@@ -11,7 +11,7 @@
     <table style="margin: 10px 0 6px;">
         <tr>
             <td>
-                <h1 class="strong" style="font-size: 15px; color: #5d2e00;">{{ $texto }}</h1>
+                <h1 class="strong" style="font-size: 15px; color: {{ config('theme.warm') }};">{{ $texto }}</h1>
                 @if ($estado)<span class="muted">Estado: {{ $estado }}</span>@endif
             </td>
             <td class="right" style="width: 200px;">

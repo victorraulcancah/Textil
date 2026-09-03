@@ -28,7 +28,7 @@
                 @endif
             </td>
             <td style="vertical-align: top;">
-                <h2 class="strong" style="font-size: 13px; color: #5d2e00;">{{ $empresa->razon_social ?? $empresa->nombre_comercial ?? 'Mi Empresa' }}</h2>
+                <h2 class="strong" style="font-size: 13px; color: {{ config('theme.warm') }};">{{ $empresa->razon_social ?? $empresa->nombre_comercial ?? 'Mi Empresa' }}</h2>
                 @if ($empresa?->nombre_comercial && $empresa?->razon_social)
                     <div class="muted">{{ $empresa->nombre_comercial }}</div>
                 @endif

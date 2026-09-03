@@ -3,10 +3,20 @@
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
 
+/*
+ * Paleta de marca — ÚNICA fuente de color del proyecto (web + gráficos).
+ * Para adaptar la app a otra empresa, edita solo los valores de este bloque:
+ * todos los componentes reutilizables (Button, Badge, Alert, Dashboard, reportes, etc.)
+ * los toman de aquí, nunca de un color suelto en el componente.
+ *
+ * El lado de los PDF (dompdf no puede leer estas variables CSS) usa su propio
+ * espejo en config/theme.php — mantén ambos archivos con los mismos valores.
+ */
 @theme {
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
 
+    /* Color de marca */
     --color-primary-50: #fff3e0;
     --color-primary-100: #ffe0b2;
     --color-primary-200: #ffcc80;
@@ -18,12 +28,45 @@
     --color-primary-800: #d84315;
     --color-primary-900: #bf360c;
 
+    /* Neutros cálidos (texto, bordes) */
     --color-warm-900: #5d2e00;
     --color-warm-500: #a9866a;
 
     --color-cream: #fdf6ef;
     --color-field: #fafafa;
     --color-edge: #e0dad2;
+
+    /* Colores de estado (éxito / error / advertencia / información) */
+    --color-success-50: #f0fdf4;
+    --color-success-100: #dcfce7;
+    --color-success-200: #bbf7d0;
+    --color-success-500: #22c55e;
+    --color-success-600: #16a34a;
+    --color-success-700: #15803d;
+
+    --color-danger-50: #fef2f2;
+    --color-danger-100: #fee2e2;
+    --color-danger-200: #fecaca;
+    --color-danger-500: #ef4444;
+    --color-danger-600: #dc2626;
+    --color-danger-700: #b91c1c;
+
+    --color-warning-50: #fffbeb;
+    --color-warning-100: #fef3c7;
+    --color-warning-200: #fde68a;
+    --color-warning-500: #f59e0b;
+    --color-warning-600: #d97706;
+    --color-warning-700: #b45309;
+
+    --color-info-50: #eff6ff;
+    --color-info-100: #dbeafe;
+    --color-info-200: #bfdbfe;
+    --color-info-500: #3b82f6;
+    --color-info-600: #2563eb;
+    --color-info-700: #1d4ed8;
+
+    /* Auxiliares de gráficos (Recharts no puede usar clases de Tailwind) */
+    --color-chart-grid: #f0ece6;
 }
 
 @keyframes toast-in {

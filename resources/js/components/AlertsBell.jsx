@@ -4,9 +4,9 @@ import api from '../lib/api';
 import { cn } from './ui';
 
 const NIVEL = {
-    danger: { dot: 'bg-red-500', chip: 'bg-red-100 text-red-700', Icon: AlertOctagon },
-    warning: { dot: 'bg-amber-500', chip: 'bg-amber-100 text-amber-700', Icon: AlertTriangle },
-    info: { dot: 'bg-blue-500', chip: 'bg-blue-100 text-blue-700', Icon: Info },
+    danger: { dot: 'bg-danger-500', chip: 'bg-danger-100 text-danger-700', Icon: AlertOctagon },
+    warning: { dot: 'bg-warning-500', chip: 'bg-warning-100 text-warning-700', Icon: AlertTriangle },
+    info: { dot: 'bg-info-500', chip: 'bg-info-100 text-info-700', Icon: Info },
 };
 
 export default function AlertsBell() {
@@ -47,9 +47,9 @@ export default function AlertsBell() {
     const total = data.total ?? 0;
     const badgeColor =
         (data.por_nivel?.danger ?? 0) > 0
-            ? 'bg-red-600'
+            ? 'bg-danger-600'
             : (data.por_nivel?.warning ?? 0) > 0
-              ? 'bg-amber-500'
+              ? 'bg-warning-500'
               : 'bg-primary-600';
 
     return (

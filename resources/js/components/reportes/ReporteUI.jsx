@@ -6,6 +6,7 @@ import {
     Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import { Card, Input, cn } from '../ui';
+import { colors, tooltipStyle } from '../../theme/colors';
 
 /* ------------------------------------------------------------------ */
 /*  Formato y paleta                                                   */
@@ -17,18 +18,14 @@ export const num = (n, decimales = 0) =>
     new Intl.NumberFormat('es-PE', { maximumFractionDigits: decimales }).format(Number(n) || 0);
 export const pct = (n) => `${num(n, 1)}%`;
 
-export const PRIMARY = '#ef6c00';
-export const GREEN = '#16a34a';
-export const AMBER = '#f59e0b';
-export const RED = '#dc2626';
-export const BLUE = '#2563eb';
+// Colores tomados de resources/js/theme/colors.js (única fuente: resources/css/app.css)
+export const PRIMARY = colors.primary600;
+export const GREEN = colors.success;
+export const AMBER = colors.warning;
+export const RED = colors.danger;
+export const BLUE = colors.info;
 
-export const tooltipStyle = {
-    borderRadius: 12,
-    border: '1px solid #e0dad2',
-    fontSize: 12,
-    boxShadow: '0 8px 24px rgba(0,0,0,.08)',
-};
+export { tooltipStyle };
 
 /* ------------------------------------------------------------------ */
 /*  Fechas y periodos                                                  */
@@ -302,17 +299,17 @@ export function TendenciaChart({ data = [], agrupar = 'dia', series, height = 'h
                                 </linearGradient>
                             ))}
                         </defs>
-                        <CartesianGrid strokeDasharray="4 4" stroke="#e8e2da" />
+                        <CartesianGrid strokeDasharray="4 4" stroke={colors.chartGrid} />
                         <XAxis
                             dataKey="grupo"
                             tickFormatter={(v) => etiquetaPeriodo(v, agrupar)}
                             tick={{ fontSize: 11 }}
-                            stroke="#a9866a"
+                            stroke={colors.warm500}
                             tickLine={false}
                             interval={agrupar === 'mes' ? 0 : 'preserveStartEnd'}
                             minTickGap={24}
                         />
-                        <YAxis tick={{ fontSize: 11 }} stroke="#a9866a" tickLine={false} width={64} tickFormatter={(v) => num(v)} />
+                        <YAxis tick={{ fontSize: 11 }} stroke={colors.warm500} tickLine={false} width={64} tickFormatter={(v) => num(v)} />
                         <Tooltip
                             contentStyle={tooltipStyle}
                             formatter={(v) => money(v)}
@@ -354,9 +351,9 @@ export function RankingChart({
             {data.length ? (
                 <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={data} layout="vertical" margin={{ top: 4, right: 24, left: 8, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="4 4" stroke="#e8e2da" horizontal={false} />
-                        <XAxis type="number" tick={{ fontSize: 11 }} stroke="#a9866a" tickLine={false} tickFormatter={(v) => num(v)} />
-                        <YAxis type="category" dataKey={nameKey} width={150} tick={{ fontSize: 11 }} stroke="#a9866a" tickLine={false} tickFormatter={corto} />
+                        <CartesianGrid strokeDasharray="4 4" stroke={colors.chartGrid} horizontal={false} />
+                        <XAxis type="number" tick={{ fontSize: 11 }} stroke={colors.warm500} tickLine={false} tickFormatter={(v) => num(v)} />
+                        <YAxis type="category" dataKey={nameKey} width={150} tick={{ fontSize: 11 }} stroke={colors.warm500} tickLine={false} tickFormatter={corto} />
                         <Tooltip contentStyle={tooltipStyle} formatter={(v) => [formatter(v), label]} />
                         <Bar dataKey={dataKey} fill={color} radius={[0, 6, 6, 0]} />
                     </BarChart>

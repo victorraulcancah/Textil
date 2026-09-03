@@ -7,9 +7,9 @@ const variants = {
     secondary:
         'bg-white text-gray-700 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus-visible:ring-primary-500',
     danger:
-        'bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-500 disabled:hover:bg-red-600',
+        'bg-danger-600 text-white hover:bg-danger-700 focus-visible:ring-danger-500 disabled:hover:bg-danger-600',
     success:
-        'bg-green-600 text-white hover:bg-green-700 focus-visible:ring-green-500 disabled:hover:bg-green-600',
+        'bg-success-600 text-white hover:bg-success-700 focus-visible:ring-success-500 disabled:hover:bg-success-600',
     ghost: 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
 };
 

@@ -2,9 +2,9 @@ import { cn } from './cn';
 
 const variants = {
     gray: 'bg-gray-100 text-gray-700 ring-gray-200',
-    green: 'bg-green-50 text-green-700 ring-green-200',
-    red: 'bg-red-50 text-red-700 ring-red-200',
-    amber: 'bg-amber-50 text-amber-700 ring-amber-200',
+    green: 'bg-success-50 text-success-700 ring-success-200',
+    red: 'bg-danger-50 text-danger-700 ring-danger-200',
+    amber: 'bg-warning-50 text-warning-700 ring-warning-200',
     blue: 'bg-primary-50 text-primary-700 ring-primary-200',
 };
 

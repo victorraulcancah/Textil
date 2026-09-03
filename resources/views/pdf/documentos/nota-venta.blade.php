@@ -93,8 +93,8 @@
         @endif
 
         @if ($anulada && $venta->motivo_anulacion)
-            <table class="marco" style="margin-top: 6px; border-color: #d32f2f;">
-                <tr><td style="color: #d32f2f;"><span class="strong">ANULADA:</span> {{ $venta->motivo_anulacion }}</td></tr>
+            <table class="marco" style="margin-top: 6px; border-color: {{ config('theme.danger') }};">
+                <tr><td style="color: {{ config('theme.danger') }};"><span class="strong">ANULADA:</span> {{ $venta->motivo_anulacion }}</td></tr>
             </table>
         @endif
     @endif

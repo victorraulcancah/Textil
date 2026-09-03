@@ -11,17 +11,17 @@ import api from '../lib/api';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import { Alert, Badge, Card, Spinner } from '../components/ui';
+import { colors, CAT_COLORS, tooltipStyle } from '../theme/colors';
 
 const money = (n) =>
     new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(n) || 0);
 const num = (n) => new Intl.NumberFormat('es-PE').format(Number(n) || 0);
 
-// Paleta cálida del proyecto + colores de apoyo
-const PRIMARY = '#ef6c00';
-const GREEN = '#16a34a';
-const RED = '#dc2626';
-const AMBER = '#f59e0b';
-const CAT_COLORS = ['#ef6c00', '#fb8c00', '#ffa726', '#8d6e63', '#5d2e00', '#a9866a', '#e65100', '#bf360c'];
+// Colores tomados de resources/js/theme/colors.js (única fuente: resources/css/app.css)
+const PRIMARY = colors.primary600;
+const GREEN = colors.success;
+const RED = colors.danger;
+const AMBER = colors.warning;
 
 const RANGOS = [
     { value: 7, label: '7 días' },
@@ -62,13 +62,6 @@ function ChartCard({ title, subtitle, children, className = '' }) {
         </Card>
     );
 }
-
-const tooltipStyle = {
-    borderRadius: 12,
-    border: '1px solid #e0dad2',
-    fontSize: 12,
-    boxShadow: '0 8px 24px rgba(0,0,0,.08)',
-};
 
 const EmptyChart = ({ text = 'Sin datos en este periodo' }) => (
     <div className="flex h-full items-center justify-center text-sm text-warm-400">{text}</div>
@@ -170,9 +163,9 @@ export default function Dashboard() {
                                                     <stop offset="95%" stopColor={PRIMARY} stopOpacity={0} />
                                                 </linearGradient>
                                             </defs>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#f0ece6" vertical={false} />
-                                            <XAxis dataKey="fecha" tickFormatter={fechaCorta} tick={{ fontSize: 11 }} stroke="#a9866a" />
-                                            <YAxis tick={{ fontSize: 11 }} stroke="#a9866a" width={48} />
+                                            <CartesianGrid strokeDasharray="3 3" stroke={colors.chartGrid} vertical={false} />
+                                            <XAxis dataKey="fecha" tickFormatter={fechaCorta} tick={{ fontSize: 11 }} stroke={colors.warm500} />
+                                            <YAxis tick={{ fontSize: 11 }} stroke={colors.warm500} width={48} />
                                             <Tooltip contentStyle={tooltipStyle} formatter={(v) => [money(v), 'Ventas']} labelFormatter={fechaCorta} />
                                             <Area type="monotone" dataKey="total" stroke={PRIMARY} strokeWidth={2} fill="url(#gVentas)" />
                                         </AreaChart>
@@ -207,9 +200,9 @@ export default function Dashboard() {
                                 {data.top_vendidos?.length ? (
                                     <ResponsiveContainer width="100%" height="100%">
                                         <BarChart data={data.top_vendidos} layout="vertical" margin={{ left: 10, right: 16 }}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#f0ece6" horizontal={false} />
-                                            <XAxis type="number" tick={{ fontSize: 11 }} stroke="#a9866a" />
-                                            <YAxis type="category" dataKey="producto" width={120} tick={{ fontSize: 10 }} stroke="#a9866a" />
+                                            <CartesianGrid strokeDasharray="3 3" stroke={colors.chartGrid} horizontal={false} />
+                                            <XAxis type="number" tick={{ fontSize: 11 }} stroke={colors.warm500} />
+                                            <YAxis type="category" dataKey="producto" width={120} tick={{ fontSize: 10 }} stroke={colors.warm500} />
                                             <Tooltip contentStyle={tooltipStyle} formatter={(v) => [num(v), 'Unidades']} />
                                             <Bar dataKey="unidades" fill={PRIMARY} radius={[0, 6, 6, 0]} />
                                         </BarChart>
@@ -223,9 +216,9 @@ export default function Dashboard() {
                                 {data.top_ganancia?.length ? (
                                     <ResponsiveContainer width="100%" height="100%">
                                         <BarChart data={data.top_ganancia} layout="vertical" margin={{ left: 10, right: 16 }}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#f0ece6" horizontal={false} />
-                                            <XAxis type="number" tick={{ fontSize: 11 }} stroke="#a9866a" />
-                                            <YAxis type="category" dataKey="producto" width={120} tick={{ fontSize: 10 }} stroke="#a9866a" />
+                                            <CartesianGrid strokeDasharray="3 3" stroke={colors.chartGrid} horizontal={false} />
+                                            <XAxis type="number" tick={{ fontSize: 11 }} stroke={colors.warm500} />
+                                            <YAxis type="category" dataKey="producto" width={120} tick={{ fontSize: 10 }} stroke={colors.warm500} />
                                             <Tooltip contentStyle={tooltipStyle} formatter={(v) => [money(v), 'Ganancia']} />
                                             <Bar dataKey="ganancia" fill={GREEN} radius={[0, 6, 6, 0]} />
                                         </BarChart>
@@ -259,9 +252,9 @@ export default function Dashboard() {
                                 {data.caja?.length ? (
                                     <ResponsiveContainer width="100%" height="100%">
                                         <BarChart data={data.caja} margin={{ left: 0, right: 10 }}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#f0ece6" vertical={false} />
-                                            <XAxis dataKey="tipo" tick={{ fontSize: 11 }} stroke="#a9866a" />
-                                            <YAxis tick={{ fontSize: 11 }} stroke="#a9866a" width={48} />
+                                            <CartesianGrid strokeDasharray="3 3" stroke={colors.chartGrid} vertical={false} />
+                                            <XAxis dataKey="tipo" tick={{ fontSize: 11 }} stroke={colors.warm500} />
+                                            <YAxis tick={{ fontSize: 11 }} stroke={colors.warm500} width={48} />
                                             <Tooltip contentStyle={tooltipStyle} formatter={(v) => money(v)} />
                                             <Bar dataKey="total" radius={[6, 6, 0, 0]}>
                                                 {data.caja.map((e, i) => (

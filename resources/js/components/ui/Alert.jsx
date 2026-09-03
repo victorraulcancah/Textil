@@ -1,9 +1,9 @@
 import { cn } from './cn';
 
 const variants = {
-    error: 'bg-red-50 text-red-700 ring-red-200',
-    success: 'bg-green-50 text-green-700 ring-green-200',
-    warning: 'bg-amber-50 text-amber-700 ring-amber-200',
+    error: 'bg-danger-50 text-danger-700 ring-danger-200',
+    success: 'bg-success-50 text-success-700 ring-success-200',
+    warning: 'bg-warning-50 text-warning-700 ring-warning-200',
     info: 'bg-primary-50 text-primary-700 ring-primary-200',
 };
 

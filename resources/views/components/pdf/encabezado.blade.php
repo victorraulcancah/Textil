@@ -19,7 +19,7 @@
             @endif
         </td>
         <td style="vertical-align: middle; text-align: center; padding: 0 8px;">
-            <span class="strong" style="font-size: 14px; color: #111;">{{ $nombreEmpresa }}</span><br>
+            <span class="strong" style="font-size: 14px; color: {{ config('theme.text') }};">{{ $nombreEmpresa }}</span><br>
             @if ($empresa?->direccion)<span class="upper" style="font-size: 9px;">{{ $empresa->direccion }}</span><br>@endif
             @if ($empresa?->telefono)<span class="muted">Cel: {{ $empresa->telefono }}</span>@endif
             @if ($empresa?->email)<br><span class="muted upper">Email: {{ $empresa->email }}</span>@endif

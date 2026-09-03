@@ -10,14 +10,14 @@
         body {
             font-family: 'DejaVu Sans', sans-serif;
             font-size: 10px;
-            color: #1f1f1f;
+            color: {{ config('theme.text') }};
             margin: 0;
         }
-        footer { position: fixed; bottom: -26px; left: 0; right: 0; height: 26px; font-size: 8px; color: #8a8a8a; }
+        footer { position: fixed; bottom: -26px; left: 0; right: 0; height: 26px; font-size: 8px; color: {{ config('theme.muted_light') }}; }
         .pagina:after { content: "Página " counter(page) " de " counter(pages); }
 
         h1, h2, h3, p { margin: 0; }
-        .muted { color: #6b6b6b; }
+        .muted { color: {{ config('theme.muted') }}; }
         .strong { font-weight: bold; }
         .right { text-align: right; }
         .center { text-align: center; }
@@ -26,27 +26,27 @@
         table { width: 100%; border-collapse: collapse; }
 
         /* Marco general de secciones (datos, son, observaciones) */
-        .marco { border: 1px solid #d9cfc4; }
+        .marco { border: 1px solid {{ config('theme.marco_border') }}; }
         .marco td { padding: 4px 8px; vertical-align: top; }
 
         /* Recuadro de la cabecera: RUC / tipo de documento / número */
-        .docbox td { border: 1px solid #e0902f; padding: 5px 8px; text-align: center; }
-        .docbox .hl { background: #ef6c00; color: #fff; font-weight: bold; text-transform: uppercase; letter-spacing: .4px; }
+        .docbox td { border: 1px solid {{ config('theme.primary_border') }}; padding: 5px 8px; text-align: center; }
+        .docbox .hl { background: {{ config('theme.primary') }}; color: #fff; font-weight: bold; text-transform: uppercase; letter-spacing: .4px; }
         .docbox .num { font-weight: bold; font-size: 12px; }
 
         /* Tabla de ítems (encabezado de color, cuerpo con líneas suaves) */
-        .items { border: 1px solid #e0dad2; }
+        .items { border: 1px solid {{ config('theme.edge') }}; }
         .items th {
-            background: #ef6c00; color: #fff; font-size: 9px; text-transform: uppercase;
+            background: {{ config('theme.primary') }}; color: #fff; font-size: 9px; text-transform: uppercase;
             letter-spacing: .3px; padding: 5px 6px; text-align: left;
         }
         .items td { padding: 4px 6px; border-bottom: 1px solid #eee; }
         .items .filler td { padding: 5px 6px; }
 
         /* Totales */
-        .totales td { padding: 5px 10px; border: 1px solid #e0dad2; }
+        .totales td { padding: 5px 10px; border: 1px solid {{ config('theme.edge') }}; }
         .totales .lbl { text-align: right; font-weight: bold; text-transform: uppercase; }
-        .totales .tot { background: #ef6c00; color: #fff; border-color: #e0902f; }
+        .totales .tot { background: {{ config('theme.primary') }}; color: #fff; border-color: {{ config('theme.primary_border') }}; }
     </style>
 </head>
 <body>

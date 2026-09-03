@@ -1,0 +1,73 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+
+@theme {
+    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+        'Segoe UI Symbol', 'Noto Color Emoji';
+
+    --color-primary-50: #fff3e0;
+    --color-primary-100: #ffe0b2;
+    --color-primary-200: #ffcc80;
+    --color-primary-300: #ffb74d;
+    --color-primary-400: #ffa726;
+    --color-primary-500: #fb8c00;
+    --color-primary-600: #ef6c00;
+    --color-primary-700: #e65100;
+    --color-primary-800: #d84315;
+    --color-primary-900: #bf360c;
+
+    --color-warm-900: #5d2e00;
+    --color-warm-500: #a9866a;
+
+    --color-cream: #fdf6ef;
+    --color-field: #fafafa;
+    --color-edge: #e0dad2;
+}
+
+@keyframes toast-in {
+    from {
+        opacity: 0;
+        transform: translateX(1rem);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes dropdown-in {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Submenú que sale del sidebar contraído. */
+@keyframes flyout-in {
+    from {
+        opacity: 0;
+        transform: translateX(-8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* Apertura de un grupo del sidebar desplegado. */
+@keyframes accordion-in {
+    from {
+        opacity: 0;
+        transform: translateY(-6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

@@ -3,6 +3,8 @@ import { Printer, Truck, Undo2 } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
+import BottomSheet from '../components/ui/BottomSheet';
+import DetalleCard from '../components/ui/DetalleCard';
 import PageHeader from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
 import ActionsMenu from '../components/ActionsMenu';
@@ -191,8 +193,41 @@ export default function RecepcionesCompra() {
                 dense
             />
 
-            {/* Detalle de la recepción seleccionada */}
-            <div className="mt-6 rounded-xl border border-edge bg-white shadow-sm">
+            {/* Móvil: el detalle sube desde abajo al tocar una card (en escritorio no pinta nada). */}
+            <BottomSheet
+                open={Boolean(seleccionada)}
+                onClose={() => setSeleccionada(null)}
+                title={seleccionada ? `Recepción ${seleccionada.documento ?? `#${seleccionada.id}`}` : ''}
+                subtitle={`${detalles.length} ${detalles.length === 1 ? 'línea' : 'líneas'}`}
+            >
+                {detalles.length === 0 ? (
+                    <p className="py-6 text-center text-sm text-warm-500">Esta recepción no tiene líneas.</p>
+                ) : (
+                    <div className="space-y-3">
+                        {detalles.map((d) => {
+                            const producto = d.presentacion?.producto;
+                            return (
+                                <DetalleCard
+                                    key={d.id}
+                                    titulo={producto?.nombre ?? '—'}
+                                    subtitulo={[producto?.codigo, d.presentacion?.nombre, producto?.marca?.nombre].filter(Boolean).join(' · ')}
+                                    campos={[
+                                        { label: 'Cant.', value: num(d.cantidad_recibida), valueClassName: 'text-primary-600' },
+                                        { label: 'Pedida', value: num(d.cantidad_pedida) },
+                                        { label: 'Total recep.', value: num(totalRecepcionado(d.compra_detalle_id)) },
+                                        { label: 'Finalizado', value: num(d.compra_detalle?.cantidad_finalizada), valueClassName: 'text-warning-600' },
+                                        { label: 'Stock ant.', value: num(d.stock_anterior) },
+                                        { label: 'Stock nuevo', value: num(d.stock_nuevo) },
+                                    ]}
+                                />
+                            );
+                        })}
+                    </div>
+                )}
+            </BottomSheet>
+
+            {/* Detalle de la recepción seleccionada (escritorio) */}
+            <div className="mt-6 hidden rounded-xl border border-edge bg-white shadow-sm md:block">
                 <div className="flex items-center justify-between border-b border-edge px-5 py-3">
                     <h2 className="text-sm font-semibold text-warm-900">
                         Detalle {seleccionada?.documento ? `de ${seleccionada.documento}` : ''}

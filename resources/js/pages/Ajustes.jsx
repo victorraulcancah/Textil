@@ -4,6 +4,8 @@ import api, { asList } from '../lib/api';
 import { opcionesAlmacen } from '../lib/almacenes';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
+import BottomSheet from '../components/ui/BottomSheet';
+import DetalleCard from '../components/ui/DetalleCard';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
 import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select, Tabs } from '../components/ui';
@@ -785,8 +787,38 @@ export default function Ajustes() {
                         rowClassName={(row) => (row.id === seleccionado?.id ? 'bg-primary-50' : undefined)}
                     />
 
-                    {/* Detalle del ajuste seleccionado */}
-                    <div className="mt-6 rounded-xl border border-edge bg-white shadow-sm">
+                    {/* Móvil: el detalle sube desde abajo al tocar una card (en escritorio no pinta nada). */}
+                    <BottomSheet
+                        open={Boolean(seleccionado)}
+                        onClose={() => setSeleccionado(null)}
+                        title={seleccionado ? `Ajuste ${seleccionado.documento ?? `#${seleccionado.id}`}` : ''}
+                        subtitle={seleccionado ? `${detalleSeleccionado.length} ${detalleSeleccionado.length === 1 ? 'producto' : 'productos'} · ${money(seleccionado.total)}` : ''}
+                    >
+                        {detalleSeleccionado.length === 0 ? (
+                            <p className="py-6 text-center text-sm text-warm-500">Este ajuste no tiene productos.</p>
+                        ) : (
+                            <div className="space-y-3">
+                                {detalleSeleccionado.map((d) => {
+                                    const producto = d.presentacion?.producto;
+                                    return (
+                                        <DetalleCard
+                                            key={d.id}
+                                            titulo={producto?.nombre ?? '—'}
+                                            subtitulo={[producto?.codigo, d.presentacion?.nombre, producto?.marca?.nombre].filter(Boolean).join(' · ')}
+                                            campos={[
+                                                { label: 'Cantidad', value: num(d.cantidad) },
+                                                { label: 'Costo', value: money(d.costo_unitario) },
+                                                { label: 'Total', value: money(d.subtotal), valueClassName: 'text-primary-600' },
+                                            ]}
+                                        />
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </BottomSheet>
+
+                    {/* Detalle del ajuste seleccionado (escritorio) */}
+                    <div className="mt-6 hidden rounded-xl border border-edge bg-white shadow-sm md:block">
                         <div className="flex items-center justify-between border-b border-edge px-5 py-3">
                             <h2 className="text-sm font-semibold text-warm-900">
                                 Detalle {seleccionado?.documento ? `de ${seleccionado.documento}` : ''}

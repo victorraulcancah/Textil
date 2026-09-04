@@ -4,6 +4,8 @@ import { Ban, CheckCircle2, PackageCheck, Pencil, Printer, ShoppingBag, Trash2 }
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
+import BottomSheet from '../components/ui/BottomSheet';
+import DetalleCard from '../components/ui/DetalleCard';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
 import ActionsMenu from '../components/ActionsMenu';
@@ -230,8 +232,40 @@ export default function Compras() {
                 dense
             />
 
-            {/* Detalle de la compra seleccionada */}
-            <div className="mt-6 rounded-xl border border-edge bg-white shadow-sm">
+            {/* Móvil: el detalle sube desde abajo al tocar una card (en escritorio no pinta nada). */}
+            <BottomSheet
+                open={Boolean(seleccionada)}
+                onClose={() => setSeleccionada(null)}
+                title={seleccionada ? `${seleccionada.numero_compra ?? `#${seleccionada.id}`} · ${seleccionada.proveedor?.nombre ?? 'Proveedor'}` : ''}
+                subtitle={`${detalles.length} ${detalles.length === 1 ? 'producto' : 'productos'}`}
+            >
+                {detalles.length === 0 ? (
+                    <p className="py-6 text-center text-sm text-warm-500">Esta compra no tiene productos.</p>
+                ) : (
+                    <div className="space-y-3">
+                        {detalles.map((d) => {
+                            const producto = d.presentacion?.producto;
+                            return (
+                                <DetalleCard
+                                    key={d.id}
+                                    titulo={producto?.nombre ?? '—'}
+                                    subtitulo={[producto?.codigo, d.presentacion?.nombre, producto?.marca?.nombre].filter(Boolean).join(' · ')}
+                                    campos={[
+                                        { label: 'Cant.', value: num(d.cantidad) },
+                                        { label: 'Costo', value: money(d.costo_unitario) },
+                                        { label: 'Subtotal', value: money(d.subtotal), valueClassName: 'text-primary-600' },
+                                        { label: 'Recibido', value: num(d.recibido), valueClassName: 'text-success-600' },
+                                        { label: 'Pendiente', value: num(d.pendiente), valueClassName: Number(d.pendiente) > 0 ? 'text-warning-600' : undefined },
+                                    ]}
+                                />
+                            );
+                        })}
+                    </div>
+                )}
+            </BottomSheet>
+
+            {/* Detalle de la compra seleccionada (escritorio) */}
+            <div className="mt-6 hidden rounded-xl border border-edge bg-white shadow-sm md:block">
                 <div className="flex items-center justify-between border-b border-edge px-5 py-3">
                     <h2 className="text-sm font-semibold text-warm-900">
                         Detalle {seleccionada?.numero_compra ? `de ${seleccionada.numero_compra}` : ''}

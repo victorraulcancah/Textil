@@ -4,6 +4,8 @@ import { FileDown, Pencil, Printer, ShoppingCart, Trash2 } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
+import BottomSheet from '../components/ui/BottomSheet';
+import DetalleCard from '../components/ui/DetalleCard';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
 import { Alert, Badge, Button, DataTable, Modal, Select } from '../components/ui';
@@ -221,8 +223,45 @@ export default function OrdenesCompra() {
                 dense
             />
 
-            {/* Detalle de la orden seleccionada */}
-            <div className="mt-6 rounded-xl border border-edge bg-white shadow-sm">
+            {/* Móvil: el detalle sube desde abajo al tocar una card (en escritorio no pinta nada). */}
+            <BottomSheet
+                open={Boolean(seleccionada)}
+                onClose={() => setSeleccionada(null)}
+                title={seleccionada ? `${seleccionada.codigo ?? 'Orden'} · ${seleccionada.proveedor?.nombre ?? 'Proveedor'}` : ''}
+                subtitle={seleccionada ? `Emisión ${fecha(seleccionada.fecha_emision)} · Entrega est. ${fecha(seleccionada.fecha_entrega_estimada)}` : ''}
+            >
+                {(seleccionada?.detalles ?? []).length === 0 ? (
+                    <p className="py-6 text-center text-sm text-warm-500">Esta orden no tiene productos.</p>
+                ) : (
+                    <div className="space-y-3">
+                        {seleccionada.detalles.map((d) => {
+                            const producto = d.presentacion?.producto;
+                            const subtotal = (Number(d.cantidad) || 0) * (Number(d.precio_unitario) || 0);
+                            return (
+                                <DetalleCard
+                                    key={d.id}
+                                    titulo={producto?.nombre ?? '—'}
+                                    subtitulo={[producto?.codigo, d.presentacion?.nombre, producto?.marca?.nombre].filter(Boolean).join(' · ')}
+                                    campos={[
+                                        { label: 'Cant.', value: num(d.cantidad) },
+                                        { label: 'P. Unit.', value: money(d.precio_unitario) },
+                                        { label: 'Subtotal', value: money(subtotal), valueClassName: 'text-primary-600' },
+                                    ]}
+                                />
+                            );
+                        })}
+                        <div className="flex items-center justify-between px-1 pt-1 text-sm">
+                            <span className="font-medium text-warm-500">Total</span>
+                            <span className="text-base font-bold text-warm-900">
+                                {money(seleccionada.detalles.reduce((s, d) => s + (Number(d.cantidad) || 0) * (Number(d.precio_unitario) || 0), 0))}
+                            </span>
+                        </div>
+                    </div>
+                )}
+            </BottomSheet>
+
+            {/* Detalle de la orden seleccionada (escritorio) */}
+            <div className="mt-6 hidden rounded-xl border border-edge bg-white shadow-sm md:block">
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-edge px-5 py-3">
                     <h2 className="text-sm font-semibold text-warm-900">
                         Detalle {seleccionada?.codigo ? `de ${seleccionada.codigo}` : ''}

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Package, Store } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import Layout from '../components/Layout';
+import BottomSheet from '../components/ui/BottomSheet';
+import DetalleCard from '../components/ui/DetalleCard';
 import PageHeader from '../components/PageHeader';
 import { Alert, Badge, Button, DataTable, Select, Tabs } from '../components/ui';
 
@@ -415,8 +417,37 @@ export default function Existencias() {
                 rowClassName={(row) => (row.id === seleccionada?.id ? 'bg-primary-50' : undefined)}
             />
 
-            {/* Desglose del stock en cada unidad derivada del producto */}
-            <div className="mt-6 rounded-xl border border-edge bg-white shadow-sm">
+            {/* Móvil: el desglose sube desde abajo al tocar una card (en escritorio no pinta nada). */}
+            <BottomSheet
+                open={Boolean(seleccionada)}
+                onClose={() => setSeleccionada(null)}
+                title={seleccionada?.producto?.nombre ?? 'Unidades derivadas'}
+                subtitle={seleccionada ? `Stock base: ${num(seleccionada.stock_actual)} ${seleccionada.producto?.unidad_base?.abreviatura ?? ''}${seleccionada.almacen?.nombre ? ` · ${seleccionada.almacen.nombre}` : ''}` : ''}
+            >
+                {derivadas.length === 0 ? (
+                    <p className="py-6 text-center text-sm text-warm-500">Este producto no tiene unidades derivadas activas.</p>
+                ) : (
+                    <div className="space-y-3">
+                        {derivadas.map((u) => (
+                            <DetalleCard
+                                key={u.id}
+                                titulo={u.nombre}
+                                subtitulo={`Factor x${num(u.factor)} ${u.abrev}`}
+                                columnas={2}
+                                campos={[
+                                    { label: 'Stock en esa unidad', value: num(u.completas), valueClassName: 'text-primary-600' },
+                                    { label: 'Sobrante', value: u.sobrante > 0 ? `${num(u.sobrante)} ${u.abrev}` : '—' },
+                                    { label: 'P. Compra', value: money(u.precio_compra) },
+                                    { label: 'P. Venta', value: money(u.precio_venta) },
+                                ]}
+                            />
+                        ))}
+                    </div>
+                )}
+            </BottomSheet>
+
+            {/* Desglose del stock en cada unidad derivada del producto (escritorio) */}
+            <div className="mt-6 hidden rounded-xl border border-edge bg-white shadow-sm md:block">
                 <div className="flex items-center justify-between border-b border-edge px-5 py-3">
                     <h2 className="text-sm font-semibold text-warm-900">
                         Unidades derivadas

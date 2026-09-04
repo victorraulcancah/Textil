@@ -4,6 +4,8 @@ import api, { asList } from '../lib/api';
 import { opcionesAlmacen } from '../lib/almacenes';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
+import BottomSheet from '../components/ui/BottomSheet';
+import DetalleCard from '../components/ui/DetalleCard';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
 import ProductoPickerModal from '../components/ProductoPickerModal';
@@ -646,8 +648,38 @@ export default function Transferencias() {
                 rowClassName={(row) => (row.id === seleccionada?.id ? 'bg-primary-50' : undefined)}
             />
 
-            {/* Detalle de la guía seleccionada */}
-            <div className="mt-6 rounded-xl border border-edge bg-white shadow-sm">
+            {/* Móvil: el detalle sube desde abajo al tocar una card (en escritorio no pinta nada). */}
+            <BottomSheet
+                open={Boolean(seleccionada)}
+                onClose={() => setSeleccionada(null)}
+                title={seleccionada ? `Guía ${seleccionada.documento ?? `#${seleccionada.id}`}` : ''}
+                subtitle={seleccionada ? `${MOTIVO_LABEL[seleccionada.motivo_traslado] ?? '—'} · ${seleccionada.modalidad_transporte === 'publico' ? 'Público' : 'Privado'}${seleccionada.vehiculo_placa ? ` · ${seleccionada.vehiculo_placa}` : ''}` : ''}
+            >
+                {detalles.length === 0 ? (
+                    <p className="py-6 text-center text-sm text-warm-500">Esta guía no tiene productos.</p>
+                ) : (
+                    <div className="space-y-3">
+                        {detalles.map((d) => {
+                            const producto = d.presentacion?.producto;
+                            return (
+                                <DetalleCard
+                                    key={d.id}
+                                    titulo={producto?.nombre ?? '—'}
+                                    subtitulo={[producto?.codigo, d.presentacion?.nombre, producto?.marca?.nombre].filter(Boolean).join(' · ')}
+                                    columnas={2}
+                                    campos={[
+                                        { label: 'Enviado', value: num(d.cantidad_enviada), valueClassName: 'text-primary-600' },
+                                        { label: 'Recibido', value: d.cantidad_recibida != null ? num(d.cantidad_recibida) : '—' },
+                                    ]}
+                                />
+                            );
+                        })}
+                    </div>
+                )}
+            </BottomSheet>
+
+            {/* Detalle de la guía seleccionada (escritorio) */}
+            <div className="mt-6 hidden rounded-xl border border-edge bg-white shadow-sm md:block">
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-edge px-5 py-3">
                     <h2 className="text-sm font-semibold text-warm-900">
                         Detalle {seleccionada?.documento ? `de ${seleccionada.documento}` : ''}

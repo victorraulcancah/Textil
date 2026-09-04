@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Coins, Printer } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import Layout from '../components/Layout';
+import BottomSheet from '../components/ui/BottomSheet';
 import PageHeader from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
 import { Alert, Badge, Button, DataTable, Select } from '../components/ui';
@@ -334,8 +335,25 @@ export default function CierresCaja() {
                 rowClassName={(row) => (row.id === seleccionado?.id ? 'bg-primary-50' : undefined)}
             />
 
-            {/* Movimientos entre la apertura y el cierre seleccionado */}
-            <div className="mt-6">
+            {/* Móvil: los movimientos suben desde abajo al tocar una card (en escritorio no pinta nada). */}
+            <BottomSheet
+                open={Boolean(seleccionado)}
+                onClose={() => setSeleccionado(null)}
+                title={seleccionado ? `Movimientos${seleccionado.apertura?.caja?.nombre ? ` · ${seleccionado.apertura.caja.nombre}` : ''}` : ''}
+                subtitle={seleccionado ? `${fechaCorta(seleccionado.fecha_cierre)} · ${movimientos.length} ${movimientos.length === 1 ? 'movimiento' : 'movimientos'}` : ''}
+            >
+                <DataTable
+                    columns={movColumns}
+                    rows={movimientos}
+                    loading={cargandoDetalle}
+                    searchable={false}
+                    toggleableColumns={false}
+                    emptyMessage="Esta apertura no tuvo movimientos."
+                />
+            </BottomSheet>
+
+            {/* Movimientos entre la apertura y el cierre seleccionado (escritorio) */}
+            <div className="mt-6 hidden md:block">
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                     <h2 className="text-sm font-semibold text-warm-900">
                         Movimientos

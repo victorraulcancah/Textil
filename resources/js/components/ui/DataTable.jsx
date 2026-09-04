@@ -555,7 +555,8 @@ export default function DataTable({
                 </div>
             )}
 
-            <div className="overflow-hidden rounded-lg border border-edge bg-white shadow-sm">
+            {/* Tarjeta solo en escritorio: en móvil cada fila ya es su propia card. */}
+            <div className="md:overflow-hidden md:rounded-lg md:border md:border-edge md:bg-white md:shadow-sm">
                 {loading ? (
                     <div className="flex items-center justify-center py-16">
                         <Spinner size="lg" className="text-primary-600" />
@@ -763,7 +764,7 @@ export default function DataTable({
                         </div>
 
                     <div
-                        className="space-y-3 overflow-y-auto bg-gray-50 p-3 md:hidden"
+                        className="space-y-3 overflow-y-auto md:hidden"
                         style={{ height: height ?? undefined, maxHeight: height ?? maxHeight }}
                     >
                         {filteredRows.length === 0 && (

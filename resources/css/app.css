@@ -118,3 +118,13 @@
         transform: translateY(0);
     }
 }
+
+/* Chips de filtro/búsqueda activos en las tablas. */
+@keyframes fade-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}

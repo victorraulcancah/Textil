@@ -659,8 +659,8 @@ export default function DataTable({
                                                             onDragStart={(e) => e.preventDefault()}
                                                             className={cn(
                                                                 'absolute right-0 top-0 z-10 flex h-full w-2 cursor-col-resize items-center justify-center',
-                                                                'after:h-1/2 after:w-0.5 after:rounded-full after:bg-white after:transition-opacity',
-                                                                resizingKey === col.key ? 'after:opacity-100' : 'after:opacity-0 hover:after:opacity-70',
+                                                                'after:h-1/2 after:w-0.5 after:rounded-full after:bg-white after:opacity-60 after:transition-opacity',
+                                                                resizingKey === col.key ? 'after:opacity-100' : 'hover:after:opacity-100',
                                                             )}
                                                         />
                                                     </th>

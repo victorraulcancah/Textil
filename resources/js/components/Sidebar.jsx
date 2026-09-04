@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { NavLink } from 'react-router-dom';
 import { ChevronDown, ChevronsLeft, ChevronsRight, Menu, X } from 'lucide-react';
 import { navigation } from '../config/navigation';
 import api from '../lib/api';
+import { useAuth } from '../lib/auth';
 import { cn } from './ui';
 import UserMenu from './UserMenu';
 
@@ -30,6 +31,24 @@ function persistGroups(groups) {
 }
 
 export default function Sidebar({ collapsed = false, onToggleCollapse }) {
+    const { puede } = useAuth();
+
+    /**
+     * Solo lo que el rol puede ver: se ocultan los módulos sin permiso, y un
+     * grupo desaparece cuando se queda sin hijos visibles.
+     */
+    const navegacion = useMemo(() => {
+        const visible = (item) => !item.permiso || puede(item.permiso);
+
+        return navigation
+            .map((item) => {
+                if (!item.children) return visible(item) ? item : null;
+                const hijos = item.children.filter(visible);
+                return hijos.length ? { ...item, children: hijos } : null;
+            })
+            .filter(Boolean);
+    }, [puede]);
+
     const [branding, setBranding] = useState(null);
     useEffect(() => {
         api.get('/branding')
@@ -181,7 +200,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse }) {
 
                 <nav className={cn('flex-1 overflow-y-auto py-4', rail ? 'px-2' : 'px-3')}>
                     {rail ? (
-                        navigation.map((item) => {
+                        navegacion.map((item) => {
                             const Icon = item.icon;
                             if (!item.children) {
                                 return (
@@ -227,7 +246,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse }) {
                             <div className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
                                 Principal
                             </div>
-                            {navigation.map((item) => {
+                            {navegacion.map((item) => {
                                 if (!item.children) {
                                     return (
                                         <NavLink

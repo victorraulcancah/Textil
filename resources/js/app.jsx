@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './lib/auth';
 import { ToastProvider } from './lib/toast';
 import ProtectedRoute from './components/ProtectedRoute';
+import RutaProtegida from './components/RutaProtegida';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Roles from './pages/Roles';
@@ -40,6 +41,7 @@ import CuentasPorCobrar from './pages/CuentasPorCobrar';
 import CuentasPorPagar from './pages/CuentasPorPagar';
 import Utilidades from './pages/Utilidades';
 import Ganancias from './pages/Ganancias';
+import Auditoria from './pages/Auditoria';
 import EnConstruccion from './pages/EnConstruccion';
 
 const routes = [
@@ -50,6 +52,7 @@ const routes = [
     { path: '/roles', element: <Roles /> },
     { path: '/usuarios', element: <Usuarios /> },
     { path: '/empresa', element: <Empresa /> },
+    { path: '/auditoria', element: <Auditoria /> },
     { path: '/productos', element: <Productos /> },
     { path: '/categorias', element: <Categorias /> },
     { path: '/marcas', element: <Marcas /> },
@@ -99,7 +102,11 @@ createRoot(document.getElementById('root')).render(
                         <Route
                             key={path}
                             path={path}
-                            element={<ProtectedRoute>{element}</ProtectedRoute>}
+                            element={
+                                <ProtectedRoute>
+                                    <RutaProtegida>{element}</RutaProtegida>
+                                </ProtectedRoute>
+                            }
                         />
                     ))}
                         {/* Rutas del menú aún sin página: muestran "En construcción"

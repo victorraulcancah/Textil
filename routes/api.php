@@ -50,6 +50,10 @@ Route::middleware('auth:api')->group(function () {
     Route::post('logout', [AuthController::class, 'logout']);
     Route::get('me', [AuthController::class, 'me']);
 
+    // Auditoría (solo lectura: la bitácora no se edita ni se borra)
+    Route::get('auditorias/filtros', [\App\Http\Controllers\AuditoriaController::class, 'filtros']);
+    Route::get('auditorias', [\App\Http\Controllers\AuditoriaController::class, 'index']);
+
     // Consulta RUC / DNI para autocompletar formularios
     Route::get('consulta/ruc/{ruc}', [\App\Http\Controllers\ConsultaDocumentoController::class, 'ruc']);
     Route::get('consulta/dni/{dni}', [\App\Http\Controllers\ConsultaDocumentoController::class, 'dni']);
@@ -143,5 +147,7 @@ Route::post('movimientos-caja', [MovimientoCajaController::class, 'store']);
     Route::put('users/{id}', [UserController::class, 'update']);
     Route::delete('users/{id}', [UserController::class, 'destroy']);
     Route::post('users/{id}/assign-role', [UserController::class, 'assignRole']);
+    // Antes del apiResource: si no, {role} capturaría "permisos".
+    Route::get('roles/permisos', [RoleController::class, 'arbolPermisos']);
     Route::apiResource('roles', RoleController::class);
 });

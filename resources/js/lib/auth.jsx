@@ -50,8 +50,22 @@ export function AuthProvider({ children }) {
         }
     }, []);
 
+    /**
+     * ¿El usuario tiene este permiso? Acepta el nombre completo
+     * ("ventas.clientes.crear") o solo el submódulo ("ventas.clientes"), que
+     * responde si puede verlo.
+     */
+    const puede = useCallback(
+        (permiso) => {
+            const lista = user?.permisos ?? [];
+            if (!permiso) return true;
+            return lista.includes(permiso.split('.').length === 2 ? `${permiso}.ver` : permiso);
+        },
+        [user],
+    );
+
     return (
-        <AuthContext.Provider value={{ user, loading, login, logout }}>
+        <AuthContext.Provider value={{ user, loading, login, logout, puede }}>
             {children}
         </AuthContext.Provider>
     );

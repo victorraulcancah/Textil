@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\Auditable;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -15,6 +16,10 @@ use Tymon\JWTAuth\Contracts\JWTSubject;
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable implements JWTSubject
 {
+    use Auditable;
+
+    /** Nombre del módulo en la bitácora de auditoría. */
+    protected string $auditarModulo = 'Usuario';
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable, HasRoles;
 

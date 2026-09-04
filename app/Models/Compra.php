@@ -2,10 +2,15 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Model;
 
 class Compra extends Model
 {
+    use Auditable;
+
+    /** Nombre del módulo en la bitácora de auditoría. */
+    protected string $auditarModulo = 'Compra';
     protected $table = 'compras';
 
     protected $fillable = [

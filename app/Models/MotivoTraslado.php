@@ -2,12 +2,17 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
 /** Motivo de la guía de traslado. La guía lo referencia por `codigo`. */
 class MotivoTraslado extends Model
 {
+    use Auditable;
+
+    /** Nombre del módulo en la bitácora de auditoría. */
+    protected string $auditarModulo = 'Motivo de traslado';
     protected $table = 'motivos_traslado';
 
     protected $fillable = ['codigo', 'nombre', 'es_sistema', 'activo'];

@@ -2,6 +2,7 @@ import {
     LayoutDashboard,
     SlidersHorizontal,
     Shield,
+    ShieldCheck,
     Users,
     Building2,
     BookOpen,
@@ -37,78 +38,83 @@ import {
     TrendingUp,
 } from 'lucide-react';
 
+/**
+ * Menú lateral. `permiso` es el submódulo de config/permisos.php que da
+ * acceso: el Sidebar oculta lo que el rol no puede ver.
+ */
 export const navigation = [
-    { label: 'Dashboard', icon: LayoutDashboard, to: '/dashboard' },
+    { label: 'Dashboard', icon: LayoutDashboard, to: '/dashboard', permiso: 'dashboard.dashboard' },
     {
         label: 'Ventas',
         icon: ShoppingBag,
         children: [
-            { label: 'Clientes', icon: Contact, to: '/clientes' },
-            { label: 'Notas de Venta', icon: ReceiptText, to: '/notas-venta' },
+            { label: 'Clientes', icon: Contact, to: '/clientes', permiso: 'ventas.clientes' },
+            { label: 'Notas de Venta', icon: ReceiptText, to: '/notas-venta', permiso: 'ventas.notas-venta' },
         ],
     },
     {
         label: 'Catálogo',
         icon: BookOpen,
         children: [
-            { label: 'Productos', icon: Package, to: '/productos' },
-            { label: 'Categorías', icon: Tags, to: '/categorias' },
-            { label: 'Marcas', icon: BadgeDollarSign, to: '/marcas' },
-            { label: 'Unidades de medida', icon: Ruler, to: '/unidades-medida' },
+            { label: 'Productos', icon: Package, to: '/productos', permiso: 'catalogo.productos' },
+            { label: 'Categorías', icon: Tags, to: '/categorias', permiso: 'catalogo.categorias' },
+            { label: 'Marcas', icon: BadgeDollarSign, to: '/marcas', permiso: 'catalogo.marcas' },
+            { label: 'Unidades de medida', icon: Ruler, to: '/unidades-medida', permiso: 'catalogo.unidades-medida' },
         ],
     },
     {
         label: 'Compras',
         icon: ShoppingCart,
         children: [
-            { label: 'Proveedores', icon: Truck, to: '/proveedores' },
-            { label: 'Órdenes de compra', icon: FileText, to: '/ordenes-compra' },
-            { label: 'Compras', icon: ShoppingBag, to: '/compras' },
-            { label: 'Recepciones de compra', icon: PackageCheck, to: '/recepciones-compra' },
+            { label: 'Proveedores', icon: Truck, to: '/proveedores', permiso: 'compras.proveedores' },
+            { label: 'Órdenes de compra', icon: FileText, to: '/ordenes-compra', permiso: 'compras.ordenes-compra' },
+            { label: 'Compras', icon: ShoppingBag, to: '/compras', permiso: 'compras.compras' },
+            { label: 'Recepciones de compra', icon: PackageCheck, to: '/recepciones-compra', permiso: 'compras.recepciones-compra' },
         ],
     },
     {
         label: 'Inventario',
         icon: Warehouse,
         children: [
-            { label: 'Almacenes', icon: Store, to: '/almacenes' },
-            { label: 'Existencias', icon: Warehouse, to: '/existencias' },
-            { label: 'Kardex', icon: ArrowLeftRight, to: '/kardex' },
-            { label: 'Traslados', icon: Repeat, to: '/transferencias' },
-            { label: 'Ajustes', icon: Scale, to: '/ajustes' },
-            { label: 'Tomas de inventario', icon: ClipboardCheck, to: '/tomas-inventario' },
-            { label: 'Préstamos', icon: Handshake, to: '/prestamos' },
+            { label: 'Almacenes', icon: Store, to: '/almacenes', permiso: 'inventario.almacenes' },
+            { label: 'Existencias', icon: Warehouse, to: '/existencias', permiso: 'inventario.existencias' },
+            { label: 'Kardex', icon: ArrowLeftRight, to: '/kardex', permiso: 'inventario.kardex' },
+            { label: 'Traslados', icon: Repeat, to: '/transferencias', permiso: 'inventario.transferencias' },
+            { label: 'Ajustes', icon: Scale, to: '/ajustes', permiso: 'inventario.ajustes' },
+            { label: 'Tomas de inventario', icon: ClipboardCheck, to: '/tomas-inventario', permiso: 'inventario.tomas-inventario' },
+            { label: 'Préstamos', icon: Handshake, to: '/prestamos', permiso: 'inventario.prestamos' },
         ],
     },
     {
         label: 'Tesorería',
         icon: Wallet,
         children: [
-            { label: 'Mi Caja', icon: Wallet, to: '/mi-caja' },
-            { label: 'Cuentas y Medios de Pago', icon: CreditCard, to: '/metodos-de-pago' },
-            { label: 'Cajas', icon: Coins, to: '/cajas' },
-            { label: 'Movimientos de Caja', icon: ArrowRightLeft, to: '/movimientos-caja' },
-            { label: 'Cierres de Caja', icon: Lock, to: '/cierres-caja' },
-            { label: 'Motivos de Movimiento', icon: ListChecks, to: '/motivos-movimiento' },
-            { label: 'Cuentas por Cobrar', icon: HandCoins, to: '/cuentas-por-cobrar' },
-            { label: 'Cuentas por Pagar', icon: Receipt, to: '/cuentas-por-pagar' },
+            { label: 'Mi Caja', icon: Wallet, to: '/mi-caja', permiso: 'tesoreria.mi-caja' },
+            { label: 'Cuentas y Medios de Pago', icon: CreditCard, to: '/metodos-de-pago', permiso: 'tesoreria.metodos-pago' },
+            { label: 'Cajas', icon: Coins, to: '/cajas', permiso: 'tesoreria.cajas' },
+            { label: 'Movimientos de Caja', icon: ArrowRightLeft, to: '/movimientos-caja', permiso: 'tesoreria.movimientos-caja' },
+            { label: 'Cierres de Caja', icon: Lock, to: '/cierres-caja', permiso: 'tesoreria.cierres-caja' },
+            { label: 'Motivos de Movimiento', icon: ListChecks, to: '/motivos-movimiento', permiso: 'tesoreria.motivos-movimiento' },
+            { label: 'Cuentas por Cobrar', icon: HandCoins, to: '/cuentas-por-cobrar', permiso: 'tesoreria.cuentas-por-cobrar' },
+            { label: 'Cuentas por Pagar', icon: Receipt, to: '/cuentas-por-pagar', permiso: 'tesoreria.cuentas-por-pagar' },
         ],
     },
     {
         label: 'Reportes',
         icon: BarChart3,
         children: [
-            { label: 'Ganancias', icon: TrendingUp, to: '/reportes/ganancias' },
-            { label: 'Utilidades', icon: LineChart, to: '/reportes/utilidades' },
+            { label: 'Ganancias', icon: TrendingUp, to: '/reportes/ganancias', permiso: 'reportes.ganancias' },
+            { label: 'Utilidades', icon: LineChart, to: '/reportes/utilidades', permiso: 'reportes.utilidades' },
         ],
     },
     {
         label: 'Gestión',
         icon: SlidersHorizontal,
         children: [
-            { label: 'Roles', icon: Shield, to: '/roles' },
-            { label: 'Usuarios', icon: Users, to: '/usuarios' },
-            { label: 'Empresa', icon: Building2, to: '/empresa' },
+            { label: 'Roles', icon: Shield, to: '/roles', permiso: 'gestion.roles' },
+            { label: 'Usuarios', icon: Users, to: '/usuarios', permiso: 'gestion.usuarios' },
+            { label: 'Empresa', icon: Building2, to: '/empresa', permiso: 'gestion.empresa' },
+            { label: 'Auditoría', icon: ShieldCheck, to: '/auditoria', permiso: 'gestion.auditoria' },
         ],
     },
 ];

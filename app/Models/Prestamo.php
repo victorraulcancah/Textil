@@ -2,10 +2,15 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Model;
 
 class Prestamo extends Model
 {
+    use Auditable;
+
+    /** Nombre del módulo en la bitácora de auditoría. */
+    protected string $auditarModulo = 'Préstamo';
     protected $table = 'prestamos';
 
     /** Serie del correlativo del documento de préstamo. */

@@ -14,7 +14,11 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        // Comprueba los permisos del rol en cada petición de la API, según la
+        // ruta y el método (config/permisos.php).
+        $middleware->api(append: [
+            \App\Http\Middleware\VerificarPermiso::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

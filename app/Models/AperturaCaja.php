@@ -2,10 +2,15 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Model;
 
 class AperturaCaja extends Model
 {
+    use Auditable;
+
+    /** Nombre del módulo en la bitácora de auditoría. */
+    protected string $auditarModulo = 'Apertura de caja';
     protected $table = 'aperturas_caja';
 
     protected $fillable = [

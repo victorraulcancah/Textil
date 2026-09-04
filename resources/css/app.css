@@ -17,24 +17,28 @@
         'Segoe UI Symbol', 'Noto Color Emoji';
 
     /* Color de marca */
-    --color-primary-50: #fff3e0;
-    --color-primary-100: #ffe0b2;
-    --color-primary-200: #ffcc80;
-    --color-primary-300: #ffb74d;
-    --color-primary-400: #ffa726;
-    --color-primary-500: #fb8c00;
-    --color-primary-600: #ef6c00;
-    --color-primary-700: #e65100;
-    --color-primary-800: #d84315;
-    --color-primary-900: #bf360c;
+    --color-primary-50: #eff6ff;
+    --color-primary-100: #dbeafe;
+    --color-primary-200: #bfdbfe;
+    --color-primary-300: #93c5fd;
+    --color-primary-400: #60a5fa;
+    --color-primary-500: #3b82f6;
+    --color-primary-600: #2563eb;
+    --color-primary-700: #1d4ed8;
+    --color-primary-800: #1e40af;
+    --color-primary-900: #1e3a8a;
 
-    /* Neutros cálidos (texto, bordes) */
-    --color-warm-900: #5d2e00;
-    --color-warm-500: #a9866a;
+    /* Neutros de texto/bordes. Se llaman "warm" por el tema cálido original;
+       ahora llevan azul/gris para acompañar la marca — el nombre quedó de recuerdo. */
+    --color-warm-900: #1e3a8a;
+    --color-warm-500: #64748b;
 
     --color-cream: #fdf6ef;
     --color-field: #fafafa;
     --color-edge: #e0dad2;
+
+    /* Fondo gris de las vistas de la app */
+    --color-surface: #f1f5f9;
 
     /* Colores de estado (éxito / error / advertencia / información) */
     --color-success-50: #f0fdf4;

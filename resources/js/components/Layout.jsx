@@ -27,7 +27,7 @@ export default function Layout({ children }) {
     };
 
     return (
-        <div className="min-h-screen bg-cream">
+        <div className="min-h-screen bg-surface">
             <Sidebar collapsed={collapsed} onToggleCollapse={toggleCollapsed} />
             <AlertsBell />
             <div

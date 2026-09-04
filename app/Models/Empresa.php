@@ -7,6 +7,8 @@ use Illuminate\Support\Facades\Storage;
 
 class Empresa extends Model
 {
+    protected $appends = ['logo_url'];
+
     protected $fillable = [
         'ruc',
         'razon_social',
@@ -18,6 +20,7 @@ class Empresa extends Model
         'ciudad',
         'telefono',
         'email',
+        'web',
         'logo',
         'activa',
     ];
@@ -44,7 +47,7 @@ class Empresa extends Model
 
     /**
      * URL pública del logo. Si la empresa no tiene logo subido,
-     * cae al logo BRAVA por defecto en /public/img/brava-horizontal.png.
+     * cae al logo por defecto del sistema en /public/img/logo-telas.svg.
      */
     public function getLogoUrlAttribute(): string
     {
@@ -52,12 +55,12 @@ class Empresa extends Model
             return Storage::disk('public')->url($this->logo);
         }
 
-        return asset('img/brava-horizontal.png');
+        return asset('img/logo-telas.svg');
     }
 
     /**
      * URL para el favicon: usa el logo subido de la empresa si existe,
-     * si no, el favicon.ico (monograma) del proyecto.
+     * si no, el ícono compacto del proyecto.
      */
     public function getFaviconUrlAttribute(): string
     {
@@ -65,6 +68,6 @@ class Empresa extends Model
             return Storage::disk('public')->url($this->logo);
         }
 
-        return asset('favicon.ico');
+        return asset('img/logo-telas-icon.svg');
     }
 }

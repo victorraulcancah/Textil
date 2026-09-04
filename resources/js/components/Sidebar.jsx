@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { NavLink } from 'react-router-dom';
 import { ChevronDown, ChevronsLeft, ChevronsRight, Menu, X } from 'lucide-react';
 import { navigation } from '../config/navigation';
+import api from '../lib/api';
 import { cn } from './ui';
 import UserMenu from './UserMenu';
 
@@ -29,6 +30,13 @@ function persistGroups(groups) {
 }
 
 export default function Sidebar({ collapsed = false, onToggleCollapse }) {
+    const [branding, setBranding] = useState(null);
+    useEffect(() => {
+        api.get('/branding')
+            .then((res) => setBranding(res.data))
+            .catch(() => {});
+    }, []);
+
     const [collapsedGroups, setCollapsedGroups] = useState(initGroups);
     const [mobileOpen, setMobileOpen] = useState(false);
     const [isDesktop, setIsDesktop] = useState(
@@ -128,20 +136,27 @@ export default function Sidebar({ collapsed = false, onToggleCollapse }) {
                     )}
                 >
                     {rail ? (
-                        <button
-                            onClick={onToggleCollapse}
-                            aria-label="Desplegar menú"
-                            title="Desplegar menú"
-                            className="rounded-md p-1.5 text-gray-500 transition hover:bg-gray-100 hover:text-gray-700"
-                        >
-                            <ChevronsRight className="h-5 w-5" />
-                        </button>
+                        <div className="flex flex-col items-center gap-1">
+                            <img
+                                src={branding?.favicon_url ?? '/img/logo-telas-icon.svg'}
+                                alt={branding?.nombre_comercial ?? 'Logo'}
+                                className="h-7 w-7 object-contain"
+                            />
+                            <button
+                                onClick={onToggleCollapse}
+                                aria-label="Desplegar menú"
+                                title="Desplegar menú"
+                                className="rounded-md p-1 text-gray-500 transition hover:bg-gray-100 hover:text-gray-700"
+                            >
+                                <ChevronsRight className="h-4 w-4" />
+                            </button>
+                        </div>
                     ) : (
                         <>
                             <img
-                                src="/images/brava-horizontal.png"
-                                alt="BRAVA"
-                                className="h-14 w-auto"
+                                src={branding?.logo_url ?? '/img/logo-telas.svg'}
+                                alt={branding?.nombre_comercial ?? 'Logo'}
+                                className="h-12 w-auto object-contain"
                             />
                             <div className="flex items-center gap-1">
                                 <button

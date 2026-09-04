@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Button, Input, Alert } from '../components/ui';
 import { useAuth } from '../lib/auth';
+import api from '../lib/api';
 
 const REMEMBER_KEY = 'brava_remember';
 
@@ -33,6 +34,13 @@ export default function Login() {
     const { login } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
+
+    const [branding, setBranding] = useState(null);
+    useEffect(() => {
+        api.get('/branding')
+            .then((res) => setBranding(res.data))
+            .catch(() => {});
+    }, []);
 
     const [form, setForm] = useState(() => {
         const saved = localStorage.getItem(REMEMBER_KEY);
@@ -104,13 +112,13 @@ export default function Login() {
     };
 
     return (
-        <div className="flex min-h-screen items-center justify-center bg-cream px-4 py-12">
+        <div className="flex min-h-screen items-center justify-center bg-surface px-4 py-12">
             <div className="w-full max-w-md">
                 <div className="mb-8 text-center">
                     <img
-                        src="/images/brava-horizontal.png"
-                        alt="BRAVA"
-                        className="mx-auto h-20 w-auto drop-shadow-sm"
+                        src={branding?.logo_url ?? '/img/logo-telas.svg'}
+                        alt={branding?.nombre_comercial ?? 'Logo'}
+                        className="mx-auto h-20 w-auto object-contain"
                     />
                     <p className="mt-4 text-sm text-warm-500">
                         Ingresa a tu cuenta para continuar

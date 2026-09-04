@@ -695,7 +695,8 @@ export default function Productos() {
                                 value={compra.unidad_contenido_id}
                                 onChange={setCompraField('unidad_contenido_id')}
                                 options={[
-                                    { value: '', label: 'Ej. Kilogramo, Unidad…' },
+                                    // Sin unidades registradas no se lista nada (ni un ejemplo).
+                                    { value: '', label: unidadOptions.length ? 'Seleccionar unidad…' : '' },
                                     ...unidadOptions,
                                 ]}
                                 error={errors.compra_contenido}

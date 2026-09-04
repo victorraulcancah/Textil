@@ -415,9 +415,9 @@ export default function DataTable({
     return (
         <div className="relative">
             {(searchable || filterable || toggleableColumns) && (
-                <div className="mb-2 flex flex-wrap items-center justify-end gap-2">
+                <div className="mb-2 flex flex-nowrap items-center justify-end gap-2">
                     {searchable && (
-                        <div className="relative w-full sm:w-64">
+                        <div className="relative min-w-0 flex-1 sm:w-64 sm:flex-none">
                             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                             <input
                                 type="search"
@@ -440,7 +440,7 @@ export default function DataTable({
                     )}
 
                     {(filterable || toggleableColumns) && (
-                        <div className="flex items-center gap-1">
+                        <div className="flex shrink-0 items-center gap-1">
                             {filterable && (
                                 <div className="relative">
                                     <ToolbarButton

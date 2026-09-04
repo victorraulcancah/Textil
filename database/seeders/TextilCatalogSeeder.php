@@ -59,6 +59,7 @@ class TextilCatalogSeeder extends Seeder
             // ── Telas de vestir (tejido plano) ──
             [
                 'codigo' => 'TEL001',
+                'colores' => [['Blanco', '100', '#FFFFFF'], ['Negro', '900', '#111111'], ['Azul Marino', '402', '#1F3A93'], ['Celeste', '410', '#7FB2E5'], ['Rosa Palo', '305', '#E8B4B8']],
                 'composicion' => '100% Algodón', 'ancho_cm' => 150, 'gramaje' => 130,
                 'tipo_tejido' => 'plano', 'elasticidad' => 'ninguna', 'encogimiento' => 5, 'minimo_compra' => 5,
                 'usos' => 'Camisería, blusas, vestidos y ropa de niño.',
@@ -73,6 +74,7 @@ class TextilCatalogSeeder extends Seeder
             ],
             [
                 'codigo' => 'TEL002',
+                'colores' => [['Floral Azul', 'F01', '#4A6FA5'], ['Floral Rosa', 'F02', '#D98695'], ['Cuadros Rojo', 'C01', '#B03A2E']],
                 'composicion' => '100% Algodón', 'ancho_cm' => 110, 'gramaje' => 120,
                 'tipo_tejido' => 'plano', 'elasticidad' => 'ninguna', 'encogimiento' => 5, 'minimo_compra' => 3,
                 'usos' => 'Patchwork, manualidades, camisería clásica.',
@@ -87,6 +89,7 @@ class TextilCatalogSeeder extends Seeder
             ],
             [
                 'codigo' => 'TEL003',
+                'colores' => [['Crudo', '101', '#EFE6D6'], ['Beige', '110', '#D9C7A7'], ['Verde Oliva', '520', '#6B7A3A'], ['Terracota', '610', '#C1663E']],
                 'composicion' => '100% Lino', 'ancho_cm' => 140, 'gramaje' => 190,
                 'tipo_tejido' => 'plano', 'elasticidad' => 'ninguna', 'encogimiento' => 8, 'minimo_compra' => 5,
                 'usos' => 'Pantalones, vestidos y camisas de verano.',
@@ -101,6 +104,7 @@ class TextilCatalogSeeder extends Seeder
             ],
             [
                 'codigo' => 'TEL004',
+                'colores' => [['Índigo', '801', '#2C3E6B'], ['Negro', '900', '#1A1A1A'], ['Celeste Claro', '420', '#8FA9C9']],
                 'composicion' => '98% Algodón / 2% Elastano', 'ancho_cm' => 150, 'gramaje' => 400,
                 'tipo_tejido' => 'plano', 'elasticidad' => 'mono', 'encogimiento' => 3, 'minimo_compra' => 5,
                 'usos' => 'Jeans, casacas y faldas.',
@@ -115,6 +119,7 @@ class TextilCatalogSeeder extends Seeder
             ],
             [
                 'codigo' => 'TEL005',
+                'colores' => [['Marfil', '102', '#F4EFE2'], ['Vino', '620', '#7B1E32'], ['Esmeralda', '530', '#0F7B5F'], ['Negro', '900', '#111111']],
                 'composicion' => '95% Poliéster / 5% Elastano', 'ancho_cm' => 150, 'gramaje' => 150,
                 'tipo_tejido' => 'plano', 'elasticidad' => 'bi', 'encogimiento' => 2, 'minimo_compra' => 3,
                 'usos' => 'Vestidos de fiesta, forros y blusas.',
@@ -129,6 +134,7 @@ class TextilCatalogSeeder extends Seeder
             ],
             [
                 'codigo' => 'TEL006',
+                'colores' => [['Gris Plomo', '700', '#6E7278'], ['Azul Noche', '405', '#22304A'], ['Beige', '110', '#CDBA9B'], ['Negro', '900', '#1A1A1A']],
                 'composicion' => '65% Poliéster / 35% Algodón', 'ancho_cm' => 150, 'gramaje' => 240,
                 'tipo_tejido' => 'plano', 'elasticidad' => 'ninguna', 'encogimiento' => 3, 'minimo_compra' => 5,
                 'usos' => 'Pantalones de vestir, uniformes y ropa de trabajo.',
@@ -145,6 +151,7 @@ class TextilCatalogSeeder extends Seeder
             // ── Telas de punto (al peso) ──
             [
                 'codigo' => 'TEL007',
+                'colores' => [['Blanco', '100', '#FFFFFF'], ['Negro', '900', '#141414'], ['Gris Jaspe', '705', '#9AA0A6'], ['Rojo', '600', '#C0392B'], ['Verde Botella', '535', '#14532D']],
                 'composicion' => '100% Algodón', 'ancho_cm' => 180, 'gramaje' => 180,
                 'tipo_tejido' => 'punto', 'elasticidad' => 'mono', 'encogimiento' => 6, 'minimo_compra' => 1,
                 'usos' => 'Camisetas, polos y ropa básica.',
@@ -159,6 +166,7 @@ class TextilCatalogSeeder extends Seeder
             ],
             [
                 'codigo' => 'TEL008',
+                'colores' => [['Negro', '900', '#111111'], ['Azul Petróleo', '440', '#1F5F6B'], ['Fucsia', '320', '#C2185B']],
                 'composicion' => '80% Poliamida / 20% Elastano', 'ancho_cm' => 160, 'gramaje' => 220,
                 'tipo_tejido' => 'punto', 'elasticidad' => 'bi', 'encogimiento' => 2, 'minimo_compra' => 1,
                 'usos' => 'Ropa deportiva, leggins y ropa de baño.',
@@ -173,6 +181,7 @@ class TextilCatalogSeeder extends Seeder
             ],
             [
                 'codigo' => 'TEL009',
+                'colores' => [['Gris Jaspe', '705', '#9AA0A6'], ['Negro', '900', '#141414'], ['Melón', '615', '#E8825B']],
                 'composicion' => '95% Algodón / 5% Elastano', 'ancho_cm' => 180, 'gramaje' => 280,
                 'tipo_tejido' => 'punto', 'elasticidad' => 'mono', 'encogimiento' => 5, 'minimo_compra' => 1,
                 'usos' => 'Poleras, buzos y joggers.',
@@ -189,6 +198,7 @@ class TextilCatalogSeeder extends Seeder
             // ── Hogar y tapicería (gran ancho) ──
             [
                 'codigo' => 'TEL010',
+                'colores' => [['Camel', '120', '#B58B57'], ['Gris Piedra', '710', '#8A8D8F'], ['Azul Prusia', '450', '#1B3A57']],
                 'composicion' => '70% Poliéster / 30% Algodón', 'ancho_cm' => 280, 'gramaje' => 420,
                 'tipo_tejido' => 'plano', 'elasticidad' => 'ninguna', 'encogimiento' => 2, 'minimo_compra' => 3,
                 'usos' => 'Tapicería de muebles, cojines y cabeceras.',
@@ -203,6 +213,7 @@ class TextilCatalogSeeder extends Seeder
             ],
             [
                 'codigo' => 'TEL011',
+                'colores' => [['Blanco Roto', '105', '#F2EFE9'], ['Gris', '700', '#7A7D80'], ['Chocolate', '630', '#4A342A']],
                 'composicion' => '100% Poliéster', 'ancho_cm' => 300, 'gramaje' => 300,
                 'tipo_tejido' => 'plano', 'elasticidad' => 'ninguna', 'encogimiento' => 1, 'minimo_compra' => 3,
                 'usos' => 'Cortinas con bloqueo de luz.',
@@ -217,6 +228,7 @@ class TextilCatalogSeeder extends Seeder
             ],
             [
                 'codigo' => 'TEL012',
+                'colores' => [['Blanco', '100', '#FFFFFF'], ['Celeste', '410', '#AFCBE3'], ['Rosa', '310', '#E6B7C1']],
                 'composicion' => '50% Algodón / 50% Poliéster', 'ancho_cm' => 280, 'gramaje' => 140,
                 'tipo_tejido' => 'plano', 'elasticidad' => 'ninguna', 'encogimiento' => 4, 'minimo_compra' => 3,
                 'usos' => 'Sábanas, fundas y mantelería.',
@@ -233,6 +245,7 @@ class TextilCatalogSeeder extends Seeder
             // ── Mercería ──
             [
                 'codigo' => 'MER001',
+                'colores' => [['Blanco', '100', '#FFFFFF'], ['Negro', '900', '#141414'], ['Crudo', '101', '#EFE6D6']],
                 'composicion' => '100% Algodón', 'ancho_cm' => 5, 'gramaje' => null,
                 'tipo_tejido' => 'plano', 'elasticidad' => 'ninguna', 'encogimiento' => null, 'minimo_compra' => 1,
                 'usos' => 'Terminaciones, lencería y decoración.',
@@ -247,6 +260,7 @@ class TextilCatalogSeeder extends Seeder
             ],
             [
                 'codigo' => 'MER002',
+                'colores' => [['Blanco', '100', '#FFFFFF'], ['Negro', '900', '#141414']],
                 'composicion' => '85% Poliéster / 15% Elastano', 'ancho_cm' => 2, 'gramaje' => null,
                 'tipo_tejido' => 'punto', 'elasticidad' => 'bi', 'encogimiento' => null, 'minimo_compra' => 1,
                 'usos' => 'Pretinas, puños y ropa deportiva.',
@@ -261,6 +275,7 @@ class TextilCatalogSeeder extends Seeder
             ],
             [
                 'codigo' => 'MER003',
+                'colores' => [['Blanco', '100', '#FFFFFF'], ['Negro', '900', '#141414'], ['Rojo', '600', '#C0392B'], ['Azul', '400', '#2C5FA8']],
                 'composicion' => '100% Poliéster', 'ancho_cm' => null, 'gramaje' => null,
                 'tipo_tejido' => null, 'elasticidad' => null, 'encogimiento' => null, 'minimo_compra' => 1,
                 'usos' => 'Costura general en máquina recta y remalladora.',
@@ -275,6 +290,7 @@ class TextilCatalogSeeder extends Seeder
             ],
             [
                 'codigo' => 'MER004',
+                'colores' => [['Negro', '900', '#141414'], ['Blanco', '100', '#FFFFFF'], ['Beige', '110', '#CDBA9B']],
                 'composicion' => 'Nylon y poliéster', 'ancho_cm' => null, 'gramaje' => null,
                 'tipo_tejido' => null, 'elasticidad' => null, 'encogimiento' => null, 'minimo_compra' => 1,
                 'usos' => 'Faldas, pantalones y carteras.',
@@ -375,6 +391,9 @@ class TextilCatalogSeeder extends Seeder
             'activo' => true,
         ];
 
+        // Colores del muestrario: [nombre, código, hex].
+        $colores = $p['colores'] ?? [];
+
         // Ficha técnica: solo las claves presentes en el producto.
         foreach (['composicion', 'ancho_cm', 'gramaje', 'tipo_tejido', 'elasticidad',
             'encogimiento', 'minimo_compra', 'usos', 'propiedades', 'cuidados'] as $campo) {
@@ -411,6 +430,7 @@ class TextilCatalogSeeder extends Seeder
             $pres[] = ['nombre' => 'Retazo (saldo)', 'factor_conversion' => 50, 'precio_venta' => round($p['precio_m'] * 0.5 * 0.7, 2), 'precio_compra' => 0, 'es_compra' => false];
 
             $this->presentaciones($producto, $pres, $u['cm']);
+            $this->colores($producto, $colores);
 
             return;
         }
@@ -439,6 +459,7 @@ class TextilCatalogSeeder extends Seeder
             }
 
             $this->presentaciones($producto, $pres, $u['g']);
+            $this->colores($producto, $colores);
 
             return;
         }
@@ -455,6 +476,20 @@ class TextilCatalogSeeder extends Seeder
             ['nombre' => $p['unidad'] === 'cono' ? 'Cono' : 'Unidad', 'factor_conversion' => 1, 'precio_venta' => $p['precio_u'], 'precio_compra' => $p['costo_u']],
             ['nombre' => 'Docena', 'factor_conversion' => 12, 'precio_venta' => round($p['precio_u'] * 12 * 0.92, 2), 'precio_compra' => round($p['costo_u'] * 12, 2)],
         ], $unidad);
+        $this->colores($producto, $colores);
+    }
+
+    /** Guarda la gama de colores: [nombre, código, hex]. */
+    private function colores(Producto $producto, array $lista): void
+    {
+        foreach ($lista as [$nombre, $codigo, $hex]) {
+            $producto->colores()->create([
+                'nombre' => $nombre,
+                'codigo' => $codigo,
+                'hex' => $hex,
+                'activo' => true,
+            ]);
+        }
     }
 
     private function presentaciones(Producto $producto, array $lista, int $unidadBaseId): void

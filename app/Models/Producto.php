@@ -2,6 +2,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Storage;
 
 class Producto extends Model
 {
@@ -40,6 +41,18 @@ class Producto extends Model
         'stock_maximo',
         'activo',
     ];
+
+    protected $appends = ['imagen_url'];
+
+    /** URL pública de la foto del producto, o null si no tiene. */
+    public function getImagenUrlAttribute(): ?string
+    {
+        if (! $this->imagen || ! Storage::disk('public')->exists($this->imagen)) {
+            return null;
+        }
+
+        return Storage::disk('public')->url($this->imagen);
+    }
 
     /**
      * Siguiente código correlativo (PROD001, PROD002…) para cuando no se envía
@@ -83,6 +96,8 @@ class Producto extends Model
 
     public function presentaciones() { return $this->hasMany(ProductoPresentacion::class); }
     public function lotes() { return $this->hasMany(ProductoLote::class); }
+    /** Gama de colores del muestrario. */
+    public function colores() { return $this->hasMany(ProductoColor::class); }
     public function stocks() { return $this->hasMany(ProductoAlmacenStock::class); }
     public function movimientos() { return $this->hasMany(MovimientoInventario::class); }
 }

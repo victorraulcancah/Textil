@@ -47,8 +47,12 @@ const emptyProducto = {
 const TABS = [
     { key: 'general', label: 'General' },
     { key: 'ficha', label: 'Ficha técnica' },
+    { key: 'colores', label: 'Colores' },
     { key: 'comercial', label: 'Compra y venta' },
 ];
+
+/** Un color del muestrario: "Azul Marino - Cód. 402". */
+const colorVacio = () => ({ nombre: '', codigo: '', hex: '#1f3a93' });
 
 /** Cómo se compra el producto: "un saco que trae 50 kilos, a S/ 140". */
 const compraVacia = () => ({
@@ -77,6 +81,9 @@ export default function Productos() {
     const [form, setForm] = useState(emptyProducto);
     const [compra, setCompra] = useState(compraVacia);
     const [ventas, setVentas] = useState([ventaVacia()]);
+    const [colores, setColores] = useState([]);
+    /** Foto elegida en el formulario; se sube después de guardar el producto. */
+    const [imagenFile, setImagenFile] = useState(null);
     const [errors, setErrors] = useState({});
     const [saving, setSaving] = useState(false);
 
@@ -135,6 +142,8 @@ export default function Productos() {
         setForm(emptyProducto);
         setCompra(compraVacia());
         setVentas([ventaVacia()]);
+        setColores([]);
+        setImagenFile(null);
         setErrors({});
         setTab('general');
         setModalOpen(true);
@@ -203,6 +212,14 @@ export default function Productos() {
                   }))
                 : [ventaVacia()],
         );
+        setColores(
+            (Array.isArray(prod.colores) ? prod.colores : []).map((c) => ({
+                nombre: c.nombre ?? '',
+                codigo: c.codigo ?? '',
+                hex: c.hex ?? '#1f3a93',
+            })),
+        );
+        setImagenFile(null);
         setErrors({});
         setModalOpen(true);
     };
@@ -346,15 +363,38 @@ export default function Productos() {
             propiedades: str(form.propiedades),
             cuidados: str(form.cuidados),
             presentaciones: buildPresentaciones(),
+            colores: colores
+                .filter((c) => c.nombre.trim())
+                .map((c) => ({
+                    nombre: c.nombre.trim(),
+                    codigo: str(c.codigo),
+                    hex: str(c.hex),
+                })),
         };
 
         try {
+            let productoId = editing?.id;
             if (editing) {
                 await api.put(`/productos/${editing.id}`, payload);
                 toast.success('Producto actualizado correctamente.');
             } else {
-                await api.post('/productos', payload);
+                const { data } = await api.post('/productos', payload);
+                productoId = data?.data?.id ?? data?.id;
                 toast.success('Producto creado correctamente.');
+            }
+
+            // La foto va aparte: el producto se manda como JSON y una imagen
+            // necesita multipart.
+            if (imagenFile && productoId) {
+                const fd = new FormData();
+                fd.append('imagen', imagenFile);
+                try {
+                    await api.post(`/productos/${productoId}/imagen`, fd, {
+                        headers: { 'Content-Type': 'multipart/form-data' },
+                    });
+                } catch {
+                    toast.error('El producto se guardó, pero no se pudo subir la foto.');
+                }
             }
             setModalOpen(false);
             await load();
@@ -848,6 +888,120 @@ export default function Productos() {
                                 error={errors.cuidados}
                             />
                         </div>
+                    </section>
+                </div>
+
+                {/* ── Gama de colores del muestrario ── */}
+                <div className={cn('space-y-6', tab !== 'colores' && 'hidden')}>
+                    <section>
+                        <div className="mb-2 flex items-center justify-between">
+                            <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+                                Colores disponibles
+                            </h3>
+                            <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => setColores((prev) => [...prev, colorVacio()])}
+                            >
+                                <Plus className="h-4 w-4" />
+                                Agregar color
+                            </Button>
+                        </div>
+                        <p className="mb-3 text-xs text-warm-400">
+                            En qué colores existe esta tela. Es informativo: el stock no se
+                            separa por color.
+                        </p>
+
+                        {colores.length === 0 ? (
+                            <p className="rounded-lg border border-dashed border-edge px-4 py-8 text-center text-sm text-warm-400">
+                                Sin colores registrados.
+                            </p>
+                        ) : (
+                            <div className="space-y-2">
+                                {colores.map((c, i) => (
+                                    <div
+                                        key={i}
+                                        className="flex flex-wrap items-end gap-2 rounded-lg border border-edge p-2"
+                                    >
+                                        <input
+                                            type="color"
+                                            aria-label="Muestra de color"
+                                            value={c.hex || '#1f3a93'}
+                                            onChange={(e) =>
+                                                setColores((prev) =>
+                                                    prev.map((x, j) =>
+                                                        j === i ? { ...x, hex: e.target.value } : x,
+                                                    ),
+                                                )
+                                            }
+                                            className="h-[38px] w-12 shrink-0 cursor-pointer rounded-md border border-edge bg-white p-1"
+                                        />
+                                        <Input
+                                            label="Nombre"
+                                            placeholder="Azul Marino"
+                                            className="min-w-[10rem] flex-1"
+                                            value={c.nombre}
+                                            onChange={(e) =>
+                                                setColores((prev) =>
+                                                    prev.map((x, j) =>
+                                                        j === i ? { ...x, nombre: e.target.value } : x,
+                                                    ),
+                                                )
+                                            }
+                                        />
+                                        <Input
+                                            label="Código"
+                                            placeholder="402"
+                                            className="w-28"
+                                            value={c.codigo}
+                                            onChange={(e) =>
+                                                setColores((prev) =>
+                                                    prev.map((x, j) =>
+                                                        j === i ? { ...x, codigo: e.target.value } : x,
+                                                    ),
+                                                )
+                                            }
+                                        />
+                                        <button
+                                            type="button"
+                                            aria-label="Quitar color"
+                                            onClick={() =>
+                                                setColores((prev) => prev.filter((_, j) => j !== i))
+                                            }
+                                            className="mb-px rounded-md p-2 text-danger-600 transition hover:bg-danger-50"
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </section>
+
+                    <section>
+                        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+                            Foto del producto
+                        </h3>
+                        {(imagenFile || editing?.imagen_url) && (
+                            <img
+                                src={
+                                    imagenFile
+                                        ? URL.createObjectURL(imagenFile)
+                                        : editing.imagen_url
+                                }
+                                alt="Foto del producto"
+                                className="mb-2 h-28 w-28 rounded-lg border border-edge object-cover"
+                            />
+                        )}
+                        <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp"
+                            onChange={(e) => setImagenFile(e.target.files?.[0] ?? null)}
+                            className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-primary-50 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary-700 hover:file:bg-primary-100"
+                        />
+                        <p className="mt-1 text-xs text-warm-400">
+                            PNG, JPG o WEBP, hasta 4 MB. Se sube al guardar el producto.
+                        </p>
                     </section>
                 </div>
 

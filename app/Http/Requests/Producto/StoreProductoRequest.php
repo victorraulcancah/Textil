@@ -65,6 +65,13 @@ class StoreProductoRequest extends FormRequest
             'presentaciones.*.cantidad_complementaria' => 'nullable|numeric|min:0',
             'presentaciones.*.activo' => 'boolean',
 
+            // Gama de colores del muestrario (opcional).
+            'colores' => 'nullable|array',
+            'colores.*.nombre' => 'required|string|max:255',
+            'colores.*.codigo' => 'nullable|string|max:255',
+            'colores.*.hex' => 'nullable|string|max:9',
+            'colores.*.activo' => 'boolean',
+
             // Lote inicial (opcional).
             'lote' => 'nullable|array',
             'lote.numero_lote' => 'nullable|string|max:255',

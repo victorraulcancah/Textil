@@ -69,6 +69,8 @@ Route::middleware('auth:api')->group(function () {
     Route::apiResource('categorias', CategoriaController::class);
     Route::apiResource('marcas', MarcaController::class);
     Route::apiResource('sub-marcas', SubMarcaController::class);
+    // Antes del apiResource: si no, {producto} capturaría "…/imagen".
+    Route::post('productos/{producto}/imagen', [ProductoController::class, 'subirImagen']);
     Route::apiResource('productos', ProductoController::class);
     Route::apiResource('productos.presentaciones', ProductoPresentacionController::class)->shallow();
     Route::apiResource('unidades-medida', UnidadMedidaController::class);

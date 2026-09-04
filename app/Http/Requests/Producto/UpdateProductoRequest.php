@@ -72,6 +72,13 @@ class UpdateProductoRequest extends FormRequest
             'unidad_medida_id.required' => 'La unidad de medida es obligatoria',
             'presentaciones.*.nombre.required' => 'El nombre de la unidad derivada es obligatorio',
             'presentaciones.*.factor_conversion.required' => 'El factor es obligatorio',
+            // Gama de colores del muestrario (opcional).
+            'colores' => 'nullable|array',
+            'colores.*.nombre' => 'required|string|max:255',
+            'colores.*.codigo' => 'nullable|string|max:255',
+            'colores.*.hex' => 'nullable|string|max:9',
+            'colores.*.activo' => 'boolean',
+
         ];
     }
 }

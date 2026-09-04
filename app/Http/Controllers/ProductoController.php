@@ -13,6 +13,8 @@ use App\Models\UnidadMedida;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class ProductoController extends Controller
 {
@@ -20,6 +22,7 @@ class ProductoController extends Controller
         'marca', 'subMarca', 'categoria', 'subCategoria', 'unidadMedida',
         'unidadCompra', 'unidadBase',
         'presentaciones.unidadBase', 'presentaciones.complementario',
+        'colores',
         'lotes',
     ];
 
@@ -43,7 +46,7 @@ class ProductoController extends Controller
     {
         $perPage = min(max((int) $request->input('per_page', 15), 1), 500);
 
-        $productos = Producto::with(['marca', 'subMarca', 'categoria', 'subCategoria', 'unidadMedida', 'presentaciones.unidadBase'])
+        $productos = Producto::with(['marca', 'subMarca', 'categoria', 'subCategoria', 'unidadMedida', 'presentaciones.unidadBase', 'colores'])
             ->latest('id')
             ->paginate($perPage);
         return ProductoResource::collection($productos);
@@ -56,6 +59,7 @@ class ProductoController extends Controller
         $producto = DB::transaction(function () use ($data) {
             $producto = Producto::create($this->soloProducto($data));
             $this->syncPresentaciones($producto, $data['presentaciones'] ?? []);
+            $this->syncColores($producto, $data['colores'] ?? []);
             $this->registrarLoteInicial($producto, $data['lote'] ?? null);
             return $producto;
         });
@@ -86,6 +90,9 @@ class ProductoController extends Controller
             if (array_key_exists('presentaciones', $data)) {
                 $this->syncPresentaciones($producto, $data['presentaciones'] ?? []);
             }
+            if (array_key_exists('colores', $data)) {
+                $this->syncColores($producto, $data['colores'] ?? []);
+            }
         });
 
         return new ProductoResource($producto->load(self::RELATIONS));
@@ -97,10 +104,83 @@ class ProductoController extends Controller
         return response()->json(['message' => 'Producto eliminado correctamente']);
     }
 
-    /** Solo las columnas propias del producto (sin presentaciones ni lote). */
+    /** Solo las columnas propias del producto (sin presentaciones, colores ni lote). */
     private function soloProducto(array $data): array
     {
-        return collect($data)->except(['presentaciones', 'lote'])->all();
+        return collect($data)->except(['presentaciones', 'colores', 'lote'])->all();
+    }
+
+    /**
+     * Guarda la foto del producto. Va en su propia ruta porque el formulario
+     * manda JSON (con presentaciones y colores anidados) y una imagen necesita
+     * multipart: mezclarlos obligaría a serializar todo el árbol.
+     */
+    public function subirImagen(Request $request, Producto $producto)
+    {
+        $request->validate([
+            'imagen' => 'required|file|extensions:png,jpg,jpeg,webp|max:4096',
+        ], [
+            'imagen.required' => 'Selecciona una imagen',
+            'imagen.extensions' => 'La imagen debe ser PNG, JPG o WEBP',
+            'imagen.max' => 'La imagen no debe superar 4 MB',
+        ]);
+
+        $anterior = $producto->imagen;
+
+        $archivo = $request->file('imagen');
+        $ext = strtolower($archivo->getClientOriginalExtension() ?: 'jpg');
+        $producto->imagen = $archivo->storeAs('productos', Str::uuid().'.'.$ext, 'public');
+        $producto->save();
+
+        if ($anterior && Storage::disk('public')->exists($anterior)) {
+            Storage::disk('public')->delete($anterior);
+        }
+
+        return new ProductoResource($producto->load(self::RELATIONS));
+    }
+
+    /**
+     * Deja los colores del producto igual a la lista enviada. Se identifican
+     * por nombre (único por producto), igual que las presentaciones, para no
+     * borrarlos y recrearlos en cada guardado.
+     */
+    private function syncColores(Producto $producto, array $lista): void
+    {
+        $existentes = $producto->colores()->get()->keyBy('nombre');
+        $conservados = [];
+
+        foreach ($lista as $c) {
+            $nombre = trim($c['nombre'] ?? '');
+            if ($nombre === '') {
+                continue;
+            }
+
+            $datos = [
+                'codigo' => $c['codigo'] ?? null,
+                'hex' => $c['hex'] ?? null,
+                'activo' => $c['activo'] ?? true,
+            ];
+
+            if ($existente = $existentes->get($nombre)) {
+                $existente->update($datos);
+            } else {
+                $producto->colores()->create($datos + ['nombre' => $nombre]);
+            }
+
+            $conservados[] = $nombre;
+        }
+
+        // Los que ya no están en la lista se eliminan (son catálogo, no
+        // apuntan a documentos), junto con su foto si la tenían.
+        foreach ($existentes as $nombre => $color) {
+            if (in_array($nombre, $conservados, true)) {
+                continue;
+            }
+            if ($color->imagen && Storage::disk('public')->exists($color->imagen)) {
+                Storage::disk('public')->delete($color->imagen);
+            }
+            $color->delete();
+        }
     }
 
     /**

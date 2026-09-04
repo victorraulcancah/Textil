@@ -46,6 +46,8 @@ class ProductoResource extends JsonResource
             'stock_minimo' => $this->stock_minimo,
             'stock_maximo' => $this->stock_maximo,
             'activo' => $this->activo,
+            'imagen_url' => $this->imagen_url,
+            'colores' => $this->whenLoaded('colores'),
             'presentaciones' => ProductoPresentacionResource::collection($this->whenLoaded('presentaciones')),
             'lotes' => ProductoLoteResource::collection($this->whenLoaded('lotes')),
             'created_at' => $this->created_at,

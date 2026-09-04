@@ -397,11 +397,20 @@ export default function DataTable({
      * table-fixed las comprime y las últimas quedan fuera del contenedor.
      * Las columnas sin ancho declarado reservan un mínimo razonable.
      */
-    const minTableWidth = allColumns.reduce((acc, col) => {
-        const w = colWidth(col);
-        const px = typeof w === 'string' && w.endsWith('px') ? parseFloat(w) : 170;
-        return acc + (Number.isFinite(px) ? px : 170);
-    }, 0);
+    const minTableWidth =
+        allColumns.reduce((acc, col) => {
+            const w = colWidth(col);
+            // Ancho arrastrado por el usuario: llega como número.
+            if (typeof w === 'number') return acc + (Number.isFinite(w) ? w : 170);
+            // Ancho declarado en px por la página.
+            if (typeof w === 'string' && w.endsWith('px')) return acc + (parseFloat(w) || 170);
+            // Porcentaje (columna automática): reserva un mínimo razonable.
+            return acc + 170;
+        }, 0) +
+        // Sumar el hueco de la barra vertical: así el contenedor es exactamente
+        // "columnas + barra", y el encabezado (que reserva ese hueco con padding)
+        // y el cuerpo (que lo ocupa con la barra) terminan con el mismo ancho.
+        gutter;
 
     return (
         <div className="relative">
@@ -685,8 +694,15 @@ export default function DataTable({
                             {/* Cuerpo desplazable: la barra de scroll aparece solo aquí. */}
                             <div
                                 ref={bodyRef}
-                                className="overflow-x-hidden overflow-y-auto"
-                                style={{ height: height ?? undefined, maxHeight: height ?? maxHeight }}
+                                className="overflow-y-auto"
+                                style={{
+                                    height: height ?? undefined,
+                                    maxHeight: height ?? maxHeight,
+                                    // 'clip' (a diferencia de 'hidden') no crea un contexto de scroll propio
+                                    // en este eje: el scroll horizontal queda solo en el contenedor de afuera,
+                                    // así el encabezado y el cuerpo nunca se desalinean entre sí.
+                                    overflowX: 'clip',
+                                }}
                             >
                                 <table className="w-full table-fixed text-left text-sm">
                                     <colgroup>

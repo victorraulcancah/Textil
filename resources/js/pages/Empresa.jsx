@@ -275,7 +275,7 @@ export default function Empresa() {
                         )}
                         <input
                             type="file"
-                            accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                            accept="image/png,image/jpeg"
                             onChange={(e) => setLogoFile(e.target.files?.[0] ?? null)}
                             className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-primary-50 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary-700 hover:file:bg-primary-100"
                         />

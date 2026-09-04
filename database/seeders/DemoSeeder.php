@@ -43,35 +43,35 @@ class DemoSeeder extends Seeder
         $cuentas = [];
         $cuentas[] = CuentaBancaria::create([
             'banco_id' => $bancos['BCP']->id, 'alias' => 'Cuenta principal soles', 'numero_cuenta' => '191-1234567-0-88',
-            'cci' => '00219100123456708812', 'titular' => 'Brother Corp S.A.C.', 'moneda' => 'PEN', 'tipo_cuenta' => 'corriente', 'activo' => true,
+            'cci' => '00219100123456708812', 'titular' => 'Textil S.A.C.', 'moneda' => 'PEN', 'tipo_cuenta' => 'corriente', 'activo' => true,
         ]);
         $cuentas[] = CuentaBancaria::create([
             'banco_id' => $bancos['Interbank']->id, 'alias' => 'Ahorros negocio', 'numero_cuenta' => '200-3009876543',
-            'cci' => '00320000300987654399', 'titular' => 'Brother Corp S.A.C.', 'moneda' => 'PEN', 'tipo_cuenta' => 'ahorros', 'activo' => true,
+            'cci' => '00320000300987654399', 'titular' => 'Textil S.A.C.', 'moneda' => 'PEN', 'tipo_cuenta' => 'ahorros', 'activo' => true,
         ]);
         $cuentas[] = CuentaBancaria::create([
             'banco_id' => $bancos['BBVA']->id, 'alias' => 'Cuenta pagos proveedores', 'numero_cuenta' => '0011-0456-0200123456',
-            'cci' => '01104560020012345678', 'titular' => 'Brother Corp S.A.C.', 'moneda' => 'PEN', 'tipo_cuenta' => 'corriente', 'activo' => true,
+            'cci' => '01104560020012345678', 'titular' => 'Textil S.A.C.', 'moneda' => 'PEN', 'tipo_cuenta' => 'corriente', 'activo' => true,
         ]);
 
         // ── Tarjetas ──
         TarjetaBancaria::create([
             'cuenta_bancaria_id' => $cuentas[0]->id, 'tipo_tarjeta' => 'debito', 'nombre_referencial' => 'Débito BCP negocio',
-            'numero_enmascarado' => '4557', 'marca' => 'Visa', 'fecha_vencimiento' => '08/2028', 'titular' => 'Brother Corp', 'estado' => 'activa',
+            'numero_enmascarado' => '4557', 'marca' => 'Visa', 'fecha_vencimiento' => '08/2028', 'titular' => 'Textil', 'estado' => 'activa',
         ]);
         TarjetaBancaria::create([
             'cuenta_bancaria_id' => $cuentas[2]->id, 'tipo_tarjeta' => 'credito', 'nombre_referencial' => 'Crédito BBVA',
-            'numero_enmascarado' => '5211', 'marca' => 'Mastercard', 'fecha_vencimiento' => '03/2027', 'titular' => 'Brother Corp', 'limite_credito' => 15000, 'estado' => 'activa',
+            'numero_enmascarado' => '5211', 'marca' => 'Mastercard', 'fecha_vencimiento' => '03/2027', 'titular' => 'Textil', 'limite_credito' => 15000, 'estado' => 'activa',
         ]);
 
         // ── Billeteras digitales ──
         BilleteraDigital::create([
             'nombre' => 'Yape', 'numero_asociado' => '987654321', 'cuenta_bancaria_id' => $cuentas[0]->id,
-            'titular' => 'Brother Corp', 'requiere_captura' => true, 'activo' => true,
+            'titular' => 'Textil', 'requiere_captura' => true, 'activo' => true,
         ]);
         BilleteraDigital::create([
             'nombre' => 'Plin', 'numero_asociado' => '955443322', 'cuenta_bancaria_id' => $cuentas[1]->id,
-            'titular' => 'Brother Corp', 'requiere_captura' => false, 'activo' => true,
+            'titular' => 'Textil', 'requiere_captura' => false, 'activo' => true,
         ]);
 
         // ── Cajas (se asignan a usuarios; aceptan efectivo + cuentas + billeteras) ──

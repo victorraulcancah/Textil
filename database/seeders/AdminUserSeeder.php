@@ -14,8 +14,8 @@ class AdminUserSeeder extends Seeder
         if (!$empresa) {
             $empresa = Empresa::create([
                 'ruc' => '20123456789',
-                'razon_social' => 'Brother Corp S.A.C.',
-                'nombre_comercial' => 'Brother',
+                'razon_social' => 'Textil S.A.C.',
+                'nombre_comercial' => 'Textil',
                 'direccion' => 'Av. Principal 123',
                 'telefono' => '999888777',
                 'email' => 'contacto@brother.com',

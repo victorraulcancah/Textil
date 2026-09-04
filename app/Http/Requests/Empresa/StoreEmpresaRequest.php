@@ -26,7 +26,8 @@ class StoreEmpresaRequest extends FormRequest
             'email' => 'nullable|email|max:255',
             'web' => 'nullable|url|max:255',
             'activa' => 'sometimes|boolean',
-            'logo' => 'nullable|image|max:4096',
+            // Solo PNG/JPG: dompdf (los PDF) no renderiza SVG ni WebP de forma confiable.
+            'logo' => 'nullable|image|mimes:png,jpg,jpeg|max:4096',
         ];
     }
 

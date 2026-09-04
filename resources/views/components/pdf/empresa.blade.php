@@ -2,11 +2,8 @@
 
 @php
     // El logo se guarda en storage/app/public; dompdf necesita la ruta física.
+    // Sin logo subido se muestra el nombre comercial como marca de texto.
     $logoPath = $empresa?->logo ? public_path('storage/' . ltrim($empresa->logo, '/')) : null;
-    // Sin logo propio de la empresa se usa el del sistema (BRAVA).
-    if (!$logoPath || !file_exists($logoPath)) {
-        $logoPath = public_path('img/brava-horizontal.png');
-    }
     $tieneLogo = $logoPath && file_exists($logoPath);
 @endphp
 
@@ -17,6 +14,7 @@
         @if ($empresa?->ruc)RUC {{ $empresa->ruc }}<br>@endif
         @if ($empresa?->direccion)<span class="muted">{{ $empresa->direccion }}</span><br>@endif
         @if ($empresa?->telefono)<span class="muted">Tel. {{ $empresa->telefono }}</span>@endif
+        @if ($empresa?->web)<br><span class="muted">{{ $empresa->web }}</span>@endif
     </div>
     <div class="sep"></div>
 @else
@@ -25,6 +23,8 @@
             <td style="width: 140px; vertical-align: top;">
                 @if ($tieneLogo)
                     <img src="{{ $logoPath }}" style="max-height: 50px; max-width: 135px;">
+                @else
+                    <div class="strong upper" style="font-size: 16px; letter-spacing: 1px; color: {{ config('theme.primary') }};">{{ $empresa->nombre_comercial ?? $empresa->razon_social ?? 'Mi Empresa' }}</div>
                 @endif
             </td>
             <td style="vertical-align: top;">
@@ -39,6 +39,7 @@
                 <div class="muted">
                     @if ($empresa?->telefono)Tel. {{ $empresa->telefono }}@endif
                     @if ($empresa?->email) · {{ $empresa->email }}@endif
+                    @if ($empresa?->web) · {{ $empresa->web }}@endif
                 </div>
             </td>
         </tr>

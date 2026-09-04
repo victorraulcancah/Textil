@@ -685,7 +685,7 @@ export default function DataTable({
                             {/* Cuerpo desplazable: la barra de scroll aparece solo aquí. */}
                             <div
                                 ref={bodyRef}
-                                className="overflow-y-auto"
+                                className="overflow-x-hidden overflow-y-auto"
                                 style={{ height: height ?? undefined, maxHeight: height ?? maxHeight }}
                             >
                                 <table className="w-full table-fixed text-left text-sm">

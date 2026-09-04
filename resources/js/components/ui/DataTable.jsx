@@ -763,10 +763,8 @@ export default function DataTable({
                           </div>
                         </div>
 
-                    <div
-                        className="space-y-3 overflow-y-auto md:hidden"
-                        style={{ height: height ?? undefined, maxHeight: height ?? maxHeight }}
-                    >
+                    {/* Móvil: las cards fluyen con la página, sin alto fijo ni scroll propio. */}
+                    <div className="space-y-3 md:hidden">
                         {filteredRows.length === 0 && (
                             <p className="px-4 py-12 text-center text-sm text-gray-400">
                                 {emptyMessage}

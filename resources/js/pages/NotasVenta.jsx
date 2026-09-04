@@ -4,6 +4,7 @@ import { Ban, Edit, Eye, Printer, User } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
+import BottomSheet from '../components/ui/BottomSheet';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
 import { Alert, Badge, Button, DataTable, Input, Modal, Select, Spinner } from '../components/ui';
@@ -243,8 +244,48 @@ export default function NotasVenta() {
                 }
             />
 
-            {/* Detalle de la venta seleccionada */}
-            <div className="mt-6 rounded-xl border border-edge bg-white shadow-sm">
+            {/* Móvil: el detalle sube desde abajo al tocar una card (en escritorio no pinta nada). */}
+            <BottomSheet
+                open={Boolean(seleccionada)}
+                onClose={() => setSeleccionada(null)}
+                title={seleccionada ? `${seleccionada.serie}-${seleccionada.numero} · ${seleccionada.cliente?.nombre ?? 'Cliente'}` : ''}
+                subtitle={`${detallesVenta.length} ${detallesVenta.length === 1 ? 'producto' : 'productos'}`}
+            >
+                {detallesVenta.length === 0 ? (
+                    <p className="py-6 text-center text-sm text-warm-500">Esta venta no tiene productos.</p>
+                ) : (
+                    <ul className="space-y-2">
+                        {detallesVenta.map((d) => {
+                            const producto = d.presentacion?.producto;
+                            return (
+                                <li key={d.id} className="flex items-center justify-between gap-3 rounded-lg border border-edge px-3 py-2">
+                                    <div className="min-w-0">
+                                        <p className="truncate text-sm font-semibold text-warm-900">
+                                            {producto?.nombre ?? d.producto_nombre ?? '—'}
+                                        </p>
+                                        <p className="text-xs text-warm-500">
+                                            {num(d.cantidad)} {d.presentacion?.nombre ?? ''}
+                                        </p>
+                                    </div>
+                                    <p className="shrink-0 text-right text-xs text-warm-500">
+                                        {money(d.precio_unitario)} × {num(d.cantidad)} ={' '}
+                                        <span className="text-sm font-semibold text-primary-600">{money(d.subtotal)}</span>
+                                    </p>
+                                </li>
+                            );
+                        })}
+                        <li className="flex items-center justify-between px-3 pt-1 text-sm">
+                            <span className="font-medium text-warm-500">Total</span>
+                            <span className="font-bold text-warm-900">
+                                {money(detallesVenta.reduce((a, d) => a + Number(d.subtotal || 0), 0))}
+                            </span>
+                        </li>
+                    </ul>
+                )}
+            </BottomSheet>
+
+            {/* Detalle de la venta seleccionada (escritorio) */}
+            <div className="mt-6 hidden rounded-xl border border-edge bg-white shadow-sm md:block">
                 <div className="flex items-center justify-between border-b border-edge px-5 py-3">
                     <h2 className="text-sm font-semibold text-warm-900">
                         Detalle {seleccionada ? `de ${seleccionada.serie}-${seleccionada.numero}` : ''}

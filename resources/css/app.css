@@ -119,6 +119,16 @@
     }
 }
 
+/* Panel que sube desde abajo (BottomSheet, detalle en móvil). */
+@keyframes sheet-in {
+    from {
+        transform: translateY(100%);
+    }
+    to {
+        transform: translateY(0);
+    }
+}
+
 /* Chips de filtro/búsqueda activos en las tablas. */
 @keyframes fade-in {
     from {

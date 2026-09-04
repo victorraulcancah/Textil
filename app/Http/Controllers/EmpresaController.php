@@ -27,7 +27,7 @@ class EmpresaController extends Controller
         $empresa = Empresa::create($data);
 
         if ($request->hasFile('logo')) {
-            $empresa->logo = $request->file('logo')->store('empresas', 'public');
+            $empresa->logo = $this->guardarLogo($request->file('logo'));
             $empresa->save();
         }
 
@@ -52,7 +52,7 @@ class EmpresaController extends Controller
             if ($logoAnterior && Storage::disk('public')->exists($logoAnterior)) {
                 Storage::disk('public')->delete($logoAnterior);
             }
-            $empresa->logo = $request->file('logo')->store('empresas', 'public');
+            $empresa->logo = $this->guardarLogo($request->file('logo'));
             $empresa->save();
         }
 
@@ -64,6 +64,19 @@ class EmpresaController extends Controller
         Empresa::findOrFail($id)->delete();
 
         return response()->json(null, 204);
+    }
+
+    /**
+     * Guarda el logo conservando su extensión real. `store()` deduce la
+     * extensión del MIME detectado, y con un SVG puede quedar sin extensión
+     * (el navegador entonces no lo muestra como imagen).
+     */
+    private function guardarLogo(\Illuminate\Http\UploadedFile $archivo): string
+    {
+        $ext = strtolower($archivo->getClientOriginalExtension() ?: 'png');
+        $nombre = \Illuminate\Support\Str::uuid() . '.' . $ext;
+
+        return $archivo->storeAs('empresas', $nombre, 'public');
     }
 
     /**

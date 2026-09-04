@@ -26,14 +26,19 @@ class UpdateEmpresaRequest extends FormRequest
             'email' => 'nullable|email|max:255',
             'web' => 'nullable|url|max:255',
             'activa' => 'sometimes|boolean',
-            // Solo PNG/JPG: dompdf (los PDF) no renderiza SVG ni WebP de forma confiable.
-            'logo' => 'nullable|image|mimes:png,jpg,jpeg|max:4096',
+            // Por extensión y no con la regla `image`: PHP no siempre detecta el
+            // MIME de un SVG. En los PDF (dompdf) solo se usan PNG/JPG; con SVG
+            // el documento muestra el nombre comercial como marca.
+            'logo' => 'nullable|file|extensions:png,jpg,jpeg,svg|max:4096',
         ];
     }
 
     public function messages(): array
     {
         return [
+            'logo.file' => 'El logo debe ser un archivo',
+            'logo.extensions' => 'El logo debe ser PNG, JPG o SVG',
+            'logo.max' => 'El logo no debe superar 4 MB',
             'ruc.size' => 'El RUC debe tener 11 dígitos',
             'ruc.unique' => 'El RUC ya está registrado',
         ];

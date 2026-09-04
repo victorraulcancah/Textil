@@ -28,6 +28,12 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    // Consulta de RUC (SUNAT) y DNI (RENIEC) para autocompletar formularios.
+    'apisperu' => [
+        'url' => env('APISPERU_URL', 'https://dniruc.apisperu.com/api/v1'),
+        'token' => env('APISPERU_TOKEN'),
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),

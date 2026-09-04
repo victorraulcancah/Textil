@@ -15,6 +15,7 @@ class UpdateUserRequest extends FormRequest
     {
         return [
             'name' => 'sometimes|string|max:255',
+            'dni' => 'nullable|digits:8',
             // La ruta declara {id}: con route('user') venía null y el unique no
             // ignoraba al propio usuario, así que guardar sin tocar el correo
             // fallaba con "El correo ya está registrado".
@@ -32,6 +33,7 @@ class UpdateUserRequest extends FormRequest
     {
         return [
             'name.max' => 'El nombre no puede exceder 255 caracteres',
+            'dni.digits' => 'El DNI debe tener 8 dígitos',
             'email.email' => 'El correo no es válido',
             'email.unique' => 'El correo ya está registrado',
             'password.min' => 'La contraseña debe tener al menos 6 caracteres',

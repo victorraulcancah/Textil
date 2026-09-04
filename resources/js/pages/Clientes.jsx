@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Edit, IdCard, Mail, Phone, Trash2, User } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
+import ConsultarDocumento from '../components/ConsultarDocumento';
 import Layout from '../components/Layout';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import { Alert, Badge, Button, DataTable, Input, Modal, Select } from '../components/ui';
@@ -276,7 +277,25 @@ export default function Clientes() {
                                 { value: 'SIN', label: 'Sin documento' },
                             ]}
                         />
-                        <Input label="N° Documento" className="sm:col-span-2" value={form.numero_documento} onChange={(e) => field('numero_documento', e.target.value)} error={formErrors.numero_documento} />
+                        <div className="flex items-end gap-2 sm:col-span-2">
+                            <Input label="N° Documento" className="flex-1" value={form.numero_documento} onChange={(e) => field('numero_documento', e.target.value)} error={formErrors.numero_documento} />
+                            {(form.tipo_documento === 'DNI' || form.tipo_documento === 'RUC') && (
+                                <ConsultarDocumento
+                                    tipo={form.tipo_documento === 'RUC' ? 'ruc' : 'dni'}
+                                    numero={form.numero_documento}
+                                    className="mb-px shrink-0"
+                                    onResult={(d) => {
+                                        if (form.tipo_documento === 'RUC') {
+                                            field('nombre', d.razon_social ?? '');
+                                            if (d.direccion) field('direccion', d.direccion);
+                                            if (d.telefono) field('telefono', d.telefono);
+                                        } else {
+                                            field('nombre', d.nombre_completo ?? '');
+                                        }
+                                    }}
+                                />
+                            )}
+                        </div>
                     </div>
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <Input label="Teléfono" value={form.telefono} onChange={(e) => field('telefono', e.target.value)} error={formErrors.telefono} />

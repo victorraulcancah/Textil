@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Building2, Edit, Mail, Phone, Trash2 } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
+import ConsultarDocumento from '../components/ConsultarDocumento';
 import Layout from '../components/Layout';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import { Alert, Badge, Button, DataTable, Input, Modal } from '../components/ui';
@@ -250,7 +251,23 @@ export default function Empresa() {
             >
                 <form id="empresa-form" onSubmit={handleSubmit} className="space-y-4" noValidate>
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <Input label="RUC" value={form.ruc} onChange={(e) => field('ruc', e.target.value)} error={formErrors.ruc} />
+                        <div className="flex items-end gap-2">
+                            <Input label="RUC" className="flex-1" value={form.ruc} onChange={(e) => field('ruc', e.target.value)} error={formErrors.ruc} />
+                            <ConsultarDocumento
+                                tipo="ruc"
+                                numero={form.ruc}
+                                className="mb-px shrink-0"
+                                onResult={(d) => {
+                                    field('razon_social', d.razon_social ?? '');
+                                    if (d.nombre_comercial) field('nombre_comercial', d.nombre_comercial);
+                                    if (d.direccion) field('direccion', d.direccion);
+                                    if (d.departamento) field('departamento', d.departamento);
+                                    if (d.provincia) field('provincia', d.provincia);
+                                    if (d.distrito) field('distrito', d.distrito);
+                                    if (d.telefono) field('telefono', d.telefono);
+                                }}
+                            />
+                        </div>
                         <Input label="Razón social" value={form.razon_social} onChange={(e) => field('razon_social', e.target.value)} error={formErrors.razon_social} />
                         <Input label="Nombre comercial" value={form.nombre_comercial} onChange={(e) => field('nombre_comercial', e.target.value)} error={formErrors.nombre_comercial} />
                         <Input label="Teléfono" value={form.telefono} onChange={(e) => field('telefono', e.target.value)} error={formErrors.telefono} />
@@ -275,7 +292,7 @@ export default function Empresa() {
                         )}
                         <input
                             type="file"
-                            accept="image/png,image/jpeg"
+                            accept="image/png,image/jpeg,image/svg+xml,.svg"
                             onChange={(e) => setLogoFile(e.target.files?.[0] ?? null)}
                             className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-primary-50 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary-700 hover:file:bg-primary-100"
                         />

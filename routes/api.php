@@ -50,6 +50,10 @@ Route::middleware('auth:api')->group(function () {
     Route::post('logout', [AuthController::class, 'logout']);
     Route::get('me', [AuthController::class, 'me']);
 
+    // Consulta RUC / DNI para autocompletar formularios
+    Route::get('consulta/ruc/{ruc}', [\App\Http\Controllers\ConsultaDocumentoController::class, 'ruc']);
+    Route::get('consulta/dni/{dni}', [\App\Http\Controllers\ConsultaDocumentoController::class, 'dni']);
+
     // Dashboard / escritorio
     Route::get('dashboard', [DashboardController::class, 'index']);
     Route::get('alertas', [AlertaController::class, 'index']);

@@ -1,10 +1,10 @@
 @props(['empresa', 'titulo', 'numero' => null, 'estado' => null])
 
 @php
-    // Logo subido por la empresa (storage/app/public). Sin logo, la cabecera
-    // muestra el nombre comercial como marca de texto: no hay logo del sistema.
-    $logoPath = $empresa?->logo ? public_path('storage/' . ltrim($empresa->logo, '/')) : null;
-    $tieneLogo = $logoPath && file_exists($logoPath);
+    // Logo subido por la empresa (storage/app/public), ya con tamaño calculado
+    // para dompdf. Sin logo, la cabecera muestra el nombre comercial como marca
+    // de texto: no hay logo del sistema.
+    $logo = $empresa?->logoPdf(145, 54);
     $nombreEmpresa = $empresa->razon_social ?? $empresa->nombre_comercial ?? 'Mi Empresa';
     $marcaTexto = $empresa->nombre_comercial ?? $nombreEmpresa;
 @endphp
@@ -13,8 +13,8 @@
 <table style="margin-bottom: 6px;">
     <tr>
         <td style="width: 150px; vertical-align: middle;">
-            @if ($tieneLogo)
-                <img src="{{ $logoPath }}" style="max-height: 54px; max-width: 145px;">
+            @if ($logo)
+                <img src="{{ $logo['ruta'] }}" width="{{ $logo['ancho'] }}" height="{{ $logo['alto'] }}" style="width: {{ $logo['ancho'] }}px; height: {{ $logo['alto'] }}px;">
             @else
                 <div class="strong upper" style="font-size: 17px; letter-spacing: 1px; color: {{ config('theme.primary') }};">{{ $marcaTexto }}</div>
             @endif

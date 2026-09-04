@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Edit, Trash2, User as UserIcon } from 'lucide-react';
 import api from '../lib/api';
+import ConsultarDocumento from '../components/ConsultarDocumento';
 import Layout from '../components/Layout';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import { Alert, Badge, Button, DataTable, Input, Modal, Select } from '../components/ui';
@@ -16,6 +17,7 @@ export default function Usuarios() {
     const [editing, setEditing] = useState(null);
     const [form, setForm] = useState({
         name: '',
+        dni: '',
         email: '',
         password: '',
         role: '',
@@ -55,7 +57,7 @@ export default function Usuarios() {
 
     const openCreate = () => {
         setEditing(null);
-        setForm({ name: '', email: '', password: '', role: '', empresa_id: '' });
+        setForm({ name: '', dni: '', email: '', password: '', role: '', empresa_id: '' });
         setErrors({});
         setModalOpen(true);
     };
@@ -64,6 +66,7 @@ export default function Usuarios() {
         setEditing(user);
         setForm({
             name: user.name,
+            dni: user.dni ?? '',
             email: user.email,
             password: '',
             role: user.roles?.[0]?.name ?? '',
@@ -80,6 +83,7 @@ export default function Usuarios() {
 
         const payload = {
             name: form.name,
+            dni: form.dni || null,
             email: form.email,
             role: form.role || undefined,
             empresa_id: form.empresa_id || undefined,
@@ -266,6 +270,23 @@ export default function Usuarios() {
                 }
             >
                 <form id="user-form" onSubmit={handleSubmit} className="space-y-4" noValidate>
+                    <div className="flex items-end gap-2">
+                        <Input
+                            label="DNI"
+                            name="dni"
+                            className="flex-1"
+                            placeholder="8 dígitos"
+                            value={form.dni}
+                            onChange={(e) => setForm((prev) => ({ ...prev, dni: e.target.value }))}
+                            error={errors.dni}
+                        />
+                        <ConsultarDocumento
+                            tipo="dni"
+                            numero={form.dni}
+                            className="mb-px shrink-0"
+                            onResult={(d) => setForm((prev) => ({ ...prev, name: d.nombre_completo ?? prev.name }))}
+                        />
+                    </div>
                     <Input
                         label="Nombre"
                         name="name"

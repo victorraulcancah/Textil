@@ -15,6 +15,7 @@ class StoreUserRequest extends FormRequest
     {
         return [
             'name' => 'required|string|max:255',
+            'dni' => 'nullable|digits:8',
             'email' => 'required|email|max:255|unique:users,email',
             'password' => 'required|string|min:6',
             'empresa_id' => 'nullable|exists:empresas,id',
@@ -27,6 +28,7 @@ class StoreUserRequest extends FormRequest
     {
         return [
             'name.required' => 'El nombre es obligatorio',
+            'dni.digits' => 'El DNI debe tener 8 dígitos',
             'email.required' => 'El correo es obligatorio',
             'email.email' => 'El correo no es válido',
             'email.unique' => 'El correo ya está registrado',

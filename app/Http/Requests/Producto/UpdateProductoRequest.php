@@ -27,6 +27,18 @@ class UpdateProductoRequest extends FormRequest
             'imagen' => 'nullable|string|max:255',
             'ficha_tecnica' => 'nullable|string|max:255',
             'accion_tecnica' => 'nullable|string|max:5000',
+
+            // Ficha técnica de tela (todo opcional: mercería y avíos no la usan).
+            'composicion' => 'nullable|string|max:255',
+            'ancho_cm' => 'nullable|numeric|min:0|max:999999',
+            'gramaje' => 'nullable|numeric|min:0|max:999999',
+            'tipo_tejido' => 'nullable|in:plano,punto',
+            'elasticidad' => 'nullable|in:ninguna,mono,bi',
+            'encogimiento' => 'nullable|numeric|min:0|max:100',
+            'minimo_compra' => 'nullable|numeric|min:0',
+            'usos' => 'nullable|string|max:5000',
+            'propiedades' => 'nullable|string|max:5000',
+            'cuidados' => 'nullable|string|max:5000',
             'precio_base' => 'nullable|numeric|min:0',
             'stock_minimo' => 'nullable|numeric|min:0',
             'stock_maximo' => 'nullable|numeric|min:0',

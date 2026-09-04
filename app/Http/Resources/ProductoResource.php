@@ -29,6 +29,19 @@ class ProductoResource extends JsonResource
             'imagen' => $this->imagen,
             'ficha_tecnica' => $this->ficha_tecnica,
             'accion_tecnica' => $this->accion_tecnica,
+
+            // Ficha técnica de tela (null en mercería y avíos).
+            'composicion' => $this->composicion,
+            'ancho_cm' => $this->ancho_cm,
+            'gramaje' => $this->gramaje,
+            'tipo_tejido' => $this->tipo_tejido,
+            'elasticidad' => $this->elasticidad,
+            'encogimiento' => $this->encogimiento,
+            'minimo_compra' => $this->minimo_compra,
+            'usos' => $this->usos,
+            'propiedades' => $this->propiedades,
+            'cuidados' => $this->cuidados,
+
             'precio_base' => $this->precio_base,
             'stock_minimo' => $this->stock_minimo,
             'stock_maximo' => $this->stock_maximo,

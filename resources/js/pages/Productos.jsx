@@ -5,7 +5,7 @@ import { calcularPresentaciones, describirContenido } from '../lib/unidades';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import PageHeader, { CreateButton } from '../components/PageHeader';
-import { Alert, Badge, Button, DataTable, Input, Modal, Select } from '../components/ui';
+import { Alert, Badge, Button, DataTable, Input, Modal, Select, Tabs, cn } from '../components/ui';
 
 /** Soles con hasta 4 decimales: el costo por gramo puede ser S/ 0.0028. */
 const money = (n) =>
@@ -29,7 +29,26 @@ const emptyProducto = {
     stock_minimo: '',
     stock_maximo: '',
     activo: true,
+    // Ficha técnica de tela (opcional: mercería y avíos la dejan vacía).
+    descripcion: '',
+    composicion: '',
+    ancho_cm: '',
+    gramaje: '',
+    tipo_tejido: '',
+    elasticidad: '',
+    encogimiento: '',
+    minimo_compra: '',
+    usos: '',
+    propiedades: '',
+    cuidados: '',
 };
+
+/** Pestañas del modal: el formulario es largo y se parte por temas. */
+const TABS = [
+    { key: 'general', label: 'General' },
+    { key: 'ficha', label: 'Ficha técnica' },
+    { key: 'comercial', label: 'Compra y venta' },
+];
 
 /** Cómo se compra el producto: "un saco que trae 50 kilos, a S/ 140". */
 const compraVacia = () => ({
@@ -53,6 +72,7 @@ export default function Productos() {
     const [error, setError] = useState(null);
 
     const [modalOpen, setModalOpen] = useState(false);
+    const [tab, setTab] = useState('general');
     const [editing, setEditing] = useState(null);
     const [form, setForm] = useState(emptyProducto);
     const [compra, setCompra] = useState(compraVacia);
@@ -116,6 +136,7 @@ export default function Productos() {
         setCompra(compraVacia());
         setVentas([ventaVacia()]);
         setErrors({});
+        setTab('general');
         setModalOpen(true);
     };
 
@@ -137,7 +158,19 @@ export default function Productos() {
             stock_minimo: prod.stock_minimo ?? '',
             stock_maximo: prod.stock_maximo ?? '',
             activo: prod.activo !== false,
+            descripcion: prod.descripcion ?? '',
+            composicion: prod.composicion ?? '',
+            ancho_cm: prod.ancho_cm ?? '',
+            gramaje: prod.gramaje ?? '',
+            tipo_tejido: prod.tipo_tejido ?? '',
+            elasticidad: prod.elasticidad ?? '',
+            encogimiento: prod.encogimiento ?? '',
+            minimo_compra: prod.minimo_compra ?? '',
+            usos: prod.usos ?? '',
+            propiedades: prod.propiedades ?? '',
+            cuidados: prod.cuidados ?? '',
         });
+        setTab('general');
         // Se reconstruye "compro / vendo" desde lo guardado.
         const baseId = relId('unidad_medida_id', 'unidad_medida');
         const contenido = describirContenido(unidades, baseId, prod.factor_compra_base);
@@ -301,6 +334,17 @@ export default function Productos() {
             factor_compra_base: calculo.factorCompraBase || undefined,
             stock_minimo: num(form.stock_minimo),
             stock_maximo: num(form.stock_maximo),
+            descripcion: str(form.descripcion),
+            composicion: str(form.composicion),
+            ancho_cm: num(form.ancho_cm),
+            gramaje: num(form.gramaje),
+            tipo_tejido: str(form.tipo_tejido),
+            elasticidad: str(form.elasticidad),
+            encogimiento: num(form.encogimiento),
+            minimo_compra: num(form.minimo_compra),
+            usos: str(form.usos),
+            propiedades: str(form.propiedades),
+            cuidados: str(form.cuidados),
             presentaciones: buildPresentaciones(),
         };
 
@@ -535,7 +579,13 @@ export default function Productos() {
                     </>
                 }
             >
-                <div className="space-y-6">
+                {/* El formulario es largo: se parte en pestañas. Todas siguen
+                    montadas para no perder lo escrito al cambiar de pestaña. */}
+                <div className="-mt-2 mb-4">
+                    <Tabs items={TABS} value={tab} onChange={setTab} />
+                </div>
+
+                <div className={cn('space-y-6', tab !== 'general' && 'hidden')}>
                     {/* Identificación */}
                     <section>
                         <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
@@ -654,6 +704,155 @@ export default function Productos() {
                         </div>
                     </section>
 
+                </div>
+
+                {/* ── Ficha técnica de la tela ── */}
+                <div className={cn('space-y-6', tab !== 'ficha' && 'hidden')}>
+                    <section>
+                        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+                            Especificaciones
+                        </h3>
+                        <p className="mb-3 text-xs text-warm-400">
+                            Todo es opcional: la mercería y los avíos no usan estos datos.
+                        </p>
+                        <div className="grid gap-4 sm:grid-cols-3">
+                            <Input
+                                label="Composición"
+                                placeholder="100% Algodón / 65% Poliéster 35% Algodón"
+                                value={form.composicion}
+                                onChange={setField('composicion')}
+                                error={errors.composicion}
+                                className="sm:col-span-3"
+                            />
+                            <Input
+                                label="Ancho útil (cm)"
+                                type="number"
+                                step="0.5"
+                                placeholder="150"
+                                value={form.ancho_cm}
+                                onChange={setField('ancho_cm')}
+                                error={errors.ancho_cm}
+                            />
+                            <Input
+                                label="Gramaje (g/m²)"
+                                type="number"
+                                step="1"
+                                placeholder="180"
+                                value={form.gramaje}
+                                onChange={setField('gramaje')}
+                                error={errors.gramaje}
+                            />
+                            <Input
+                                label="Encogimiento (%)"
+                                type="number"
+                                step="0.5"
+                                placeholder="5"
+                                value={form.encogimiento}
+                                onChange={setField('encogimiento')}
+                                error={errors.encogimiento}
+                            />
+                            <Select
+                                label="Tipo de tejido"
+                                value={form.tipo_tejido}
+                                onChange={setField('tipo_tejido')}
+                                options={[
+                                    { value: '', label: 'Sin especificar' },
+                                    { value: 'plano', label: 'Plano (rígido)' },
+                                    { value: 'punto', label: 'Punto (elástico)' },
+                                ]}
+                                error={errors.tipo_tejido}
+                            />
+                            <Select
+                                label="Elasticidad"
+                                value={form.elasticidad}
+                                onChange={setField('elasticidad')}
+                                options={[
+                                    { value: '', label: 'Sin especificar' },
+                                    { value: 'ninguna', label: 'Sin elasticidad' },
+                                    { value: 'mono', label: 'Estira a lo ancho' },
+                                    { value: 'bi', label: 'Bielástico' },
+                                ]}
+                                error={errors.elasticidad}
+                            />
+                            <Input
+                                label="Mínimo de compra"
+                                type="number"
+                                step="0.5"
+                                placeholder="5"
+                                value={form.minimo_compra}
+                                onChange={setField('minimo_compra')}
+                                error={errors.minimo_compra}
+                            />
+                        </div>
+                        {(form.ancho_cm || form.gramaje) && (
+                            <p className="mt-2 text-xs text-warm-500">
+                                {form.ancho_cm > 0 && (
+                                    <>
+                                        Ancho: <strong>{(Number(form.ancho_cm) / 100).toFixed(2)} m</strong>
+                                        {' · '}
+                                        {Number(form.ancho_cm) <= 120
+                                            ? 'sencillo'
+                                            : Number(form.ancho_cm) <= 160
+                                              ? 'doble ancho'
+                                              : 'gran ancho'}
+                                    </>
+                                )}
+                                {form.ancho_cm > 0 && form.gramaje > 0 && ' · '}
+                                {form.gramaje > 0 && (
+                                    <>
+                                        Tela{' '}
+                                        <strong>
+                                            {Number(form.gramaje) < 150
+                                                ? 'liviana'
+                                                : Number(form.gramaje) <= 250
+                                                  ? 'media'
+                                                  : 'pesada'}
+                                        </strong>
+                                    </>
+                                )}
+                            </p>
+                        )}
+                    </section>
+
+                    <section>
+                        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+                            Usos y cuidados
+                        </h3>
+                        <div className="grid gap-4">
+                            <Input
+                                label="Descripción"
+                                placeholder="Detalle libre del producto"
+                                value={form.descripcion}
+                                onChange={setField('descripcion')}
+                                error={errors.descripcion}
+                            />
+                            <Input
+                                label="Usos recomendados"
+                                placeholder="Camisería, vestidos de verano, mantelería…"
+                                value={form.usos}
+                                onChange={setField('usos')}
+                                error={errors.usos}
+                            />
+                            <Input
+                                label="Propiedades especiales"
+                                placeholder="Antipilling, repelente al agua, protección UV, preencogido…"
+                                value={form.propiedades}
+                                onChange={setField('propiedades')}
+                                error={errors.propiedades}
+                            />
+                            <Input
+                                label="Cuidados de lavado"
+                                placeholder="Lavar a 30 °C, no usar lejía, planchado medio…"
+                                value={form.cuidados}
+                                onChange={setField('cuidados')}
+                                error={errors.cuidados}
+                            />
+                        </div>
+                    </section>
+                </div>
+
+                {/* ── Compra y venta ── */}
+                <div className={cn('space-y-6', tab !== 'comercial' && 'hidden')}>
                     {/* Cómo lo compro */}
                     <section>
                         <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
@@ -667,7 +866,10 @@ export default function Productos() {
                                     label="Compro por"
                                     value={compra.unidad_compra_id}
                                     onChange={setCompraField('unidad_compra_id')}
-                                    options={[{ value: '', label: 'Ej. Saco, Caja…' }, ...unidadOptions]}
+                                    options={[
+                                        { value: '', label: unidadOptions.length ? 'Seleccionar unidad…' : '' },
+                                        ...unidadOptions,
+                                    ]}
                                     error={errors.compra_unidad}
                                 />
                             </FieldWithAdd>
@@ -702,28 +904,6 @@ export default function Productos() {
                                 error={errors.compra_contenido}
                             />
                         </div>
-                        <p className="mt-2 text-xs text-warm-400">
-                            Ej. un saco trae <strong>50</strong> de <strong>Kilogramo</strong>; una
-                            caja trae <strong>12</strong> de <strong>Unidad</strong>.
-                        </p>
-                        {calculo.baseId && calculo.factorCompraBase > 0 && (
-                            <p className="mt-2 text-xs text-warm-500">
-                                {compra.unidad_compra_id
-                                    ? `1 ${unidadNombre(compra.unidad_compra_id)} = `
-                                    : 'La compra equivale a '}
-                                <strong>
-                                    {calculo.factorCompraBase.toLocaleString('es-PE')}{' '}
-                                    {unidadNombre(calculo.baseId)}
-                                </strong>
-                                {Number(compra.precio) > 0 && (
-                                    <>
-                                        {' · costo por '}
-                                        {unidadNombre(calculo.baseId).toLowerCase()}:{' '}
-                                        <strong>{money(calculo.costoBase)}</strong>
-                                    </>
-                                )}
-                            </p>
-                        )}
                     </section>
 
                     {/* Cómo lo vendo */}

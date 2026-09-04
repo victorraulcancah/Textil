@@ -93,8 +93,8 @@ function ToolbarButton({ label, children, onClick, active, badge }) {
             aria-label={label}
             title={label}
             className={cn(
-                'relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors',
-                active ? 'bg-primary-600/12 text-primary-700' : 'text-gray-500 hover:bg-primary-600/12 hover:text-primary-700',
+                'relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-600/12 text-primary-700 transition-colors hover:bg-primary-600/20',
+                active && 'bg-primary-600/20',
             )}
         >
             {children}
@@ -404,9 +404,9 @@ export default function DataTable({
     }, 0);
 
     return (
-        <div className="relative rounded-lg border border-edge bg-white shadow-sm">
+        <div className="relative">
             {(searchable || filterable || toggleableColumns) && (
-                <div className="flex flex-wrap items-center justify-end gap-2 border-b border-edge px-3 py-2.5 sm:px-4">
+                <div className="mb-2 flex flex-wrap items-center justify-end gap-2">
                     {searchable && (
                         <div className="relative w-full sm:w-64">
                             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
@@ -514,7 +514,7 @@ export default function DataTable({
             )}
 
             {activeColumnSearches > 0 && (
-                <div className="flex flex-wrap items-center gap-1.5 border-b border-edge px-3 py-2 sm:px-4">
+                <div className="mb-2 flex flex-wrap items-center gap-1.5">
                     {Object.entries(columnSearch)
                         .filter(([, v]) => v?.trim())
                         .map(([key, value]) => (
@@ -546,7 +546,7 @@ export default function DataTable({
                 </div>
             )}
 
-            <div>
+            <div className="overflow-hidden rounded-lg border border-edge bg-white shadow-sm">
                 {loading ? (
                     <div className="flex items-center justify-center py-16">
                         <Spinner size="lg" className="text-primary-600" />

@@ -5,6 +5,7 @@ import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import BottomSheet from '../components/ui/BottomSheet';
+import DetalleCard from '../components/ui/DetalleCard';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
 import { Alert, Badge, Button, DataTable, Input, Modal, Select, Spinner } from '../components/ui';
@@ -254,33 +255,33 @@ export default function NotasVenta() {
                 {detallesVenta.length === 0 ? (
                     <p className="py-6 text-center text-sm text-warm-500">Esta venta no tiene productos.</p>
                 ) : (
-                    <ul className="space-y-2">
+                    <div className="space-y-3">
                         {detallesVenta.map((d) => {
                             const producto = d.presentacion?.producto;
+                            const conDescuento = Number(d.descuento) > 0;
                             return (
-                                <li key={d.id} className="flex items-center justify-between gap-3 rounded-lg border border-edge px-3 py-2">
-                                    <div className="min-w-0">
-                                        <p className="truncate text-sm font-semibold text-warm-900">
-                                            {producto?.nombre ?? d.producto_nombre ?? '—'}
-                                        </p>
-                                        <p className="text-xs text-warm-500">
-                                            {num(d.cantidad)} {d.presentacion?.nombre ?? ''}
-                                        </p>
-                                    </div>
-                                    <p className="shrink-0 text-right text-xs text-warm-500">
-                                        {money(d.precio_unitario)} × {num(d.cantidad)} ={' '}
-                                        <span className="text-sm font-semibold text-primary-600">{money(d.subtotal)}</span>
-                                    </p>
-                                </li>
+                                <DetalleCard
+                                    key={d.id}
+                                    titulo={producto?.nombre ?? d.producto_nombre ?? '—'}
+                                    subtitulo={[producto?.codigo, d.presentacion?.nombre, producto?.marca?.nombre]
+                                        .filter(Boolean)
+                                        .join(' · ')}
+                                    campos={[
+                                        { label: 'Cant.', value: num(d.cantidad) },
+                                        { label: 'Precio', value: money(d.precio_unitario) },
+                                        { label: 'Subtotal', value: money(d.subtotal), valueClassName: 'text-primary-600' },
+                                        ...(conDescuento ? [{ label: 'Dscto.', value: money(d.descuento) }] : []),
+                                    ]}
+                                />
                             );
                         })}
-                        <li className="flex items-center justify-between px-3 pt-1 text-sm">
+                        <div className="flex items-center justify-between px-1 pt-1 text-sm">
                             <span className="font-medium text-warm-500">Total</span>
-                            <span className="font-bold text-warm-900">
+                            <span className="text-base font-bold text-warm-900">
                                 {money(detallesVenta.reduce((a, d) => a + Number(d.subtotal || 0), 0))}
                             </span>
-                        </li>
-                    </ul>
+                        </div>
+                    </div>
                 )}
             </BottomSheet>
 

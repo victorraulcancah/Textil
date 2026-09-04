@@ -2,10 +2,10 @@ import { useState } from 'react';
 import { Search } from 'lucide-react';
 import api from '../lib/api';
 import { useToast } from '../lib/toast';
-import { Button } from './ui';
+import { Spinner, cn } from './ui';
 
 /**
- * Botón "Consultar" para RUC (SUNAT) o DNI (RENIEC). Llama al backend
+ * Botón de lupa para consultar RUC (SUNAT) o DNI (RENIEC). Llama al backend
  * (/api/consulta/{tipo}/{numero}) y entrega el resultado normalizado a
  * `onResult` para que cada formulario rellene sus campos.
  *
@@ -19,12 +19,10 @@ export default function ConsultarDocumento({ tipo = 'dni', numero, onResult, cla
     const largo = tipo === 'ruc' ? 11 : 8;
     const limpio = String(numero ?? '').replace(/\D/g, '');
     const valido = limpio.length === largo;
+    const etiqueta = `Consultar ${tipo.toUpperCase()}`;
 
     const consultar = async () => {
-        if (!valido) {
-            toast.error(`El ${tipo.toUpperCase()} debe tener ${largo} dígitos.`);
-            return;
-        }
+        if (!valido || loading) return;
         setLoading(true);
         try {
             const { data } = await api.get(`/consulta/${tipo}/${limpio}`);
@@ -38,17 +36,20 @@ export default function ConsultarDocumento({ tipo = 'dni', numero, onResult, cla
     };
 
     return (
-        <Button
+        <button
             type="button"
-            variant="secondary"
             onClick={consultar}
-            loading={loading}
-            disabled={!valido}
-            title={`Consultar ${tipo.toUpperCase()}`}
-            className={className}
+            disabled={!valido || loading}
+            aria-label={etiqueta}
+            title={valido ? etiqueta : `Ingresa ${largo} dígitos para consultar`}
+            className={cn(
+                'inline-flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-md text-primary-600 transition',
+                'hover:bg-primary-50 hover:text-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
+                'disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent',
+                className,
+            )}
         >
-            {!loading && <Search className="h-4 w-4" />}
-            Consultar
-        </Button>
+            {loading ? <Spinner size="sm" /> : <Search className="h-5 w-5" />}
+        </button>
     );
 }

@@ -4,7 +4,7 @@ import { Ban, CheckCircle2, PackageCheck, Pencil, Printer, ShoppingBag, Trash2 }
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
-import BottomSheet from '../components/ui/BottomSheet';
+import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
 import DetalleCard from '../components/ui/DetalleCard';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
@@ -42,6 +42,7 @@ export default function Compras() {
     const [motivo, setMotivo] = useState('');
     /** Compra cuyo detalle se muestra en la segunda tabla. */
     const [seleccionada, setSeleccionada] = useState(null);
+    const sheet = useSheet();
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -226,7 +227,7 @@ export default function Compras() {
                 rows={compras}
                 loading={loading}
                 searchPlaceholder="Buscar compras..."
-                onRowClick={(row) => setSeleccionada(row)}
+                onRowClick={(row) => { setSeleccionada(row); sheet.abrir(); }}
                 rowClassName={(row) => (row.id === seleccionada?.id ? 'bg-primary-50' : undefined)}
                 height="34vh"
                 dense
@@ -234,8 +235,8 @@ export default function Compras() {
 
             {/* Móvil: el detalle sube desde abajo al tocar una card (en escritorio no pinta nada). */}
             <BottomSheet
-                open={Boolean(seleccionada)}
-                onClose={() => setSeleccionada(null)}
+                open={sheet.open && Boolean(seleccionada)}
+                onClose={sheet.cerrar}
                 title={seleccionada ? `${seleccionada.numero_compra ?? `#${seleccionada.id}`} · ${seleccionada.proveedor?.nombre ?? 'Proveedor'}` : ''}
                 subtitle={`${detalles.length} ${detalles.length === 1 ? 'producto' : 'productos'}`}
             >

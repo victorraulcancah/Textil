@@ -3,7 +3,7 @@ import { Printer, Truck, Undo2 } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
-import BottomSheet from '../components/ui/BottomSheet';
+import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
 import DetalleCard from '../components/ui/DetalleCard';
 import PageHeader from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
@@ -28,6 +28,7 @@ export default function RecepcionesCompra() {
 
     /** Recepción cuyo detalle se muestra en la segunda tabla. */
     const [seleccionada, setSeleccionada] = useState(null);
+    const sheet = useSheet();
 
     const [deshacerTarget, setDeshacerTarget] = useState(null);
     const [pdfTarget, setPdfTarget] = useState(null);
@@ -187,7 +188,7 @@ export default function RecepcionesCompra() {
                 rows={recepciones}
                 loading={loading}
                 searchPlaceholder="Buscar recepciones..."
-                onRowClick={(row) => setSeleccionada(row)}
+                onRowClick={(row) => { setSeleccionada(row); sheet.abrir(); }}
                 rowClassName={(row) => (row.id === seleccionada?.id ? 'bg-primary-50' : undefined)}
                 height="34vh"
                 dense
@@ -195,8 +196,8 @@ export default function RecepcionesCompra() {
 
             {/* Móvil: el detalle sube desde abajo al tocar una card (en escritorio no pinta nada). */}
             <BottomSheet
-                open={Boolean(seleccionada)}
-                onClose={() => setSeleccionada(null)}
+                open={sheet.open && Boolean(seleccionada)}
+                onClose={sheet.cerrar}
                 title={seleccionada ? `Recepción ${seleccionada.documento ?? `#${seleccionada.id}`}` : ''}
                 subtitle={`${detalles.length} ${detalles.length === 1 ? 'línea' : 'líneas'}`}
             >

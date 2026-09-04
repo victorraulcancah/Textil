@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Coins, Printer } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import Layout from '../components/Layout';
-import BottomSheet from '../components/ui/BottomSheet';
+import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
 import PageHeader from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
 import { Alert, Badge, Button, DataTable, Select } from '../components/ui';
@@ -26,6 +26,7 @@ export default function CierresCaja() {
 
     /** Cierre cuyos movimientos se muestran abajo. */
     const [seleccionado, setSeleccionado] = useState(null);
+    const sheet = useSheet();
     const [pdfTarget, setPdfTarget] = useState(null);
     const [movimientos, setMovimientos] = useState([]);
     const [cargandoDetalle, setCargandoDetalle] = useState(false);
@@ -331,14 +332,14 @@ export default function CierresCaja() {
                 filterCount={filtrosCount}
                 emptyMessage="Todavía no hay cierres de caja registrados."
                 height="350px"
-                onRowClick={(row) => setSeleccionado(row)}
+                onRowClick={(row) => { setSeleccionado(row); sheet.abrir(); }}
                 rowClassName={(row) => (row.id === seleccionado?.id ? 'bg-primary-50' : undefined)}
             />
 
             {/* Móvil: los movimientos suben desde abajo al tocar una card (en escritorio no pinta nada). */}
             <BottomSheet
-                open={Boolean(seleccionado)}
-                onClose={() => setSeleccionado(null)}
+                open={sheet.open && Boolean(seleccionado)}
+                onClose={sheet.cerrar}
                 title={seleccionado ? `Movimientos${seleccionado.apertura?.caja?.nombre ? ` · ${seleccionado.apertura.caja.nombre}` : ''}` : ''}
                 subtitle={seleccionado ? `${fechaCorta(seleccionado.fecha_cierre)} · ${movimientos.length} ${movimientos.length === 1 ? 'movimiento' : 'movimientos'}` : ''}
             >

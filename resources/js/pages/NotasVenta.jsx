@@ -4,7 +4,7 @@ import { Ban, Edit, Eye, Printer, User } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
-import BottomSheet from '../components/ui/BottomSheet';
+import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
 import DetalleCard from '../components/ui/DetalleCard';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
@@ -23,6 +23,7 @@ export default function NotasVenta() {
     const navigate = useNavigate();
     /** Venta cuyo detalle se muestra en la segunda tabla. */
     const [seleccionada, setSeleccionada] = useState(null);
+    const sheet = useSheet();
     const [notas, setNotas] = useState([]);
     /** Nota cuyo PDF se está viendo. */
     const [pdfTarget, setPdfTarget] = useState(null);
@@ -203,7 +204,7 @@ export default function NotasVenta() {
                         (!fPago || n.tipo_pago === fPago),
                 )}
                 loading={loading}
-                onRowClick={(row) => setSeleccionada(row)}
+                onRowClick={(row) => { setSeleccionada(row); sheet.abrir(); }}
                 rowClassName={(row) => (row.id === seleccionada?.id ? 'bg-primary-50' : undefined)}
                 searchPlaceholder="Buscar ventas..."
                 filterable
@@ -247,8 +248,8 @@ export default function NotasVenta() {
 
             {/* Móvil: el detalle sube desde abajo al tocar una card (en escritorio no pinta nada). */}
             <BottomSheet
-                open={Boolean(seleccionada)}
-                onClose={() => setSeleccionada(null)}
+                open={sheet.open && Boolean(seleccionada)}
+                onClose={sheet.cerrar}
                 title={seleccionada ? `${seleccionada.serie}-${seleccionada.numero} · ${seleccionada.cliente?.nombre ?? 'Cliente'}` : ''}
                 subtitle={`${detallesVenta.length} ${detallesVenta.length === 1 ? 'producto' : 'productos'}`}
             >

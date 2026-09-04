@@ -4,7 +4,7 @@ import api, { asList } from '../lib/api';
 import { opcionesAlmacen } from '../lib/almacenes';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
-import BottomSheet from '../components/ui/BottomSheet';
+import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
 import DetalleCard from '../components/ui/DetalleCard';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
@@ -69,6 +69,7 @@ export default function Prestamos() {
 
     /** Préstamo cuyo detalle se muestra en la segunda tabla. */
     const [seleccionado, setSeleccionado] = useState(null);
+    const sheet = useSheet();
 
     const [filterEstado, setFilterEstado] = useState('');
     const [filterAlmacen, setFilterAlmacen] = useState('');
@@ -476,14 +477,14 @@ export default function Prestamos() {
                 filterable
                 filters={filters}
                 filterCount={filterCount}
-                onRowClick={(row) => setSeleccionado(row)}
+                onRowClick={(row) => { setSeleccionado(row); sheet.abrir(); }}
                 rowClassName={(row) => (row.id === seleccionado?.id ? 'bg-primary-50' : undefined)}
             />
 
             {/* Móvil: el detalle sube desde abajo al tocar una card (en escritorio no pinta nada). */}
             <BottomSheet
-                open={Boolean(seleccionado)}
-                onClose={() => setSeleccionado(null)}
+                open={sheet.open && Boolean(seleccionado)}
+                onClose={sheet.cerrar}
                 title={seleccionado ? `${seleccionado.documento ?? 'Préstamo'} · ${seleccionado.tercero ?? ''}` : ''}
                 subtitle={seleccionado ? `${seleccionado.tipo === 'prestado' ? 'Presté a' : 'Me prestó'}${seleccionado.tercero_telefono ? ` · Tel. ${seleccionado.tercero_telefono}` : ''}${seleccionado.fecha_devolucion ? ` · Devuelto el ${fecha(seleccionado.fecha_devolucion)}` : ''}` : ''}
             >

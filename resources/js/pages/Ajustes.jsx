@@ -4,7 +4,7 @@ import api, { asList } from '../lib/api';
 import { opcionesAlmacen } from '../lib/almacenes';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
-import BottomSheet from '../components/ui/BottomSheet';
+import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
 import DetalleCard from '../components/ui/DetalleCard';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
@@ -39,6 +39,7 @@ export default function Ajustes() {
     const [proveedores, setProveedores] = useState([]);
     /** Ajuste cuyo detalle se muestra en la segunda tabla. */
     const [seleccionado, setSeleccionado] = useState(null);
+    const sheet = useSheet();
     const [pdfTarget, setPdfTarget] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -783,14 +784,14 @@ export default function Ajustes() {
                         filterable
                         filters={filters}
                         filterCount={filterCount}
-                        onRowClick={(row) => setSeleccionado(row)}
+                        onRowClick={(row) => { setSeleccionado(row); sheet.abrir(); }}
                         rowClassName={(row) => (row.id === seleccionado?.id ? 'bg-primary-50' : undefined)}
                     />
 
                     {/* Móvil: el detalle sube desde abajo al tocar una card (en escritorio no pinta nada). */}
                     <BottomSheet
-                        open={Boolean(seleccionado)}
-                        onClose={() => setSeleccionado(null)}
+                        open={sheet.open && Boolean(seleccionado)}
+                        onClose={sheet.cerrar}
                         title={seleccionado ? `Ajuste ${seleccionado.documento ?? `#${seleccionado.id}`}` : ''}
                         subtitle={seleccionado ? `${detalleSeleccionado.length} ${detalleSeleccionado.length === 1 ? 'producto' : 'productos'} · ${money(seleccionado.total)}` : ''}
                     >

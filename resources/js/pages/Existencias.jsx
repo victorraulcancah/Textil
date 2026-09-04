@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Package, Store } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import Layout from '../components/Layout';
-import BottomSheet from '../components/ui/BottomSheet';
+import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
 import DetalleCard from '../components/ui/DetalleCard';
 import PageHeader from '../components/PageHeader';
 import { Alert, Badge, Button, DataTable, Select, Tabs } from '../components/ui';
@@ -25,6 +25,7 @@ export default function Existencias() {
 
     /** Fila cuyo desglose por unidad derivada se muestra abajo. */
     const [seleccionada, setSeleccionada] = useState(null);
+    const sheet = useSheet();
 
     /** Unidad elegida por fila para expresar su stock: { [id de la fila]: nombre }. */
     const [unidadPorFila, setUnidadPorFila] = useState({});
@@ -413,14 +414,14 @@ export default function Existencias() {
                 filters={filters}
                 filterCount={filterCount}
                 emptyMessage="Sin existencias en este almacén"
-                onRowClick={(row) => setSeleccionada(row)}
+                onRowClick={(row) => { setSeleccionada(row); sheet.abrir(); }}
                 rowClassName={(row) => (row.id === seleccionada?.id ? 'bg-primary-50' : undefined)}
             />
 
             {/* Móvil: el desglose sube desde abajo al tocar una card (en escritorio no pinta nada). */}
             <BottomSheet
-                open={Boolean(seleccionada)}
-                onClose={() => setSeleccionada(null)}
+                open={sheet.open && Boolean(seleccionada)}
+                onClose={sheet.cerrar}
                 title={seleccionada?.producto?.nombre ?? 'Unidades derivadas'}
                 subtitle={seleccionada ? `Stock base: ${num(seleccionada.stock_actual)} ${seleccionada.producto?.unidad_base?.abreviatura ?? ''}${seleccionada.almacen?.nombre ? ` · ${seleccionada.almacen.nombre}` : ''}` : ''}
             >

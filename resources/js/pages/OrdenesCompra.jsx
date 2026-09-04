@@ -4,7 +4,7 @@ import { FileDown, Pencil, Printer, ShoppingCart, Trash2 } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
-import BottomSheet from '../components/ui/BottomSheet';
+import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
 import DetalleCard from '../components/ui/DetalleCard';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
@@ -35,6 +35,7 @@ export default function OrdenesCompra() {
     const [pdfTarget, setPdfTarget] = useState(null);
     /** Orden cuyo detalle se muestra en la segunda tabla. */
     const [seleccionada, setSeleccionada] = useState(null);
+    const sheet = useSheet();
 
     const [filterEstado, setFilterEstado] = useState('');
     const [filterCompra, setFilterCompra] = useState('');
@@ -217,7 +218,7 @@ export default function OrdenesCompra() {
                 filterable
                 filters={filters}
                 filterCount={filterCount}
-                onRowClick={(row) => setSeleccionada(row)}
+                onRowClick={(row) => { setSeleccionada(row); sheet.abrir(); }}
                 rowClassName={(row) => (row.id === seleccionada?.id ? 'bg-primary-50' : undefined)}
                 height="34vh"
                 dense
@@ -225,8 +226,8 @@ export default function OrdenesCompra() {
 
             {/* Móvil: el detalle sube desde abajo al tocar una card (en escritorio no pinta nada). */}
             <BottomSheet
-                open={Boolean(seleccionada)}
-                onClose={() => setSeleccionada(null)}
+                open={sheet.open && Boolean(seleccionada)}
+                onClose={sheet.cerrar}
                 title={seleccionada ? `${seleccionada.codigo ?? 'Orden'} · ${seleccionada.proveedor?.nombre ?? 'Proveedor'}` : ''}
                 subtitle={seleccionada ? `Emisión ${fecha(seleccionada.fecha_emision)} · Entrega est. ${fecha(seleccionada.fecha_entrega_estimada)}` : ''}
             >

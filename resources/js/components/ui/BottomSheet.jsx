@@ -18,6 +18,24 @@ export function useIsMobile() {
 }
 
 /**
+ * Estado abierto/cerrado del panel, separado de la fila seleccionada: las
+ * pantallas maestro-detalle seleccionan la primera fila al cargar (para el
+ * detalle de escritorio) y eso no debe abrir el panel — solo un toque.
+ *
+ *   const sheet = useSheet();
+ *   <DataTable onRowClick={(row) => { setSeleccionada(row); sheet.abrir(); }} />
+ *   <BottomSheet open={sheet.open && Boolean(seleccionada)} onClose={sheet.cerrar} />
+ */
+export function useSheet() {
+    const [open, setOpen] = useState(false);
+    return {
+        open,
+        abrir: () => setOpen(true),
+        cerrar: () => setOpen(false),
+    };
+}
+
+/**
  * Panel que se desliza desde abajo, solo en móvil. En escritorio no pinta
  * nada: la página muestra su detalle normal. Pensado para las pantallas
  * maestro-detalle (tocar una card → ver su detalle sin salir de la lista).

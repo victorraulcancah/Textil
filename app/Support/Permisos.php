@@ -11,10 +11,19 @@ use Illuminate\Support\Facades\Cache;
  */
 class Permisos
 {
-    /** Acciones que aplican a un submódulo (las suyas o las generales). */
+    /**
+     * Acciones de un submódulo: las que declare o las básicas, más "imprimir"
+     * si tiene documentos PDF.
+     */
     public static function accionesDe(array $submodulo): array
     {
-        return $submodulo['acciones'] ?? array_keys(config('permisos.acciones'));
+        $acciones = $submodulo['acciones'] ?? config('permisos.acciones_base');
+
+        if (! empty($submodulo['pdf'])) {
+            $acciones[] = 'imprimir';
+        }
+
+        return $acciones;
     }
 
     /**
@@ -114,6 +123,15 @@ class Permisos
     {
         $ruta = ltrim(preg_replace('#^api/#', '', $uri), '/');
 
+        // Los PDF son su propia acción: "pdf/nota-venta/12" exige el permiso
+        // de imprimir del submódulo dueño de ese documento.
+        if (str_starts_with($ruta, 'pdf/')) {
+            $tipo = explode('/', $ruta)[1] ?? null;
+            $submodulo = self::documentos()[$tipo] ?? null;
+
+            return $submodulo ? $submodulo.'.imprimir' : null;
+        }
+
         foreach (self::rutas() as $api => $submodulo) {
             if ($ruta === $api || str_starts_with($ruta, $api.'/')) {
                 return $submodulo.'.'.self::accionDe($metodo);
@@ -121,6 +139,29 @@ class Permisos
         }
 
         return null;
+    }
+
+    /**
+     * Tipo de documento PDF → submódulo que lo imprime:
+     * ['nota-venta' => 'ventas.notas-venta', …].
+     *
+     * @return array<string, string>
+     */
+    public static function documentos(): array
+    {
+        return Cache::rememberForever('permisos.documentos', function () {
+            $mapa = [];
+
+            foreach (config('permisos.modulos') as $modulo => $datos) {
+                foreach ($datos['submodulos'] as $sub => $subDatos) {
+                    foreach ($subDatos['pdf'] ?? [] as $tipo) {
+                        $mapa[$tipo] = "{$modulo}.{$sub}";
+                    }
+                }
+            }
+
+            return $mapa;
+        });
     }
 
     /** Qué acción representa cada método HTTP. */

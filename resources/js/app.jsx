@@ -42,6 +42,7 @@ import CuentasPorPagar from './pages/CuentasPorPagar';
 import Utilidades from './pages/Utilidades';
 import Ganancias from './pages/Ganancias';
 import Auditoria from './pages/Auditoria';
+import Accesos from './pages/Accesos';
 import EnConstruccion from './pages/EnConstruccion';
 
 const routes = [
@@ -52,6 +53,7 @@ const routes = [
     { path: '/roles', element: <Roles /> },
     { path: '/usuarios', element: <Usuarios /> },
     { path: '/empresa', element: <Empresa /> },
+    { path: '/accesos', element: <Accesos /> },
     { path: '/auditoria', element: <Auditoria /> },
     { path: '/productos', element: <Productos /> },
     { path: '/categorias', element: <Categorias /> },

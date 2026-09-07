@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import { BadgeCheck, Edit, MapPin, Power, PowerOff, Tag, Trash2, Warehouse } from 'lucide-react';
+import { BadgeCheck, Edit, MapPin, Power, PowerOff, Tag, Trash2, Warehouse, X } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import PageHeader, { CreateButton } from '../components/PageHeader';
-import { Alert, Badge, Button, DataTable, Input, Modal, Select, cn } from '../components/ui';
+import { Alert, Badge, Button, DataTable, Input, Modal, Select } from '../components/ui';
 
 const emptyForm = {
     nombre: '',
@@ -407,46 +407,57 @@ export default function Almacenes() {
                         ]}
                     />
                     <div>
-                        <label className="mb-1 block text-sm font-medium text-gray-700">
-                            ¿En qué unidades vende este local?
-                        </label>
-                        <p className="mb-2 text-xs text-warm-400">
-                            Al vender solo se ofrecen las presentaciones en estas unidades. Sin
-                            marcar ninguna, vende en todas.
-                        </p>
-                        <div className="flex flex-wrap gap-2 rounded-lg border border-edge p-2">
-                            {unidades.map((u) => {
-                                const marcada = form.unidades_venta.includes(u.id);
-                                return (
-                                    <label
-                                        key={u.id}
-                                        className={cn(
-                                            'flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-sm transition',
-                                            marcada
-                                                ? 'border-primary-600 bg-primary-50 text-primary-700'
-                                                : 'border-edge text-gray-600 hover:bg-gray-50',
-                                        )}
-                                    >
-                                        <input
-                                            type="checkbox"
-                                            checked={marcada}
-                                            onChange={() =>
-                                                setForm((prev) => ({
-                                                    ...prev,
-                                                    unidades_venta: marcada
-                                                        ? prev.unidades_venta.filter((id) => id !== u.id)
-                                                        : [...prev.unidades_venta, u.id],
-                                                }))
-                                            }
-                                            className="h-3.5 w-3.5 rounded border-gray-300 accent-primary-600"
-                                        />
-                                        {u.nombre}
-                                    </label>
-                                );
-                            })}
-                        </div>
-                        {form.unidades_venta.length === 0 && (
-                            <p className="mt-1 text-xs text-warm-500">Vende en todas las unidades.</p>
+                        <Select
+                            label="¿En qué unidades vende este local?"
+                            value=""
+                            onChange={(e) => {
+                                const id = Number(e.target.value);
+                                if (!id) return;
+                                setForm((prev) => ({
+                                    ...prev,
+                                    unidades_venta: [...prev.unidades_venta, id],
+                                }));
+                            }}
+                            options={[
+                                { value: '', label: 'Agregar unidad…' },
+                                // Solo las que faltan: las ya elegidas se ven abajo.
+                                ...unidades
+                                    .filter((u) => !form.unidades_venta.includes(u.id))
+                                    .map((u) => ({ value: String(u.id), label: u.nombre })),
+                            ]}
+                        />
+
+                        {form.unidades_venta.length === 0 ? (
+                            <p className="mt-1.5 text-xs text-warm-500">
+                                Sin unidades elegidas: este local vende en todas.
+                            </p>
+                        ) : (
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                                {form.unidades_venta.map((id) => {
+                                    const unidad = unidades.find((u) => u.id === id);
+                                    return (
+                                        <span
+                                            key={id}
+                                            className="inline-flex items-center gap-1.5 rounded-full bg-primary-50 py-1 pl-3 pr-1.5 text-xs font-medium text-primary-700 ring-1 ring-inset ring-primary-200"
+                                        >
+                                            {unidad?.nombre ?? id}
+                                            <button
+                                                type="button"
+                                                aria-label={`Quitar ${unidad?.nombre ?? ''}`}
+                                                onClick={() =>
+                                                    setForm((prev) => ({
+                                                        ...prev,
+                                                        unidades_venta: prev.unidades_venta.filter((x) => x !== id),
+                                                    }))
+                                                }
+                                                className="rounded-full p-0.5 transition hover:bg-primary-100"
+                                            >
+                                                <X className="h-3 w-3" />
+                                            </button>
+                                        </span>
+                                    );
+                                })}
+                            </div>
                         )}
                     </div>
                     <Input

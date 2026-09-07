@@ -3,6 +3,7 @@ import {
     SlidersHorizontal,
     Shield,
     ShieldCheck,
+    KeyRound,
     Users,
     Building2,
     BookOpen,
@@ -112,6 +113,7 @@ export const navigation = [
         icon: SlidersHorizontal,
         children: [
             { label: 'Roles', icon: Shield, to: '/roles', permiso: 'gestion.roles' },
+            { label: 'Accesos', icon: KeyRound, to: '/accesos', permiso: 'gestion.roles' },
             { label: 'Usuarios', icon: Users, to: '/usuarios', permiso: 'gestion.usuarios' },
             { label: 'Empresa', icon: Building2, to: '/empresa', permiso: 'gestion.empresa' },
             { label: 'Auditoría', icon: ShieldCheck, to: '/auditoria', permiso: 'gestion.auditoria' },

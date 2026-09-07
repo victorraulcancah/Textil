@@ -14,13 +14,19 @@
  */
 return [
 
-    // Acciones disponibles en cada submódulo.
+    // Etiqueta de cada acción.
     'acciones' => [
         'ver' => 'Ver',
         'crear' => 'Crear',
         'editar' => 'Editar',
         'eliminar' => 'Eliminar',
+        'imprimir' => 'Imprimir',
     ],
+
+    // Las que tiene cualquier submódulo. "Imprimir" no está aquí: solo la
+    // reciben los que declaran documentos PDF (clave `pdf`), porque en un
+    // catálogo de marcas no hay nada que imprimir.
+    'acciones_base' => ['ver', 'crear', 'editar', 'eliminar'],
 
     /**
      * Roles que siempre lo pueden todo, sin depender de sus permisos. Evita
@@ -46,7 +52,7 @@ return [
             'label' => 'Ventas',
             'submodulos' => [
                 'clientes' => ['label' => 'Clientes', 'apis' => ['clientes']],
-                'notas-venta' => ['label' => 'Notas de venta', 'apis' => ['notas-venta']],
+                'notas-venta' => ['label' => 'Notas de venta', 'apis' => ['notas-venta'], 'pdf' => ['nota-venta']],
             ],
         ],
 
@@ -64,9 +70,9 @@ return [
             'label' => 'Compras',
             'submodulos' => [
                 'proveedores' => ['label' => 'Proveedores', 'apis' => ['proveedores']],
-                'ordenes-compra' => ['label' => 'Órdenes de compra', 'apis' => ['ordenes-compra']],
-                'compras' => ['label' => 'Compras', 'apis' => ['compras']],
-                'recepciones-compra' => ['label' => 'Recepciones de compra', 'apis' => ['recepciones-compra']],
+                'ordenes-compra' => ['label' => 'Órdenes de compra', 'apis' => ['ordenes-compra'], 'pdf' => ['orden-compra']],
+                'compras' => ['label' => 'Compras', 'apis' => ['compras'], 'pdf' => ['compra']],
+                'recepciones-compra' => ['label' => 'Recepciones de compra', 'apis' => ['recepciones-compra'], 'pdf' => ['recepcion-compra']],
             ],
         ],
 
@@ -76,10 +82,10 @@ return [
                 'almacenes' => ['label' => 'Almacenes', 'apis' => ['almacenes']],
                 'existencias' => ['label' => 'Existencias', 'apis' => ['existencias']],
                 'kardex' => ['label' => 'Kardex', 'apis' => ['movimientos'], 'acciones' => ['ver']],
-                'transferencias' => ['label' => 'Traslados', 'apis' => ['transferencias', 'motivos-traslado']],
-                'ajustes' => ['label' => 'Ajustes', 'apis' => ['ajustes']],
+                'transferencias' => ['label' => 'Traslados', 'apis' => ['transferencias', 'motivos-traslado'], 'pdf' => ['guia-traslado']],
+                'ajustes' => ['label' => 'Ajustes', 'apis' => ['ajustes'], 'pdf' => ['ajuste']],
                 'tomas-inventario' => ['label' => 'Tomas de inventario', 'apis' => ['tomas-inventario']],
-                'prestamos' => ['label' => 'Préstamos', 'apis' => ['prestamos']],
+                'prestamos' => ['label' => 'Préstamos', 'apis' => ['prestamos'], 'pdf' => ['prestamo']],
             ],
         ],
 
@@ -92,8 +98,8 @@ return [
                     'apis' => ['metodos-pago', 'bancos', 'cuentas-bancarias', 'billeteras-digitales', 'tarjetas-bancarias'],
                 ],
                 'cajas' => ['label' => 'Cajas', 'apis' => ['cajas']],
-                'movimientos-caja' => ['label' => 'Movimientos de caja', 'apis' => ['movimientos-caja']],
-                'cierres-caja' => ['label' => 'Cierres de caja', 'apis' => ['cierres-caja']],
+                'movimientos-caja' => ['label' => 'Movimientos de caja', 'apis' => ['movimientos-caja'], 'pdf' => ['movimiento-caja']],
+                'cierres-caja' => ['label' => 'Cierres de caja', 'apis' => ['cierres-caja'], 'pdf' => ['cierre-caja']],
                 'motivos-movimiento' => ['label' => 'Motivos de movimiento', 'apis' => ['motivos-movimiento']],
                 'cuentas-por-cobrar' => ['label' => 'Cuentas por cobrar', 'apis' => ['cuentas-por-cobrar']],
                 'cuentas-por-pagar' => ['label' => 'Cuentas por pagar', 'apis' => ['cuentas-por-pagar']],

@@ -11,6 +11,7 @@ class NotaVentaDetalle extends Model
     protected $fillable = [
         'nota_venta_id',
         'producto_presentacion_id',
+        'rollo_id',
         'cantidad',
         'precio_unitario',
         'descuento',
@@ -35,5 +36,11 @@ class NotaVentaDetalle extends Model
     public function presentacion()
     {
         return $this->belongsTo(ProductoPresentacion::class, 'producto_presentacion_id');
+    }
+
+    /** Rollo del que salió esta línea, si el producto se maneja por rollos. */
+    public function rollo()
+    {
+        return $this->belongsTo(Rollo::class);
     }
 }

@@ -11,6 +11,11 @@
  * En cada submódulo, `apis` son los prefijos de ruta que protege. El método
  * HTTP decide la acción: GET → ver, POST → crear, PUT/PATCH → editar,
  * DELETE → eliminar. Un submódulo sin `apis` solo controla el menú.
+ *
+ * Cuando eso no alcanza —el almacenero debe poder despachar un pedido pero no
+ * crearlo, y ambas cosas son POST sobre la misma ruta— el submódulo declara
+ * `patrones`: rutas concretas con la acción que exigen. Los patrones ganan
+ * sobre los prefijos, porque son más específicos.
  */
 return [
 
@@ -52,7 +57,18 @@ return [
             'label' => 'Ventas',
             'submodulos' => [
                 'clientes' => ['label' => 'Clientes', 'apis' => ['clientes']],
-                'notas-venta' => ['label' => 'Notas de venta', 'apis' => ['notas-venta'], 'pdf' => ['nota-venta']],
+                'pedidos' => [
+                    'label' => 'Pedidos',
+                    'apis' => ['ordenes-venta'],
+                    'pdf' => ['orden-venta', 'requerimiento-almacen'],
+                ],
+                'notas-venta' => [
+                    'label' => 'Notas de venta',
+                    'apis' => ['notas-venta'],
+                    'pdf' => ['nota-venta'],
+                    // Facturar un pedido es crear una venta, no crear un pedido.
+                    'patrones' => ['ordenes-venta/*/facturar' => 'crear'],
+                ],
             ],
         ],
 
@@ -81,6 +97,22 @@ return [
             'submodulos' => [
                 'almacenes' => ['label' => 'Almacenes', 'apis' => ['almacenes']],
                 'existencias' => ['label' => 'Existencias', 'apis' => ['existencias']],
+                'rollos' => [
+                    'label' => 'Rollos',
+                    'apis' => ['rollos'],
+                    'pdf' => ['etiqueta-rollo'],
+                ],
+                'despacho' => [
+                    'label' => 'Preparación y despacho',
+                    // El almacenero mueve el pedido por el almacén, pero no lo
+                    // crea ni lo cotiza: eso es de Ventas.
+                    'patrones' => [
+                        'ordenes-venta/*/preparar' => 'editar',
+                        'ordenes-venta/*/escanear' => 'editar',
+                        'ordenes-venta/*/despachar' => 'editar',
+                    ],
+                    'acciones' => ['ver', 'editar'],
+                ],
                 'kardex' => ['label' => 'Kardex', 'apis' => ['movimientos'], 'acciones' => ['ver']],
                 'transferencias' => ['label' => 'Traslados', 'apis' => ['transferencias', 'motivos-traslado'], 'pdf' => ['guia-traslado']],
                 'ajustes' => ['label' => 'Ajustes', 'apis' => ['ajustes'], 'pdf' => ['ajuste']],

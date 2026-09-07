@@ -40,4 +40,10 @@ class ProductoColor extends Model
 
         return Storage::disk('public')->url($this->imagen);
     }
+
+    /** Los rollos físicos de este color. */
+    public function rollos()
+    {
+        return $this->hasMany(Rollo::class, 'producto_color_id');
+    }
 }

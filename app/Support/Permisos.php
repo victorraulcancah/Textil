@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 
 /**
  * Lee el árbol de config/permisos.php y lo traduce a lo que necesitan las
@@ -132,6 +133,14 @@ class Permisos
             return $submodulo ? $submodulo.'.imprimir' : null;
         }
 
+        // Los patrones ganan sobre los prefijos: "ordenes-venta/*/despachar"
+        // es más específico que "ordenes-venta" y exige otro permiso.
+        foreach (self::patrones() as $patron => $permiso) {
+            if (Str::is($patron, $ruta)) {
+                return $permiso;
+            }
+        }
+
         foreach (self::rutas() as $api => $submodulo) {
             if ($ruta === $api || str_starts_with($ruta, $api.'/')) {
                 return $submodulo.'.'.self::accionDe($metodo);
@@ -139,6 +148,29 @@ class Permisos
         }
 
         return null;
+    }
+
+    /**
+     * Rutas concretas que exigen un permiso distinto al de su prefijo:
+     * el patron "ordenes-venta/*\/despachar" apunta a inventario.despacho.editar.
+     *
+     * @return array<string, string>
+     */
+    public static function patrones(): array
+    {
+        return Cache::rememberForever('permisos.patrones', function () {
+            $mapa = [];
+
+            foreach (config('permisos.modulos') as $modulo => $datos) {
+                foreach ($datos['submodulos'] as $sub => $subDatos) {
+                    foreach ($subDatos['patrones'] ?? [] as $patron => $accion) {
+                        $mapa[$patron] = "{$modulo}.{$sub}.{$accion}";
+                    }
+                }
+            }
+
+            return $mapa;
+        });
     }
 
     /**

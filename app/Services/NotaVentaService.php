@@ -109,6 +109,8 @@ class NotaVentaService
     {
         return [
             'cliente_id' => $data['cliente_id'] ?? null,
+            // Pedido del que nace la nota; null en una venta de mostrador.
+            'orden_venta_id' => $data['orden_venta_id'] ?? null,
             'almacen_id' => $data['almacen_id'],
             'vendedor_id' => $data['vendedor_id'],
             'fecha_emision' => $data['fecha_emision'],

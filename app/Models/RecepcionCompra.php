@@ -88,4 +88,10 @@ class RecepcionCompra extends Model
     {
         return $this->hasMany(DevolucionProveedor::class);
     }
+
+    /** Rollos creados con este ingreso de mercadería. */
+    public function rollos()
+    {
+        return $this->hasMany(Rollo::class, 'recepcion_compra_id');
+    }
 }

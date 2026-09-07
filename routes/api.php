@@ -25,6 +25,8 @@ use App\Http\Controllers\MotivoMovimientoController;
 use App\Http\Controllers\MotivoTrasladoController;
 use App\Http\Controllers\MovimientoInventarioController;
 use App\Http\Controllers\NotaVentaController;
+use App\Http\Controllers\OrdenVentaController;
+use App\Http\Controllers\RolloController;
 use App\Http\Controllers\PdfController;
 use App\Http\Controllers\OrdenCompraController;
 use App\Http\Controllers\ProductoController;
@@ -106,6 +108,29 @@ Route::middleware('auth:api')->group(function () {
     Route::get('cierres-caja/{cierresCaja}', [CierreCajaController::class, 'show']);
     Route::apiResource('prestamos', PrestamoController::class);
     Route::post('prestamos/{prestamo}/devoluciones', [PrestamoController::class, 'devolucion']);
+
+    // Rollos: la unidad individual de inventario
+    Route::get('rollos', [RolloController::class, 'index']);
+    Route::get('rollos/resumen', [RolloController::class, 'resumen']);
+    // Antes que {rollo} para que "codigo" no se confunda con un id.
+    Route::get('rollos/codigo/{codigo}', [RolloController::class, 'porCodigo']);
+    Route::get('rollos/{rollo}', [RolloController::class, 'show']);
+    Route::post('rollos/ingresar', [RolloController::class, 'ingresar']);
+    Route::post('rollos/{rollo}/trasladar', [RolloController::class, 'trasladar']);
+
+    // Pedidos: el recorrido hasta el despacho (no mueve stock)
+    Route::get('ordenes-venta', [OrdenVentaController::class, 'index']);
+    Route::post('ordenes-venta', [OrdenVentaController::class, 'store']);
+    Route::get('ordenes-venta/{ordenesVenta}', [OrdenVentaController::class, 'show']);
+    Route::put('ordenes-venta/{ordenesVenta}', [OrdenVentaController::class, 'update']);
+    Route::post('ordenes-venta/{ordenesVenta}/separar', [OrdenVentaController::class, 'separar']);
+    Route::post('ordenes-venta/{ordenesVenta}/devolver', [OrdenVentaController::class, 'devolver']);
+    Route::post('ordenes-venta/{ordenesVenta}/preparar', [OrdenVentaController::class, 'preparar']);
+    Route::post('ordenes-venta/{ordenesVenta}/escanear', [OrdenVentaController::class, 'escanear']);
+    Route::post('ordenes-venta/{ordenesVenta}/despachar', [OrdenVentaController::class, 'despachar']);
+    Route::post('ordenes-venta/{ordenesVenta}/facturar', [OrdenVentaController::class, 'facturar']);
+    Route::post('ordenes-venta/{ordenesVenta}/anular', [OrdenVentaController::class, 'anular']);
+
     // Facturación
     Route::apiResource('clientes', ClienteController::class);
     Route::get('notas-venta', [NotaVentaController::class, 'index']);

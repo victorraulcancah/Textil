@@ -105,4 +105,34 @@ class Producto extends Model
     public function colores() { return $this->hasMany(ProductoColor::class); }
     public function stocks() { return $this->hasMany(ProductoAlmacenStock::class); }
     public function movimientos() { return $this->hasMany(MovimientoInventario::class); }
+
+    /** Los rollos físicos de esta tela. */
+    public function rollos()
+    {
+        return $this->hasMany(Rollo::class);
+    }
+
+    /**
+     * Cuántas unidades base equivale un metro de esta tela.
+     *
+     * El stock se guarda en la unidad base del producto (centímetros, para
+     * las telas) pero los rollos se miden en metros. La equivalencia sale de
+     * la propia presentación que se vende por metro: si "Metro (al corte)"
+     * convierte a 100, entonces un metro son 100 unidades base.
+     *
+     * Sin esa presentación se asume 1, que es lo correcto para un producto
+     * cuya unidad base ya es el metro.
+     */
+    public function factorBasePorMetro(): float
+    {
+        $presentaciones = $this->relationLoaded('presentaciones')
+            ? $this->presentaciones
+            : $this->presentaciones()->with('unidadBase')->get();
+
+        $porMetro = $presentaciones->first(
+            fn ($p) => strtolower($p->unidadBase?->abreviatura ?? '') === 'm'
+        );
+
+        return (float) ($porMetro?->factor_conversion ?: 1);
+    }
 }

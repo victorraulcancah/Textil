@@ -17,6 +17,7 @@ class NotaVenta extends Model
         'serie',
         'numero',
         'cliente_id',
+        'orden_venta_id',
         'almacen_id',
         'vendedor_id',
         'fecha_emision',
@@ -71,5 +72,11 @@ class NotaVenta extends Model
     public function pagos()
     {
         return $this->hasMany(NotaVentaPago::class);
+    }
+
+    /** Pedido del que nació esta nota, si no fue venta de mostrador. */
+    public function ordenVenta()
+    {
+        return $this->belongsTo(OrdenVenta::class);
     }
 }

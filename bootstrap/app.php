@@ -24,4 +24,14 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*'),
         );
+
+        // Las reglas de negocio se lanzan como DomainException desde los
+        // servicios ("ese rollo ya no está disponible"). No son errores del
+        // sistema: son avisos para el usuario, y viajan como un 422 igual que
+        // los de validación, que es lo que el frontend ya sabe mostrar.
+        $exceptions->render(function (\DomainException $e, Request $request) {
+            if ($request->is('api/*')) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
+        });
     })->create();

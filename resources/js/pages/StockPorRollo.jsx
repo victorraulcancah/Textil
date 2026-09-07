@@ -49,7 +49,7 @@ const ESTADOS = [
  * recepción de compra, que es donde llega el contenedor y donde el rollo queda
  * amarrado a su importación y a su costo.
  */
-export default function Rollos() {
+export default function StockPorRollo() {
     const toast = useToast();
 
     const [resumen, setResumen] = useState([]);
@@ -307,7 +307,7 @@ export default function Rollos() {
     return (
         <Layout>
             <PageHeader
-                title="Rollos"
+                title="Stock por rollo"
                 description="Cada rollo con su metraje, su estado y dónde está"
                 actions={
                     <div className="flex flex-wrap items-center gap-2">

@@ -98,7 +98,7 @@ return [
                 'almacenes' => ['label' => 'Almacenes', 'apis' => ['almacenes']],
                 'existencias' => ['label' => 'Existencias', 'apis' => ['existencias']],
                 'rollos' => [
-                    'label' => 'Rollos',
+                    'label' => 'Stock por rollo',
                     'apis' => ['rollos'],
                     'pdf' => ['etiqueta-rollo'],
                 ],

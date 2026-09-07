@@ -17,7 +17,7 @@ import SubMarcas from './pages/SubMarcas';
 import UnidadesMedida from './pages/UnidadesMedida';
 import Almacenes from './pages/Almacenes';
 import Existencias from './pages/Existencias';
-import Rollos from './pages/Rollos';
+import StockPorRollo from './pages/StockPorRollo';
 import Movimientos from './pages/Movimientos';
 import Transferencias from './pages/Transferencias';
 import Ajustes from './pages/Ajustes';
@@ -66,7 +66,7 @@ const routes = [
     { path: '/unidades-medida', element: <UnidadesMedida /> },
     { path: '/almacenes', element: <Almacenes /> },
     { path: '/existencias', element: <Existencias /> },
-    { path: '/rollos', element: <Rollos /> },
+    { path: '/stock-rollos', element: <StockPorRollo /> },
     { path: '/kardex', element: <Movimientos /> },
     // Alias del nombre anterior, para no romper enlaces guardados.
     { path: '/movimientos', element: <Movimientos /> },

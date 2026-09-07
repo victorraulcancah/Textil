@@ -83,7 +83,7 @@ export const navigation = [
         children: [
             { label: 'Almacenes', icon: Store, to: '/almacenes', permiso: 'inventario.almacenes' },
             { label: 'Existencias', icon: Warehouse, to: '/existencias', permiso: 'inventario.existencias' },
-            { label: 'Rollos', icon: Layers, to: '/rollos', permiso: 'inventario.rollos' },
+            { label: 'Stock por rollo', icon: Layers, to: '/stock-rollos', permiso: 'inventario.rollos' },
             { label: 'Preparación y despacho', icon: ScanLine, to: '/despacho', permiso: 'inventario.despacho' },
             { label: 'Kardex', icon: ArrowLeftRight, to: '/kardex', permiso: 'inventario.kardex' },
             { label: 'Traslados', icon: Repeat, to: '/transferencias', permiso: 'inventario.transferencias' },

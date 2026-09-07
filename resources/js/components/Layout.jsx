@@ -33,7 +33,7 @@ export default function Layout({ children }) {
             <div
                 className={cn(
                     'flex min-h-screen flex-col transition-[padding]',
-                    collapsed ? 'lg:pl-16' : 'lg:pl-64',
+                    collapsed ? 'lg:pl-16' : 'lg:pl-52',
                 )}
             >
                 <main className="flex-1 px-4 pb-6 pt-16 sm:px-6 lg:px-8 lg:pr-20 lg:pt-6">{children}</main>

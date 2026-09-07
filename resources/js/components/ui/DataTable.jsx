@@ -601,8 +601,11 @@ export default function DataTable({
                                                         }}
                                                         onDrop={() => handleDrop(col.key)}
                                                         className={cn(
+                                                            // Cabecera compacta: el texto va en
+                                                            // mayúsculas pequeñas y no necesita el
+                                                            // alto de una fila de datos.
                                                             'group relative overflow-hidden px-4',
-                                                            dense ? 'py-2' : 'py-3',
+                                                            dense ? 'py-1' : 'py-1.5',
                                                             resizingKey === col.key ? 'select-none' : 'transition-[background-color,opacity] duration-150',
                                                             isDragged && 'opacity-40',
                                                             isTarget && 'bg-white/15',
@@ -685,7 +688,7 @@ export default function DataTable({
                                                     scope="col"
                                                     className={cn(
                                                         'px-4 text-xs font-semibold uppercase tracking-wide',
-                                                        dense ? 'py-2' : 'py-3',
+                                                        dense ? 'py-1' : 'py-1.5',
                                                     )}
                                                 >
                                                     {actionsCol.label}

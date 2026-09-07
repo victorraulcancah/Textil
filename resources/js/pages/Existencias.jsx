@@ -387,6 +387,63 @@ export default function Existencias() {
         return pres ? Number(pres.factor_conversion) || 1 : 1;
     };
 
+    /** Columnas del desglose por unidad derivada. */
+    const columnasDerivadas = [
+        {
+            key: 'nombre',
+            label: 'Unidad derivada',
+            render: (u) => <span className="font-semibold text-warm-900">{u.nombre}</span>,
+        },
+        {
+            key: 'factor',
+            label: 'Factor',
+            align: 'right',
+            width: '120px',
+            searchable: false,
+            render: (u) => (
+                <span className="text-warm-500">
+                    x{num(u.factor)} {u.abrev}
+                </span>
+            ),
+        },
+        {
+            key: 'completas',
+            label: 'Stock en esa unidad',
+            align: 'right',
+            width: '150px',
+            searchable: false,
+            render: (u) => <span className="font-bold text-primary-600">{num(u.completas)}</span>,
+        },
+        {
+            key: 'sobrante',
+            label: 'Sobrante',
+            align: 'right',
+            width: '110px',
+            searchable: false,
+            render: (u) => (
+                <span className="text-warm-500">
+                    {u.sobrante > 0 ? `${num(u.sobrante)} ${u.abrev}` : '—'}
+                </span>
+            ),
+        },
+        {
+            key: 'precio_compra',
+            label: 'P. Compra',
+            align: 'right',
+            width: '110px',
+            searchable: false,
+            render: (u) => <span className="text-warm-500">{money(u.precio_compra)}</span>,
+        },
+        {
+            key: 'precio_venta',
+            label: 'P. Venta',
+            align: 'right',
+            width: '110px',
+            searchable: false,
+            render: (u) => <span className="text-warm-900">{money(u.precio_venta)}</span>,
+        },
+    ];
+
     const tabItems = [
         { key: 'todos', label: 'Todos', icon: Store },
         ...almacenes.map((a) => ({
@@ -466,65 +523,24 @@ export default function Existencias() {
                 )}
             </BottomSheet>
 
-            {/* Desglose del stock en cada unidad derivada del producto (escritorio) */}
-            <div className="mt-6 hidden rounded-xl border border-edge bg-white shadow-sm md:block">
-                <div className="flex items-center justify-between border-b border-edge px-5 py-3">
-                    <h2 className="text-sm font-semibold text-warm-900">
-                        Unidades derivadas
-                        {seleccionada?.producto?.nombre ? ` de ${seleccionada.producto.nombre}` : ''}
-                    </h2>
-                    {seleccionada && (
-                        <span className="text-xs text-warm-500">
-                            Stock base: {num(seleccionada.stock_actual)}{' '}
-                            {seleccionada.producto?.unidad_base?.abreviatura ?? ''}
-                            {seleccionada.almacen?.nombre ? ` · ${seleccionada.almacen.nombre}` : ''}
-                        </span>
-                    )}
-                </div>
-                <div className="overflow-x-auto">
-                    <table className="w-full min-w-[720px] text-sm">
-                        <thead>
-                            <tr className="bg-primary-600 text-left text-xs font-semibold uppercase tracking-wide text-white">
-                                <th className="w-12 px-3 py-2.5 text-center">#</th>
-                                <th className="px-3 py-2.5">Unidad derivada</th>
-                                <th className="w-32 px-3 py-2.5 text-right">Factor</th>
-                                <th className="w-36 px-3 py-2.5 text-right">Stock en esa unidad</th>
-                                <th className="w-28 px-3 py-2.5 text-right">Sobrante</th>
-                                <th className="w-28 px-3 py-2.5 text-right">P. Compra</th>
-                                <th className="w-28 px-3 py-2.5 text-right">P. Venta</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                            {derivadas.length === 0 && (
-                                <tr>
-                                    <td colSpan={7} className="px-3 py-10 text-center text-sm text-warm-500">
-                                        {seleccionada
-                                            ? 'Este producto no tiene unidades derivadas activas.'
-                                            : 'Selecciona un producto arriba para ver su desglose.'}
-                                    </td>
-                                </tr>
-                            )}
-
-                            {derivadas.map((u, i) => (
-                                <tr key={u.id}>
-                                    <td className="px-3 py-2 text-center text-warm-500">{i + 1}</td>
-                                    <td className="px-3 py-2 font-semibold text-warm-900">{u.nombre}</td>
-                                    <td className="px-3 py-2 text-right text-warm-500">
-                                        x{num(u.factor)} {u.abrev}
-                                    </td>
-                                    <td className="px-3 py-2 text-right">
-                                        <span className="font-bold text-primary-600">{num(u.completas)}</span>
-                                    </td>
-                                    <td className="px-3 py-2 text-right text-warm-500">
-                                        {u.sobrante > 0 ? `${num(u.sobrante)} ${u.abrev}` : '—'}
-                                    </td>
-                                    <td className="px-3 py-2 text-right text-warm-500">{money(u.precio_compra)}</td>
-                                    <td className="px-3 py-2 text-right text-warm-900">{money(u.precio_venta)}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
+            {/* Desglose del stock en cada unidad derivada del producto (escritorio).
+                Sin cabecera propia ni tarjeta alrededor: la tabla ya trae la
+                suya, y el producto y su stock base se ven en la fila marcada
+                de arriba. Sin buscador ni filtros porque son cuatro filas que
+                cuelgan de esa selección, no una lista que haya que recorrer. */}
+            <div className="mt-6 hidden md:block">
+                <DataTable
+                    columns={columnasDerivadas}
+                    rows={derivadas}
+                    searchable={false}
+                    toggleableColumns={false}
+                    dense
+                    emptyMessage={
+                        seleccionada
+                            ? 'Este producto no tiene unidades derivadas activas.'
+                            : 'Selecciona un producto arriba para ver su desglose.'
+                    }
+                />
             </div>
         </Layout>
     );

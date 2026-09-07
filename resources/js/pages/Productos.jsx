@@ -5,7 +5,7 @@ import { calcularPresentaciones, describirContenido } from '../lib/unidades';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import PageHeader, { CreateButton } from '../components/PageHeader';
-import { Alert, Badge, Button, DataTable, Input, Modal, Select, Tabs, cn } from '../components/ui';
+import { Alert, Badge, Button, DataTable, Input, Modal, OptionSelect, Select, Tabs, cn } from '../components/ui';
 
 /** Soles con hasta 4 decimales: el costo por gramo puede ser S/ 0.0028. */
 const money = (n) =>
@@ -1756,22 +1756,28 @@ function CeldaProveedores({ proveedores }) {
         );
     }
 
-    // El código y el precio van dentro de cada opción: fuera del selector
-    // quedaban sueltos y parecían pertenecer a la fila de arriba.
-    const etiqueta = (p) =>
-        [p.principal ? `${p.nombre} ★` : p.nombre, p.codigo_proveedor, p.precio_referencia && money(p.precio_referencia)]
+    // El código y el precio son la segunda línea de cada opción: es lo que se
+    // compara entre proveedores, y en un <select> nativo no cabría.
+    const detalle = (p) =>
+        [p.codigo_proveedor, p.precio_referencia && money(p.precio_referencia)]
             .filter(Boolean)
-            .join(' · ');
+            .join(' · ') || 'sin datos';
 
     return (
-        <Select
-            value={elegido}
-            onChange={(e) => setElegido(e.target.value)}
-            // La fila no debe reaccionar al usar el selector.
-            onClick={(e) => e.stopPropagation()}
-            aria-label={`Proveedores (${lista.length})`}
-            className="min-w-[13rem] py-1 text-xs"
-            options={lista.map((p) => ({ value: String(p.proveedor_id), label: etiqueta(p) }))}
-        />
+        // La fila no debe reaccionar al usar el selector.
+        <div onClick={(e) => e.stopPropagation()} className="min-w-[13rem]">
+            <OptionSelect
+                size="sm"
+                value={elegido}
+                onChange={(v) => setElegido(v)}
+                aria-label={`Proveedores (${lista.length})`}
+                options={lista.map((p) => ({
+                    value: String(p.proveedor_id),
+                    label: p.nombre,
+                    detail: detalle(p),
+                    badge: p.principal ? <Badge variant="blue">Principal</Badge> : null,
+                }))}
+            />
+        </div>
     );
 }

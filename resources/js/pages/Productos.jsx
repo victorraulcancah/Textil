@@ -1756,27 +1756,22 @@ function CeldaProveedores({ proveedores }) {
         );
     }
 
-    const actual = lista.find((p) => String(p.proveedor_id) === elegido) ?? principal;
+    // El código y el precio van dentro de cada opción: fuera del selector
+    // quedaban sueltos y parecían pertenecer a la fila de arriba.
+    const etiqueta = (p) =>
+        [p.principal ? `${p.nombre} ★` : p.nombre, p.codigo_proveedor, p.precio_referencia && money(p.precio_referencia)]
+            .filter(Boolean)
+            .join(' · ');
 
     return (
-        <div className="min-w-[11rem]">
-            <Select
-                value={elegido}
-                onChange={(e) => setElegido(e.target.value)}
-                // La fila no debe reaccionar al usar el selector.
-                onClick={(e) => e.stopPropagation()}
-                aria-label={`Proveedores (${lista.length})`}
-                className="py-1 text-xs"
-                options={lista.map((p) => ({
-                    value: String(p.proveedor_id),
-                    label: p.principal ? `${p.nombre} ★` : p.nombre,
-                }))}
-            />
-            <span className="mt-0.5 block text-xs text-warm-400">
-                {[actual.codigo_proveedor, actual.precio_referencia && money(actual.precio_referencia)]
-                    .filter(Boolean)
-                    .join(' · ') || 'sin datos'}
-            </span>
-        </div>
+        <Select
+            value={elegido}
+            onChange={(e) => setElegido(e.target.value)}
+            // La fila no debe reaccionar al usar el selector.
+            onClick={(e) => e.stopPropagation()}
+            aria-label={`Proveedores (${lista.length})`}
+            className="min-w-[13rem] py-1 text-xs"
+            options={lista.map((p) => ({ value: String(p.proveedor_id), label: etiqueta(p) }))}
+        />
     );
 }

@@ -49,6 +49,41 @@ const TABS = [
     { key: 'comercial', label: 'Compra y venta' },
 ];
 
+/**
+ * A qué pestaña pertenece cada campo, para llevar al usuario hasta el error.
+ * Sin esto, un fallo en "Compra y venta" deja el modal quieto en General y
+ * nadie entiende por qué no guarda.
+ */
+const PESTANA_DEL_CAMPO = {
+    general: [
+        'codigo', 'codigo_barras', 'nombre', 'descripcion_ticket', 'activo',
+        'categoria_id', 'sub_categoria_id', 'marca_id', 'sub_marca_id', 'proveedores',
+    ],
+    ficha: [
+        'composicion', 'ancho_cm', 'gramaje', 'peso_por_metro', 'tipo_tejido',
+        'elasticidad', 'minimo_compra', 'descripcion', 'propiedades',
+    ],
+    colores: ['colores'],
+    comercial: [
+        'unidad_medida_id', 'unidad_base_id', 'unidad_compra_id',
+        'factor_compra_base', 'presentaciones', 'stock_minimo', 'stock_maximo',
+        // Nombres que usa la validación del propio formulario.
+        'compra_unidad', 'compra_cantidad', 'compra_contenido', 'ventas',
+    ],
+};
+
+/** La primera pestaña que tiene un error, para saltar a ella. */
+function pestanaConError(campos) {
+    const raiz = (c) => String(c).split('.')[0];
+
+    for (const [pestana, suyos] of Object.entries(PESTANA_DEL_CAMPO)) {
+        if (campos.some((c) => suyos.includes(raiz(c)))) {
+            return pestana;
+        }
+    }
+    return null;
+}
+
 /** Un color del muestrario: "Azul Marino - Cód. 402". */
 const colorVacio = () => ({ nombre: '', nombre_proveedor: '', codigo: '', hex: '#1f3a93' });
 
@@ -333,7 +368,17 @@ export default function Productos() {
             next.ventas = 'Hay formatos de venta repetidos';
         }
         setErrors(next);
-        return Object.keys(next).length === 0;
+
+        if (Object.keys(next).length) {
+            // El error casi siempre está en otra pestaña: se lleva al usuario
+            // hasta él en vez de dejar el botón sin reacción aparente.
+            const destino = pestanaConError(Object.keys(next));
+            if (destino) setTab(destino);
+            toast.error(Object.values(next)[0]);
+            return false;
+        }
+
+        return true;
     };
 
     const buildPresentaciones = () =>
@@ -431,7 +476,19 @@ export default function Productos() {
             if (err.response?.status === 422) {
                 const validation = err.response.data?.errors ?? {};
                 setErrors(Object.fromEntries(Object.entries(validation).map(([k, v]) => [k, v[0]])));
-                toast.error('Verifique los datos del producto.');
+
+                // Se dice qué está mal y se abre la pestaña donde está, en vez
+                // de un "revisa los datos" que obliga a buscar a ciegas.
+                const campos = Object.keys(validation);
+                const destino = pestanaConError(campos);
+                if (destino) setTab(destino);
+
+                const mensajes = Object.values(validation).map((v) => v[0]);
+                toast.error(
+                    mensajes[0]
+                        ? mensajes[0] + (mensajes.length > 1 ? ` (y ${mensajes.length - 1} error(es) más)` : '')
+                        : 'Verifique los datos del producto.',
+                );
             } else {
                 toast.error('No se pudo guardar el producto.');
             }

@@ -17,6 +17,7 @@ import SubMarcas from './pages/SubMarcas';
 import UnidadesMedida from './pages/UnidadesMedida';
 import Almacenes from './pages/Almacenes';
 import Existencias from './pages/Existencias';
+import Rollos from './pages/Rollos';
 import Movimientos from './pages/Movimientos';
 import Transferencias from './pages/Transferencias';
 import Ajustes from './pages/Ajustes';
@@ -30,6 +31,9 @@ import CrearCompra from './pages/CrearCompra';
 import RecepcionesCompra from './pages/RecepcionesCompra';
 import Clientes from './pages/Clientes';
 import NotasVenta from './pages/NotasVenta';
+import Pedidos from './pages/Pedidos';
+import CrearPedido from './pages/CrearPedido';
+import Despacho from './pages/Despacho';
 import CrearVenta from './pages/CrearVenta';
 import MetodosDePago from './pages/MetodosDePago';
 import MiCaja from './pages/MiCaja';
@@ -62,6 +66,7 @@ const routes = [
     { path: '/unidades-medida', element: <UnidadesMedida /> },
     { path: '/almacenes', element: <Almacenes /> },
     { path: '/existencias', element: <Existencias /> },
+    { path: '/rollos', element: <Rollos /> },
     { path: '/kardex', element: <Movimientos /> },
     // Alias del nombre anterior, para no romper enlaces guardados.
     { path: '/movimientos', element: <Movimientos /> },
@@ -78,6 +83,10 @@ const routes = [
     { path: '/compras/:id/editar', element: <CrearCompra /> },
     { path: '/recepciones-compra', element: <RecepcionesCompra /> },
     { path: '/clientes', element: <Clientes /> },
+    { path: '/pedidos', element: <Pedidos /> },
+    { path: '/pedidos/nuevo', element: <CrearPedido /> },
+    { path: '/pedidos/:id/editar', element: <CrearPedido /> },
+    { path: '/despacho', element: <Despacho /> },
     { path: '/notas-venta', element: <NotasVenta /> },
     { path: '/notas-venta/nueva', element: <CrearVenta /> },
     { path: '/notas-venta/:id/editar', element: <CrearVenta /> },

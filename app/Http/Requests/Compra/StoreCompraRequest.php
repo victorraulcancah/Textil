@@ -27,6 +27,17 @@ class StoreCompraRequest extends FormRequest
             'dias_credito' => 'nullable|integer|min:0',
             'fecha_vencimiento' => 'nullable|date',
             'flete' => 'nullable|numeric|min:0',
+
+            // Datos de la importacion: solo cuando la compra viene del exterior.
+            'es_importacion' => 'nullable|boolean',
+            'numero_importacion' => 'nullable|string|max:40',
+            'contenedor' => 'nullable|string|max:40',
+            'precinto' => 'nullable|string|max:40',
+            'bl' => 'nullable|string|max:60',
+            'pais_origen' => 'nullable|string|max:60',
+            'fecha_llegada' => 'nullable|date',
+            'moneda_origen' => 'nullable|string|max:10',
+            'tipo_cambio' => 'nullable|numeric|min:0',
             'observaciones' => 'nullable|string',
 
             'detalles' => 'required|array|min:1',

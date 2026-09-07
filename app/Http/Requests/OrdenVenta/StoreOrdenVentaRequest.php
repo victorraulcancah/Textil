@@ -33,7 +33,9 @@ class StoreOrdenVentaRequest extends FormRequest
 
             'detalles' => 'required|array|min:1',
             'detalles.*.rollo_id' => 'required|exists:rollos,id',
-            'detalles.*.producto_presentacion_id' => 'nullable|exists:producto_presentaciones,id',
+            // Obligatoria: de ella salen el precio y el descuento de stock al
+            // facturar. Sin ella el pedido reventaria recien al final.
+            'detalles.*.producto_presentacion_id' => 'required|exists:producto_presentaciones,id',
             'detalles.*.metros' => 'required|numeric|min:0.01',
             'detalles.*.precio_unitario' => 'nullable|numeric|min:0',
             'detalles.*.descuento' => 'nullable|numeric|min:0',

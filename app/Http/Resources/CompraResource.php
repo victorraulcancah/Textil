@@ -37,6 +37,16 @@ class CompraResource extends JsonResource
             'fecha_vencimiento' => $this->fecha_vencimiento,
 
             'flete' => $this->flete,
+
+            'es_importacion' => (bool) $this->es_importacion,
+            'numero_importacion' => $this->numero_importacion,
+            'contenedor' => $this->contenedor,
+            'precinto' => $this->precinto,
+            'bl' => $this->bl,
+            'pais_origen' => $this->pais_origen,
+            'fecha_llegada' => $this->fecha_llegada,
+            'moneda_origen' => $this->moneda_origen,
+            'tipo_cambio' => $this->tipo_cambio,
             'subtotal' => $this->subtotal,
             'total' => $this->total,
 

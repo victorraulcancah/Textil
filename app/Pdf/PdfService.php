@@ -41,11 +41,31 @@ class PdfService
 
         // Un solo blade por documento; internamente extiende el layout según
         // $formato (a4 o ticket).
-        $pdf = Pdf::loadView($documento->vista(), $datos);
+        return $this->generarVista($documento->vista(), $datos, $formato);
+    }
 
-        $formato === 'ticket'
-            ? $pdf->setPaper($this->papelTicket())->setOption('dpi', 96)
-            : $pdf->setPaper('a4');
+    /**
+     * Renderiza cualquier blade con el papel del formato pedido.
+     *
+     * Lo usan tanto los documentos registrados como las impresiones en lote
+     * —las etiquetas de un color entero— que no cuelgan de un solo id.
+     */
+    public function generarVista(string $vista, array $datos, string $formato = 'a4')
+    {
+        $datos += [
+            'empresa' => Empresa::query()->where('activa', true)->first() ?? Empresa::first(),
+            'formato' => $formato,
+            'pieLegal' => config('pdf.pie_legal'),
+            'generadoEn' => now(),
+        ];
+
+        $pdf = Pdf::loadView($vista, $datos);
+
+        match ($formato) {
+            'ticket' => $pdf->setPaper($this->papelTicket())->setOption('dpi', 96),
+            'etiqueta' => $pdf->setPaper($this->papelEtiqueta())->setOption('dpi', 96),
+            default => $pdf->setPaper('a4'),
+        };
 
         // El logo y las tildes necesitan que dompdf resuelva rutas locales y
         // trate el HTML como UTF-8.
@@ -53,6 +73,17 @@ class PdfService
         $pdf->setOption('defaultFont', 'DejaVu Sans');
 
         return $pdf;
+    }
+
+    /** Papel de la etiqueta del rollo: el rollo de etiquetas adhesivas. */
+    private function papelEtiqueta(): array
+    {
+        return [
+            0,
+            0,
+            (float) config('rollos.etiqueta.ancho_mm', 100) * self::MM_A_PT,
+            (float) config('rollos.etiqueta.alto_mm', 60) * self::MM_A_PT,
+        ];
     }
 
     /** Papel del ticket: ancho fijo (config), alto grande que dompdf recorta. */

@@ -357,7 +357,18 @@ class OrdenVentaService
     {
         return $orden->detalles->map(function ($detalle) {
             $producto = $detalle->rollo?->producto;
-            $presentacion = $detalle->presentacion;
+
+            // Desde ahora la presentación es obligatoria al crear el pedido;
+            // los que se guardaron antes de esa regla caen en la del metro,
+            // que es como se vende la tela por defecto.
+            $presentacion = $detalle->presentacion ?? $producto?->presentaciones
+                ->first(fn ($p) => strtolower($p->unidadBase?->abreviatura ?? '') === 'm');
+
+            if (! $presentacion) {
+                throw new \DomainException(
+                    "El rollo {$detalle->rollo?->codigo} no tiene presentación de venta: no se puede facturar."
+                );
+            }
 
             // metros → unidad base (cm) → unidades de la presentación.
             $base = (float) $detalle->metros * ($producto?->factorBasePorMetro() ?? 1);
@@ -365,7 +376,7 @@ class OrdenVentaService
             $cantidad = round($base / $factor, 2);
 
             return [
-                'producto_presentacion_id' => $detalle->producto_presentacion_id,
+                'producto_presentacion_id' => $presentacion->id,
                 'rollo_id' => $detalle->rollo_id,
                 'cantidad' => $cantidad,
                 // El precio del pedido es por metro; en la nota va por unidad

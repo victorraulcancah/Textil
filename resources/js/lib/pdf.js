@@ -17,6 +17,20 @@ export async function obtenerPdf(tipo, id, { formato = 'a4', descargar = false }
     return URL.createObjectURL(data);
 }
 
+/**
+ * Igual que `obtenerPdf` pero contra una ruta cualquiera de la API.
+ *
+ * Lo necesitan las impresiones que no cuelgan de un solo documento, como las
+ * etiquetas de todos los rollos de un color (`/rollos/etiquetas?...`).
+ */
+export async function obtenerPdfDeUrl(url, { descargar = false } = {}) {
+    const { data } = await api.get(url, {
+        params: descargar ? { descargar: 1 } : {},
+        responseType: 'blob',
+    });
+    return URL.createObjectURL(data);
+}
+
 /** Dispara la descarga del PDF con un nombre de archivo. */
 export async function descargarPdf(tipo, id, { formato = 'a4', nombre } = {}) {
     const url = await obtenerPdf(tipo, id, { formato, descargar: true });

@@ -10,6 +10,8 @@ use App\Models\Producto;
 use App\Models\ProductoColor;
 use App\Models\RecepcionCompra;
 use App\Models\Rollo;
+use App\Pdf\Documentos\EtiquetaRolloPdf;
+use App\Pdf\PdfService;
 use App\Services\RolloService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -150,10 +152,51 @@ class RolloController extends Controller
             $data['codigo_proveedor'] ?? null,
         );
 
+        // Se recargan desde la base porque el servicio devuelve una colección
+        // simple, sin las relaciones que necesita la respuesta.
+        $rollos = Rollo::with(self::RELACIONES)
+            ->whereIn('id', $creados->pluck('id'))
+            ->orderBy('numero')
+            ->get();
+
         return response()->json([
             'message' => "Se crearon {$creados->count()} rollos con ".round($creados->sum('metros_inicial'), 2).' m en total.',
-            'rollos' => RolloResource::collection($creados->load(self::RELACIONES))->toArray($request),
+            'rollos' => RolloResource::collection($rollos)->toArray($request),
         ], 201);
+    }
+
+    /**
+     * Imprime las etiquetas de varios rollos de una vez.
+     *
+     * Al llegar una importación hay que etiquetar 93 rollos: hacerlo de uno en
+     * uno no es viable. Se puede pedir por ids sueltos o por color entero, que
+     * es como se etiqueta en la práctica.
+     */
+    public function etiquetas(Request $request)
+    {
+        $rollos = Rollo::with(['producto:id,codigo,nombre', 'color', 'almacen:id,nombre'])
+            ->when($request->filled('ids'), fn ($q) => $q->whereIn('id', array_filter(explode(',', (string) $request->input('ids')))))
+            ->when($request->filled('producto_id'), fn ($q) => $q->where('producto_id', $request->producto_id))
+            ->when($request->filled('producto_color_id'), fn ($q) => $q->where('producto_color_id', $request->producto_color_id))
+            ->when($request->filled('recepcion_compra_id'), fn ($q) => $q->where('recepcion_compra_id', $request->recepcion_compra_id))
+            ->orderBy('numero')
+            ->get();
+
+        if ($rollos->isEmpty()) {
+            return response()->json(['message' => 'No hay rollos que etiquetar con ese filtro.'], 404);
+        }
+
+        $documento = app(EtiquetaRolloPdf::class);
+
+        $pdf = app(PdfService::class)->generarVista(
+            $documento->vista(),
+            ['etiquetas' => $rollos->map(fn ($r) => $documento->etiqueta($r))->all()],
+            'etiqueta',
+        );
+
+        $archivo = 'etiquetas-'.$rollos->count().'-rollos.pdf';
+
+        return $request->boolean('descargar') ? $pdf->download($archivo) : $pdf->stream($archivo);
     }
 
     /** Cambia el rollo de rack o de almacén. */

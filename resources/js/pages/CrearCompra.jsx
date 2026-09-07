@@ -48,6 +48,17 @@ export default function CrearCompra() {
         fecha_vencimiento: hoy(),
         flete: '0',
         observaciones: '',
+
+        // Datos del embarque. Solo se piden si la compra viene del exterior.
+        es_importacion: false,
+        numero_importacion: '',
+        contenedor: '',
+        precinto: '',
+        bl: '',
+        pais_origen: '',
+        fecha_llegada: '',
+        moneda_origen: 'PEN',
+        tipo_cambio: '',
     });
 
     /** Panel superior de búsqueda/alta. */
@@ -100,6 +111,16 @@ export default function CrearCompra() {
                     fecha_vencimiento: (compra.fecha_vencimiento ?? hoy()).slice(0, 10),
                     flete: String(compra.flete ?? '0'),
                     observaciones: compra.observaciones ?? '',
+
+                    es_importacion: Boolean(compra.es_importacion),
+                    numero_importacion: compra.numero_importacion ?? '',
+                    contenedor: compra.contenedor ?? '',
+                    precinto: compra.precinto ?? '',
+                    bl: compra.bl ?? '',
+                    pais_origen: compra.pais_origen ?? '',
+                    fecha_llegada: (compra.fecha_llegada ?? '').slice(0, 10),
+                    moneda_origen: compra.moneda_origen ?? 'PEN',
+                    tipo_cambio: compra.tipo_cambio ? String(compra.tipo_cambio) : '',
                 });
                 setItems(
                     (compra.detalles ?? []).map((d) => ({
@@ -368,6 +389,20 @@ export default function CrearCompra() {
             fecha_vencimiento: form.forma_pago === 'credito' ? form.fecha_vencimiento : null,
             flete,
             observaciones: form.observaciones,
+
+            es_importacion: form.es_importacion,
+            ...(form.es_importacion
+                ? {
+                      numero_importacion: form.numero_importacion || null,
+                      contenedor: form.contenedor || null,
+                      precinto: form.precinto || null,
+                      bl: form.bl || null,
+                      pais_origen: form.pais_origen || null,
+                      fecha_llegada: form.fecha_llegada || null,
+                      moneda_origen: form.moneda_origen || 'PEN',
+                      tipo_cambio: form.tipo_cambio ? Number(form.tipo_cambio) : null,
+                  }
+                : {}),
             detalles: items.map((it) => ({
                 producto_presentacion_id: it.producto_presentacion_id,
                 cantidad: it.cantidad,
@@ -764,6 +799,82 @@ export default function CrearCompra() {
                         )}
                     </div>
                     )}
+
+                    {/* Embarque: de qué importación vino la mercadería. Se pliega
+                        porque la mayoría de compras son locales y no lo usan. */}
+                    <div className="rounded-xl border border-edge bg-white p-5 shadow-sm">
+                        <label className="flex cursor-pointer items-center gap-2">
+                            <input
+                                type="checkbox"
+                                checked={form.es_importacion}
+                                onChange={(e) => setField('es_importacion', e.target.checked)}
+                                className="h-4 w-4 rounded border-gray-300 accent-primary-600"
+                            />
+                            <span className="text-xs font-bold uppercase tracking-wide text-warm-500">
+                                Es una importación
+                            </span>
+                        </label>
+
+                        {form.es_importacion && (
+                            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                                <Input
+                                    label="N.º de importación"
+                                    placeholder="IMP-2026-014"
+                                    value={form.numero_importacion}
+                                    onChange={(e) => setField('numero_importacion', e.target.value)}
+                                />
+                                <Input
+                                    label="Contenedor"
+                                    placeholder="FFAU1941760"
+                                    value={form.contenedor}
+                                    onChange={(e) => setField('contenedor', e.target.value)}
+                                />
+                                <Input
+                                    label="Precinto"
+                                    placeholder="FX46406368"
+                                    value={form.precinto}
+                                    onChange={(e) => setField('precinto', e.target.value)}
+                                />
+                                <Input
+                                    label="BL (conocimiento de embarque)"
+                                    placeholder="177FGNGNN20655A"
+                                    value={form.bl}
+                                    onChange={(e) => setField('bl', e.target.value)}
+                                />
+                                <Input
+                                    label="País de origen"
+                                    placeholder="China"
+                                    value={form.pais_origen}
+                                    onChange={(e) => setField('pais_origen', e.target.value)}
+                                />
+                                <Input
+                                    label="Fecha de llegada"
+                                    type="date"
+                                    value={form.fecha_llegada}
+                                    onChange={(e) => setField('fecha_llegada', e.target.value)}
+                                />
+                                <Select
+                                    label="Moneda de origen"
+                                    value={form.moneda_origen}
+                                    onChange={(e) => setField('moneda_origen', e.target.value)}
+                                    options={[
+                                        { value: 'PEN', label: 'Soles (PEN)' },
+                                        { value: 'USD', label: 'Dólares (USD)' },
+                                        { value: 'CNY', label: 'Yuan (CNY)' },
+                                        { value: 'EUR', label: 'Euros (EUR)' },
+                                    ]}
+                                />
+                                <Input
+                                    label="Tipo de cambio"
+                                    type="number"
+                                    step="0.0001"
+                                    placeholder="3.7500"
+                                    value={form.tipo_cambio}
+                                    onChange={(e) => setField('tipo_cambio', e.target.value)}
+                                />
+                            </div>
+                        )}
+                    </div>
 
                     <div className="rounded-xl border border-edge bg-white p-5 shadow-sm">
                         <h2 className="mb-2 text-xs font-bold uppercase tracking-wide text-warm-500">Observaciones</h2>

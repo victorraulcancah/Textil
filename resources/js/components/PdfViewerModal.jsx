@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Download, ExternalLink, FileText, Loader2, Printer, X } from 'lucide-react';
-import { descargarPdf, obtenerPdf } from '../lib/pdf';
+import { descargarPdf, obtenerPdf, obtenerPdfDeUrl } from '../lib/pdf';
 import { useToast } from '../lib/toast';
 
 /**
@@ -24,12 +24,18 @@ const soportaPdfIncrustado = () => {
  *
  *   <PdfViewerModal open tipo="nota-venta" id={12} nombre="NV01-00000012"
  *       formatos={['a4','ticket']} titulo="Nota de venta" onClose={...} />
+ *
+ * Para impresiones que no cuelgan de un solo documento —las etiquetas de todos
+ * los rollos de un color— se pasa `url` en lugar de tipo/id:
+ *
+ *   <PdfViewerModal open url="/rollos/etiquetas?producto_color_id=2" ... />
  */
 export default function PdfViewerModal({
     open,
     onClose,
     tipo,
     id,
+    url: urlDirecta,
     nombre,
     titulo = 'Documento',
     formatos = ['a4'],
@@ -48,10 +54,11 @@ export default function PdfViewerModal({
     }, [open, id]); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
-        if (!open || !tipo || id == null) return;
+        if (!open) return;
+        if (!urlDirecta && (!tipo || id == null)) return;
         let vigente = true;
         setLoading(true);
-        obtenerPdf(tipo, id, { formato })
+        (urlDirecta ? obtenerPdfDeUrl(urlDirecta) : obtenerPdf(tipo, id, { formato }))
             .then((blobUrl) => {
                 if (!vigente) return URL.revokeObjectURL(blobUrl);
                 if (urlRef.current) URL.revokeObjectURL(urlRef.current);
@@ -64,7 +71,7 @@ export default function PdfViewerModal({
         return () => {
             vigente = false;
         };
-    }, [open, tipo, id, formato]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [open, tipo, id, urlDirecta, formato]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Al cerrar del todo se libera el blob.
     useEffect(() => {
@@ -213,7 +220,19 @@ export default function PdfViewerModal({
                             )}
                         </button>
                         <button
-                            onClick={() => descargarPdf(tipo, id, { formato, nombre })}
+                            onClick={() =>
+                                urlDirecta
+                                    ? obtenerPdfDeUrl(urlDirecta, { descargar: true }).then((u) => {
+                                          const a = document.createElement('a');
+                                          a.href = u;
+                                          a.download = `${nombre || titulo}.pdf`;
+                                          document.body.appendChild(a);
+                                          a.click();
+                                          a.remove();
+                                          setTimeout(() => URL.revokeObjectURL(u), 4000);
+                                      })
+                                    : descargarPdf(tipo, id, { formato, nombre })
+                            }
                             disabled={!url}
                             className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-primary-700 disabled:opacity-40"
                         >

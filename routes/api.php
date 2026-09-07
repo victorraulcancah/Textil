@@ -112,6 +112,7 @@ Route::middleware('auth:api')->group(function () {
     // Rollos: la unidad individual de inventario
     Route::get('rollos', [RolloController::class, 'index']);
     Route::get('rollos/resumen', [RolloController::class, 'resumen']);
+    Route::get('rollos/etiquetas', [RolloController::class, 'etiquetas']);
     // Antes que {rollo} para que "codigo" no se confunda con un id.
     Route::get('rollos/codigo/{codigo}', [RolloController::class, 'porCodigo']);
     Route::get('rollos/{rollo}', [RolloController::class, 'show']);

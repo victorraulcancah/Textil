@@ -37,6 +37,9 @@ import {
     BarChart3,
     LineChart,
     TrendingUp,
+    Layers,
+    ScanLine,
+    ClipboardList,
 } from 'lucide-react';
 
 /**
@@ -50,6 +53,7 @@ export const navigation = [
         icon: ShoppingBag,
         children: [
             { label: 'Clientes', icon: Contact, to: '/clientes', permiso: 'ventas.clientes' },
+            { label: 'Pedidos', icon: ClipboardList, to: '/pedidos', permiso: 'ventas.pedidos' },
             { label: 'Notas de Venta', icon: ReceiptText, to: '/notas-venta', permiso: 'ventas.notas-venta' },
         ],
     },
@@ -79,6 +83,8 @@ export const navigation = [
         children: [
             { label: 'Almacenes', icon: Store, to: '/almacenes', permiso: 'inventario.almacenes' },
             { label: 'Existencias', icon: Warehouse, to: '/existencias', permiso: 'inventario.existencias' },
+            { label: 'Rollos', icon: Layers, to: '/rollos', permiso: 'inventario.rollos' },
+            { label: 'Preparación y despacho', icon: ScanLine, to: '/despacho', permiso: 'inventario.despacho' },
             { label: 'Kardex', icon: ArrowLeftRight, to: '/kardex', permiso: 'inventario.kardex' },
             { label: 'Traslados', icon: Repeat, to: '/transferencias', permiso: 'inventario.transferencias' },
             { label: 'Ajustes', icon: Scale, to: '/ajustes', permiso: 'inventario.ajustes' },

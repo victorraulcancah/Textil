@@ -58,6 +58,19 @@ class CompraController extends Controller
                 'dias_credito' => $data['dias_credito'] ?? 0,
                 'fecha_vencimiento' => $data['fecha_vencimiento'] ?? null,
                 'flete' => $flete,
+
+                // Datos del embarque: permiten saber de qué importación vino
+                // cada rollo y con qué tipo de cambio se costeó.
+                'es_importacion' => (bool) ($data['es_importacion'] ?? false),
+                'numero_importacion' => $data['numero_importacion'] ?? null,
+                'contenedor' => $data['contenedor'] ?? null,
+                'precinto' => $data['precinto'] ?? null,
+                'bl' => $data['bl'] ?? null,
+                'pais_origen' => $data['pais_origen'] ?? null,
+                'fecha_llegada' => $data['fecha_llegada'] ?? null,
+                'moneda_origen' => $data['moneda_origen'] ?? 'PEN',
+                'tipo_cambio' => $data['tipo_cambio'] ?? null,
+
                 'subtotal' => $subtotal,
                 'total' => round($subtotal + $flete, 2),
                 'estado' => 'registrada',

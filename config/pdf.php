@@ -42,6 +42,9 @@ return [
         'ajuste' => \App\Pdf\Documentos\AjustePdf::class,
         'cierre-caja' => \App\Pdf\Documentos\CierreCajaPdf::class,
         'movimiento-caja' => \App\Pdf\Documentos\MovimientoCajaPdf::class,
+        'etiqueta-rollo' => \App\Pdf\Documentos\EtiquetaRolloPdf::class,
+        'orden-venta' => \App\Pdf\Documentos\OrdenVentaPdf::class,
+        'requerimiento-almacen' => \App\Pdf\Documentos\RequerimientoAlmacenPdf::class,
     ],
 
 ];

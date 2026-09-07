@@ -200,18 +200,18 @@ export default function Existencias() {
 
                 return (
                     <select
-                        value={unidadPorFila[row.id] ?? ''}
+                        value={unidadDeFila(row)}
                         onChange={(e) =>
                             setUnidadPorFila((prev) => ({ ...prev, [row.id]: e.target.value }))
                         }
                         className="h-8 w-full rounded-md border border-gray-300 bg-white px-2 text-xs"
                     >
-                        <option value="">{base} (base)</option>
                         {formatos.map((f) => (
                             <option key={f.id} value={f.nombre.trim()}>
                                 {f.nombre.trim()}
                             </option>
                         ))}
+                        <option value="">{base} (base)</option>
                     </select>
                 );
             },
@@ -352,17 +352,36 @@ export default function Existencias() {
     }, [seleccionada]);
 
     /** Formatos activos del producto de esa fila, del más chico al más grande. */
+    /**
+     * Los formatos de venta del producto, del más grande al más pequeño:
+     * Rollo antes que Metro, Docena antes que Unidad.
+     *
+     * No se usa el orden en que están guardados porque ese depende del id, o
+     * sea del orden en que se fueron creando, y no de cómo los ve el usuario.
+     */
     const formatosDe = (row) =>
         (row.producto?.presentaciones ?? [])
             .filter((p) => p.activo !== false && p.nombre?.trim())
-            .sort((a, b) => (Number(a.factor_conversion) || 1) - (Number(b.factor_conversion) || 1));
+            .sort((a, b) => (Number(b.factor_conversion) || 1) - (Number(a.factor_conversion) || 1));
+
+    /**
+     * En qué unidad se muestra la fila: la elegida a mano o, por defecto, el
+     * formato más grande. Un almacén se cuenta en la unidad en que la
+     * mercadería está apilada —"14 rollos", no "750 metros"—; la unidad base
+     * queda como opción para el detalle fino, no como punto de partida.
+     */
+    const unidadDeFila = (row) => {
+        const elegida = unidadPorFila[row.id];
+        if (elegida !== undefined) return elegida;
+        return formatosDe(row)[0]?.nombre.trim() ?? '';
+    };
 
     /**
      * Cuántas unidades base vale la unidad elegida en esa fila. Sin elección
      * (o si el formato ya no existe) vale 1: se muestra en unidad base.
      */
     const factorDeFila = (row) => {
-        const elegida = unidadPorFila[row.id];
+        const elegida = unidadDeFila(row);
         if (!elegida) return 1;
         const pres = formatosDe(row).find((p) => p.nombre.trim() === elegida);
         return pres ? Number(pres.factor_conversion) || 1 : 1;

@@ -419,11 +419,14 @@ export default function DataTable({
                     {searchable && (
                         <div className="relative min-w-0 flex-1 sm:w-64 sm:flex-none">
                             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                            {/* type="text" y no "search": Chrome le dibuja su
+                                propia ✕ al de tipo search, y salían dos. */}
                             <input
-                                type="search"
+                                type="text"
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
                                 placeholder={searchPlaceholder}
+                                autoComplete="off"
                                 className="block w-full rounded-lg border-0 bg-white py-2 pl-9 pr-9 text-sm text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-primary-600"
                             />
                             {search && (

@@ -530,6 +530,15 @@ export default function Productos() {
 
     const columns = [
         {
+            // El código del fabricante es con lo que trabajan a diario: va en su
+            // propia columna, no de subtítulo.
+            key: 'codigo',
+            label: 'Código',
+            render: (row) => (
+                <span className="font-mono text-sm font-medium text-warm-900">{row.codigo}</span>
+            ),
+        },
+        {
             key: 'nombre',
             label: 'Producto',
             render: (row) => (
@@ -537,9 +546,11 @@ export default function Productos() {
                     <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-100 text-primary-700">
                         <Package className="h-4 w-4" />
                     </span>
-                    <span>
-                        <span className="block font-medium text-warm-900">{row.nombre}</span>
-                        <span className="block text-xs text-gray-500">{row.codigo}</span>
+                    <span className="min-w-0">
+                        <span className="block truncate font-medium text-warm-900">{row.nombre}</span>
+                        {row.codigo_barras && (
+                            <span className="block truncate text-xs text-gray-500">{row.codigo_barras}</span>
+                        )}
                     </span>
                 </span>
             ),
@@ -586,6 +597,47 @@ export default function Productos() {
                 ) : (
                     <span className="text-gray-400">—</span>
                 ),
+        },
+        {
+            key: 'colores',
+            label: 'Colores',
+            align: 'right',
+            searchable: false,
+            render: (row) =>
+                Array.isArray(row.colores) && row.colores.length ? (
+                    <span className="inline-flex items-center gap-1">
+                        {/* Un vistazo al muestrario sin abrir el producto. */}
+                        {row.colores.slice(0, 4).map((c) => (
+                            <span
+                                key={c.id}
+                                title={c.codigo ? `${c.nombre} (${c.codigo})` : c.nombre}
+                                className="h-3.5 w-3.5 rounded-full border border-edge"
+                                style={{ background: c.hex || '#e5e7eb' }}
+                            />
+                        ))}
+                        <span className="ml-1 text-xs text-warm-500">{row.colores.length}</span>
+                    </span>
+                ) : (
+                    <span className="text-gray-400">—</span>
+                ),
+        },
+        {
+            key: 'proveedor',
+            label: 'Proveedor',
+            render: (row) => <CeldaProveedores proveedores={row.proveedores} />,
+        },
+        {
+            key: 'precio_venta',
+            label: 'Precio venta',
+            align: 'right',
+            searchable: false,
+            render: (row) => {
+                // El de la presentación más pequeña: es el precio de mostrador.
+                const precios = (row.presentaciones ?? [])
+                    .map((p) => Number(p.precio_venta) || 0)
+                    .filter((n) => n > 0);
+                return precios.length ? money(Math.min(...precios)) : <span className="text-gray-400">—</span>;
+            },
         },
         {
             key: 'activo',
@@ -1672,5 +1724,59 @@ function QuickCreateModal({ quick, onClose, onCreated, marcaId, categoriaId, mar
                 ))}
             </div>
         </Modal>
+    );
+}
+
+/**
+ * Los proveedores de una tela dentro de la tabla.
+ *
+ * Con uno solo se muestra su nombre y ya. Con varios se ofrece un selector,
+ * porque lo que interesa comparar es a qué precio y con qué código la trae
+ * cada uno, y eso no cabe en una celda de texto.
+ *
+ * No modifica nada: solo cambia qué proveedor se está mirando.
+ */
+function CeldaProveedores({ proveedores }) {
+    const lista = Array.isArray(proveedores) ? proveedores : [];
+    const principal = lista.find((p) => p.principal) ?? lista[0];
+    const [elegido, setElegido] = useState(String(principal?.proveedor_id ?? ''));
+
+    if (!lista.length) return <span className="text-gray-400">—</span>;
+
+    if (lista.length === 1) {
+        return (
+            <span className="text-sm">
+                <span className="block truncate">{principal.nombre}</span>
+                <span className="text-xs text-warm-400">
+                    {[principal.codigo_proveedor, principal.precio_referencia && money(principal.precio_referencia)]
+                        .filter(Boolean)
+                        .join(' · ') || '—'}
+                </span>
+            </span>
+        );
+    }
+
+    const actual = lista.find((p) => String(p.proveedor_id) === elegido) ?? principal;
+
+    return (
+        <div className="min-w-[11rem]">
+            <Select
+                value={elegido}
+                onChange={(e) => setElegido(e.target.value)}
+                // La fila no debe reaccionar al usar el selector.
+                onClick={(e) => e.stopPropagation()}
+                aria-label={`Proveedores (${lista.length})`}
+                className="py-1 text-xs"
+                options={lista.map((p) => ({
+                    value: String(p.proveedor_id),
+                    label: p.principal ? `${p.nombre} ★` : p.nombre,
+                }))}
+            />
+            <span className="mt-0.5 block text-xs text-warm-400">
+                {[actual.codigo_proveedor, actual.precio_referencia && money(actual.precio_referencia)]
+                    .filter(Boolean)
+                    .join(' · ') || 'sin datos'}
+            </span>
+        </div>
     );
 }

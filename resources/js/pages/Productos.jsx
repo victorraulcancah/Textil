@@ -34,13 +34,11 @@ const emptyProducto = {
     composicion: '',
     ancho_cm: '',
     gramaje: '',
+    peso_por_metro: '',
     tipo_tejido: '',
     elasticidad: '',
-    encogimiento: '',
     minimo_compra: '',
-    usos: '',
     propiedades: '',
-    cuidados: '',
 };
 
 /** Pestañas del modal: el formulario es largo y se parte por temas. */
@@ -52,7 +50,16 @@ const TABS = [
 ];
 
 /** Un color del muestrario: "Azul Marino - Cód. 402". */
-const colorVacio = () => ({ nombre: '', codigo: '', hex: '#1f3a93' });
+const colorVacio = () => ({ nombre: '', nombre_proveedor: '', codigo: '', hex: '#1f3a93' });
+
+/** Un proveedor de la tela: la misma la puede traer más de uno. */
+const provVacio = () => ({
+    proveedor_id: '',
+    codigo_proveedor: '',
+    precio_referencia: '',
+    dias_entrega: '',
+    principal: false,
+});
 
 /** Cómo se compra el producto: "un saco que trae 50 kilos, a S/ 140". */
 const compraVacia = () => ({
@@ -70,6 +77,7 @@ export default function Productos() {
     const [productos, setProductos] = useState([]);
     const [categorias, setCategorias] = useState([]);
     const [marcas, setMarcas] = useState([]);
+    const [proveedores, setProveedores] = useState([]);
     const [subMarcas, setSubMarcas] = useState([]);
     const [unidades, setUnidades] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -82,6 +90,8 @@ export default function Productos() {
     const [compra, setCompra] = useState(compraVacia);
     const [ventas, setVentas] = useState([ventaVacia()]);
     const [colores, setColores] = useState([]);
+    /** Proveedores que traen esta tela, cada uno con su código y su precio. */
+    const [provs, setProvs] = useState([]);
     /** Foto elegida en el formulario; se sube después de guardar el producto. */
     const [imagenFile, setImagenFile] = useState(null);
     const [errors, setErrors] = useState({});
@@ -100,18 +110,20 @@ export default function Productos() {
         setLoading(true);
         setError(null);
         try {
-            const [prodsRes, catRes, marRes, subRes, uniRes] = await Promise.all([
+            const [prodsRes, catRes, marRes, subRes, uniRes, provRes] = await Promise.all([
                 api.get('/productos'),
                 api.get('/categorias'),
                 api.get('/marcas'),
                 api.get('/sub-marcas'),
                 api.get('/unidades-medida'),
+                api.get('/proveedores'),
             ]);
             setProductos(asList(prodsRes));
             setCategorias(asList(catRes));
             setMarcas(asList(marRes));
             setSubMarcas(asList(subRes));
             setUnidades(asList(uniRes));
+            setProveedores(asList(provRes));
         } catch {
             setError('No se pudieron cargar los productos.');
         } finally {
@@ -143,6 +155,7 @@ export default function Productos() {
         setCompra(compraVacia());
         setVentas([ventaVacia()]);
         setColores([]);
+        setProvs([]);
         setImagenFile(null);
         setErrors({});
         setTab('general');
@@ -171,13 +184,11 @@ export default function Productos() {
             composicion: prod.composicion ?? '',
             ancho_cm: prod.ancho_cm ?? '',
             gramaje: prod.gramaje ?? '',
+            peso_por_metro: prod.peso_por_metro ?? '',
             tipo_tejido: prod.tipo_tejido ?? '',
             elasticidad: prod.elasticidad ?? '',
-            encogimiento: prod.encogimiento ?? '',
             minimo_compra: prod.minimo_compra ?? '',
-            usos: prod.usos ?? '',
             propiedades: prod.propiedades ?? '',
-            cuidados: prod.cuidados ?? '',
         });
         setTab('general');
         // Se reconstruye "compro / vendo" desde lo guardado.
@@ -212,9 +223,19 @@ export default function Productos() {
                   }))
                 : [ventaVacia()],
         );
+        setProvs(
+            (Array.isArray(prod.proveedores) ? prod.proveedores : []).map((pv) => ({
+                proveedor_id: String(pv.proveedor_id ?? ''),
+                codigo_proveedor: pv.codigo_proveedor ?? '',
+                precio_referencia: pv.precio_referencia != null ? String(pv.precio_referencia) : '',
+                dias_entrega: pv.dias_entrega != null ? String(pv.dias_entrega) : '',
+                principal: Boolean(pv.principal),
+            })),
+        );
         setColores(
             (Array.isArray(prod.colores) ? prod.colores : []).map((c) => ({
                 nombre: c.nombre ?? '',
+                nombre_proveedor: c.nombre_proveedor ?? '',
                 codigo: c.codigo ?? '',
                 hex: c.hex ?? '#1f3a93',
             })),
@@ -355,20 +376,28 @@ export default function Productos() {
             composicion: str(form.composicion),
             ancho_cm: num(form.ancho_cm),
             gramaje: num(form.gramaje),
+            peso_por_metro: num(form.peso_por_metro),
             tipo_tejido: str(form.tipo_tejido),
             elasticidad: str(form.elasticidad),
-            encogimiento: num(form.encogimiento),
             minimo_compra: num(form.minimo_compra),
-            usos: str(form.usos),
             propiedades: str(form.propiedades),
-            cuidados: str(form.cuidados),
             presentaciones: buildPresentaciones(),
             colores: colores
                 .filter((c) => c.nombre.trim())
                 .map((c) => ({
                     nombre: c.nombre.trim(),
+                    nombre_proveedor: str(c.nombre_proveedor),
                     codigo: str(c.codigo),
                     hex: str(c.hex),
+                })),
+            proveedores: provs
+                .filter((pv) => pv.proveedor_id)
+                .map((pv) => ({
+                    proveedor_id: Number(pv.proveedor_id),
+                    codigo_proveedor: str(pv.codigo_proveedor),
+                    precio_referencia: num(pv.precio_referencia),
+                    dias_entrega: num(pv.dias_entrega),
+                    principal: Boolean(pv.principal),
                 })),
         };
 
@@ -632,13 +661,24 @@ export default function Productos() {
                             Identificación
                         </h3>
                         <div className="grid gap-4 sm:grid-cols-3">
-                            {/* El código se genera solo en el servidor (PROD001, PROD002…). */}
                             <Input
                                 label="Producto"
                                 value={form.nombre}
                                 onChange={setField('nombre')}
                                 error={errors.nombre}
                                 className="sm:col-span-2"
+                            />
+                            {/* El código del fabricante (A103) es la columna
+                                vertebral del negocio: de él salen el código de
+                                cada rollo (A103-21-0001) y el cruce con el
+                                packing list del proveedor. Se deja escribir; si
+                                se deja vacío, el servidor genera uno. */}
+                            <Input
+                                label="Código de tela"
+                                placeholder="A103"
+                                value={form.codigo}
+                                onChange={setField('codigo')}
+                                error={errors.codigo}
                             />
                             <Input
                                 label="Código de barra"
@@ -744,6 +784,126 @@ export default function Productos() {
                         </div>
                     </section>
 
+                    {/* Quiénes traen la tela. La misma se le puede comprar a
+                        varios, y cada uno la llama con su código y la cotiza a
+                        su precio: por eso es una lista y no un solo campo. */}
+                    <section>
+                        <div className="mb-2 flex items-center justify-between">
+                            <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+                                Proveedores
+                            </h3>
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => setProvs((prev) => [...prev, provVacio()])}
+                            >
+                                <Plus className="h-4 w-4" />
+                                Agregar proveedor
+                            </Button>
+                        </div>
+
+                        {provs.length === 0 ? (
+                            <p className="rounded-lg border border-dashed border-edge px-4 py-6 text-center text-sm text-warm-400">
+                                Sin proveedores asignados.
+                            </p>
+                        ) : (
+                            <div className="space-y-2">
+                                {provs.map((pv, i) => (
+                                    <div key={i} className="flex flex-wrap items-end gap-2 rounded-lg border border-edge p-2">
+                                        <Select
+                                            label="Proveedor"
+                                            className="min-w-[12rem] flex-1"
+                                            value={pv.proveedor_id}
+                                            onChange={(e) =>
+                                                setProvs((prev) =>
+                                                    prev.map((x, j) =>
+                                                        j === i ? { ...x, proveedor_id: e.target.value } : x,
+                                                    ),
+                                                )
+                                            }
+                                            options={[
+                                                { value: '', label: 'Elegir proveedor…' },
+                                                ...proveedores
+                                                    .filter(
+                                                        (op) =>
+                                                            String(op.id) === String(pv.proveedor_id) ||
+                                                            !provs.some((o) => String(o.proveedor_id) === String(op.id)),
+                                                    )
+                                                    .map((op) => ({ value: String(op.id), label: op.nombre })),
+                                            ]}
+                                        />
+                                        <Input
+                                            label="Su código"
+                                            placeholder="A103"
+                                            className="w-32"
+                                            value={pv.codigo_proveedor}
+                                            onChange={(e) =>
+                                                setProvs((prev) =>
+                                                    prev.map((x, j) =>
+                                                        j === i ? { ...x, codigo_proveedor: e.target.value } : x,
+                                                    ),
+                                                )
+                                            }
+                                        />
+                                        <Input
+                                            label="Precio ref."
+                                            type="number"
+                                            step="0.0001"
+                                            placeholder="4.20"
+                                            className="w-28"
+                                            value={pv.precio_referencia}
+                                            onChange={(e) =>
+                                                setProvs((prev) =>
+                                                    prev.map((x, j) =>
+                                                        j === i ? { ...x, precio_referencia: e.target.value } : x,
+                                                    ),
+                                                )
+                                            }
+                                        />
+                                        <Input
+                                            label="Días entrega"
+                                            type="number"
+                                            placeholder="45"
+                                            className="w-28"
+                                            value={pv.dias_entrega}
+                                            onChange={(e) =>
+                                                setProvs((prev) =>
+                                                    prev.map((x, j) =>
+                                                        j === i ? { ...x, dias_entrega: e.target.value } : x,
+                                                    ),
+                                                )
+                                            }
+                                        />
+                                        {/* Solo uno es el habitual: marcar otro desmarca el anterior. */}
+                                        <label className="flex items-center gap-1.5 pb-2 text-sm text-gray-700">
+                                            <input
+                                                type="radio"
+                                                name="proveedor-principal"
+                                                checked={Boolean(pv.principal)}
+                                                onChange={() =>
+                                                    setProvs((prev) =>
+                                                        prev.map((x, j) => ({ ...x, principal: j === i })),
+                                                    )
+                                                }
+                                                className="h-4 w-4 accent-primary-600"
+                                            />
+                                            Principal
+                                        </label>
+                                        <button
+                                            type="button"
+                                            aria-label="Quitar proveedor"
+                                            onClick={() => setProvs((prev) => prev.filter((_, j) => j !== i))}
+                                            className="mb-1.5 rounded-md p-1.5 text-red-600 transition hover:bg-red-50"
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </section>
+
                 </div>
 
                 {/* ── Ficha técnica de la tela ── */}
@@ -782,14 +942,17 @@ export default function Productos() {
                                 onChange={setField('gramaje')}
                                 error={errors.gramaje}
                             />
+                            {/* El packing list pesa cada rollo (58 m ~ 26 kg).
+                                Guardar la equivalencia permite detectar un
+                                metraje mal tecleado y vender por kilo. */}
                             <Input
-                                label="Encogimiento (%)"
+                                label="Peso por metro (kg)"
                                 type="number"
-                                step="0.5"
-                                placeholder="5"
-                                value={form.encogimiento}
-                                onChange={setField('encogimiento')}
-                                error={errors.encogimiento}
+                                step="0.0001"
+                                placeholder="0.45"
+                                value={form.peso_por_metro}
+                                onChange={setField('peso_por_metro')}
+                                error={errors.peso_por_metro}
                             />
                             <Select
                                 label="Tipo de tejido"
@@ -856,7 +1019,7 @@ export default function Productos() {
 
                     <section>
                         <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
-                            Usos y cuidados
+                            Descripción
                         </h3>
                         <div className="grid gap-4">
                             <Input
@@ -867,25 +1030,11 @@ export default function Productos() {
                                 error={errors.descripcion}
                             />
                             <Input
-                                label="Usos recomendados"
-                                placeholder="Camisería, vestidos de verano, mantelería…"
-                                value={form.usos}
-                                onChange={setField('usos')}
-                                error={errors.usos}
-                            />
-                            <Input
                                 label="Propiedades especiales"
                                 placeholder="Antipilling, repelente al agua, protección UV, preencogido…"
                                 value={form.propiedades}
                                 onChange={setField('propiedades')}
                                 error={errors.propiedades}
-                            />
-                            <Input
-                                label="Cuidados de lavado"
-                                placeholder="Lavar a 30 °C, no usar lejía, planchado medio…"
-                                value={form.cuidados}
-                                onChange={setField('cuidados')}
-                                error={errors.cuidados}
                             />
                         </div>
                     </section>
@@ -945,6 +1094,26 @@ export default function Productos() {
                                                 setColores((prev) =>
                                                     prev.map((x, j) =>
                                                         j === i ? { ...x, nombre: e.target.value } : x,
+                                                    ),
+                                                )
+                                            }
+                                        />
+                                        {/* El proveedor nombra los colores a su
+                                            manera ("Verde oscuro (Ha Qing)") y la
+                                            tienda a la suya ("ANTIQUE"). Con los dos
+                                            se puede cruzar el packing list del
+                                            siguiente contenedor. */}
+                                        <Input
+                                            label="Nombre del proveedor"
+                                            placeholder="Verde oscuro (Ha Qing)"
+                                            className="min-w-[10rem] flex-1"
+                                            value={c.nombre_proveedor}
+                                            onChange={(e) =>
+                                                setColores((prev) =>
+                                                    prev.map((x, j) =>
+                                                        j === i
+                                                            ? { ...x, nombre_proveedor: e.target.value }
+                                                            : x,
                                                     ),
                                                 )
                                             }

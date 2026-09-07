@@ -25,6 +25,15 @@ class StoreProductoRequest extends FormRequest
             'descripcion_ticket' => 'nullable|string|max:255',
             'marca_id' => 'nullable|exists:marcas,id',
             'sub_marca_id' => 'nullable|exists:sub_marcas,id',
+            // Una tela la puede traer más de un proveedor, cada uno con su
+            // código y su precio.
+            'proveedores' => 'nullable|array',
+            'proveedores.*.proveedor_id' => 'required|exists:proveedores,id',
+            'proveedores.*.codigo_proveedor' => 'nullable|string|max:255',
+            'proveedores.*.precio_referencia' => 'nullable|numeric|min:0',
+            'proveedores.*.moneda' => 'nullable|string|max:10',
+            'proveedores.*.dias_entrega' => 'nullable|integer|min:0|max:9999',
+            'proveedores.*.principal' => 'nullable|boolean',
             'categoria_id' => 'nullable|exists:categorias,id',
             'sub_categoria_id' => 'nullable|exists:categorias,id',
             'unidad_medida_id' => 'required|exists:unidades_medida,id',
@@ -40,6 +49,8 @@ class StoreProductoRequest extends FormRequest
             'composicion' => 'nullable|string|max:255',
             'ancho_cm' => 'nullable|numeric|min:0|max:999999',
             'gramaje' => 'nullable|numeric|min:0|max:999999',
+            // Cuántos kilos pesa un metro de esta tela (58 m ~ 26 kg = 0.45).
+            'peso_por_metro' => 'nullable|numeric|min:0|max:9999',
             'tipo_tejido' => 'nullable|in:plano,punto',
             'elasticidad' => 'nullable|in:ninguna,mono,bi',
             'encogimiento' => 'nullable|numeric|min:0|max:100',
@@ -68,6 +79,8 @@ class StoreProductoRequest extends FormRequest
             // Gama de colores del muestrario (opcional).
             'colores' => 'nullable|array',
             'colores.*.nombre' => 'required|string|max:255',
+            // Como lo llama el proveedor, para poder cruzar su packing list.
+            'colores.*.nombre_proveedor' => 'nullable|string|max:255',
             'colores.*.codigo' => 'nullable|string|max:255',
             'colores.*.hex' => 'nullable|string|max:9',
             'colores.*.activo' => 'boolean',

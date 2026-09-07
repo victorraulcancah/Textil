@@ -34,6 +34,7 @@ class Producto extends Model
         'composicion',
         'ancho_cm',
         'gramaje',
+        'peso_por_metro',
         'tipo_tejido',
         'elasticidad',
         'encogimiento',
@@ -134,5 +135,25 @@ class Producto extends Model
         );
 
         return (float) ($porMetro?->factor_conversion ?: 1);
+    }
+
+    /**
+     * Proveedores que traen esta tela. Cada uno la llama con su código y la
+     * cotiza a su precio, por eso los datos viven en la relación y no en el
+     * producto.
+     */
+    public function proveedores()
+    {
+        return $this->belongsToMany(Proveedor::class, 'producto_proveedor')
+            ->withPivot(['codigo_proveedor', 'precio_referencia', 'moneda', 'dias_entrega', 'principal', 'activo', 'observaciones'])
+            ->withTimestamps();
+    }
+
+    /** El proveedor habitual: el que se propone al recomprar. */
+    public function proveedorPrincipal(): ?Proveedor
+    {
+        $lista = $this->relationLoaded('proveedores') ? $this->proveedores : $this->proveedores()->get();
+
+        return $lista->firstWhere('pivot.principal', true) ?? $lista->first();
     }
 }

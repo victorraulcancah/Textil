@@ -19,7 +19,7 @@ use Illuminate\Support\Str;
 class ProductoController extends Controller
 {
     private const RELATIONS = [
-        'marca', 'subMarca', 'categoria', 'subCategoria', 'unidadMedida',
+        'marca', 'subMarca', 'proveedores:id,nombre', 'categoria', 'subCategoria', 'unidadMedida',
         'unidadCompra', 'unidadBase',
         'presentaciones.unidadBase', 'presentaciones.complementario',
         'colores',
@@ -46,7 +46,7 @@ class ProductoController extends Controller
     {
         $perPage = min(max((int) $request->input('per_page', 15), 1), 500);
 
-        $productos = Producto::with(['marca', 'subMarca', 'categoria', 'subCategoria', 'unidadMedida', 'presentaciones.unidadBase', 'colores'])
+        $productos = Producto::with(['marca', 'subMarca', 'proveedores:id,nombre', 'categoria', 'subCategoria', 'unidadMedida', 'presentaciones.unidadBase', 'colores'])
             ->latest('id')
             ->paginate($perPage);
         return ProductoResource::collection($productos);
@@ -60,6 +60,7 @@ class ProductoController extends Controller
             $producto = Producto::create($this->soloProducto($data));
             $this->syncPresentaciones($producto, $data['presentaciones'] ?? []);
             $this->syncColores($producto, $data['colores'] ?? []);
+            $this->syncProveedores($producto, $data['proveedores'] ?? []);
             $this->registrarLoteInicial($producto, $data['lote'] ?? null);
             return $producto;
         });
@@ -93,6 +94,9 @@ class ProductoController extends Controller
             if (array_key_exists('colores', $data)) {
                 $this->syncColores($producto, $data['colores'] ?? []);
             }
+            if (array_key_exists('proveedores', $data)) {
+                $this->syncProveedores($producto, $data['proveedores'] ?? []);
+            }
         });
 
         return new ProductoResource($producto->load(self::RELATIONS));
@@ -107,7 +111,7 @@ class ProductoController extends Controller
     /** Solo las columnas propias del producto (sin presentaciones, colores ni lote). */
     private function soloProducto(array $data): array
     {
-        return collect($data)->except(['presentaciones', 'colores', 'lote'])->all();
+        return collect($data)->except(['presentaciones', 'colores', 'proveedores', 'lote'])->all();
     }
 
     /**
@@ -157,6 +161,9 @@ class ProductoController extends Controller
 
             $datos = [
                 'codigo' => $c['codigo'] ?? null,
+                // El proveedor nombra los colores a su manera; se guarda tal
+                // cual para poder cruzar su packing list en el próximo embarque.
+                'nombre_proveedor' => $c['nombre_proveedor'] ?? null,
                 'hex' => $c['hex'] ?? null,
                 'activo' => $c['activo'] ?? true,
             ];
@@ -380,5 +387,37 @@ class ProductoController extends Controller
                 $stock->save();
             }
         }
+    }
+
+    /**
+     * Deja el producto con exactamente los proveedores que llegan.
+     *
+     * Cada uno guarda cómo llama a la tela y a qué precio la cotiza: son los
+     * datos que cambian de un proveedor a otro y por eso viven en la relación.
+     * Si nadie viene marcado como principal se toma el primero, para que
+     * siempre haya uno que proponer al recomprar.
+     */
+    private function syncProveedores(Producto $producto, array $lista): void
+    {
+        $filas = [];
+        $hayPrincipal = collect($lista)->contains(fn ($p) => ! empty($p['principal']));
+
+        foreach (array_values($lista) as $i => $p) {
+            if (empty($p['proveedor_id'])) {
+                continue;
+            }
+
+            $filas[$p['proveedor_id']] = [
+                'codigo_proveedor' => $p['codigo_proveedor'] ?? null,
+                'precio_referencia' => $p['precio_referencia'] ?? null,
+                'moneda' => $p['moneda'] ?? 'PEN',
+                'dias_entrega' => $p['dias_entrega'] ?? null,
+                'principal' => ! empty($p['principal']) || (! $hayPrincipal && $i === 0),
+                'activo' => $p['activo'] ?? true,
+                'observaciones' => $p['observaciones'] ?? null,
+            ];
+        }
+
+        $producto->proveedores()->sync($filas);
     }
 }

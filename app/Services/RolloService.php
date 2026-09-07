@@ -33,7 +33,9 @@ class RolloService
      *
      * Además suma los metros al stock del producto: los rollos son el detalle
      * de esa existencia, no un inventario paralelo. Si no se sumara, vender un
-     * rollo fallaría por falta de stock aunque la tela esté en el almacén.
+     * rollo fallaría por falta de stock aunque la tela esté en el almacén. Se
+     * puede desactivar con `$actualizarStock` cuando quien llama ya registró
+     * la entrada —es el caso de la recepción de compra—.
      *
      * @param  list<array{metros: float, peso_kg?: float|null}>  $lineas
      * @return Collection<int, Rollo>
@@ -47,8 +49,9 @@ class RolloService
         ?RecepcionCompra $recepcion = null,
         ?string $codigoProveedor = null,
         ?int $usuarioId = null,
+        bool $actualizarStock = true,
     ): Collection {
-        return DB::transaction(function () use ($producto, $color, $almacen, $lineas, $costoUnitario, $recepcion, $codigoProveedor, $usuarioId) {
+        return DB::transaction(function () use ($producto, $color, $almacen, $lineas, $costoUnitario, $recepcion, $codigoProveedor, $usuarioId, $actualizarStock) {
             // Se continúa la numeración del color, no se reinicia: el rollo 19
             // de un segundo contenedor no puede chocar con el 19 del primero.
             $siguiente = $this->siguienteNumero($producto, $color);
@@ -95,7 +98,9 @@ class RolloService
                 $siguiente++;
             }
 
-            if ($creados->isNotEmpty()) {
+            // La recepción de compra ya registró la entrada de stock por su
+            // cuenta; sumar aquí otra vez contaría la mercadería dos veces.
+            if ($actualizarStock && $creados->isNotEmpty()) {
                 $this->sumarAlStock($producto, $almacen, (float) $creados->sum('metros_inicial'), $costoUnitario, $recepcion);
             }
 

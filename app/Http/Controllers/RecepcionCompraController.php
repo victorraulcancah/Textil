@@ -4,9 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\Almacen;
 use App\Models\Compra;
+use App\Models\ProductoColor;
 use App\Models\ProductoPresentacion;
 use App\Models\RecepcionCompra;
 use App\Models\SerieDocumento;
+use App\Services\RolloService;
 use App\Services\StockService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -36,7 +38,7 @@ class RecepcionCompraController extends Controller
      */
     public function pendientesDeCompra(Compra $compra)
     {
-        $compra->load(['detalles.presentacion.producto.marca', 'proveedor:id,nombre']);
+        $compra->load(['detalles.presentacion.producto.marca', 'detalles.presentacion.producto.colores', 'proveedor:id,nombre']);
 
         $pendientes = $compra->pendientePorLinea();
         $recibidos = $compra->recibidoPorLinea();
@@ -44,7 +46,13 @@ class RecepcionCompraController extends Controller
         $lineas = $compra->detalles->map(fn ($d) => [
             'compra_detalle_id' => $d->id,
             'producto_presentacion_id' => $d->producto_presentacion_id,
+            'producto_id' => $d->presentacion?->producto?->id,
             'producto' => $d->presentacion?->producto?->nombre,
+            // Si la tela tiene muestrario, la recepción pide los rollos color
+            // por color: es como viene el packing list.
+            'colores' => $d->presentacion?->producto?->colores
+                ->map(fn ($c) => ['id' => $c->id, 'nombre' => $c->nombre, 'codigo' => $c->codigo])
+                ->values(),
             'codigo' => $d->presentacion?->producto?->codigo,
             'marca' => $d->presentacion?->producto?->marca?->nombre,
             'unidad' => $d->presentacion?->nombre,
@@ -85,6 +93,15 @@ class RecepcionCompraController extends Controller
             'detalles' => 'required|array|min:1',
             'detalles.*.compra_detalle_id' => 'required|exists:compra_detalles,id',
             'detalles.*.cantidad_recibida' => 'required|numeric|min:0.01',
+
+            // Mercadería que se maneja pieza por pieza: los rollos que trae el
+            // packing list. Cuando vienen, la cantidad recibida se calcula de
+            // ellos y no de lo que se teclee, para que no puedan discrepar.
+            'detalles.*.producto_color_id' => 'nullable|exists:producto_colores,id',
+            'detalles.*.codigo_proveedor' => 'nullable|string|max:100',
+            'detalles.*.rollos' => 'nullable|array',
+            'detalles.*.rollos.*.metros' => 'required|numeric|min:0.01',
+            'detalles.*.rollos.*.peso_kg' => 'nullable|numeric|min:0',
         ]);
 
         try {
@@ -127,7 +144,15 @@ class RecepcionCompraController extends Controller
                         throw new \RuntimeException('Una de las líneas no pertenece a esta compra.');
                     }
 
-                    $cantidad = (float) $detalle['cantidad_recibida'];
+                    $presentacionLinea = ProductoPresentacion::with('producto')
+                        ->findOrFail($linea->producto_presentacion_id);
+
+                    // Con rollos capturados, la cantidad sale de ellos: es la
+                    // única forma de que el stock y las piezas no discrepen.
+                    $cantidad = ! empty($detalle['rollos'])
+                        ? $this->cantidadDeRollos($presentacionLinea, $detalle['rollos'])
+                        : (float) $detalle['cantidad_recibida'];
+
                     $pendiente = $pendientes[$linea->id] ?? 0;
 
                     if ($cantidad > $pendiente + 0.001) {
@@ -136,7 +161,7 @@ class RecepcionCompraController extends Controller
                         );
                     }
 
-                    $presentacion = ProductoPresentacion::findOrFail($linea->producto_presentacion_id);
+                    $presentacion = $presentacionLinea;
                     $costoPresentacion = (float) $linea->costo_unitario;
 
                     // StockService valoriza en unidad base; el costo es por presentación.
@@ -163,6 +188,25 @@ class RecepcionCompraController extends Controller
                         'stock_anterior' => (float) $movimiento->stock_anterior,
                         'stock_nuevo' => (float) $movimiento->saldo_stock,
                     ]);
+
+                    // Las piezas físicas, si esta mercadería se maneja así. El
+                    // stock ya lo movió la entrada de arriba, por eso no se
+                    // vuelve a tocar.
+                    if (! empty($detalle['rollos'])) {
+                        app(RolloService::class)->ingresar(
+                            $presentacion->producto,
+                            isset($detalle['producto_color_id'])
+                                ? ProductoColor::find($detalle['producto_color_id'])
+                                : null,
+                            $almacen,
+                            $detalle['rollos'],
+                            $this->costoPorMetro($presentacion, $costoPresentacion),
+                            $recepcion,
+                            $detalle['codigo_proveedor'] ?? null,
+                            auth()->id(),
+                            actualizarStock: false,
+                        );
+                    }
                 }
 
                 $this->refrescarEstados($recepcion->fresh(), $compra);
@@ -187,6 +231,29 @@ class RecepcionCompraController extends Controller
             DB::transaction(function () use ($recepcionesCompra) {
                 $almacen = $recepcionesCompra->almacen;
                 $stock = app(StockService::class);
+
+                // Los rollos que entraron con esta recepción se van con ella.
+                // Si alguno ya se movió no se puede deshacer: la mercadería
+                // salió del almacén y borrarla dejaría el inventario mintiendo.
+                $rollos = $recepcionesCompra->rollos()->get();
+
+                $tocados = $rollos->filter(
+                    fn ($r) => $r->estado !== 'disponible'
+                        || (float) $r->metros_actual !== (float) $r->metros_inicial
+                );
+
+                if ($tocados->isNotEmpty()) {
+                    throw new \RuntimeException(
+                        'No se puede deshacer: estos rollos ya se movieron — '
+                        .$tocados->pluck('codigo')->take(5)->implode(', ')
+                        .($tocados->count() > 5 ? ' y otros' : '').'.'
+                    );
+                }
+
+                foreach ($rollos as $rollo) {
+                    $rollo->movimientos()->delete();
+                    $rollo->delete();
+                }
 
                 foreach ($recepcionesCompra->detalles as $detalle) {
                     $presentacion = ProductoPresentacion::findOrFail($detalle->producto_presentacion_id);
@@ -279,5 +346,29 @@ class RecepcionCompraController extends Controller
         $serieDoc->increment('numero_actual');
 
         return str_pad($serieDoc->numero_actual, 4, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * Cuántas unidades de la presentación suman los rollos recibidos.
+     *
+     * El packing list viene en metros y el stock se lleva en la unidad de la
+     * presentación ("Rollo 50 m", "Metro"), así que hay que convertir.
+     */
+    private function cantidadDeRollos(ProductoPresentacion $presentacion, array $rollos): float
+    {
+        $metros = collect($rollos)->sum(fn ($r) => (float) ($r['metros'] ?? 0));
+        $base = $metros * ($presentacion->producto?->factorBasePorMetro() ?? 1);
+        $factor = (float) ($presentacion->factor_conversion ?: 1);
+
+        return round($base / $factor, 2);
+    }
+
+    /** El costo de la línea, llevado a soles por metro. */
+    private function costoPorMetro(ProductoPresentacion $presentacion, float $costoPresentacion): float
+    {
+        $factor = (float) ($presentacion->factor_conversion ?: 1);
+        $basePorMetro = max((float) ($presentacion->producto?->factorBasePorMetro() ?? 1), 1);
+
+        return round($costoPresentacion / $factor * $basePorMetro, 4);
     }
 }

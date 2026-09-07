@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { PackageCheck } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { opcionesAlmacen } from '../lib/almacenes';
@@ -15,6 +15,27 @@ const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).
  *
  *   onDone — se llama tras registrar, para que el padre recargue.
  */
+/**
+ * "58 26.5 / 58 26.6 / 64" -> [{metros: 58, peso_kg: 26.5}, …]
+ *
+ * El packing list se pega tal cual: una línea por rollo, con el metraje y —si
+ * viene— el peso. Se acepta cualquier separador porque cada proveedor manda el
+ * suyo.
+ */
+function leerMetrajes(texto) {
+    return String(texto || '')
+        .split(/\r?\n/)
+        .flatMap((linea) => {
+            const numeros = (linea.match(/[\d]+(?:[.,][\d]+)?/g) || []).map((n) =>
+                Number(n.replace(',', '.')),
+            );
+            if (!numeros.length) return [];
+            // Si en la fila hay dos números, el segundo es el peso.
+            return [{ metros: numeros[0], peso_kg: numeros.length > 1 ? numeros[1] : null }];
+        })
+        .filter((r) => r.metros > 0);
+}
+
 export default function RecepcionarCompraModal({ open, onClose, compraId, onDone }) {
     const toast = useToast();
 
@@ -24,6 +45,11 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
     const [almacenes, setAlmacenes] = useState([]);
     /** Cantidad a recibir por línea: { [compra_detalle_id]: '5' } */
     const [cantidades, setCantidades] = useState({});
+    /**
+     * Rollos capturados por línea: { [compra_detalle_id]: { color_id, codigo, metrajes } }.
+     * Solo aplica a la mercadería que se maneja pieza por pieza (las telas).
+     */
+    const [rollosPorLinea, setRollosPorLinea] = useState({});
     const [form, setForm] = useState({ almacen_id: '', fecha_recepcion: hoy(), observaciones: '' });
 
     const cargar = useCallback(async () => {
@@ -75,6 +101,17 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
             .map((l) => ({
                 compra_detalle_id: l.compra_detalle_id,
                 cantidad_recibida: Number(cantidades[String(l.compra_detalle_id)]) || 0,
+                ...(() => {
+                    const cap = rollosPorLinea[String(l.compra_detalle_id)];
+                    const rollos = leerMetrajes(cap?.metrajes);
+                    return rollos.length
+                        ? {
+                              rollos,
+                              producto_color_id: cap.color_id || null,
+                              codigo_proveedor: cap.codigo || null,
+                          }
+                        : {};
+                })(),
             }))
             .filter((d) => d.cantidad_recibida > 0);
 
@@ -176,33 +213,130 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100">
-                                    {conPendiente.map((l) => (
-                                        <tr key={l.compra_detalle_id}>
-                                            <td className="px-3 py-2 text-warm-500">{l.codigo ?? '—'}</td>
-                                            <td className="px-3 py-2 font-semibold text-warm-900">{l.producto}</td>
-                                            <td className="px-3 py-2 text-warm-500">{l.unidad ?? '—'}</td>
-                                            <td className="px-3 py-2 text-right text-warm-900">{num(l.cantidad_pedida)}</td>
-                                            <td className="px-3 py-2 text-right text-warm-500">{num(l.cantidad_recibida)}</td>
-                                            <td className="px-3 py-2 text-right font-semibold text-amber-600">{num(l.pendiente)}</td>
-                                            <td className="px-3 py-2">
-                                                <Input
-                                                    type="number"
-                                                    min="0"
-                                                    max={l.pendiente}
-                                                    step="any"
-                                                    value={cantidades[String(l.compra_detalle_id)] ?? ''}
-                                                    onChange={(e) =>
-                                                        setCantidades((prev) => ({
-                                                            ...prev,
-                                                            [String(l.compra_detalle_id)]: e.target.value,
-                                                        }))
-                                                    }
-                                                    aria-label={`Cantidad recibida de ${l.producto}`}
-                                                    className="text-right"
-                                                />
-                                            </td>
-                                        </tr>
-                                    ))}
+                                    {conPendiente.map((l) => {
+                                        const clave = String(l.compra_detalle_id);
+                                        const cap = rollosPorLinea[clave];
+                                        // Solo la mercadería con muestrario se
+                                        // maneja rollo por rollo.
+                                        const porRollos = (l.colores?.length ?? 0) > 0;
+                                        const leidos = leerMetrajes(cap?.metrajes);
+                                        const setCap = (campo, valor) =>
+                                            setRollosPorLinea((prev) => ({
+                                                ...prev,
+                                                [clave]: { ...(prev[clave] ?? {}), [campo]: valor },
+                                            }));
+
+                                        return (
+                                            <Fragment key={clave}>
+                                                <tr>
+                                                    <td className="px-3 py-2 text-warm-500">{l.codigo ?? '—'}</td>
+                                                    <td className="px-3 py-2 font-semibold text-warm-900">
+                                                        {l.producto}
+                                                        {porRollos && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setCap('abierto', !cap?.abierto)}
+                                                                className="ml-2 rounded-md px-1.5 py-0.5 text-xs font-medium text-primary-600 transition hover:bg-primary-50"
+                                                            >
+                                                                {cap?.abierto ? 'Ocultar rollos' : 'Capturar rollos'}
+                                                            </button>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-3 py-2 text-warm-500">{l.unidad ?? '—'}</td>
+                                                    <td className="px-3 py-2 text-right text-warm-900">{num(l.cantidad_pedida)}</td>
+                                                    <td className="px-3 py-2 text-right text-warm-500">{num(l.cantidad_recibida)}</td>
+                                                    <td className="px-3 py-2 text-right font-semibold text-amber-600">{num(l.pendiente)}</td>
+                                                    <td className="px-3 py-2">
+                                                        <Input
+                                                            type="number"
+                                                            min="0"
+                                                            max={l.pendiente}
+                                                            step="any"
+                                                            value={cantidades[clave] ?? ''}
+                                                            onChange={(e) =>
+                                                                setCantidades((prev) => ({
+                                                                    ...prev,
+                                                                    [clave]: e.target.value,
+                                                                }))
+                                                            }
+                                                            // Con rollos capturados la manda el detalle:
+                                                            // la cantidad sale de la suma de sus metros.
+                                                            disabled={leidos.length > 0}
+                                                            aria-label={`Cantidad recibida de ${l.producto}`}
+                                                            className="text-right"
+                                                        />
+                                                    </td>
+                                                </tr>
+
+                                                {porRollos && cap?.abierto && (
+                                                    <tr className="bg-gray-50">
+                                                        <td colSpan={7} className="px-3 py-3">
+                                                            <div className="grid gap-3 sm:grid-cols-[14rem,10rem,1fr]">
+                                                                <Select
+                                                                    label="Color"
+                                                                    value={cap?.color_id ?? ''}
+                                                                    onChange={(e) => setCap('color_id', e.target.value)}
+                                                                    options={[
+                                                                        { value: '', label: 'Elegir color…' },
+                                                                        ...l.colores.map((c) => ({
+                                                                            value: String(c.id),
+                                                                            label: c.codigo ? `${c.nombre} (${c.codigo})` : c.nombre,
+                                                                        })),
+                                                                    ]}
+                                                                />
+                                                                <Input
+                                                                    label="Código del proveedor"
+                                                                    placeholder="A103-3"
+                                                                    value={cap?.codigo ?? ''}
+                                                                    onChange={(e) => setCap('codigo', e.target.value)}
+                                                                />
+                                                                <div>
+                                                                    <label className="mb-1 block text-sm font-medium text-warm-800">
+                                                                        Metrajes del packing list
+                                                                    </label>
+                                                                    <textarea
+                                                                        rows={4}
+                                                                        value={cap?.metrajes ?? ''}
+                                                                        onChange={(e) => setCap('metrajes', e.target.value)}
+                                                                        placeholder={'Pega aquí el packing list, un rollo por línea:\n58   26.5\n58   26.6\n64   28.3'}
+                                                                        className="w-full rounded-md border border-edge px-3 py-2 font-mono text-sm shadow-sm outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-100"
+                                                                    />
+                                                                    <p className="mt-1 text-xs text-warm-500">
+                                                                        Un rollo por línea. Si pones dos números, el
+                                                                        segundo es el peso en kilos.
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+
+                                                            {leidos.length > 0 && (
+                                                                <p className="mt-2 text-sm text-primary-700">
+                                                                    Se crearán <strong>{leidos.length} rollos</strong> con{' '}
+                                                                    <strong>
+                                                                        {num(leidos.reduce((a, r) => a + r.metros, 0))} m
+                                                                    </strong>
+                                                                    {leidos.some((r) => r.peso_kg) && (
+                                                                        <>
+                                                                            {' y '}
+                                                                            <strong>
+                                                                                {num(
+                                                                                    leidos.reduce(
+                                                                                        (a, r) => a + (r.peso_kg || 0),
+                                                                                        0,
+                                                                                    ),
+                                                                                )}{' '}
+                                                                                kg
+                                                                            </strong>
+                                                                        </>
+                                                                    )}
+                                                                    .
+                                                                </p>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </Fragment>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>

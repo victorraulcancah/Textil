@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
     Layers,
     MapPin,
@@ -10,11 +10,11 @@ import {
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
-import PageHeader, { CreateButton } from '../components/PageHeader';
+import PageHeader from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
 import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
 import DetalleCard from '../components/ui/DetalleCard';
-import { Alert, Badge, Button, DataTable, Input, Modal, Select, Spinner } from '../components/ui';
+import { Alert, Badge, Button, DataTable, Input, Select, Spinner } from '../components/ui';
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
 const money = (n) =>
@@ -44,6 +44,10 @@ const ESTADOS = [
  * Stock de rollos, en dos niveles: el resumen por color arriba y, al elegir
  * uno, sus rollos concretos abajo. Es el recorrido que pide el cliente —
  * "¿cuántos metros de negro tengo?" y enseguida "¿cuáles son esos rollos?".
+ *
+ * Es una pantalla de consulta: no crea rollos. La mercadería entra por la
+ * recepción de compra, que es donde llega el contenedor y donde el rollo queda
+ * amarrado a su importación y a su costo.
  */
 export default function Rollos() {
     const toast = useToast();
@@ -66,7 +70,6 @@ export default function Rollos() {
     const [metrosHasta, setMetrosHasta] = useState('');
 
     const [pdf, setPdf] = useState(null);
-    const [ingresoAbierto, setIngresoAbierto] = useState(false);
 
     /* ------------------------------ carga ------------------------------ */
 
@@ -322,7 +325,6 @@ export default function Rollos() {
                                 Etiquetas del color
                             </Button>
                         )}
-                        <CreateButton onClick={() => setIngresoAbierto(true)}>Ingresar rollos</CreateButton>
                     </div>
                 }
             />
@@ -433,17 +435,6 @@ export default function Rollos() {
                 )}
             </BottomSheet>
 
-            <IngresoRollosModal
-                open={ingresoAbierto}
-                onClose={() => setIngresoAbierto(false)}
-                almacenes={almacenes}
-                onCreado={(mensaje) => {
-                    toast.success(mensaje);
-                    setIngresoAbierto(false);
-                    load();
-                }}
-            />
-
             <PdfViewerModal
                 open={Boolean(pdf)}
                 onClose={() => setPdf(null)}
@@ -468,177 +459,5 @@ function Tarjeta({ icono: Icono, titulo, valor }) {
                 <span className="block truncate text-lg font-semibold text-warm-900">{valor}</span>
             </span>
         </div>
-    );
-}
-
-/**
- * Ingreso masivo: se pega la lista de metrajes del packing list y el sistema
- * crea los rollos numerados. Es como llega la mercadería de la importación.
- */
-function IngresoRollosModal({ open, onClose, almacenes, onCreado }) {
-    const toast = useToast();
-    const [productos, setProductos] = useState([]);
-    const [colores, setColores] = useState([]);
-    const [guardando, setGuardando] = useState(false);
-    const [errores, setErrores] = useState({});
-    const [form, setForm] = useState({
-        producto_id: '',
-        producto_color_id: '',
-        almacen_id: '',
-        codigo_proveedor: '',
-        costo_unitario: '',
-        metrajes: '',
-    });
-
-    useEffect(() => {
-        if (!open) return;
-        api.get('/productos').then((res) => setProductos(asList(res))).catch(() => {});
-        setErrores({});
-    }, [open]);
-
-    // Los colores son los del muestrario de la tela elegida.
-    useEffect(() => {
-        if (!form.producto_id) {
-            setColores([]);
-            return;
-        }
-        api.get(`/productos/${form.producto_id}`)
-            .then(({ data }) => setColores((data?.data ?? data)?.colores ?? []))
-            .catch(() => setColores([]));
-    }, [form.producto_id]);
-
-    /** Cuántos rollos y cuántos metros saldrían de lo que se pegó. */
-    const previa = useMemo(() => {
-        const metros = String(form.metrajes)
-            .split(/[^\d.,]+/)
-            .map((t) => parseFloat(t.replace(',', '.')))
-            .filter((m) => m > 0);
-
-        return { rollos: metros.length, total: metros.reduce((a, b) => a + b, 0) };
-    }, [form.metrajes]);
-
-    const set = (campo) => (e) => {
-        setForm((prev) => ({ ...prev, [campo]: e.target.value }));
-        setErrores((prev) => ({ ...prev, [campo]: undefined }));
-    };
-
-    const guardar = async (e) => {
-        e.preventDefault();
-        setGuardando(true);
-        setErrores({});
-        try {
-            const { data } = await api.post('/rollos/ingresar', {
-                ...form,
-                producto_color_id: form.producto_color_id || null,
-                costo_unitario: form.costo_unitario || 0,
-            });
-            setForm((prev) => ({ ...prev, metrajes: '', codigo_proveedor: '' }));
-            onCreado(data.message);
-        } catch (err) {
-            if (err.response?.status === 422) {
-                const v = err.response.data?.errors ?? {};
-                setErrores(Object.fromEntries(Object.entries(v).map(([k, m]) => [k, m[0]])));
-            } else {
-                toast.error(err.response?.data?.message ?? 'No se pudieron ingresar los rollos.');
-            }
-        } finally {
-            setGuardando(false);
-        }
-    };
-
-    return (
-        <Modal
-            open={open}
-            onClose={onClose}
-            title="Ingresar rollos"
-            description="Pega los metrajes del packing list y el sistema crea un rollo por cada uno"
-            size="lg"
-            footer={
-                <>
-                    <Button variant="secondary" onClick={onClose}>
-                        Cancelar
-                    </Button>
-                    <Button type="submit" form="ingreso-rollos" loading={guardando} disabled={!previa.rollos}>
-                        Crear {previa.rollos || ''} rollos
-                    </Button>
-                </>
-            }
-        >
-            <form id="ingreso-rollos" onSubmit={guardar} className="space-y-4" noValidate>
-                <div className="grid gap-4 sm:grid-cols-2">
-                    <Select
-                        label="Tela"
-                        value={form.producto_id}
-                        onChange={set('producto_id')}
-                        error={errores.producto_id}
-                        options={[
-                            { value: '', label: 'Elige una tela…' },
-                            ...productos.map((p) => ({ value: String(p.id), label: `${p.codigo} · ${p.nombre}` })),
-                        ]}
-                    />
-                    <Select
-                        label="Color"
-                        value={form.producto_color_id}
-                        onChange={set('producto_color_id')}
-                        error={errores.producto_color_id}
-                        options={[
-                            { value: '', label: colores.length ? 'Elige un color…' : 'Sin colores registrados' },
-                            ...colores.map((c) => ({
-                                value: String(c.id),
-                                label: c.codigo ? `${c.nombre} (${c.codigo})` : c.nombre,
-                            })),
-                        ]}
-                    />
-                    <Select
-                        label="Almacén"
-                        value={form.almacen_id}
-                        onChange={set('almacen_id')}
-                        error={errores.almacen_id}
-                        options={[
-                            { value: '', label: 'Elige un almacén…' },
-                            ...almacenes.map((a) => ({ value: String(a.id), label: a.nombre })),
-                        ]}
-                    />
-                    <Input
-                        label="Código del proveedor"
-                        placeholder="A103-01"
-                        value={form.codigo_proveedor}
-                        onChange={set('codigo_proveedor')}
-                        error={errores.codigo_proveedor}
-                    />
-                    <Input
-                        label="Costo por metro"
-                        type="number"
-                        step="0.0001"
-                        placeholder="4.20"
-                        value={form.costo_unitario}
-                        onChange={set('costo_unitario')}
-                        error={errores.costo_unitario}
-                    />
-                </div>
-
-                <div>
-                    <label className="mb-1 block text-sm font-medium text-warm-800">Metrajes</label>
-                    <textarea
-                        rows={4}
-                        value={form.metrajes}
-                        onChange={set('metrajes')}
-                        placeholder="55 - 58 - 96 - 78 - 85 - 62 - 63 - 69 - 91 - 65"
-                        className="w-full rounded-md border border-edge px-3 py-2 text-sm shadow-sm outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-100"
-                    />
-                    {errores.metrajes && <p className="mt-1 text-xs text-red-600">{errores.metrajes}</p>}
-                    <p className="mt-1 text-xs text-warm-500">
-                        Pega la lista tal como venga: da igual si separa con guiones, comas o espacios.
-                    </p>
-                </div>
-
-                {previa.rollos > 0 && (
-                    <Alert variant="info">
-                        Se crearán <strong>{previa.rollos} rollos</strong> con{' '}
-                        <strong>{num(previa.total)} m</strong> en total.
-                    </Alert>
-                )}
-            </form>
-        </Modal>
     );
 }

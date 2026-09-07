@@ -33,7 +33,8 @@ class CompraController extends Controller
 
         $compras->each(fn (Compra $compra) => $this->agregarAvanceDeRecepcion($compra));
 
-        return CompraResource::collection($compras);
+        // Sin envoltura "data": el listado se consume como array plano.
+        return CompraResource::collection($compras)->toArray(request());
     }
 
     public function store(StoreCompraRequest $request)

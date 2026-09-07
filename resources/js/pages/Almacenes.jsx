@@ -4,13 +4,26 @@ import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import PageHeader, { CreateButton } from '../components/PageHeader';
-import { Alert, Badge, Button, DataTable, Input, Modal, Select } from '../components/ui';
+import { Alert, Badge, Button, DataTable, Input, Modal, Select, cn } from '../components/ui';
 
-const emptyForm = { nombre: '', codigo: '', tipo: 'principal', direccion: '', activo: true };
+const emptyForm = {
+    nombre: '',
+    codigo: '',
+    tipo: 'principal',
+    // Unidades en las que vende este local (ids de unidades_medida).
+    // Vacío = vende en todas.
+    unidades_venta: [],
+    direccion: '',
+    activo: true,
+};
+
+
 
 export default function Almacenes() {
     const toast = useToast();
     const [almacenes, setAlmacenes] = useState([]);
+    /** Unidades de medida del sistema, para las reglas de venta del local. */
+    const [unidades, setUnidades] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
@@ -34,7 +47,12 @@ export default function Almacenes() {
         setLoading(true);
         setError(null);
         try {
-            setAlmacenes(asList(await api.get('/almacenes')));
+            const [almacenesRes, unidadesRes] = await Promise.all([
+                api.get('/almacenes'),
+                api.get('/unidades-medida'),
+            ]);
+            setAlmacenes(asList(almacenesRes));
+            setUnidades(asList(unidadesRes));
         } catch {
             setError('No se pudieron cargar los almacenes.');
         } finally {
@@ -59,6 +77,7 @@ export default function Almacenes() {
             nombre: almacen.nombre,
             codigo: almacen.codigo,
             tipo: almacen.tipo ?? 'principal',
+            unidades_venta: (almacen.unidades_venta ?? []).map((u) => u.id),
             direccion: almacen.direccion ?? '',
             activo: Boolean(almacen.activo),
         });
@@ -123,6 +142,7 @@ export default function Almacenes() {
             nombre: almacen.nombre,
             codigo: almacen.codigo,
             tipo: almacen.tipo,
+            unidades_venta: (almacen.unidades_venta ?? []).map((u) => u.id),
             direccion: almacen.direccion,
             activo,
         });
@@ -386,6 +406,49 @@ export default function Almacenes() {
                             { value: 'tienda', label: 'Tienda' },
                         ]}
                     />
+                    <div>
+                        <label className="mb-1 block text-sm font-medium text-gray-700">
+                            ¿En qué unidades vende este local?
+                        </label>
+                        <p className="mb-2 text-xs text-warm-400">
+                            Al vender solo se ofrecen las presentaciones en estas unidades. Sin
+                            marcar ninguna, vende en todas.
+                        </p>
+                        <div className="flex flex-wrap gap-2 rounded-lg border border-edge p-2">
+                            {unidades.map((u) => {
+                                const marcada = form.unidades_venta.includes(u.id);
+                                return (
+                                    <label
+                                        key={u.id}
+                                        className={cn(
+                                            'flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-sm transition',
+                                            marcada
+                                                ? 'border-primary-600 bg-primary-50 text-primary-700'
+                                                : 'border-edge text-gray-600 hover:bg-gray-50',
+                                        )}
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            checked={marcada}
+                                            onChange={() =>
+                                                setForm((prev) => ({
+                                                    ...prev,
+                                                    unidades_venta: marcada
+                                                        ? prev.unidades_venta.filter((id) => id !== u.id)
+                                                        : [...prev.unidades_venta, u.id],
+                                                }))
+                                            }
+                                            className="h-3.5 w-3.5 rounded border-gray-300 accent-primary-600"
+                                        />
+                                        {u.nombre}
+                                    </label>
+                                );
+                            })}
+                        </div>
+                        {form.unidades_venta.length === 0 && (
+                            <p className="mt-1 text-xs text-warm-500">Vende en todas las unidades.</p>
+                        )}
+                    </div>
                     <Input
                         label="Dirección"
                         name="direccion"

@@ -21,6 +21,32 @@ class Almacen extends Model
         'activo',
     ];
 
+    /**
+     * Unidades en las que este local vende (Metro, Rollo, Yarda…). Sin
+     * ninguna marcada, vende en todas: es el comportamiento por defecto.
+     */
+    public function unidadesVenta()
+    {
+        return $this->belongsToMany(UnidadMedida::class, 'almacen_unidad_venta', 'almacen_id', 'unidad_medida_id');
+    }
+
+    /**
+     * ¿Este local vende en esta unidad? Un almacén sin reglas vende en todas,
+     * así que no hay que configurar nada para que siga funcionando como antes.
+     */
+    public function vendeEn(?int $unidadMedidaId): bool
+    {
+        $permitidas = $this->relationLoaded('unidadesVenta')
+            ? $this->unidadesVenta
+            : $this->unidadesVenta()->get();
+
+        if ($permitidas->isEmpty()) {
+            return true;
+        }
+
+        return $permitidas->contains('id', $unidadMedidaId);
+    }
+
     protected function casts(): array
     {
         return [

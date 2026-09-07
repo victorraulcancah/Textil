@@ -71,6 +71,39 @@ class StoreNotaVentaRequest extends FormRequest
         ];
     }
 
+    /**
+     * Cada local vende en ciertas unidades: el mayorista despacha rollos y la
+     * tienda corta metro a metro. Se comprueba aquí y no solo en pantalla, para
+     * que la regla no se pueda saltar llamando a la API directamente.
+     */
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $v) {
+            $almacen = \App\Models\Almacen::with('unidadesVenta')->find($this->input('almacen_id'));
+
+            // Sin unidades marcadas el almacén vende en todas.
+            if (! $almacen || $almacen->unidadesVenta->isEmpty()) {
+                return;
+            }
+
+            $permitidas = $almacen->unidadesVenta->pluck('nombre')->implode(', ');
+
+            foreach ((array) $this->input('detalles', []) as $i => $detalle) {
+                $presentacion = \App\Models\ProductoPresentacion::with('producto')
+                    ->find($detalle['producto_presentacion_id'] ?? null);
+
+                if (! $presentacion || $almacen->vendeEn($presentacion->unidad_base_id)) {
+                    continue;
+                }
+
+                $v->errors()->add(
+                    "detalles.{$i}.producto_presentacion_id",
+                    "\"{$presentacion->nombre}\" de {$presentacion->producto?->nombre} no se vende en {$almacen->nombre}: ahí solo se vende en {$permitidas}.",
+                );
+            }
+        });
+    }
+
     protected function failedValidation(Validator $validator): never
     {
         throw new HttpResponseException(

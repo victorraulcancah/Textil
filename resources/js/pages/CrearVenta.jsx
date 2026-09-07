@@ -170,6 +170,25 @@ export default function CrearVenta() {
         [productosDisponibles],
     );
 
+    /** Almacén elegido, para saber cómo vende. */
+    const almacenActual = useMemo(
+        () => almacenes.find((a) => String(a.id) === String(form.almacen_id)) ?? null,
+        [almacenes, form.almacen_id],
+    );
+
+    /**
+     * ¿Este local vende en esta unidad? Cada almacén marca sus unidades
+     * (Metro, Rollo, Yarda…); sin ninguna marcada, vende en todas.
+     */
+    const permiteVender = useCallback(
+        (unidadId) => {
+            const permitidas = almacenActual?.unidades_venta ?? [];
+            if (permitidas.length === 0) return true;
+            return permitidas.some((u) => String(u.id) === String(unidadId));
+        },
+        [almacenActual],
+    );
+
     /** Unidades del producto con el disponible ya convertido a esa unidad. */
     const unidadesDe = useCallback(
         (productoId) => {
@@ -181,6 +200,10 @@ export default function CrearVenta() {
 
             return (p.presentaciones ?? [])
                 .filter((pres) => pres.activo !== false)
+                // Cada local vende en ciertas unidades: el mayorista despacha
+                // rollos y la tienda corta metro a metro. Lo que no se vende
+                // aquí, no se ofrece.
+                .filter((pres) => permiteVender(pres.unidad_base_id))
                 .map((pres) => {
                     const factor = Number(pres.factor_conversion) || 1;
                     return {
@@ -193,7 +216,7 @@ export default function CrearVenta() {
                     };
                 });
         },
-        [productoDe, stockDelAlmacen],
+        [productoDe, stockDelAlmacen, permiteVender],
     );
 
     const disponibleDe = (productoId, presentacionId) =>

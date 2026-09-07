@@ -414,20 +414,21 @@ class TextilCatalogSeeder extends Seeder
             ]);
 
             $pres = [
-                ['nombre' => 'Metro (al corte)', 'factor_conversion' => 100, 'precio_venta' => $p['precio_m'], 'precio_compra' => $p['costo_m']],
-                ['nombre' => 'Yarda (al corte)', 'factor_conversion' => 91.44, 'precio_venta' => round($p['precio_m'] * 0.9144, 2), 'precio_compra' => round($p['costo_m'] * 0.9144, 2)],
+                ['nombre' => 'Metro (al corte)', 'unidad_base_id' => $u['m'], 'factor_conversion' => 100, 'precio_venta' => $p['precio_m'], 'precio_compra' => $p['costo_m']],
+                ['nombre' => 'Yarda (al corte)', 'unidad_base_id' => $u['yd'], 'factor_conversion' => 91.44, 'precio_venta' => round($p['precio_m'] * 0.9144, 2), 'precio_compra' => round($p['costo_m'] * 0.9144, 2)],
             ];
             foreach ($p['rollos'] as $m) {
                 // Mayorista: rollo cerrado con ~10 % de descuento sobre el precio al corte.
                 $pres[] = [
                     'nombre' => "Rollo {$m} m",
+                    'unidad_base_id' => $u['rollo'],
                     'factor_conversion' => $m * 100,
                     'precio_venta' => round($p['precio_m'] * $m * 0.90, 2),
                     'precio_compra' => round($p['costo_m'] * $m, 2),
                 ];
             }
             // Saldo: trozo sobrante a precio fijo (se registra su largo real al vender).
-            $pres[] = ['nombre' => 'Retazo (saldo)', 'factor_conversion' => 50, 'precio_venta' => round($p['precio_m'] * 0.5 * 0.7, 2), 'precio_compra' => 0, 'es_compra' => false];
+            $pres[] = ['nombre' => 'Retazo (saldo)', 'unidad_base_id' => $u['retazo'], 'factor_conversion' => 50, 'precio_venta' => round($p['precio_m'] * 0.5 * 0.7, 2), 'precio_compra' => 0, 'es_compra' => false];
 
             $this->presentaciones($producto, $pres, $u['cm']);
             $this->colores($producto, $colores);
@@ -446,12 +447,13 @@ class TextilCatalogSeeder extends Seeder
             ]);
 
             $pres = [
-                ['nombre' => 'Kilogramo', 'factor_conversion' => 1000, 'precio_venta' => $p['precio_kg'], 'precio_compra' => $p['costo_kg']],
-                ['nombre' => 'Medio kilo', 'factor_conversion' => 500, 'precio_venta' => round($p['precio_kg'] * 0.52, 2), 'precio_compra' => round($p['costo_kg'] / 2, 2)],
+                ['nombre' => 'Kilogramo', 'unidad_base_id' => $u['kg'], 'factor_conversion' => 1000, 'precio_venta' => $p['precio_kg'], 'precio_compra' => $p['costo_kg']],
+                ['nombre' => 'Medio kilo', 'unidad_base_id' => $u['kg'], 'factor_conversion' => 500, 'precio_venta' => round($p['precio_kg'] * 0.52, 2), 'precio_compra' => round($p['costo_kg'] / 2, 2)],
             ];
             foreach ($p['rollos_kg'] as $kg) {
                 $pres[] = [
                     'nombre' => "Rollo {$kg} kg",
+                    'unidad_base_id' => $u['rollo'],
                     'factor_conversion' => $kg * 1000,
                     'precio_venta' => round($p['precio_kg'] * $kg * 0.90, 2),
                     'precio_compra' => round($p['costo_kg'] * $kg, 2),
@@ -473,8 +475,8 @@ class TextilCatalogSeeder extends Seeder
         ]);
 
         $this->presentaciones($producto, [
-            ['nombre' => $p['unidad'] === 'cono' ? 'Cono' : 'Unidad', 'factor_conversion' => 1, 'precio_venta' => $p['precio_u'], 'precio_compra' => $p['costo_u']],
-            ['nombre' => 'Docena', 'factor_conversion' => 12, 'precio_venta' => round($p['precio_u'] * 12 * 0.92, 2), 'precio_compra' => round($p['costo_u'] * 12, 2)],
+            ['nombre' => $p['unidad'] === 'cono' ? 'Cono' : 'Unidad', 'unidad_base_id' => $unidad, 'factor_conversion' => 1, 'precio_venta' => $p['precio_u'], 'precio_compra' => $p['costo_u']],
+            ['nombre' => 'Docena', 'unidad_base_id' => $u['doc'], 'factor_conversion' => 12, 'precio_venta' => round($p['precio_u'] * 12 * 0.92, 2), 'precio_compra' => round($p['costo_u'] * 12, 2)],
         ], $unidad);
         $this->colores($producto, $colores);
     }
@@ -492,7 +494,12 @@ class TextilCatalogSeeder extends Seeder
         }
     }
 
-    private function presentaciones(Producto $producto, array $lista, int $unidadBaseId): void
+    /**
+     * Crea las presentaciones. `unidad_base_id` guarda la unidad EN QUE SE
+     * VENDE cada una (Metro, Rollo, Yarda…): de ahí salen las reglas de venta
+     * por almacén. `$unidadPorDefecto` solo cubre las que no la declaren.
+     */
+    private function presentaciones(Producto $producto, array $lista, int $unidadPorDefecto): void
     {
         foreach ($lista as $pres) {
             $margen = $pres['precio_compra'] > 0
@@ -501,7 +508,7 @@ class TextilCatalogSeeder extends Seeder
 
             ProductoPresentacion::create($pres + [
                 'producto_id' => $producto->id,
-                'unidad_base_id' => $unidadBaseId,
+                'unidad_base_id' => $pres['unidad_base_id'] ?? $unidadPorDefecto,
                 'margen' => $margen,
                 'es_compra' => $pres['es_compra'] ?? true,
                 'es_venta' => true,

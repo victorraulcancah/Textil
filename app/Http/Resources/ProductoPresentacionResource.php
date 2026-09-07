@@ -17,6 +17,9 @@ class ProductoPresentacionResource extends JsonResource
             'precio_compra' => $this->precio_compra,
             'margen' => $this->margen,
             'factor_conversion' => $this->factor_conversion,
+            // Unidad en la que se vende esta presentación (Metro, Rollo…).
+            // El id va suelto porque la venta filtra con él según el almacén.
+            'unidad_base_id' => $this->unidad_base_id,
             'unidad_base' => new UnidadMedidaResource($this->whenLoaded('unidadBase')),
             // Solo si quien consulta lo cargó (ventas y compras lo necesitan
             // para mostrar código y marca); si no, ni se serializa.

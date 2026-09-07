@@ -37,7 +37,9 @@ class AlmacenController extends Controller
 
     public function index()
     {
-        return response()->json(Almacen::latest('id')->get());
+        // Con sus unidades de venta: la pantalla de ventas las necesita para
+        // ofrecer solo lo que se puede vender en el almacén elegido.
+        return response()->json(Almacen::with('unidadesVenta:id,nombre,abreviatura')->latest('id')->get());
     }
 
     /**
@@ -71,15 +73,21 @@ class AlmacenController extends Controller
             'nombre' => 'required|string|max:255',
             'codigo' => 'required|string|max:50|unique:almacenes,codigo',
             'tipo' => 'nullable|string|max:50',
+            // Unidades en las que vende este local. Vacío = vende en todas.
+            'unidades_venta' => 'nullable|array',
+            'unidades_venta.*' => 'integer|exists:unidades_medida,id',
             'direccion' => 'nullable|string|max:500',
             'activo' => 'boolean',
         ]);
-        return response()->json(Almacen::create($data), 201);
+        $almacen = Almacen::create(collect($data)->except('unidades_venta')->all());
+        $almacen->unidadesVenta()->sync($data['unidades_venta'] ?? []);
+
+        return response()->json($almacen->load('unidadesVenta'), 201);
     }
 
     public function show(Almacen $almacene)
     {
-        return response()->json($almacene);
+        return response()->json($almacene->load('unidadesVenta'));
     }
 
     public function update(Request $request, Almacen $almacene)
@@ -88,11 +96,19 @@ class AlmacenController extends Controller
             'nombre' => 'required|string|max:255',
             'codigo' => 'required|string|max:50|unique:almacenes,codigo,' . $almacene->id,
             'tipo' => 'nullable|string|max:50',
+            // Unidades en las que vende este local. Vacío = vende en todas.
+            'unidades_venta' => 'nullable|array',
+            'unidades_venta.*' => 'integer|exists:unidades_medida,id',
             'direccion' => 'nullable|string|max:500',
             'activo' => 'boolean',
         ]);
-        $almacene->update($data);
-        return response()->json($almacene);
+        $almacene->update(collect($data)->except('unidades_venta')->all());
+
+        if (array_key_exists('unidades_venta', $data)) {
+            $almacene->unidadesVenta()->sync($data['unidades_venta'] ?? []);
+        }
+
+        return response()->json($almacene->load('unidadesVenta'));
     }
 
     /**

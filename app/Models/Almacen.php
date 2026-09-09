@@ -19,6 +19,7 @@ class Almacen extends Model
         'direccion',
         'tipo',
         'activo',
+        'predeterminado',
     ];
 
     /**
@@ -51,6 +52,7 @@ class Almacen extends Model
     {
         return [
             'activo' => 'boolean',
+            'predeterminado' => 'boolean',
         ];
     }
 

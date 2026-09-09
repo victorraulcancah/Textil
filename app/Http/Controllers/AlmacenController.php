@@ -78,9 +78,12 @@ class AlmacenController extends Controller
             'unidades_venta.*' => 'integer|exists:unidades_medida,id',
             'direccion' => 'nullable|string|max:500',
             'activo' => 'boolean',
+            // Solo puede haber uno marcado; de eso se encarga aplicarPredeterminado().
+            'predeterminado' => 'boolean',
         ]);
         $almacen = Almacen::create(collect($data)->except('unidades_venta')->all());
         $almacen->unidadesVenta()->sync($data['unidades_venta'] ?? []);
+        $this->aplicarPredeterminado($almacen);
 
         return response()->json($almacen->load('unidadesVenta'), 201);
     }
@@ -101,6 +104,8 @@ class AlmacenController extends Controller
             'unidades_venta.*' => 'integer|exists:unidades_medida,id',
             'direccion' => 'nullable|string|max:500',
             'activo' => 'boolean',
+            // Solo puede haber uno marcado; de eso se encarga aplicarPredeterminado().
+            'predeterminado' => 'boolean',
         ]);
         $almacene->update(collect($data)->except('unidades_venta')->all());
 
@@ -108,7 +113,31 @@ class AlmacenController extends Controller
             $almacene->unidadesVenta()->sync($data['unidades_venta'] ?? []);
         }
 
+        $this->aplicarPredeterminado($almacene);
+
         return response()->json($almacene->load('unidadesVenta'));
+    }
+
+    /**
+     * Deja un único almacén predeterminado. Un almacén inactivo no puede serlo:
+     * si se desactiva el que estaba marcado, la marca se retira y las pantallas
+     * vuelven a pedir el almacén a mano en lugar de proponer uno inservible.
+     */
+    private function aplicarPredeterminado(Almacen $almacen): void
+    {
+        if ($almacen->predeterminado && ! $almacen->activo) {
+            $almacen->forceFill(['predeterminado' => false])->save();
+
+            return;
+        }
+
+        if (! $almacen->predeterminado) {
+            return;
+        }
+
+        Almacen::where('id', '!=', $almacen->id)
+            ->where('predeterminado', true)
+            ->update(['predeterminado' => false]);
     }
 
     /**

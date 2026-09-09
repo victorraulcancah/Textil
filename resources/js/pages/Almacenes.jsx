@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { BadgeCheck, Edit, MapPin, Power, PowerOff, Tag, Trash2, Warehouse, X } from 'lucide-react';
+import { BadgeCheck, Edit, MapPin, Power, PowerOff, Star, Tag, Trash2, Warehouse, X } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
@@ -15,6 +15,9 @@ const emptyForm = {
     unidades_venta: [],
     direccion: '',
     activo: true,
+    // El almacén con el que se trabaja a diario: viene ya elegido al crear
+    // una nota de venta. Solo uno puede estarlo.
+    predeterminado: false,
 };
 
 
@@ -80,6 +83,7 @@ export default function Almacenes() {
             unidades_venta: (almacen.unidades_venta ?? []).map((u) => u.id),
             direccion: almacen.direccion ?? '',
             activo: Boolean(almacen.activo),
+            predeterminado: Boolean(almacen.predeterminado),
         });
         setFormErrors({});
         setModalOpen(true);
@@ -146,6 +150,31 @@ export default function Almacenes() {
             direccion: almacen.direccion,
             activo,
         });
+
+    /**
+     * Marca este almacén como el predeterminado. El backend desmarca el
+     * anterior, así que basta con recargar la lista para verlo reflejado.
+     */
+    const marcarPredeterminado = async (almacen) => {
+        setToggling(almacen.id);
+        try {
+            await api.put(`/almacenes/${almacen.id}`, {
+                nombre: almacen.nombre,
+                codigo: almacen.codigo,
+                tipo: almacen.tipo,
+                unidades_venta: (almacen.unidades_venta ?? []).map((u) => u.id),
+                direccion: almacen.direccion,
+                activo: almacen.activo,
+                predeterminado: true,
+            });
+            toast.success(`"${almacen.nombre}" es ahora el almacén predeterminado.`);
+            await load();
+        } catch {
+            toast.error('No se pudo marcar el almacén como predeterminado.');
+        } finally {
+            setToggling(null);
+        }
+    };
 
     const toggleActivo = async (almacen) => {
         const activar = !almacen.activo;
@@ -240,6 +269,12 @@ export default function Almacenes() {
                 <span className="inline-flex items-center gap-2 font-medium text-warm-900">
                     <Warehouse className="h-4 w-4 text-primary-600" />
                     {row.nombre}
+                    {row.predeterminado && (
+                        <Badge variant="blue">
+                            <Star className="mr-1 h-3 w-3 fill-current" />
+                            Predeterminado
+                        </Badge>
+                    )}
                 </span>
             ),
         },
@@ -290,9 +325,24 @@ export default function Almacenes() {
             key: 'actions',
             label: 'Acciones',
             // Tres botones no entran en los 120px por defecto.
-            width: '150px',
+            width: '190px',
             actions: (row) => (
                 <>
+                    {/* Marcar el almacén del día a día. El que ya lo es se
+                        muestra apagado: desmarcarlo se hace marcando otro. */}
+                    <button
+                        aria-label="Marcar como predeterminado"
+                        title={
+                            row.predeterminado
+                                ? 'Es el almacén predeterminado'
+                                : 'Marcar como predeterminado'
+                        }
+                        disabled={row.predeterminado || !row.activo || toggling === row.id}
+                        onClick={() => marcarPredeterminado(row)}
+                        className="rounded-md p-1.5 text-amber-500 transition hover:bg-amber-50 hover:text-amber-600 disabled:cursor-default disabled:opacity-40"
+                    >
+                        <Star className={`h-4 w-4 ${row.predeterminado ? 'fill-current' : ''}`} />
+                    </button>
                     <button
                         aria-label="Editar"
                         title="Editar"
@@ -479,6 +529,26 @@ export default function Almacenes() {
                         />
                         <BadgeCheck className="h-4 w-4 text-primary-600" />
                         Almacén activo
+                    </label>
+                    {/* Solo puede haber uno: al marcar este, el servidor
+                        desmarca el que lo estuviera. */}
+                    <label className="flex items-center gap-2 text-sm text-gray-700">
+                        <input
+                            type="checkbox"
+                            checked={form.predeterminado}
+                            disabled={!form.activo}
+                            onChange={(e) =>
+                                setForm((prev) => ({ ...prev, predeterminado: e.target.checked }))
+                            }
+                            className="h-4 w-4 rounded border-gray-300 accent-primary-600 disabled:opacity-40"
+                        />
+                        <Star className="h-4 w-4 text-amber-500" />
+                        <span>
+                            Almacén predeterminado
+                            <span className="ml-1 text-xs text-gray-400">
+                                — viene ya elegido al crear una nota de venta
+                            </span>
+                        </span>
                     </label>
                 </form>
             </Modal>

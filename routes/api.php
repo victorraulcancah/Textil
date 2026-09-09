@@ -124,7 +124,7 @@ Route::middleware('auth:api')->group(function () {
     Route::post('ordenes-venta', [OrdenVentaController::class, 'store']);
     Route::get('ordenes-venta/{ordenesVenta}', [OrdenVentaController::class, 'show']);
     Route::put('ordenes-venta/{ordenesVenta}', [OrdenVentaController::class, 'update']);
-    Route::post('ordenes-venta/{ordenesVenta}/separar', [OrdenVentaController::class, 'separar']);
+    Route::post('ordenes-venta/{ordenesVenta}/enviar', [OrdenVentaController::class, 'enviar']);
     Route::post('ordenes-venta/{ordenesVenta}/devolver', [OrdenVentaController::class, 'devolver']);
     Route::post('ordenes-venta/{ordenesVenta}/preparar', [OrdenVentaController::class, 'preparar']);
     Route::post('ordenes-venta/{ordenesVenta}/escanear', [OrdenVentaController::class, 'escanear']);

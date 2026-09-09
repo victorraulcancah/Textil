@@ -25,6 +25,7 @@ export default function Despacho() {
     const [seleccionado, setSeleccionado] = useState(null);
     const [detalle, setDetalle] = useState(null);
     const [despachando, setDespachando] = useState(false);
+    const [tomando, setTomando] = useState(false);
     const [pdf, setPdf] = useState(null);
 
     /** Último escaneo, para pintarlo en verde o en rojo. */
@@ -35,7 +36,11 @@ export default function Despacho() {
     const cargar = useCallback(async () => {
         setCargando(true);
         try {
-            const { data } = await api.get('/ordenes-venta', { params: { estado: 'en_preparacion' } });
+            // Los dos estados que le tocan al almacén: los que acaban de
+            // llegar y los que ya tomó y está preparando.
+            const { data } = await api.get('/ordenes-venta', {
+                params: { estados: 'pendiente,en_preparacion' },
+            });
             const filas = asList({ data });
             setPedidos(filas);
             setSeleccionado((prev) => filas.find((p) => p.id === prev?.id) ?? filas[0] ?? null);
@@ -103,6 +108,26 @@ export default function Despacho() {
         }
     };
 
+    /**
+     * El almacenero toma el pedido de la bandeja: se le numera el
+     * requerimiento y recién entonces puede imprimirlo y escanear.
+     */
+    const tomar = async () => {
+        setTomando(true);
+        try {
+            const { data } = await api.post(`/ordenes-venta/${detalle.id}/preparar`);
+            const orden = data?.data ?? data;
+            setDetalle(orden);
+            toast.success(`${orden.requerimiento_numero} listo para preparar.`);
+            await cargar();
+        } catch (err) {
+            toast.error(err.response?.data?.message ?? 'No se pudo tomar el pedido.');
+        } finally {
+            setTomando(false);
+        }
+    };
+
+    const pendiente = detalle?.estado === 'pendiente';
     const verificados = (detalle?.detalles ?? []).filter((d) => d.escaneado).length;
     const total = detalle?.detalles?.length ?? 0;
     const completo = total > 0 && verificados === total;
@@ -127,7 +152,7 @@ export default function Despacho() {
                     {/* Bandeja de pedidos que llegaron al almacén */}
                     <aside className="overflow-hidden rounded-lg border border-edge bg-white shadow-sm lg:sticky lg:top-4 lg:self-start">
                         <p className="border-b border-edge px-3 py-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
-                            Por preparar ({pedidos.length})
+                            Por atender ({pedidos.length})
                         </p>
                         <ul className="max-h-[70vh] overflow-y-auto p-1">
                             {pedidos.map((p) => {
@@ -149,9 +174,15 @@ export default function Despacho() {
                                                     <ClipboardList className="h-4 w-4 shrink-0 text-primary-600" />
                                                     <span className="truncate">{p.requerimiento_numero ?? p.documento}</span>
                                                 </span>
-                                                <Badge variant={p.verificados === p.total_rollos ? 'green' : 'amber'}>
-                                                    {p.verificados}/{p.total_rollos}
-                                                </Badge>
+                                                {/* Pendiente: aún nadie lo tomó. En preparación:
+                                                    cuántos rollos van escaneados. */}
+                                                {p.estado === 'pendiente' ? (
+                                                    <Badge variant="amber">Pendiente</Badge>
+                                                ) : (
+                                                    <Badge variant={p.verificados === p.total_rollos ? 'green' : 'blue'}>
+                                                        {p.verificados}/{p.total_rollos}
+                                                    </Badge>
+                                                )}
                                             </span>
                                             <span className="mt-0.5 block truncate text-xs text-warm-500">
                                                 {p.cliente ?? 'Cliente varios'} · {num(p.total_metros)} m
@@ -182,29 +213,53 @@ export default function Despacho() {
                                         </p>
                                     </div>
                                     <div className="flex flex-wrap items-center gap-2">
-                                        <Button
-                                            variant="secondary"
-                                            size="sm"
-                                            onClick={() =>
-                                                setPdf({
-                                                    tipo: 'requerimiento-almacen',
-                                                    id: detalle.id,
-                                                    nombre: detalle.requerimiento_numero,
-                                                })
-                                            }
-                                        >
-                                            <FileText className="h-4 w-4" />
-                                            Imprimir
-                                        </Button>
-                                        <Button size="sm" loading={despachando} disabled={!completo} onClick={despachar}>
-                                            <PackageCheck className="h-4 w-4" />
-                                            Despachar
-                                        </Button>
+                                        {/* Mientras está pendiente no hay nada que
+                                            imprimir ni escanear: primero hay que
+                                            tomarlo, y ahí se numera el requerimiento. */}
+                                        {pendiente ? (
+                                            <Button size="sm" loading={tomando} onClick={tomar}>
+                                                <PackageCheck className="h-4 w-4" />
+                                                Empezar preparación
+                                            </Button>
+                                        ) : (
+                                            <>
+                                                <Button
+                                                    variant="secondary"
+                                                    size="sm"
+                                                    onClick={() =>
+                                                        setPdf({
+                                                            tipo: 'requerimiento-almacen',
+                                                            id: detalle.id,
+                                                            nombre: detalle.requerimiento_numero,
+                                                        })
+                                                    }
+                                                >
+                                                    <FileText className="h-4 w-4" />
+                                                    Imprimir
+                                                </Button>
+                                                <Button size="sm" loading={despachando} disabled={!completo} onClick={despachar}>
+                                                    <PackageCheck className="h-4 w-4" />
+                                                    Despachar
+                                                </Button>
+                                            </>
+                                        )}
                                     </div>
                                 </div>
 
+                                {pendiente && (
+                                    <div className="border-b border-edge bg-amber-50/70 px-4 py-2.5 text-sm text-amber-800">
+                                        Los rollos están reservados para este cliente. Pulsa{' '}
+                                        <strong>Empezar preparación</strong> para tomar el pedido: se
+                                        numera el requerimiento y podrás bajarlos del rack e irlos
+                                        escaneando.
+                                    </div>
+                                )}
+
                                 {/* La pistola escribe aquí y termina con Enter */}
-                                <form onSubmit={escanear} className="border-b border-edge px-4 py-3">
+                                <form
+                                    onSubmit={escanear}
+                                    className={cn('border-b border-edge px-4 py-3', pendiente && 'hidden')}
+                                >
                                     <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-warm-500">
                                         Escanea el rollo
                                     </label>

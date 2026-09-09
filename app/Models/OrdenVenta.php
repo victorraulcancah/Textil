@@ -22,7 +22,7 @@ class OrdenVenta extends Model
 
     /** Estados del pedido. */
     public const BORRADOR = 'borrador';
-    public const SEPARADA = 'separada';
+    public const PENDIENTE = 'pendiente';
     public const EN_PREPARACION = 'en_preparacion';
     public const DESPACHADA = 'despachada';
     public const FACTURADA = 'facturada';
@@ -30,7 +30,10 @@ class OrdenVenta extends Model
 
     public const ESTADOS = [
         self::BORRADOR => 'Borrador',
-        self::SEPARADA => 'Separada',
+        // "Pendiente" es como lo ve el almacén: el vendedor ya lo mandó y está
+        // esperando a que alguien lo tome. Se llamaba "separada", pero eso
+        // describía lo que le pasa a los rollos, no el estado del trabajo.
+        self::PENDIENTE => 'Pendiente',
         self::EN_PREPARACION => 'En preparación',
         self::DESPACHADA => 'Despachada',
         self::FACTURADA => 'Facturada',
@@ -43,7 +46,10 @@ class OrdenVenta extends Model
      */
     public const ESTADO_ROLLO = [
         self::BORRADOR => Rollo::DISPONIBLE,
-        self::SEPARADA => Rollo::SEPARADO,
+        // Al mandarlo al almacén los rollos ya quedan reservados, aunque nadie
+        // los haya bajado del rack todavía: si no, otro vendedor podría
+        // venderlos mientras el pedido espera su turno.
+        self::PENDIENTE => Rollo::SEPARADO,
         self::EN_PREPARACION => Rollo::EN_PREPARACION,
         self::DESPACHADA => Rollo::DESPACHADO,
         self::FACTURADA => Rollo::VENDIDO,
@@ -52,9 +58,9 @@ class OrdenVenta extends Model
 
     /** A qué estados puede pasar el pedido desde el actual. */
     public const TRANSICIONES = [
-        self::BORRADOR => [self::SEPARADA, self::ANULADA],
-        self::SEPARADA => [self::EN_PREPARACION, self::BORRADOR, self::ANULADA],
-        self::EN_PREPARACION => [self::DESPACHADA, self::SEPARADA, self::ANULADA],
+        self::BORRADOR => [self::PENDIENTE, self::ANULADA],
+        self::PENDIENTE => [self::EN_PREPARACION, self::BORRADOR, self::ANULADA],
+        self::EN_PREPARACION => [self::DESPACHADA, self::PENDIENTE, self::ANULADA],
         self::DESPACHADA => [self::FACTURADA, self::ANULADA],
         self::FACTURADA => [],
         self::ANULADA => [],

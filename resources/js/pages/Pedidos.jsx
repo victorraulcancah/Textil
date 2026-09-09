@@ -5,7 +5,6 @@ import {
     ClipboardList,
     Edit,
     FileText,
-    Lock,
     PackageCheck,
     Printer,
     Receipt,
@@ -27,7 +26,7 @@ const fecha = (v) => (v ? new Date(v).toLocaleDateString('es-PE') : '—');
 
 const COLOR_ESTADO = {
     borrador: 'gray',
-    separada: 'amber',
+    pendiente: 'amber',
     en_preparacion: 'blue',
     despachada: 'blue',
     facturada: 'green',
@@ -37,7 +36,7 @@ const COLOR_ESTADO = {
 const ESTADOS = [
     { value: '', label: 'Todos los estados' },
     { value: 'borrador', label: 'Borrador' },
-    { value: 'separada', label: 'Separada' },
+    { value: 'pendiente', label: 'Pendiente' },
     { value: 'en_preparacion', label: 'En preparación' },
     { value: 'despachada', label: 'Despachada' },
     { value: 'facturada', label: 'Facturada' },
@@ -346,23 +345,20 @@ function DetallePedido({ pedido, procesando, onAccion, onFacturar, onPdf }) {
                     vista con el pedido ya en preparación, cuando ahí sería un
                     retroceso, no el paso que toca. */}
                 <div className="flex flex-wrap items-center gap-2">
-                    {pedido.estado === 'borrador' && puede('separada') && (
-                        <Button size="sm" loading={procesando} onClick={() => onAccion(pedido, 'separar', 'Tela separada para el cliente.')}>
-                            <Lock className="h-4 w-4" />
-                            Separar tela
+                    {/* El vendedor solo manda el pedido al almacén. Separar los
+                        rollos y prepararlos es trabajo del almacenero, y lo
+                        hace desde su propia bandeja. */}
+                    {pedido.estado === 'borrador' && puede('pendiente') && (
+                        <Button size="sm" loading={procesando} onClick={() => onAccion(pedido, 'enviar', 'Pedido enviado al almacén.')}>
+                            <PackageCheck className="h-4 w-4" />
+                            Enviar al almacén
                         </Button>
                     )}
-                    {pedido.estado === 'separada' && (
-                        <>
-                            <Button size="sm" loading={procesando} onClick={() => onAccion(pedido, 'preparar', 'Requerimiento enviado al almacén.')}>
-                                <PackageCheck className="h-4 w-4" />
-                                Enviar al almacén
-                            </Button>
-                            <Button variant="secondary" size="sm" loading={procesando} onClick={() => onAccion(pedido, 'devolver', 'Los rollos volvieron a estar disponibles.')}>
-                                <Undo2 className="h-4 w-4" />
-                                Devolver a borrador
-                            </Button>
-                        </>
+                    {pedido.estado === 'pendiente' && (
+                        <Button variant="secondary" size="sm" loading={procesando} onClick={() => onAccion(pedido, 'devolver', 'Los rollos volvieron a estar disponibles.')}>
+                            <Undo2 className="h-4 w-4" />
+                            Devolver a borrador
+                        </Button>
                     )}
                     {pedido.requerimiento_numero && (
                         <Button
@@ -382,6 +378,13 @@ function DetallePedido({ pedido, procesando, onAccion, onFacturar, onPdf }) {
                     )}
                 </div>
             </div>
+
+            {pedido.estado === 'pendiente' && (
+                <div className="border-b border-edge bg-amber-50/70 px-4 py-2 text-xs text-amber-800">
+                    Los rollos ya están reservados para este cliente. El pedido está en la
+                    bandeja del almacén, esperando a que lo tomen.
+                </div>
+            )}
 
             {pedido.estado === 'en_preparacion' && (
                 <div className="border-b border-edge bg-blue-50/60 px-4 py-2 text-xs text-blue-800">

@@ -200,7 +200,7 @@ export default function CrearPedido() {
                 toast.success('Pedido actualizado.');
             } else {
                 await api.post('/ordenes-venta', cuerpo);
-                toast.success('Pedido creado. Sepáralo para reservar los rollos.');
+                toast.success('Pedido creado. Envíalo al almacén para reservar los rollos.');
             }
             navigate('/pedidos');
         } catch (err) {

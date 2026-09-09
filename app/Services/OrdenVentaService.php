@@ -17,8 +17,12 @@ use Illuminate\Support\Facades\DB;
  * en el inventario porque físicamente están en el almacén. El descuento
  * ocurre una sola vez, cuando se emite la nota de venta.
  *
- *   borrador → separada → en_preparacion → despachada → facturada
+ *   borrador → pendiente → en_preparacion → despachada → facturada
  *                                                     ↘ anulada
+ *
+ * El corte entre quién hace qué está en "pendiente": hasta ahí es del
+ * vendedor, de ahí en adelante es del almacén. El almacenero ve los pedidos
+ * pendientes en su bandeja, los toma, baja los rollos del rack y los despacha.
  *
  * El estado de cada rollo va pegado al del pedido: nadie lo mueve a mano.
  */
@@ -71,20 +75,24 @@ class OrdenVentaService
     }
 
     /**
-     * Separa la tela: los rollos quedan reservados para este cliente.
+     * El vendedor manda el pedido al almacén.
+     *
+     * Los rollos quedan reservados para este cliente en el mismo acto: si se
+     * dejara para cuando el almacenero lo tome, otro vendedor podría venderlos
+     * mientras el pedido espera en la bandeja.
      *
      * Aquí es donde se comprueba que los rollos sigan libres — entre que se
      * armó el pedido y se confirmó, otro vendedor pudo haberlos tomado.
      */
-    public function separar(OrdenVenta $orden): OrdenVenta
+    public function enviarAlAlmacen(OrdenVenta $orden): OrdenVenta
     {
-        $this->exigirTransicion($orden, OrdenVenta::SEPARADA);
+        $this->exigirTransicion($orden, OrdenVenta::PENDIENTE);
 
         return DB::transaction(function () use ($orden) {
             $orden->load('detalles.rollo');
 
             if ($orden->detalles->isEmpty()) {
-                throw new \DomainException('El pedido no tiene rollos: agrega al menos uno antes de separar.');
+                throw new \DomainException('El pedido no tiene rollos: agrega al menos uno antes de enviarlo al almacén.');
             }
 
             $tomados = [];
@@ -121,7 +129,7 @@ class OrdenVentaService
             }
 
             $orden->update([
-                'estado' => OrdenVenta::SEPARADA,
+                'estado' => OrdenVenta::PENDIENTE,
                 'fecha_separacion' => now(),
             ]);
 
@@ -155,8 +163,10 @@ class OrdenVentaService
     }
 
     /**
-     * Genera el requerimiento de almacén: el almacenero recibe la lista y baja
-     * los rollos del rack.
+     * El almacenero toma el pedido de su bandeja y empieza a prepararlo.
+     *
+     * Aquí se numera el requerimiento de almacén: es el papel con el que baja
+     * al rack a separar físicamente los rollos, ordenado por ubicación.
      */
     public function enviarAPreparacion(OrdenVenta $orden): OrdenVenta
     {

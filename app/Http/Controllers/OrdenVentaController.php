@@ -45,6 +45,12 @@ class OrdenVentaController extends Controller
         ])
             ->withCount('detalles')
             ->when($request->filled('estado'), fn ($q) => $q->where('estado', $request->estado))
+            // La bandeja del almacén necesita dos estados a la vez: los que
+            // están esperando y los que ya se están preparando.
+            ->when($request->filled('estados'), fn ($q) => $q->whereIn(
+                'estado',
+                array_filter(explode(',', (string) $request->input('estados')))
+            ))
             ->when($request->filled('cliente_id'), fn ($q) => $q->where('cliente_id', $request->cliente_id))
             ->when($request->filled('almacen_id'), fn ($q) => $q->where('almacen_id', $request->almacen_id))
             ->latest('id')
@@ -74,11 +80,14 @@ class OrdenVentaController extends Controller
         return new OrdenVentaResource($orden->load(self::RELACIONES));
     }
 
-    /** Separa la tela: los rollos quedan reservados para este cliente. */
-    public function separar(OrdenVenta $ordenesVenta)
+    /**
+     * El vendedor manda el pedido al almacén: queda pendiente en la bandeja
+     * del almacenero y sus rollos quedan reservados.
+     */
+    public function enviar(OrdenVenta $ordenesVenta)
     {
         return new OrdenVentaResource(
-            $this->pedidos->separar($ordenesVenta)->load(self::RELACIONES)
+            $this->pedidos->enviarAlAlmacen($ordenesVenta)->load(self::RELACIONES)
         );
     }
 
@@ -90,7 +99,7 @@ class OrdenVentaController extends Controller
         );
     }
 
-    /** Genera el requerimiento de almacén y avisa al almacenero. */
+    /** El almacenero toma el pedido y se numera su requerimiento de almacén. */
     public function preparar(OrdenVenta $ordenesVenta)
     {
         return new OrdenVentaResource(

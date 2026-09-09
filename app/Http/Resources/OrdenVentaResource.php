@@ -62,11 +62,14 @@ class OrdenVentaResource extends JsonResource
             'observaciones' => $this->observaciones,
 
             // Resumen: lo que se ve en el listado sin abrir el pedido.
-            'total_rollos' => $this->when(isset($this->detalles_count), $this->detalles_count),
+            'total_lineas' => $this->when(isset($this->detalles_count), $this->detalles_count),
             'total_metros' => $this->whenLoaded('detalles', fn () => round($this->detalles->sum('metros'), 2)),
-            'verificados' => $this->whenLoaded('detalles', fn () => $this->detalles->whereNotNull('escaneado_at')->count()),
+            // Cuántos metros lleva cubiertos el almacén de los que se pidieron.
+            'metros_asignados' => $this->whenLoaded('detalles', fn () => round($this->detalles->sum(fn ($d) => $d->metrosAsignados()), 2)),
+            'total_rollos' => $this->whenLoaded('detalles', fn () => $this->detalles->sum(fn ($d) => $d->rollos->count())),
+            'completo' => $this->whenLoaded('detalles', fn () => $this->estaVerificada()),
 
-            'detalles' => OrdenVentaRolloResource::collection($detalles),
+            'detalles' => OrdenVentaDetalleResource::collection($detalles),
 
             'nota_venta_id' => $this->whenLoaded('notaVenta', fn () => $this->notaVenta?->id),
 

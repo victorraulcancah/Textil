@@ -271,7 +271,7 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
                                                 {porRollos && cap?.abierto && (
                                                     <tr className="bg-gray-50">
                                                         <td colSpan={7} className="px-3 py-3">
-                                                            <div className="grid gap-3 sm:grid-cols-[14rem,10rem,1fr]">
+                                                            <div className="grid gap-3 sm:grid-cols-[14rem_10rem_1fr]">
                                                                 <Select
                                                                     label="Color"
                                                                     value={cap?.color_id ?? ''}

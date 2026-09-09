@@ -8,9 +8,9 @@ use App\Pdf\DocumentoPdf;
 /**
  * El pedido impreso: lo que se le muestra o se le manda al cliente.
  *
- * Se agrupa por color, como en la nota de venta que hoy llevan en Excel:
- * el cliente compra "5 rollos de negro, 372 m", no rollo por rollo. El
- * detalle de qué rollos son va debajo, por si lo pide.
+ * Lleva lo que pidió —producto, cantidad y precio—, que es de lo que se habla
+ * con el cliente. Los rollos concretos que lo cubren van debajo, y solo
+ * aparecen si el almacén ya los asignó.
  */
 class OrdenVentaPdf implements DocumentoPdf
 {
@@ -31,35 +31,35 @@ class OrdenVentaPdf implements DocumentoPdf
         return [
             'orden' => $orden,
             'documento' => $orden->documento,
-            'grupos' => $this->agrupar($orden),
             'filas' => $orden->detalles->map(fn ($d, $i) => [
                 'n' => $i + 1,
-                'codigo' => $d->rollo?->codigo ?? '—',
-                'color' => $d->rollo?->color?->nombre ?? '—',
+                'codigo' => $d->presentacion?->producto?->codigo ?? '—',
+                'producto' => $d->presentacion?->producto?->nombre ?? '—',
+                'presentacion' => $d->presentacion?->nombre ?? '—',
+                'cantidad' => number_format((float) $d->cantidad, 2),
                 'metros' => number_format((float) $d->metros, 2),
                 'precio' => number_format((float) $d->precio_unitario, 2),
                 'importe' => number_format((float) $d->subtotal, 2),
             ])->all(),
+            'rollos' => $this->rollos($orden),
+            'total_metros' => number_format((float) $orden->detalles->sum('metros'), 2),
         ];
     }
 
     /**
-     * Resumen por color: rollos y metros, como lo escriben a mano.
+     * Los rollos con los que el almacén cubrió el pedido, si ya los asignó.
      *
      * @return list<array<string, mixed>>
      */
-    public function agrupar(OrdenVenta $orden): array
+    public function rollos(OrdenVenta $orden): array
     {
         return $orden->detalles
-            ->groupBy(fn ($d) => $d->rollo?->producto_color_id ?? 0)
-            ->map(fn ($lineas) => [
-                'color' => $lineas->first()->rollo?->color?->nombre ?? 'Sin color',
-                'codigo_color' => $lineas->first()->rollo?->color?->codigo,
-                'producto' => $lineas->first()->rollo?->producto?->nombre ?? '—',
-                'rollos' => $lineas->count(),
-                'metros' => number_format((float) $lineas->sum('metros'), 2),
-                'importe' => number_format((float) $lineas->sum('subtotal'), 2),
-            ])
+            ->flatMap(fn ($d) => $d->rollos->map(fn ($r) => [
+                'codigo' => $r->rollo?->codigo ?? '—',
+                'producto' => $d->presentacion?->producto?->nombre ?? '—',
+                'color' => $r->rollo?->color?->nombre ?? '—',
+                'metros' => number_format((float) $r->metros, 2),
+            ]))
             ->values()
             ->all();
     }
@@ -70,8 +70,8 @@ class OrdenVentaPdf implements DocumentoPdf
             'cliente',
             'almacen:id,nombre',
             'vendedor:id,name',
-            'detalles.rollo.producto:id,codigo,nombre',
-            'detalles.rollo.color',
+            'detalles.presentacion.producto:id,codigo,nombre',
+            'detalles.rollos.rollo.color',
         ])->findOrFail($id);
     }
 

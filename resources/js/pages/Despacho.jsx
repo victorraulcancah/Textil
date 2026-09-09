@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Camera, Check, ClipboardList, FileText, PackageCheck, ScanLine, TriangleAlert } from 'lucide-react';
+import { Camera, Check, ClipboardList, FileText, PackageCheck, ScanLine, TriangleAlert, X } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import EscanerCamara from '../components/EscanerCamara';
@@ -97,11 +97,12 @@ export default function Despacho() {
                 setUltimo({ ok: true, codigo: data.rollo.codigo, metros: data.metros, texto: 'Rollo correcto' });
                 await cargarDetalle(detalle.id);
 
-                // El primer escaneo cambia el estado por su cuenta: hay que
-                // refrescar la bandeja o seguiría diciendo "Solicitado". No se
-                // recarga en cada lectura porque con treinta rollos sería
-                // recargar la lista treinta veces.
-                if (estadoAntes === 'solicitado') await cargar();
+                // La bandeja se refresca en los dos momentos en que su
+                // contenido cambia de verdad: el primer escaneo, que pone el
+                // pedido en preparación, y el último, que lo deja cubierto. En
+                // los del medio no, o con treinta rollos serían treinta
+                // recargas de la lista.
+                if (estadoAntes === 'solicitado' || data.completo) await cargar();
 
                 return { ok: true, texto };
             } catch (err) {
@@ -137,6 +138,19 @@ export default function Despacho() {
         }
     };
 
+    /** Saca un rollo que se escaneó por error y lo devuelve al stock. */
+    const quitarRollo = async (rolloId) => {
+        try {
+            const { data } = await api.post(`/ordenes-venta/${detalle.id}/quitar-rollo`, {
+                rollo_id: rolloId,
+            });
+            setDetalle(data?.data ?? data);
+            await cargar();
+        } catch (err) {
+            toast.error(err.response?.data?.message ?? 'No se pudo quitar el rollo.');
+        }
+    };
+
     /**
      * El almacenero terminó de juntar los rollos: quedan apartados en el
      * almacén, verificados y esperando su salida.
@@ -159,9 +173,12 @@ export default function Despacho() {
     /** Todavía se pueden escanear rollos: solicitado o en plena preparación. */
     const escaneando = ['solicitado', 'preparando'].includes(detalle?.estado);
     const separado = detalle?.estado === 'separado';
-    const verificados = (detalle?.detalles ?? []).filter((d) => d.escaneado).length;
-    const total = detalle?.detalles?.length ?? 0;
-    const completo = total > 0 && verificados === total;
+    // El avance se mide en metros cubiertos: el almacenero no sigue una lista
+    // de rollos, junta la cantidad que pidió el cliente.
+    const lineas = detalle?.detalles ?? [];
+    const verificados = lineas.reduce((s, d) => s + Number(d.metros_asignados || 0), 0);
+    const total = lineas.reduce((s, d) => s + Number(d.metros || 0), 0);
+    const completo = lineas.length > 0 && lineas.every((d) => d.cubierta);
 
     return (
         <Layout>
@@ -179,7 +196,7 @@ export default function Despacho() {
                     No hay solicitudes en la bandeja. Cuando Ventas solicite un pedido aparecerá aquí.
                 </Alert>
             ) : (
-                <div className="grid gap-4 lg:grid-cols-[19rem,1fr]">
+                <div className="grid gap-4 lg:grid-cols-[19rem_1fr]">
                     {/* Bandeja de pedidos que llegaron al almacén */}
                     <aside className="overflow-hidden rounded-lg border border-edge bg-white shadow-sm lg:sticky lg:top-4 lg:self-start">
                         <p className="border-b border-edge px-3 py-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
@@ -212,8 +229,8 @@ export default function Despacho() {
                                                 ) : p.estado === 'separado' ? (
                                                     <Badge variant="green">Separado</Badge>
                                                 ) : (
-                                                    <Badge variant={p.verificados === p.total_rollos ? 'green' : 'blue'}>
-                                                        {p.verificados}/{p.total_rollos}
+                                                    <Badge variant={p.completo ? 'green' : 'blue'}>
+                                                        {num(p.metros_asignados)}/{num(p.total_metros)} m
                                                     </Badge>
                                                 )}
                                             </span>
@@ -241,8 +258,8 @@ export default function Despacho() {
                                             {detalle.requerimiento_numero ?? detalle.documento}
                                         </h2>
                                         <p className="text-xs text-warm-500">
-                                            {detalle.cliente ?? 'Cliente varios'} · {total} rollos ·{' '}
-                                            {num(detalle.total_metros)} m
+                                            {detalle.cliente ?? 'Cliente varios'} · {lineas.length} producto(s) ·{' '}
+                                            {num(total)} m
                                         </p>
                                     </div>
                                     <div className="flex flex-wrap items-center gap-2">
@@ -280,9 +297,9 @@ export default function Despacho() {
 
                                 {detalle.estado === 'solicitado' && (
                                     <div className="border-b border-edge bg-amber-50/70 px-4 py-2.5 text-sm text-amber-800">
-                                        Los rollos están reservados para este cliente. Baja el
-                                        primero del rack y escanéalo: el pedido pasa a{' '}
-                                        <strong>Preparando</strong> solo.
+                                        Busca en el rack los metros que pide cada línea y escanea
+                                        cada rollo: el sistema los va sumando. Con el primero, el
+                                        pedido pasa a <strong>Preparando</strong> solo.
                                     </div>
                                 )}
 
@@ -342,7 +359,7 @@ export default function Despacho() {
                                             <Camera className="h-4 w-4" />
                                         </Button>
                                         <span className="text-sm font-medium text-warm-700">
-                                            {verificados}/{total}
+                                            {num(verificados)}/{num(total)} m
                                         </span>
                                     </div>
 
@@ -370,39 +387,72 @@ export default function Despacho() {
 
                                 {completo && escaneando && (
                                     <div className="border-b border-edge bg-green-50 px-4 py-2 text-sm text-green-800">
-                                        Todos los rollos verificados. Pulsa <strong>Separado</strong>{' '}
-                                        para cerrar la preparación.
+                                        Todo lo pedido está cubierto. Pulsa <strong>Separado</strong> para
+                                        cerrar la preparación.
                                     </div>
                                 )}
 
+                                {/* Lo que pidió el cliente y con qué se va
+                                    cubriendo. El almacenero no sigue una lista
+                                    de rollos: busca los metros que faltan. */}
                                 <ul className="divide-y divide-gray-100">
                                     {(detalle.detalles ?? []).map((d) => (
-                                        <li
-                                            key={d.id}
-                                            className={cn(
-                                                'flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5 text-sm',
-                                                d.escaneado && 'bg-green-50/60',
-                                            )}
-                                        >
-                                            <span
-                                                className={cn(
-                                                    'flex h-6 w-6 shrink-0 items-center justify-center rounded-full border',
-                                                    d.escaneado
-                                                        ? 'border-green-500 bg-green-500 text-white'
-                                                        : 'border-gray-300 text-transparent',
+                                        <li key={d.id} className={cn('px-4 py-3', d.cubierta && 'bg-green-50/60')}>
+                                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                                                <span
+                                                    className={cn(
+                                                        'flex h-6 w-6 shrink-0 items-center justify-center rounded-full border',
+                                                        d.cubierta
+                                                            ? 'border-green-500 bg-green-500 text-white'
+                                                            : 'border-gray-300 text-transparent',
+                                                    )}
+                                                >
+                                                    <Check className="h-3.5 w-3.5" />
+                                                </span>
+                                                <span className="font-medium text-warm-900">{d.producto}</span>
+                                                <span className="text-warm-500">{d.presentacion}</span>
+                                                <span className="ml-auto font-medium text-warm-900">
+                                                    {num(d.metros_asignados)} / {num(d.metros)} m
+                                                </span>
+                                                {!d.cubierta && (
+                                                    <Badge variant="amber">
+                                                        Faltan {num(d.metros_pendientes)} m
+                                                    </Badge>
                                                 )}
-                                            >
-                                                <Check className="h-3.5 w-3.5" />
-                                            </span>
-                                            <span className="font-mono font-medium text-warm-900">
-                                                {d.rollo?.codigo}
-                                            </span>
-                                            <span className="text-warm-600">{d.rollo?.color?.nombre ?? '—'}</span>
-                                            <span className="text-warm-600">{num(d.metros)} m</span>
-                                            {d.es_parcial && <Badge variant="amber">Cortar</Badge>}
-                                            <span className="ml-auto text-xs text-warm-500">
-                                                {d.rollo?.ubicacion}
-                                            </span>
+                                            </div>
+
+                                            {d.descripcion && (
+                                                <p className="ml-9 mt-0.5 text-xs text-warm-500">{d.descripcion}</p>
+                                            )}
+
+                                            {d.rollos?.length > 0 && (
+                                                <ul className="ml-9 mt-1.5 space-y-1">
+                                                    {d.rollos.map((r) => (
+                                                        <li
+                                                            key={r.id}
+                                                            className="flex flex-wrap items-center gap-x-2 text-xs text-warm-600"
+                                                        >
+                                                            <span className="font-mono font-medium text-warm-900">
+                                                                {r.codigo}
+                                                            </span>
+                                                            <span>{r.color ?? '—'}</span>
+                                                            <span>{num(r.metros)} m</span>
+                                                            {r.es_parcial && <Badge variant="amber">Cortar</Badge>}
+                                                            {escaneando && (
+                                                                <button
+                                                                    type="button"
+                                                                    aria-label={`Quitar ${r.codigo}`}
+                                                                    title="Quitar este rollo del pedido"
+                                                                    onClick={() => quitarRollo(r.rollo_id)}
+                                                                    className="rounded p-0.5 text-red-600 transition hover:bg-red-50"
+                                                                >
+                                                                    <X className="h-3.5 w-3.5" />
+                                                                </button>
+                                                            )}
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            )}
                                         </li>
                                     ))}
                                 </ul>
@@ -416,7 +466,7 @@ export default function Despacho() {
                 abierto={camara}
                 onCerrar={() => setCamara(false)}
                 onLeer={verificar}
-                titulo={detalle ? `${detalle.requerimiento_numero ?? detalle.documento} · ${verificados}/${total}` : 'Escanear rollo'}
+                titulo={detalle ? `${detalle.requerimiento_numero ?? detalle.documento} · ${num(verificados)}/${num(total)} m` : 'Escanear rollo'}
             />
 
             <PdfViewerModal

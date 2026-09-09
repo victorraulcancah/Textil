@@ -28,9 +28,8 @@ class OrdenVentaController extends Controller
         'vendedor:id,name',
         'usuarioPrepara:id,name',
         'usuarioDespacha:id,name',
-        'detalles.rollo.producto:id,codigo,nombre',
-        'detalles.rollo.color',
-        'detalles.presentacion:id,nombre',
+        'detalles.presentacion.producto:id,codigo,nombre',
+        'detalles.rollos.rollo.color',
     ];
 
     public function __construct(private OrdenVentaService $pedidos) {}
@@ -41,7 +40,7 @@ class OrdenVentaController extends Controller
             'cliente:id,nombre',
             'almacen:id,nombre',
             'vendedor:id,name',
-            'detalles',
+            'detalles.rollos',
         ])
             ->withCount('detalles')
             ->when($request->filled('estado'), fn ($q) => $q->where('estado', $request->estado))
@@ -136,6 +135,16 @@ class OrdenVentaController extends Controller
     {
         return new OrdenVentaResource(
             $this->pedidos->anular($ordenesVenta, $request->validated()['motivo'])->load(self::RELACIONES)
+        );
+    }
+
+    /** Quita un rollo que se asignó por error. */
+    public function quitarRollo(Request $request, OrdenVenta $ordenesVenta)
+    {
+        $rolloId = (int) $request->validate(['rollo_id' => 'required|integer'])['rollo_id'];
+
+        return new OrdenVentaResource(
+            $this->pedidos->quitarRollo($ordenesVenta, $rolloId)->load(self::RELACIONES)
         );
     }
 

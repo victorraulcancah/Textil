@@ -137,7 +137,7 @@ export default function Accesos() {
                     <Spinner size="lg" className="text-primary-600" />
                 </div>
             ) : (
-                <div className="grid gap-4 lg:grid-cols-[16rem,1fr]">
+                <div className="grid gap-4 lg:grid-cols-[16rem_1fr]">
                     {/* Roles: lista en escritorio, selector en móvil */}
                     <aside className="lg:sticky lg:top-4 lg:self-start">
                         <div className="lg:hidden">

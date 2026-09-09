@@ -108,6 +108,7 @@ return [
                     // crea ni lo cotiza: eso es de Ventas.
                     'patrones' => [
                         'ordenes-venta/*/escanear' => 'editar',
+                        'ordenes-venta/*/quitar-rollo' => 'editar',
                         'ordenes-venta/*/separar' => 'editar',
                         'ordenes-venta/*/despachar' => 'editar',
                     ],

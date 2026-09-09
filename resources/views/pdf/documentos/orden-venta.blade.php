@@ -5,8 +5,6 @@
 @section('contenido')
     @php
         $estado = strtoupper(\App\Models\OrdenVenta::ESTADOS[$orden->estado] ?? $orden->estado);
-        $totalRollos = $orden->detalles->count();
-        $totalMetros = number_format((float) $orden->detalles->sum('metros'), 2);
     @endphp
 
     <x-pdf.encabezado :empresa="$empresa" titulo="PEDIDO" :numero="$documento" />
@@ -22,29 +20,29 @@
         :items="[
             'Fecha' => optional($orden->fecha_emision)->format('d/m/Y'),
             'Entrega' => optional($orden->fecha_entrega)->format('d/m/Y') ?: '—',
-            'Almacén' => $orden->almacen?->nombre ?: '—',
             'Vendedor' => $orden->vendedor?->name ?: '—',
             'Estado' => $estado,
             'Requerimiento' => $orden->requerimiento_numero ?: '—',
+            'Almacén' => $orden->almacen?->nombre ?: 'Lo define el almacén',
         ]" />
 
-    {{-- Resumen por color: es como el cliente pide y como lo revisa. --}}
     <x-pdf.items
         :columnas="[
-            ['label' => 'Tela', 'key' => 'producto'],
-            ['label' => 'Color', 'key' => 'color', 'width' => '130px'],
-            ['label' => 'Cód.', 'key' => 'codigo_color', 'width' => '60px'],
-            ['label' => 'Rollos', 'key' => 'rollos', 'align' => 'right', 'width' => '60px'],
-            ['label' => 'Metros', 'key' => 'metros', 'align' => 'right', 'width' => '80px'],
-            ['label' => 'Importe', 'key' => 'importe', 'align' => 'right', 'width' => '85px'],
+            ['label' => '#', 'key' => 'n', 'width' => '30px'],
+            ['label' => 'Código', 'key' => 'codigo', 'width' => '70px'],
+            ['label' => 'Producto', 'key' => 'producto'],
+            ['label' => 'Presentación', 'key' => 'presentacion', 'width' => '110px'],
+            ['label' => 'Cantidad', 'key' => 'cantidad', 'align' => 'right', 'width' => '70px'],
+            ['label' => 'Metros', 'key' => 'metros', 'align' => 'right', 'width' => '70px'],
+            ['label' => 'P. unit.', 'key' => 'precio', 'align' => 'right', 'width' => '70px'],
+            ['label' => 'Importe', 'key' => 'importe', 'align' => 'right', 'width' => '80px'],
         ]"
-        :filas="$grupos"
-        :minFilas="4" />
+        :filas="$filas"
+        :minFilas="6" />
 
     <table class="marco" style="margin: 6px 0 14px 0;">
         <tr>
-            <td class="strong upper" style="font-size: 9px;">Total rollos: {{ $totalRollos }}</td>
-            <td class="strong upper right" style="font-size: 9px;">Total metros: {{ $totalMetros }} m</td>
+            <td class="strong upper" style="font-size: 9px;">Total de tela: {{ $total_metros }} m</td>
         </tr>
     </table>
 
@@ -53,19 +51,19 @@
         :total="number_format((float) $orden->total, 2)"
         :moneda="$orden->moneda === 'USD' ? '$' : 'S/'" />
 
-    {{-- Qué rollos concretos son. El cliente los compra por metraje, así que
-         necesita saber que se lleva el 0001 de 55 m y no otro. --}}
-    <div class="strong upper" style="font-size: 8px; margin: 14px 0 4px 0;">Detalle de rollos</div>
-    <x-pdf.items
-        :columnas="[
-            ['label' => '#', 'key' => 'n', 'width' => '30px'],
-            ['label' => 'Rollo', 'key' => 'codigo', 'width' => '120px'],
-            ['label' => 'Color', 'key' => 'color'],
-            ['label' => 'Metros', 'key' => 'metros', 'align' => 'right', 'width' => '80px'],
-            ['label' => 'P. unit.', 'key' => 'precio', 'align' => 'right', 'width' => '75px'],
-            ['label' => 'Importe', 'key' => 'importe', 'align' => 'right', 'width' => '85px'],
-        ]"
-        :filas="$filas" />
+    {{-- Qué rollos concretos cubrieron el pedido. Solo aparece si el almacén
+         ya los asignó: mientras tanto no existen. --}}
+    @if (count($rollos))
+        <div class="strong upper" style="font-size: 8px; margin: 14px 0 4px 0;">Rollos entregados</div>
+        <x-pdf.items
+            :columnas="[
+                ['label' => 'Rollo', 'key' => 'codigo', 'width' => '120px'],
+                ['label' => 'Producto', 'key' => 'producto'],
+                ['label' => 'Color', 'key' => 'color', 'width' => '110px'],
+                ['label' => 'Metros', 'key' => 'metros', 'align' => 'right', 'width' => '80px'],
+            ]"
+            :filas="$rollos" />
+    @endif
 
     @if ($orden->observaciones)
         <table class="marco" style="margin-top: 12px;">
@@ -77,8 +75,8 @@
     @endif
 
     <div class="muted" style="font-size: 8px; margin-top: 10px;">
-        Este documento reserva la mercadería; no descuenta inventario ni constituye
-        comprobante de pago. La venta se formaliza con la nota de venta.
+        Este documento registra lo que pidió el cliente; no descuenta inventario ni
+        constituye comprobante de pago. La venta se formaliza con la nota de venta.
     </div>
 
     <x-pdf.firmas :firmas="['Vendedor', 'Cliente']" />

@@ -134,11 +134,11 @@ export default function Pedidos() {
             render: (row) => fecha(row.fecha_emision),
         },
         {
-            key: 'total_rollos',
-            label: 'Rollos',
+            key: 'total_lineas',
+            label: 'Productos',
             align: 'right',
             searchable: false,
-            render: (row) => row.total_rollos ?? 0,
+            render: (row) => row.total_lineas ?? 0,
         },
         {
             key: 'total_metros',
@@ -162,7 +162,7 @@ export default function Pedidos() {
                     <Badge variant={COLOR_ESTADO[row.estado] ?? 'gray'}>{row.estado_label}</Badge>
                     {row.estado === 'preparando' && (
                         <span className="text-xs text-warm-500">
-                            {row.verificados}/{row.total_rollos} escaneados
+                            {num(row.metros_asignados)}/{num(row.total_metros)} m cubiertos
                         </span>
                     )}
                 </span>
@@ -275,11 +275,11 @@ export default function Pedidos() {
                     {(detalle?.detalles ?? []).map((d) => (
                         <DetalleCard
                             key={d.id}
-                            titulo={d.rollo?.codigo}
-                            subtitulo={d.rollo?.color?.nombre}
+                            titulo={d.producto}
+                            subtitulo={d.presentacion}
                             campos={[
-                                { label: 'Metros', value: `${num(d.metros)} m` },
-                                { label: 'P. unit.', value: money(d.precio_unitario) },
+                                { label: 'Cantidad', value: `${num(d.cantidad)} (${num(d.metros)} m)` },
+                                { label: 'Cubierto', value: `${num(d.metros_asignados)} m` },
                                 { label: 'Importe', value: money(d.subtotal) },
                             ]}
                             columnas={3}
@@ -336,7 +336,7 @@ function DetallePedido({ pedido, procesando, onAccion, onFacturar, onPdf }) {
                         </Badge>
                     </h2>
                     <p className="text-xs text-warm-500">
-                        {pedido.cliente ?? 'Cliente varios'} · {pedido.detalles?.length ?? 0} rollos ·{' '}
+                        {pedido.cliente ?? 'Cliente varios'} · {pedido.detalles?.length ?? 0} producto(s) ·{' '}
                         {num(pedido.total_metros)} m · {money(pedido.total)}
                         {pedido.requerimiento_numero && ` · ${pedido.requerimiento_numero}`}
                     </p>
@@ -382,15 +382,15 @@ function DetallePedido({ pedido, procesando, onAccion, onFacturar, onPdf }) {
 
             {pedido.estado === 'solicitado' && (
                 <div className="border-b border-edge bg-amber-50/70 px-4 py-2 text-xs text-amber-800">
-                    Los rollos ya están reservados para este cliente. La solicitud está en la
-                    bandeja del almacén, esperando a que la atiendan.
+                    La solicitud está en la bandeja del almacén, esperando a que la atiendan.
+                    Todavía no hay rollos apartados: los elige el almacenero al prepararla.
                 </div>
             )}
 
             {pedido.estado === 'preparando' && (
                 <div className="border-b border-edge bg-blue-50/60 px-4 py-2 text-xs text-blue-800">
-                    El almacén está juntando los rollos. Cuando los tenga todos escaneados
-                    dará el pedido por separado.
+                    El almacén está juntando los rollos. Cuando cubra todos los metros dará el
+                    pedido por separado.
                 </div>
             )}
 
@@ -404,29 +404,53 @@ function DetallePedido({ pedido, procesando, onAccion, onFacturar, onPdf }) {
                 <table className="w-full text-sm">
                     <thead>
                         <tr className="border-b border-edge text-left text-xs uppercase tracking-wide text-warm-500">
-                            <th className="px-4 py-2 font-medium">Rollo</th>
-                            <th className="px-4 py-2 font-medium">Color</th>
+                            <th className="px-4 py-2 font-medium">Producto</th>
                             <th className="px-4 py-2 font-medium">Presentación</th>
-                            <th className="px-4 py-2 text-right font-medium">Metros</th>
+                            <th className="px-4 py-2 text-right font-medium">Cantidad</th>
+                            <th className="px-4 py-2 font-medium">Cubierto por</th>
                             <th className="px-4 py-2 text-right font-medium">P. unit.</th>
                             <th className="px-4 py-2 text-right font-medium">Importe</th>
                         </tr>
                     </thead>
                     <tbody>
                         {(pedido.detalles ?? []).map((d) => (
-                            <tr key={d.id} className="border-b border-gray-100 last:border-0">
+                            <tr key={d.id} className="border-b border-gray-100 last:border-0 align-top">
                                 <td className="px-4 py-2 font-medium text-warm-900">
-                                    {d.rollo?.codigo}
-                                    {d.es_parcial && (
-                                        <Badge variant="amber" className="ml-2">Se corta</Badge>
-                                    )}
-                                    {d.escaneado && (
-                                        <Badge variant="green" className="ml-2">Escaneado</Badge>
+                                    {d.producto}
+                                    {d.descripcion && (
+                                        <span className="block text-xs font-normal text-warm-500">
+                                            {d.descripcion}
+                                        </span>
                                     )}
                                 </td>
-                                <td className="px-4 py-2 text-warm-600">{d.rollo?.color?.nombre ?? '—'}</td>
                                 <td className="px-4 py-2 text-warm-600">{d.presentacion ?? '—'}</td>
-                                <td className="px-4 py-2 text-right">{num(d.metros)} m</td>
+                                <td className="px-4 py-2 text-right">
+                                    {num(d.cantidad)}
+                                    <span className="block text-xs text-warm-400">{num(d.metros)} m</span>
+                                </td>
+                                {/* Los rollos que el almacén fue asignando a esta línea. */}
+                                <td className="px-4 py-2">
+                                    {d.rollos?.length ? (
+                                        <span className="space-y-0.5">
+                                            {d.rollos.map((r) => (
+                                                <span key={r.id} className="block text-xs">
+                                                    <span className="font-mono text-warm-900">{r.codigo}</span>
+                                                    <span className="text-warm-500"> · {num(r.metros)} m</span>
+                                                    {r.es_parcial && (
+                                                        <Badge variant="amber" className="ml-1">Se corta</Badge>
+                                                    )}
+                                                </span>
+                                            ))}
+                                            {!d.cubierta && (
+                                                <span className="block text-xs text-amber-600">
+                                                    Faltan {num(d.metros_pendientes)} m
+                                                </span>
+                                            )}
+                                        </span>
+                                    ) : (
+                                        <span className="text-xs text-warm-400">Sin asignar</span>
+                                    )}
+                                </td>
                                 <td className="px-4 py-2 text-right">{money(d.precio_unitario)}</td>
                                 <td className="px-4 py-2 text-right font-medium">{money(d.subtotal)}</td>
                             </tr>

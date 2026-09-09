@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Models\NotaVenta;
 use App\Models\OrdenVenta;
+use App\Models\OrdenVentaDetalle;
+use App\Models\ProductoPresentacion;
 use App\Models\Rollo;
 use App\Models\RolloMovimiento;
 use App\Models\SerieDocumento;
@@ -12,20 +14,19 @@ use Illuminate\Support\Facades\DB;
 /**
  * El recorrido del pedido, desde que se toma hasta que se factura.
  *
- * La regla que manda sobre todo lo demás: el pedido NO mueve stock. Los
- * rollos quedan marcados para que nadie más los venda, pero siguen contando
- * en el inventario porque físicamente están en el almacén. El descuento
- * ocurre una sola vez, cuando se emite la nota de venta.
+ * La regla que manda sobre todo lo demás: el pedido NO mueve stock. El
+ * descuento ocurre una sola vez, cuando se emite la nota de venta.
  *
  *   borrador → solicitado → preparando → separado → despachado → facturado
  *                                                             ↘ anulado
  *
  * El corte entre quién hace qué está en "solicitado": hasta ahí es del
- * vendedor, de ahí en adelante es del almacén. El almacenero ve las
- * solicitudes en su bandeja, escanea los rollos —lo que pone el pedido en
- * preparación solo— y cuando los tiene todos lo da por separado.
+ * vendedor, de ahí en adelante es del almacén.
  *
- * El estado de cada rollo va pegado al del pedido: nadie lo mueve a mano.
+ * El vendedor pide producto y cantidad —"150 metros de Polinán negro"— porque
+ * es lo único que puede saber. Qué rollos cubren esos metros, y desde qué
+ * almacén, lo decide el almacenero escaneándolos: cada escaneo asigna un rollo
+ * a la línea que le corresponde y descuenta de lo que falta.
  */
 class OrdenVentaService
 {
@@ -36,9 +37,7 @@ class OrdenVentaService
 
     /**
      * Toma el pedido. Nace en borrador: todavía se le pueden agregar y quitar
-     * rollos sin consecuencias, porque nada está comprometido.
-     *
-     * @param  array{cliente_id?: int|null, almacen_id: int, vendedor_id: int, fecha_emision: string, detalles: list<array>}  $data
+     * líneas sin consecuencias, porque nada está comprometido.
      */
     public function crear(array $data): OrdenVenta
     {
@@ -56,8 +55,8 @@ class OrdenVentaService
     }
 
     /**
-     * Cambia los rollos o los datos del pedido. Solo mientras es borrador:
-     * después ya hay rollos comprometidos y el almacén trabajando sobre ellos.
+     * Cambia las líneas o los datos del pedido. Solo mientras es borrador:
+     * después el almacén ya está trabajando sobre él.
      */
     public function actualizar(OrdenVenta $orden, array $data): OrdenVenta
     {
@@ -78,64 +77,21 @@ class OrdenVentaService
     /**
      * El vendedor solicita el pedido al almacén.
      *
-     * Aquí pasan tres cosas: se numera el requerimiento —el papel con el que
-     * el almacenero baja al rack—, los rollos quedan reservados para este
-     * cliente, y el pedido aparece en la bandeja del almacén.
-     *
-     * La reserva es inmediata a propósito: si se dejara para cuando el
-     * almacenero lo tome, otro vendedor podría vender esos mismos rollos
-     * mientras el pedido espera su turno.
-     *
-     * Es también donde se comprueba que los rollos sigan libres — entre que se
-     * armó el pedido y se solicitó, otro vendedor pudo haberlos tomado.
+     * Se numera el requerimiento —el papel con el que el almacenero baja al
+     * rack— y el pedido aparece en su bandeja. Todavía no se toca ningún
+     * rollo: cuáles se usan lo decide el almacén al prepararlo.
      */
     public function solicitar(OrdenVenta $orden): OrdenVenta
     {
         $this->exigirTransicion($orden, OrdenVenta::SOLICITADO);
 
         return DB::transaction(function () use ($orden) {
-            $orden->load('detalles.rollo');
-
-            if ($orden->detalles->isEmpty()) {
-                throw new \DomainException('El pedido no tiene rollos: agrega al menos uno antes de solicitarlo.');
-            }
-
-            $tomados = [];
-
-            foreach ($orden->detalles as $detalle) {
-                // Se bloquea el rollo para que dos vendedores no se lo lleven
-                // a la vez: gana el primero que llegue.
-                $rollo = Rollo::lockForUpdate()->find($detalle->rollo_id);
-
-                if (! $rollo || ! $rollo->estaDisponible()) {
-                    $tomados[] = $rollo?->codigo ?? "#{$detalle->rollo_id}";
-                    continue;
-                }
-
-                if ((float) $detalle->metros > (float) $rollo->metros_actual) {
-                    throw new \DomainException(
-                        "El rollo {$rollo->codigo} tiene {$rollo->metros_actual} m y el pedido pide {$detalle->metros} m."
-                    );
-                }
-
-                $this->rollos->cambiarEstado(
-                    $rollo,
-                    Rollo::SEPARADO,
-                    RolloMovimiento::SEPARACION,
-                    'orden_venta',
-                    $orden->id,
-                );
-            }
-
-            if ($tomados) {
-                throw new \DomainException(
-                    'Estos rollos ya no están disponibles: '.implode(', ', $tomados).'.'
-                );
+            if ($orden->detalles()->doesntExist()) {
+                throw new \DomainException('El pedido no tiene productos: agrega al menos uno antes de solicitarlo.');
             }
 
             $orden->update([
                 'estado' => OrdenVenta::SOLICITADO,
-                'fecha_separacion' => now(),
                 // El requerimiento se numera solo la primera vez: si el pedido
                 // va y vuelve, el almacenero sigue viendo el mismo papel.
                 'requerimiento_numero' => $orden->requerimiento_numero
@@ -147,8 +103,8 @@ class OrdenVentaService
     }
 
     /**
-     * El cliente no confirmó: los rollos vuelven a estar disponibles y el
-     * pedido regresa a borrador para poder corregirlo.
+     * El cliente no confirmó: el pedido vuelve a borrador y se suelta todo lo
+     * que el almacén hubiera avanzado.
      */
     public function devolverABorrador(OrdenVenta $orden): OrdenVenta
     {
@@ -162,10 +118,8 @@ class OrdenVentaService
                 'fecha_separacion' => null,
                 'fecha_preparacion' => null,
                 'usuario_prepara_id' => null,
+                'almacen_id' => null,
             ]);
-
-            // Lo que ya se escaneó deja de valer: el pedido puede cambiar.
-            $orden->detalles()->update(['escaneado_at' => null, 'usuario_escanea_id' => null]);
 
             return $this->conRelaciones($orden->fresh());
         });
@@ -174,34 +128,22 @@ class OrdenVentaService
     /**
      * El pedido pasa a "preparando".
      *
-     * No hay que pulsar nada: lo dispara el primer escaneo. Si el almacenero
-     * ya está bajando tela del rack, el pedido está en preparación, y pedirle
-     * además que avise sería un clic que nadie recordaría dar.
+     * No hay que pulsar nada: lo dispara el primer escaneo, y ese escaneo es
+     * también el que fija de qué almacén sale la mercadería.
      */
-    public function empezarPreparacion(OrdenVenta $orden): OrdenVenta
+    public function empezarPreparacion(OrdenVenta $orden, ?int $almacenId = null): OrdenVenta
     {
         $this->exigirTransicion($orden, OrdenVenta::PREPARANDO);
 
-        return DB::transaction(function () use ($orden) {
-            $orden->load('detalles.rollo');
-
-            foreach ($orden->detalles as $detalle) {
-                $this->rollos->cambiarEstado(
-                    $detalle->rollo,
-                    Rollo::EN_PREPARACION,
-                    RolloMovimiento::PREPARACION,
-                    'orden_venta',
-                    $orden->id,
-                );
-            }
-
+        return DB::transaction(function () use ($orden, $almacenId) {
             $orden->update([
                 'estado' => OrdenVenta::PREPARANDO,
                 'fecha_preparacion' => now(),
                 'usuario_prepara_id' => auth()->id(),
+                'almacen_id' => $orden->almacen_id ?: $almacenId,
             ]);
 
-            return $this->conRelaciones($orden->fresh());
+            return $orden->fresh();
         });
     }
 
@@ -215,11 +157,13 @@ class OrdenVentaService
     {
         $this->exigirTransicion($orden, OrdenVenta::SEPARADO);
 
+        $orden->load('detalles.rollos');
+
         if (! $orden->estaVerificada()) {
-            $faltan = $orden->detalles()->whereNull('escaneado_at')->count();
+            $faltan = $orden->detalles->sum(fn ($d) => $d->metrosPendientes());
 
             throw new \DomainException(
-                "Faltan escanear {$faltan} rollo(s) antes de darlo por separado."
+                'Faltan '.round($faltan, 2).' m por cubrir antes de darlo por separado.'
             );
         }
 
@@ -234,9 +178,11 @@ class OrdenVentaService
     }
 
     /**
-     * El almacenero escanea un rollo con la pistola o con la cámara. Si no
-     * corresponde al pedido, se avisa: es la comprobación que evita despachar
-     * el rollo equivocado.
+     * El almacenero escanea un rollo, con la pistola o con la cámara.
+     *
+     * El rollo se asigna a la línea que pide ese mismo producto y todavía no
+     * está cubierta. De él se toma lo que falte: si la línea necesita 20 m y
+     * el rollo tiene 58, se apuntan 20 y el resto sigue siendo del almacén.
      */
     public function escanear(OrdenVenta $orden, string $codigo): array
     {
@@ -246,43 +192,109 @@ class OrdenVentaService
             );
         }
 
-        // El primer escaneo es lo que pone el pedido en preparación.
-        if ($orden->estado === OrdenVenta::SOLICITADO) {
-            $orden = $this->empezarPreparacion($orden);
-        }
-
         $codigo = trim($codigo);
+        $rollo = Rollo::with('producto')->where('codigo', $codigo)->first();
 
-        $detalle = $orden->detalles()
-            ->whereHas('rollo', fn ($q) => $q->where('codigo', $codigo))
-            ->with('rollo')
-            ->first();
-
-        if (! $detalle) {
-            $existe = Rollo::where('codigo', $codigo)->exists();
-
-            throw new \DomainException($existe
-                ? "El rollo {$codigo} no corresponde al requerimiento {$orden->requerimiento_numero}."
-                : "No existe ningún rollo con el código {$codigo}.");
+        if (! $rollo) {
+            throw new \DomainException("No existe ningún rollo con el código {$codigo}.");
         }
 
-        if (! $detalle->escaneado_at) {
-            $detalle->update([
+        if (! $rollo->estaDisponible()) {
+            $estado = strtolower(Rollo::ESTADOS[$rollo->estado] ?? $rollo->estado);
+            throw new \DomainException("El rollo {$codigo} está {$estado}: no se puede usar.");
+        }
+
+        // El primer escaneo fija el almacén y pone el pedido en preparación.
+        if ($orden->estado === OrdenVenta::SOLICITADO) {
+            $orden = $this->empezarPreparacion($orden, $rollo->almacen_id);
+        } elseif ($orden->almacen_id && $orden->almacen_id !== $rollo->almacen_id) {
+            throw new \DomainException(
+                "El rollo {$codigo} está en otro almacén: este pedido se está preparando desde {$orden->almacen?->nombre}."
+            );
+        }
+
+        $orden->load('detalles.rollos', 'detalles.presentacion');
+
+        $linea = $orden->detalles->first(
+            fn ($d) => ! $d->estaCubierta()
+                && (int) $d->presentacion?->producto_id === (int) $rollo->producto_id
+        );
+
+        if (! $linea) {
+            $yaEsta = $orden->detalles->contains(
+                fn ($d) => $d->rollos->contains('rollo_id', $rollo->id)
+            );
+
+            throw new \DomainException($yaEsta
+                ? "El rollo {$codigo} ya está asignado a este pedido."
+                : "El rollo {$codigo} es de {$rollo->producto?->nombre}, que no falta en el requerimiento {$orden->requerimiento_numero}.");
+        }
+
+        return DB::transaction(function () use ($orden, $linea, $rollo, $codigo) {
+            // Se toma lo que falte, sin pasarse de lo que da el rollo.
+            $metros = min($linea->metrosPendientes(), (float) $rollo->metros_actual);
+
+            $linea->rollos()->create([
+                'rollo_id' => $rollo->id,
+                'metros' => $metros,
                 'escaneado_at' => now(),
                 'usuario_escanea_id' => auth()->id(),
             ]);
+
+            $this->rollos->cambiarEstado(
+                $rollo,
+                Rollo::EN_PREPARACION,
+                RolloMovimiento::PREPARACION,
+                'orden_venta',
+                $orden->id,
+            );
+
+            $orden->load('detalles.rollos');
+            $avance = $orden->avance();
+
+            return [
+                'rollo' => ['id' => $rollo->id, 'codigo' => $codigo, 'metros_actual' => (float) $rollo->metros_actual],
+                'metros' => $metros,
+                'producto' => $rollo->producto?->nombre,
+                'verificados' => $avance['asignados'],
+                'total' => $avance['pedidos'],
+                'completo' => $orden->estaVerificada(),
+            ];
+        });
+    }
+
+    /** Quita un rollo que se asignó por error. */
+    public function quitarRollo(OrdenVenta $orden, int $rolloId): OrdenVenta
+    {
+        if (! in_array($orden->estado, [OrdenVenta::PREPARANDO, OrdenVenta::SEPARADO], true)) {
+            throw new \DomainException('Solo se pueden quitar rollos mientras el pedido se prepara.');
         }
 
-        $total = $orden->detalles()->count();
-        $verificados = $orden->detalles()->whereNotNull('escaneado_at')->count();
+        return DB::transaction(function () use ($orden, $rolloId) {
+            $orden->load('detalles.rollos.rollo');
 
-        return [
-            'rollo' => $detalle->rollo->only(['id', 'codigo', 'metros_actual']),
-            'metros' => (float) $detalle->metros,
-            'verificados' => $verificados,
-            'total' => $total,
-            'completo' => $verificados === $total,
-        ];
+            foreach ($orden->detalles as $linea) {
+                foreach ($linea->rollos->where('rollo_id', $rolloId) as $asignado) {
+                    if ($asignado->rollo) {
+                        $this->rollos->cambiarEstado(
+                            $asignado->rollo,
+                            Rollo::DISPONIBLE,
+                            RolloMovimiento::CANCELACION,
+                            'orden_venta',
+                            $orden->id,
+                        );
+                    }
+                    $asignado->delete();
+                }
+            }
+
+            // Si se sacó un rollo, el pedido ya no está completo.
+            if ($orden->estado === OrdenVenta::SEPARADO) {
+                $orden->update(['estado' => OrdenVenta::PREPARANDO]);
+            }
+
+            return $this->conRelaciones($orden->fresh());
+        });
     }
 
     /**
@@ -296,11 +308,9 @@ class OrdenVentaService
         $this->exigirTransicion($orden, OrdenVenta::DESPACHADO);
 
         return DB::transaction(function () use ($orden) {
-            $orden->load('detalles.rollo');
-
-            foreach ($orden->detalles as $detalle) {
+            foreach ($this->rollosDe($orden) as $rollo) {
                 $this->rollos->cambiarEstado(
-                    $detalle->rollo,
+                    $rollo,
                     Rollo::DESPACHADO,
                     RolloMovimiento::DESPACHO,
                     'orden_venta',
@@ -322,9 +332,9 @@ class OrdenVentaService
      * Cierra el pedido: emite la nota de venta y, ahí sí, descuenta.
      *
      * Es el único punto de todo el recorrido que toca el inventario y la
-     * plata. Corta los metros de cada rollo, deja constancia de a qué cliente
-     * se fue, y delega la nota en el servicio de siempre para que la venta se
-     * registre igual que una de mostrador (caja, cuenta por cobrar, kardex).
+     * plata. Corta los metros de cada rollo asignado, deja constancia de a qué
+     * cliente se fue, y delega la nota en el servicio de siempre para que la
+     * venta se registre igual que una de mostrador.
      *
      * @param  array{tipo_pago?: string, pagos?: list<array>, fecha_emision?: string, serie?: string}  $datos
      */
@@ -333,9 +343,7 @@ class OrdenVentaService
         $this->exigirTransicion($orden, OrdenVenta::FACTURADO);
 
         return DB::transaction(function () use ($orden, $datos) {
-            $orden->load(['detalles.rollo.producto.presentaciones.unidadBase', 'detalles.presentacion']);
-
-            $fecha = $datos['fecha_emision'] ?? now()->toDateString();
+            $orden->load(['detalles.rollos.rollo', 'detalles.presentacion']);
 
             $nota = $this->notasVenta->crear([
                 'serie' => $datos['serie'] ?? 'NV01',
@@ -343,7 +351,7 @@ class OrdenVentaService
                 'cliente_id' => $orden->cliente_id,
                 'almacen_id' => $orden->almacen_id,
                 'vendedor_id' => $orden->vendedor_id,
-                'fecha_emision' => $fecha,
+                'fecha_emision' => $datos['fecha_emision'] ?? now()->toDateString(),
                 'moneda' => $orden->moneda,
                 'tipo_pago' => $datos['tipo_pago'] ?? 'contado',
                 'subtotal' => (float) $orden->subtotal,
@@ -355,33 +363,35 @@ class OrdenVentaService
             ]);
 
             // La tela sale físicamente: se cortan los metros de cada rollo.
-            foreach ($orden->detalles as $detalle) {
-                if (! $detalle->rollo) {
-                    continue;
-                }
+            foreach ($orden->detalles as $linea) {
+                foreach ($linea->rollos as $asignado) {
+                    if (! $asignado->rollo) {
+                        continue;
+                    }
 
-                $this->rollos->cortar(
-                    $detalle->rollo,
-                    (float) $detalle->metros,
-                    RolloMovimiento::VENTA,
-                    'nota_venta',
-                    $nota->id,
-                );
+                    $this->rollos->cortar(
+                        $asignado->rollo,
+                        (float) $asignado->metros,
+                        RolloMovimiento::VENTA,
+                        'nota_venta',
+                        $nota->id,
+                    );
 
-                $rollo = $detalle->rollo->fresh();
+                    $rollo = $asignado->rollo->fresh();
 
-                // Si quedó tela, el rollo vuelve al stock con su mismo código;
-                // si salió entero, queda como vendido y con dueño.
-                $this->rollos->cambiarEstado(
-                    $rollo,
-                    (float) $rollo->metros_actual > 0 ? Rollo::DISPONIBLE : Rollo::VENDIDO,
-                    RolloMovimiento::VENTA,
-                    'nota_venta',
-                    $nota->id,
-                );
+                    // Si quedó tela, el rollo vuelve al stock con su mismo
+                    // código; si salió entero, queda vendido y con dueño.
+                    $this->rollos->cambiarEstado(
+                        $rollo,
+                        (float) $rollo->metros_actual > 0 ? Rollo::DISPONIBLE : Rollo::VENDIDO,
+                        RolloMovimiento::VENTA,
+                        'nota_venta',
+                        $nota->id,
+                    );
 
-                if ((float) $rollo->metros_actual <= 0) {
-                    $rollo->update(['cliente_id' => $orden->cliente_id]);
+                    if ((float) $rollo->metros_actual <= 0) {
+                        $rollo->update(['cliente_id' => $orden->cliente_id]);
+                    }
                 }
             }
 
@@ -392,52 +402,29 @@ class OrdenVentaService
     }
 
     /**
-     * Traduce las líneas del pedido —que están en metros— a líneas de nota de
-     * venta, que van en unidades de la presentación porque así se descuenta
-     * el stock.
+     * Traduce las líneas del pedido a líneas de nota de venta.
+     *
+     * La nota se lleva la cantidad tal como se pidió, en la unidad de su
+     * presentación: es lo que descuenta el stock y lo que ve el cliente.
      *
      * @return list<array<string, mixed>>
      */
     private function detallesParaNota(OrdenVenta $orden): array
     {
-        return $orden->detalles->map(function ($detalle) {
-            $producto = $detalle->rollo?->producto;
-
-            // Desde ahora la presentación es obligatoria al crear el pedido;
-            // los que se guardaron antes de esa regla caen en la del metro,
-            // que es como se vende la tela por defecto.
-            $presentacion = $detalle->presentacion ?? $producto?->presentaciones
-                ->first(fn ($p) => strtolower($p->unidadBase?->abreviatura ?? '') === 'm');
-
-            if (! $presentacion) {
-                throw new \DomainException(
-                    "El rollo {$detalle->rollo?->codigo} no tiene presentación de venta: no se puede facturar."
-                );
-            }
-
-            // metros → unidad base (cm) → unidades de la presentación.
-            $base = (float) $detalle->metros * ($producto?->factorBasePorMetro() ?? 1);
-            $factor = (float) ($presentacion?->factor_conversion ?: 1);
-            $cantidad = round($base / $factor, 2);
-
-            return [
-                'producto_presentacion_id' => $presentacion->id,
-                'rollo_id' => $detalle->rollo_id,
-                'cantidad' => $cantidad,
-                // El precio del pedido es por metro; en la nota va por unidad
-                // de presentación, para que el subtotal siga cuadrando.
-                'precio_unitario' => $cantidad > 0 ? round((float) $detalle->subtotal / $cantidad, 2) : 0,
-                'descuento' => (float) $detalle->descuento,
-                'subtotal' => (float) $detalle->subtotal,
-            ];
-        })->all();
+        return $orden->detalles->map(fn ($linea) => [
+            'producto_presentacion_id' => $linea->producto_presentacion_id,
+            // Un rollo por línea no cabe: la nota guarda el primero como
+            // referencia y la trazabilidad fina vive en el pedido.
+            'rollo_id' => $linea->rollos->first()?->rollo_id,
+            'cantidad' => (float) $linea->cantidad,
+            'precio_unitario' => (float) $linea->precio_unitario,
+            'descuento' => (float) $linea->descuento,
+            'subtotal' => (float) $linea->subtotal,
+        ])->all();
     }
 
     /**
-     * Anula el pedido y devuelve los rollos al stock disponible.
-     *
-     * Un pedido facturado ya no se anula por aquí: eso se hace anulando la
-     * nota de venta, que es la que movió el inventario y la plata.
+     * Anula el pedido y devuelve al stock los rollos que se hubieran asignado.
      */
     public function anular(OrdenVenta $orden, string $motivo): OrdenVenta
     {
@@ -459,30 +446,41 @@ class OrdenVentaService
 
     /* ------------------------------------------------------------------ */
 
-    /** Devuelve los rollos del pedido a disponible. */
+    /** Los rollos que el almacén asignó a este pedido. */
+    private function rollosDe(OrdenVenta $orden)
+    {
+        return $orden->loadMissing('detalles.rollos.rollo')
+            ->detalles
+            ->flatMap(fn ($d) => $d->rollos->pluck('rollo'))
+            ->filter();
+    }
+
+    /** Suelta los rollos asignados y borra la asignación. */
     private function liberarRollos(OrdenVenta $orden, string $tipo, ?string $observacion = null): void
     {
-        $orden->load('detalles.rollo');
+        $orden->load('detalles.rollos.rollo');
 
-        foreach ($orden->detalles as $detalle) {
-            if (! $detalle->rollo) {
-                continue;
+        foreach ($orden->detalles as $linea) {
+            foreach ($linea->rollos as $asignado) {
+                if ($asignado->rollo) {
+                    // Un rollo agotado no vuelve a disponible: ya no queda tela.
+                    $destino = (float) $asignado->rollo->metros_actual > 0
+                        ? Rollo::DISPONIBLE
+                        : Rollo::AGOTADO;
+
+                    $this->rollos->cambiarEstado(
+                        $asignado->rollo,
+                        $destino,
+                        $tipo,
+                        'orden_venta',
+                        $orden->id,
+                        null,
+                        $observacion,
+                    );
+                }
+
+                $asignado->delete();
             }
-
-            // Un rollo agotado no vuelve a disponible: ya no queda tela.
-            $destino = (float) $detalle->rollo->metros_actual > 0
-                ? Rollo::DISPONIBLE
-                : Rollo::AGOTADO;
-
-            $this->rollos->cambiarEstado(
-                $detalle->rollo,
-                $destino,
-                $tipo,
-                'orden_venta',
-                $orden->id,
-                null,
-                $observacion,
-            );
         }
     }
 
@@ -491,7 +489,6 @@ class OrdenVentaService
     {
         return [
             'cliente_id' => $data['cliente_id'] ?? null,
-            'almacen_id' => $data['almacen_id'],
             'vendedor_id' => $data['vendedor_id'],
             'fecha_emision' => $data['fecha_emision'],
             'fecha_entrega' => $data['fecha_entrega'] ?? null,
@@ -503,31 +500,46 @@ class OrdenVentaService
     /**
      * Reescribe las líneas y recalcula los totales.
      *
-     * @param  list<array{rollo_id: int, metros: float, precio_unitario?: float, descuento?: float, producto_presentacion_id?: int|null}>  $detalles
+     * La cantidad viene en unidades de la presentación y se guarda también en
+     * metros: es la unidad en la que se miden los rollos y en la que se
+     * comprueba después si la línea quedó cubierta.
+     *
+     * @param  list<array{producto_presentacion_id: int, cantidad: float, precio_unitario?: float, descuento?: float, descripcion?: string}>  $detalles
      */
     private function sincronizarDetalles(OrdenVenta $orden, array $detalles): void
     {
         $orden->detalles()->delete();
 
+        $presentaciones = ProductoPresentacion::with('producto.presentaciones.unidadBase')
+            ->whereIn('id', collect($detalles)->pluck('producto_presentacion_id'))
+            ->get()
+            ->keyBy('id');
+
         $subtotal = 0;
         $descuentos = 0;
 
         foreach ($detalles as $linea) {
-            $metros = round((float) $linea['metros'], 2);
+            $presentacion = $presentaciones[$linea['producto_presentacion_id']] ?? null;
+            if (! $presentacion) {
+                continue;
+            }
+
+            $cantidad = round((float) $linea['cantidad'], 2);
             $precio = round((float) ($linea['precio_unitario'] ?? 0), 2);
             $descuento = round((float) ($linea['descuento'] ?? 0), 2);
-            $importe = round($metros * $precio - $descuento, 2);
+            $importe = round($cantidad * $precio - $descuento, 2);
 
             $orden->detalles()->create([
-                'rollo_id' => $linea['rollo_id'],
-                'producto_presentacion_id' => $linea['producto_presentacion_id'] ?? null,
-                'metros' => $metros,
+                'producto_presentacion_id' => $presentacion->id,
+                'cantidad' => $cantidad,
+                'descripcion' => $linea['descripcion'] ?? null,
+                'metros' => $this->aMetros($presentacion, $cantidad),
                 'precio_unitario' => $precio,
                 'descuento' => $descuento,
                 'subtotal' => $importe,
             ]);
 
-            $subtotal += $metros * $precio;
+            $subtotal += $cantidad * $precio;
             $descuentos += $descuento;
         }
 
@@ -536,6 +548,20 @@ class OrdenVentaService
             'descuento_total' => round($descuentos, 2),
             'total' => round($subtotal - $descuentos, 2),
         ]);
+    }
+
+    /**
+     * Cuántos metros son esa cantidad en esa presentación.
+     *
+     * Un "Rollo 50 m" son 50 metros; un "Metro", uno. Se pasa por la unidad
+     * base del producto, que es donde ambos factores están expresados.
+     */
+    private function aMetros(ProductoPresentacion $presentacion, float $cantidad): float
+    {
+        $basePorMetro = max((float) ($presentacion->producto?->factorBasePorMetro() ?? 1), 0.0001);
+        $factor = (float) ($presentacion->factor_conversion ?: 1);
+
+        return round($cantidad * $factor / $basePorMetro, 2);
     }
 
     /** Correlativo del documento, reutilizando el contador del sistema. */
@@ -568,7 +594,8 @@ class OrdenVentaService
     {
         return $orden->load([
             'cliente', 'almacen', 'vendedor',
-            'detalles.rollo.producto', 'detalles.rollo.color', 'detalles.presentacion',
+            'detalles.presentacion.producto',
+            'detalles.rollos.rollo.color',
         ]);
     }
 }

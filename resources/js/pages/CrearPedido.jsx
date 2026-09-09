@@ -1,96 +1,112 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Plus, Save, Search, Trash2, X } from 'lucide-react';
+import { ArrowLeft, ClipboardList, Plus, Trash2 } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
-import PageHeader from '../components/PageHeader';
-import { Alert, Badge, Button, DataTable, Input, Modal, Select, Spinner } from '../components/ui';
+import { Alert, Button, Input, SearchSelect, Select, Spinner } from '../components/ui';
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
 const money = (n) =>
     new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(n) || 0);
 
+const hoy = () => new Date().toISOString().slice(0, 10);
+
 /**
- * Alta y edición del pedido.
+ * Alta y edición del pedido: lo que pide el cliente.
  *
- * Se arma eligiendo rollos concretos, no cantidades: el cliente compra "los
- * rollos 001 al 005 del negro", y por eso el almacenero sabe después cuáles
- * bajar del rack.
+ * Se pide por producto y cantidad —"120 metros de Polinán negro"— y no por
+ * rollos concretos: el vendedor no puede saber qué piezas hay en el rack ni en
+ * qué almacén están. Eso lo resuelve el almacenero al preparar el pedido,
+ * escaneando los rollos con los que lo cubre.
  *
- * Solo se puede editar mientras el pedido es borrador; después ya hay rollos
- * comprometidos y el almacén trabajando sobre ellos.
+ * Por lo mismo aquí no se elige almacén.
  */
 export default function CrearPedido() {
     const { id } = useParams();
     const navigate = useNavigate();
     const toast = useToast();
-    const { user: usuario } = useAuth();
+    const { user } = useAuth();
 
     const [clientes, setClientes] = useState([]);
-    const [almacenes, setAlmacenes] = useState([]);
+    const [productos, setProductos] = useState([]);
+    /** Stock disponible por producto, en unidad base. */
+    const [stockPorProducto, setStockPorProducto] = useState({});
     const [cargando, setCargando] = useState(true);
     const [guardando, setGuardando] = useState(false);
     const [errores, setErrores] = useState({});
 
     const [cabecera, setCabecera] = useState({
         cliente_id: '',
-        almacen_id: '',
-        fecha_emision: new Date().toISOString().slice(0, 10),
+        fecha_emision: hoy(),
         fecha_entrega: '',
         observaciones: '',
     });
 
-    /** Líneas del pedido: un rollo cada una. */
+    /** Líneas ya agregadas al pedido. */
     const [lineas, setLineas] = useState([]);
-    const [pickerAbierto, setPickerAbierto] = useState(false);
+
+    /** El renglón de arriba, donde se arma la línea antes de agregarla. */
+    const [nueva, setNueva] = useState({
+        producto_id: '',
+        producto_presentacion_id: '',
+        descripcion: '',
+        cantidad: '',
+        precio_unitario: '',
+    });
 
     /* ------------------------------ carga ------------------------------ */
 
     useEffect(() => {
         (async () => {
             try {
-                const [clientesRes, almacenesRes] = await Promise.all([
+                const [clientesRes, productosRes, existenciasRes] = await Promise.all([
                     api.get('/clientes'),
-                    api.get('/almacenes'),
+                    api.get('/productos', { params: { per_page: 500 } }),
+                    api.get('/existencias'),
                 ]);
+
                 setClientes(asList(clientesRes));
-                const alms = asList(almacenesRes);
-                setAlmacenes(alms);
+                setProductos(asList(productosRes));
+
+                // El stock se suma de todos los almacenes: el vendedor no elige
+                // desde cuál sale, así que lo que le importa es si hay o no.
+                const porProducto = {};
+                for (const fila of asList(existenciasRes)) {
+                    const pid = fila.producto?.id ?? fila.producto_id;
+                    if (!pid) continue;
+                    porProducto[pid] = (porProducto[pid] ?? 0) + Number(fila.stock_actual || 0);
+                }
+                setStockPorProducto(porProducto);
 
                 if (id) {
                     const { data } = await api.get(`/ordenes-venta/${id}`);
                     const p = data?.data ?? data;
+
                     if (!p.editable) {
                         toast.error('Este pedido ya no es editable.');
                         navigate('/pedidos');
                         return;
                     }
+
                     setCabecera({
                         cliente_id: p.cliente_id ? String(p.cliente_id) : '',
-                        almacen_id: String(p.almacen_id),
                         fecha_emision: p.fecha_emision,
                         fecha_entrega: p.fecha_entrega ?? '',
                         observaciones: p.observaciones ?? '',
                     });
+
                     setLineas(
                         (p.detalles ?? []).map((d) => ({
-                            rollo_id: d.rollo_id,
-                            codigo: d.rollo?.codigo,
-                            color: d.rollo?.color?.nombre,
-                            producto_id: d.rollo?.producto_id,
-                            disponible: Number(d.rollo?.metros_actual ?? 0),
-                            producto_presentacion_id: d.producto_presentacion_id
-                                ? String(d.producto_presentacion_id)
-                                : '',
-                            metros: String(d.metros),
+                            producto_presentacion_id: String(d.producto_presentacion_id),
+                            producto: d.producto,
+                            presentacion: d.presentacion,
+                            descripcion: d.descripcion ?? '',
+                            cantidad: String(d.cantidad),
                             precio_unitario: String(d.precio_unitario),
-                            presentaciones: [],
                         })),
                     );
-                } else if (alms.length === 1) {
-                    setCabecera((prev) => ({ ...prev, almacen_id: String(alms[0].id) }));
                 }
             } catch {
                 toast.error('No se pudieron cargar los datos del pedido.');
@@ -100,66 +116,91 @@ export default function CrearPedido() {
         })();
     }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    /** Las presentaciones de venta de cada tela, para el select de la línea. */
-    const cargarPresentaciones = useCallback(async (productoId) => {
-        const { data } = await api.get(`/productos/${productoId}/presentaciones`);
-        return asList({ data }).filter((p) => p.activo !== false);
-    }, []);
+    /* ------------------------------ renglón ------------------------------ */
 
-    // Se completan las presentaciones de las líneas que aún no las tienen.
+    const producto = useMemo(
+        () => productos.find((p) => String(p.id) === String(nueva.producto_id)) ?? null,
+        [productos, nueva.producto_id],
+    );
+
+    const presentaciones = useMemo(
+        () => (producto?.presentaciones ?? []).filter((p) => p.activo !== false),
+        [producto],
+    );
+
+    const presentacion = useMemo(
+        () => presentaciones.find((p) => String(p.id) === String(nueva.producto_presentacion_id)) ?? null,
+        [presentaciones, nueva.producto_presentacion_id],
+    );
+
+    /** El stock del producto, expresado en la unidad elegida. */
+    const stockEnUnidad = useMemo(() => {
+        if (!producto) return null;
+        const base = stockPorProducto[producto.id] ?? 0;
+        const factor = Number(presentacion?.factor_conversion) || 1;
+        return base / factor;
+    }, [producto, presentacion, stockPorProducto]);
+
+    /**
+     * Al elegir producto se propone el formato en que se vende normalmente.
+     *
+     * El metro si la tela lo tiene, porque es como se pide la tela; si no, el
+     * más pequeño. Proponer el menor a secas dejaba "Retazo (saldo)", que es
+     * un formato para restos y nadie pide así.
+     */
     useEffect(() => {
-        const pendientes = [...new Set(
-            lineas.filter((l) => !l.presentaciones?.length && l.producto_id).map((l) => l.producto_id),
-        )];
-        if (!pendientes.length) return;
+        if (!producto) return;
 
-        Promise.all(pendientes.map((pid) => cargarPresentaciones(pid).then((ps) => [pid, ps])))
-            .then((pares) => {
-                const mapa = Object.fromEntries(pares);
-                setLineas((prev) =>
-                    prev.map((l) =>
-                        mapa[l.producto_id]
-                            ? {
-                                  ...l,
-                                  presentaciones: mapa[l.producto_id],
-                                  // Por defecto se vende al metro, que es lo habitual.
-                                  producto_presentacion_id:
-                                      l.producto_presentacion_id ||
-                                      String(
-                                          mapa[l.producto_id].find((p) =>
-                                              (p.unidad_base?.abreviatura ?? '').toLowerCase() === 'm',
-                                          )?.id ?? mapa[l.producto_id][0]?.id ?? '',
-                                      ),
-                              }
-                            : l,
-                    ),
-                );
-            })
-            .catch(() => {});
-    }, [lineas, cargarPresentaciones]);
+        const activas = (producto.presentaciones ?? []).filter((p) => p.activo !== false);
+        const porMetro = activas.find(
+            (p) => (p.unidad_base?.abreviatura ?? '').toLowerCase() === 'm',
+        );
+        const menor = [...activas].sort(
+            (a, b) => (Number(a.factor_conversion) || 1) - (Number(b.factor_conversion) || 1),
+        )[0];
+        const elegida = porMetro ?? menor;
 
-    /* ------------------------------ líneas ------------------------------ */
+        setNueva((prev) => ({
+            ...prev,
+            producto_presentacion_id: elegida ? String(elegida.id) : '',
+            precio_unitario: elegida?.precio_venta != null ? String(elegida.precio_venta) : '',
+        }));
+    }, [producto]);
 
-    const agregarRollos = (rollos) => {
-        setLineas((prev) => {
-            const yaEstan = new Set(prev.map((l) => l.rollo_id));
-            const nuevas = rollos
-                .filter((r) => !yaEstan.has(r.id))
-                .map((r) => ({
-                    rollo_id: r.id,
-                    codigo: r.codigo,
-                    color: r.color?.nombre,
-                    producto_id: r.producto_id,
-                    disponible: Number(r.metros_actual),
-                    producto_presentacion_id: '',
-                    // Por defecto se lleva el rollo entero.
-                    metros: String(r.metros_actual),
-                    precio_unitario: '',
-                    presentaciones: [],
-                }));
-            return [...prev, ...nuevas];
+    // Cambiar de formato cambia el precio sugerido.
+    useEffect(() => {
+        if (!presentacion) return;
+        setNueva((prev) => ({
+            ...prev,
+            precio_unitario: presentacion.precio_venta != null ? String(presentacion.precio_venta) : prev.precio_unitario,
+        }));
+    }, [presentacion?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const puedeAgregar =
+        nueva.producto_presentacion_id && Number(nueva.cantidad) > 0 && Number(nueva.precio_unitario) >= 0;
+
+    const agregar = () => {
+        if (!puedeAgregar) return;
+
+        setLineas((prev) => [
+            ...prev,
+            {
+                producto_presentacion_id: nueva.producto_presentacion_id,
+                producto: producto?.nombre,
+                presentacion: presentacion?.nombre,
+                descripcion: nueva.descripcion.trim(),
+                cantidad: nueva.cantidad,
+                precio_unitario: nueva.precio_unitario,
+            },
+        ]);
+
+        setNueva({
+            producto_id: '',
+            producto_presentacion_id: '',
+            descripcion: '',
+            cantidad: '',
+            precio_unitario: '',
         });
-        setPickerAbierto(false);
     };
 
     const cambiar = (i, campo, valor) =>
@@ -167,31 +208,28 @@ export default function CrearPedido() {
 
     const quitar = (i) => setLineas((prev) => prev.filter((_, j) => j !== i));
 
-    const totales = useMemo(() => {
-        const metros = lineas.reduce((s, l) => s + (Number(l.metros) || 0), 0);
-        const total = lineas.reduce(
-            (s, l) => s + (Number(l.metros) || 0) * (Number(l.precio_unitario) || 0),
-            0,
-        );
-        return { rollos: lineas.length, metros, total };
-    }, [lineas]);
+    const total = useMemo(
+        () => lineas.reduce((s, l) => s + (Number(l.cantidad) || 0) * (Number(l.precio_unitario) || 0), 0),
+        [lineas],
+    );
 
     /* ------------------------------ guardar ------------------------------ */
 
     const guardar = async () => {
         setGuardando(true);
         setErrores({});
+
         try {
             const cuerpo = {
                 ...cabecera,
                 cliente_id: cabecera.cliente_id || null,
                 fecha_entrega: cabecera.fecha_entrega || null,
-                vendedor_id: usuario?.id,
+                vendedor_id: user?.id,
                 detalles: lineas.map((l) => ({
-                    rollo_id: l.rollo_id,
-                    producto_presentacion_id: l.producto_presentacion_id || null,
-                    metros: Number(l.metros) || 0,
+                    producto_presentacion_id: Number(l.producto_presentacion_id),
+                    cantidad: Number(l.cantidad) || 0,
                     precio_unitario: Number(l.precio_unitario) || 0,
+                    descripcion: l.descripcion || null,
                 })),
             };
 
@@ -200,7 +238,7 @@ export default function CrearPedido() {
                 toast.success('Pedido actualizado.');
             } else {
                 await api.post('/ordenes-venta', cuerpo);
-                toast.success('Pedido creado. Envíalo al almacén para reservar los rollos.');
+                toast.success('Pedido creado. Solicítalo al almacén para que lo preparen.');
             }
             navigate('/pedidos');
         } catch (err) {
@@ -229,343 +267,245 @@ export default function CrearPedido() {
 
     return (
         <Layout>
-            <PageHeader
-                title={id ? 'Editar pedido' : 'Nuevo pedido'}
-                description="Elige los rollos que se lleva el cliente; el stock no se mueve todavía"
-                actions={
-                    <div className="flex items-center gap-2">
-                        <Button variant="secondary" onClick={() => navigate('/pedidos')}>
-                            Cancelar
-                        </Button>
-                        <Button
-                            loading={guardando}
-                            disabled={!lineas.length || !cabecera.almacen_id}
-                            onClick={guardar}
-                        >
-                            <Save className="h-4 w-4" />
-                            {id ? 'Guardar cambios' : 'Crear pedido'}
-                        </Button>
+            <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-100 text-primary-700">
+                        <ClipboardList className="h-5 w-5" />
+                    </span>
+                    <div>
+                        <h1 className="text-xl font-bold text-warm-900">
+                            {id ? 'Editar pedido' : 'Nuevo pedido'}
+                        </h1>
+                        <p className="text-sm text-warm-500">
+                            Lo que pide el cliente. El almacén decide después con qué rollos lo cubre.
+                        </p>
                     </div>
-                }
-            />
-
-            <div className="mb-4 grid gap-4 rounded-lg border border-edge bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-4">
-                <Select
-                    label="Cliente"
-                    value={cabecera.cliente_id}
-                    onChange={(e) => setCabecera((p) => ({ ...p, cliente_id: e.target.value }))}
-                    options={[
-                        { value: '', label: 'Cliente varios' },
-                        ...clientes.map((c) => ({ value: String(c.id), label: c.nombre })),
-                    ]}
-                />
-                <Select
-                    label="Almacén"
-                    value={cabecera.almacen_id}
-                    onChange={(e) => setCabecera((p) => ({ ...p, almacen_id: e.target.value }))}
-                    error={errores.almacen_id?.[0]}
-                    options={[
-                        { value: '', label: 'Elige un almacén…' },
-                        ...almacenes.map((a) => ({ value: String(a.id), label: a.nombre })),
-                    ]}
-                />
-                <Input
-                    label="Fecha"
-                    type="date"
-                    value={cabecera.fecha_emision}
-                    onChange={(e) => setCabecera((p) => ({ ...p, fecha_emision: e.target.value }))}
-                    error={errores.fecha_emision?.[0]}
-                />
-                <Input
-                    label="Entrega"
-                    type="date"
-                    value={cabecera.fecha_entrega}
-                    onChange={(e) => setCabecera((p) => ({ ...p, fecha_entrega: e.target.value }))}
-                    error={errores.fecha_entrega?.[0]}
-                />
+                </div>
+                <Button variant="secondary" onClick={() => navigate('/pedidos')}>
+                    <ArrowLeft className="h-4 w-4" />
+                    Volver
+                </Button>
             </div>
 
-            <div className="rounded-lg border border-edge bg-white shadow-sm">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-edge px-4 py-3">
-                    <h2 className="text-sm font-semibold text-warm-900">
-                        Rollos del pedido
-                        <span className="ml-2 font-normal text-warm-500">
-                            {totales.rollos} rollos · {num(totales.metros)} m
-                        </span>
-                    </h2>
-                    <Button
-                        size="sm"
-                        disabled={!cabecera.almacen_id}
-                        onClick={() => setPickerAbierto(true)}
-                    >
-                        <Plus className="h-4 w-4" />
-                        Agregar rollos
-                    </Button>
-                </div>
-
-                {!cabecera.almacen_id && (
-                    <div className="px-4 py-3">
-                        <Alert variant="info">
-                            Elige primero el almacén: solo se pueden pedir rollos que estén ahí.
-                        </Alert>
-                    </div>
-                )}
-
-                {lineas.length === 0 ? (
-                    <p className="px-4 py-12 text-center text-sm text-warm-400">
-                        Todavía no hay rollos en este pedido.
+            <div className="grid gap-4 lg:grid-cols-[1fr_22rem] lg:items-start">
+                {/* ── Productos ───────────────────────────────────────── */}
+                <section className="rounded-xl border border-edge bg-white p-5 shadow-sm">
+                    <h2 className="text-base font-semibold text-warm-900">Productos</h2>
+                    <p className="mb-4 text-sm text-warm-500">
+                        {lineas.length} producto{lineas.length === 1 ? '' : 's'} agregado
+                        {lineas.length === 1 ? '' : 's'}
                     </p>
-                ) : (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
+
+                    <div className="space-y-4">
+                        <SearchSelect
+                            label="Buscar producto"
+                            placeholder="Nombre o código…"
+                            value={nueva.producto_id}
+                            onChange={(v) => setNueva((prev) => ({ ...prev, producto_id: v }))}
+                            options={productos.map((p) => ({
+                                value: String(p.id),
+                                label: p.nombre,
+                                keywords: p.codigo,
+                            }))}
+                        />
+
+                        <Input
+                            label="Descripción"
+                            placeholder="Detalle para esta línea (opcional)"
+                            value={nueva.descripcion}
+                            onChange={(e) => setNueva((prev) => ({ ...prev, descripcion: e.target.value }))}
+                        />
+
+                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                            <Input
+                                label="Stock"
+                                value={
+                                    producto
+                                        ? `${num(stockEnUnidad)} ${presentacion?.nombre ?? ''}`.trim()
+                                        : ''
+                                }
+                                readOnly
+                                disabled
+                            />
+                            <Select
+                                label="Unidad"
+                                value={nueva.producto_presentacion_id}
+                                onChange={(e) =>
+                                    setNueva((prev) => ({ ...prev, producto_presentacion_id: e.target.value }))
+                                }
+                                options={[
+                                    { value: '', label: producto ? 'Elegir' : '—' },
+                                    ...presentaciones.map((p) => ({ value: String(p.id), label: p.nombre })),
+                                ]}
+                            />
+                            <Input
+                                label="Cantidad"
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={nueva.cantidad}
+                                onChange={(e) => setNueva((prev) => ({ ...prev, cantidad: e.target.value }))}
+                            />
+                            <Input
+                                label="Precio de venta"
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                placeholder="0.00"
+                                value={nueva.precio_unitario}
+                                onChange={(e) =>
+                                    setNueva((prev) => ({ ...prev, precio_unitario: e.target.value }))
+                                }
+                            />
+                        </div>
+
+                        <Button onClick={agregar} disabled={!puedeAgregar}>
+                            <Plus className="h-4 w-4" />
+                            Agregar producto
+                        </Button>
+                    </div>
+
+                    {/* Líneas del pedido */}
+                    <div className="mt-5 overflow-x-auto rounded-lg border border-edge">
+                        <table className="w-full min-w-[640px] text-sm">
                             <thead>
-                                <tr className="border-b border-edge text-left text-xs uppercase tracking-wide text-warm-500">
-                                    <th className="px-4 py-2 font-medium">Rollo</th>
-                                    <th className="px-4 py-2 font-medium">Color</th>
-                                    <th className="px-4 py-2 font-medium">Se vende como</th>
-                                    <th className="px-4 py-2 text-right font-medium">Metros</th>
-                                    <th className="px-4 py-2 text-right font-medium">P. por metro</th>
-                                    <th className="px-4 py-2 text-right font-medium">Importe</th>
-                                    <th className="w-12" />
+                                <tr className="bg-primary-600 text-left text-xs font-semibold uppercase tracking-wide text-white">
+                                    <th className="px-3 py-2">Producto</th>
+                                    <th className="px-3 py-2">Presentación</th>
+                                    <th className="px-3 py-2 text-right">Cantidad</th>
+                                    <th className="px-3 py-2 text-right">Precio de venta</th>
+                                    <th className="px-3 py-2 text-right">Subtotal</th>
+                                    <th className="w-14 px-3 py-2 text-center">Acciones</th>
                                 </tr>
                             </thead>
-                            <tbody>
-                                {lineas.map((l, i) => {
-                                    const parcial = Number(l.metros) < l.disponible;
-                                    const errorLinea =
-                                        errores[`detalles.${i}.metros`]?.[0] ??
-                                        errores[`detalles.${i}.rollo_id`]?.[0] ??
-                                        errores[`detalles.${i}.producto_presentacion_id`]?.[0];
+                            <tbody className="divide-y divide-gray-100">
+                                {lineas.length === 0 && (
+                                    <tr>
+                                        <td colSpan={6} className="px-3 py-10 text-center text-warm-400">
+                                            Agrega productos con el buscador de arriba.
+                                        </td>
+                                    </tr>
+                                )}
 
-                                    return (
-                                        <tr key={l.rollo_id} className="border-b border-gray-100 last:border-0">
-                                            <td className="px-4 py-2">
-                                                <span className="font-medium text-warm-900">{l.codigo}</span>
-                                                <span className="ml-2 text-xs text-warm-400">
-                                                    disp. {num(l.disponible)} m
+                                {lineas.map((l, i) => (
+                                    <tr key={i}>
+                                        <td className="px-3 py-2">
+                                            <span className="font-medium text-warm-900">{l.producto}</span>
+                                            {l.descripcion && (
+                                                <span className="block text-xs text-warm-500">{l.descripcion}</span>
+                                            )}
+                                            {errores[`detalles.${i}.cantidad`] && (
+                                                <span className="block text-xs text-red-600">
+                                                    {errores[`detalles.${i}.cantidad`][0]}
                                                 </span>
-                                                {parcial && <Badge variant="amber" className="ml-2">Se corta</Badge>}
-                                                {errorLinea && (
-                                                    <p className="mt-0.5 text-xs text-red-600">{errorLinea}</p>
-                                                )}
-                                            </td>
-                                            <td className="px-4 py-2 text-warm-600">{l.color ?? '—'}</td>
-                                            <td className="px-4 py-2">
-                                                <Select
-                                                    value={l.producto_presentacion_id}
-                                                    onChange={(e) => cambiar(i, 'producto_presentacion_id', e.target.value)}
-                                                    options={[
-                                                        { value: '', label: '—' },
-                                                        ...(l.presentaciones ?? []).map((p) => ({
-                                                            value: String(p.id),
-                                                            label: p.nombre,
-                                                        })),
-                                                    ]}
-                                                    className="w-44"
-                                                />
-                                            </td>
-                                            <td className="px-4 py-2 text-right">
-                                                <Input
-                                                    type="number"
-                                                    step="0.01"
-                                                    max={l.disponible}
-                                                    value={l.metros}
-                                                    onChange={(e) => cambiar(i, 'metros', e.target.value)}
-                                                    className="w-28 text-right"
-                                                />
-                                            </td>
-                                            <td className="px-4 py-2 text-right">
-                                                <Input
-                                                    type="number"
-                                                    step="0.01"
-                                                    value={l.precio_unitario}
-                                                    onChange={(e) => cambiar(i, 'precio_unitario', e.target.value)}
-                                                    className="w-28 text-right"
-                                                />
-                                            </td>
-                                            <td className="px-4 py-2 text-right font-medium">
-                                                {money((Number(l.metros) || 0) * (Number(l.precio_unitario) || 0))}
-                                            </td>
-                                            <td className="px-2 py-2 text-right">
-                                                <button
-                                                    aria-label="Quitar"
-                                                    onClick={() => quitar(i)}
-                                                    className="rounded-md p-1.5 text-red-600 transition hover:bg-red-50"
-                                                >
-                                                    <Trash2 className="h-4 w-4" />
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
+                                            )}
+                                        </td>
+                                        <td className="px-3 py-2 text-warm-600">{l.presentacion}</td>
+                                        <td className="px-3 py-2 text-right">
+                                            <Input
+                                                type="number"
+                                                step="0.01"
+                                                min="0"
+                                                value={l.cantidad}
+                                                onChange={(e) => cambiar(i, 'cantidad', e.target.value)}
+                                                className="w-24 text-right"
+                                            />
+                                        </td>
+                                        <td className="px-3 py-2 text-right">
+                                            <Input
+                                                type="number"
+                                                step="0.01"
+                                                min="0"
+                                                value={l.precio_unitario}
+                                                onChange={(e) => cambiar(i, 'precio_unitario', e.target.value)}
+                                                className="w-28 text-right"
+                                            />
+                                        </td>
+                                        <td className="px-3 py-2 text-right font-medium text-warm-900">
+                                            {money((Number(l.cantidad) || 0) * (Number(l.precio_unitario) || 0))}
+                                        </td>
+                                        <td className="px-3 py-2 text-center">
+                                            <button
+                                                type="button"
+                                                aria-label="Quitar"
+                                                onClick={() => quitar(i)}
+                                                className="rounded-md p-1.5 text-red-600 transition hover:bg-red-50"
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
                             </tbody>
                         </table>
                     </div>
-                )}
+                </section>
 
-                {lineas.length > 0 && (
-                    <div className="flex flex-wrap items-center justify-end gap-6 border-t border-edge px-4 py-3">
-                        <span className="text-sm text-warm-600">
-                            {totales.rollos} rollos · <strong>{num(totales.metros)} m</strong>
-                        </span>
-                        <span className="text-base font-semibold text-warm-900">
-                            Total: {money(totales.total)}
-                        </span>
-                    </div>
-                )}
-            </div>
+                {/* ── Pedido y resumen ────────────────────────────────── */}
+                <div className="space-y-4">
+                    <section className="rounded-xl border border-edge bg-white p-5 shadow-sm">
+                        <h2 className="mb-4 text-base font-semibold text-warm-900">Pedido</h2>
 
-            <PickerRollos
-                open={pickerAbierto}
-                onClose={() => setPickerAbierto(false)}
-                almacenId={cabecera.almacen_id}
-                yaElegidos={lineas.map((l) => l.rollo_id)}
-                onAgregar={agregarRollos}
-            />
-        </Layout>
-    );
-}
+                        <div className="space-y-4">
+                            <SearchSelect
+                                label="Cliente"
+                                placeholder="Buscar cliente…"
+                                value={cabecera.cliente_id}
+                                onChange={(v) => setCabecera((p) => ({ ...p, cliente_id: v }))}
+                                options={clientes.map((c) => ({
+                                    value: String(c.id),
+                                    label: c.nombre,
+                                    keywords: c.numero_documento,
+                                }))}
+                            />
+                            <Input
+                                label="Fecha"
+                                type="date"
+                                value={cabecera.fecha_emision}
+                                onChange={(e) => setCabecera((p) => ({ ...p, fecha_emision: e.target.value }))}
+                                error={errores.fecha_emision?.[0]}
+                            />
+                            <Input
+                                label="Fecha de entrega"
+                                type="date"
+                                value={cabecera.fecha_entrega}
+                                onChange={(e) => setCabecera((p) => ({ ...p, fecha_entrega: e.target.value }))}
+                                error={errores.fecha_entrega?.[0]}
+                            />
+                            <Input
+                                label="Observación"
+                                placeholder="Referencia…"
+                                value={cabecera.observaciones}
+                                onChange={(e) => setCabecera((p) => ({ ...p, observaciones: e.target.value }))}
+                            />
+                        </div>
 
-/* ---------------------------------------------------------------------- */
+                        <Alert variant="info" className="mt-4">
+                            El almacén no se elige aquí: lo define el almacenero al preparar el pedido,
+                            según dónde estén los rollos que use.
+                        </Alert>
+                    </section>
 
-/**
- * Selector de rollos disponibles, con la búsqueda por rango de metraje que
- * pide el cliente: "necesito un azul entre 50 y 70 metros".
- */
-function PickerRollos({ open, onClose, almacenId, yaElegidos, onAgregar }) {
-    const [rollos, setRollos] = useState([]);
-    const [cargando, setCargando] = useState(false);
-    const [marcados, setMarcados] = useState([]);
-    const [desde, setDesde] = useState('');
-    const [hasta, setHasta] = useState('');
+                    <section className="rounded-xl border border-edge bg-white p-5 shadow-sm">
+                        <h2 className="mb-3 text-base font-semibold text-warm-900">Resumen</h2>
+                        <div className="flex items-center justify-between">
+                            <span className="text-xs font-semibold uppercase tracking-wide text-warm-500">
+                                Total del pedido
+                            </span>
+                            <span className="text-2xl font-bold text-primary-600">{money(total)}</span>
+                        </div>
+                    </section>
 
-    const buscar = useCallback(async () => {
-        if (!open || !almacenId) return;
-        setCargando(true);
-        try {
-            const { data } = await api.get('/rollos', {
-                params: {
-                    almacen_id: almacenId,
-                    solo_disponibles: 1,
-                    metros_desde: desde || undefined,
-                    metros_hasta: hasta || undefined,
-                },
-            });
-            setRollos(asList({ data }).filter((r) => !yaElegidos.includes(r.id)));
-        } finally {
-            setCargando(false);
-        }
-    }, [open, almacenId, desde, hasta, yaElegidos]);
-
-    useEffect(() => {
-        buscar();
-    }, [buscar]);
-
-    useEffect(() => {
-        if (open) setMarcados([]);
-    }, [open]);
-
-    const alternar = (rollo) =>
-        setMarcados((prev) =>
-            prev.some((r) => r.id === rollo.id)
-                ? prev.filter((r) => r.id !== rollo.id)
-                : [...prev, rollo],
-        );
-
-    const columnas = [
-        {
-            key: 'marcado',
-            label: '',
-            searchable: false,
-            render: (row) => (
-                <input
-                    type="checkbox"
-                    checked={marcados.some((r) => r.id === row.id)}
-                    onChange={() => alternar(row)}
-                    // Sin esto el clic llega también a la fila y la marca se
-                    // alterna dos veces, quedando como estaba.
-                    onClick={(e) => e.stopPropagation()}
-                    className="h-4 w-4 rounded border-gray-300 accent-primary-600"
-                />
-            ),
-        },
-        { key: 'codigo', label: 'Rollo' },
-        { key: 'producto', label: 'Tela', render: (row) => row.producto?.nombre ?? '—' },
-        { key: 'color', label: 'Color', render: (row) => row.color?.nombre ?? '—' },
-        {
-            key: 'metros_actual',
-            label: 'Metros',
-            align: 'right',
-            searchable: false,
-            render: (row) => `${num(row.metros_actual)} m`,
-        },
-        { key: 'ubicacion', label: 'Ubicación' },
-    ];
-
-    return (
-        <Modal
-            open={open}
-            onClose={onClose}
-            title="Agregar rollos al pedido"
-            description="Solo aparecen los rollos disponibles de este almacén"
-            size="xl"
-            footer={
-                <>
-                    <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-                    <Button disabled={!marcados.length} onClick={() => onAgregar(marcados)}>
-                        Agregar {marcados.length || ''} rollos
-                    </Button>
-                </>
-            }
-        >
-            <div className="space-y-3">
-                <div className="flex flex-wrap items-end gap-3">
-                    <Input
-                        label="Metros desde"
-                        type="number"
-                        value={desde}
-                        onChange={(e) => setDesde(e.target.value)}
-                        placeholder="50"
-                        className="w-32"
-                    />
-                    <Input
-                        label="Metros hasta"
-                        type="number"
-                        value={hasta}
-                        onChange={(e) => setHasta(e.target.value)}
-                        placeholder="70"
-                        className="w-32"
-                    />
-                    {(desde || hasta) && (
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                                setDesde('');
-                                setHasta('');
-                            }}
-                        >
-                            <X className="h-4 w-4" />
-                            Limpiar
+                    <div className="flex justify-end gap-2">
+                        <Button variant="secondary" onClick={() => navigate('/pedidos')}>
+                            Cancelar
                         </Button>
-                    )}
-                    {marcados.length > 0 && (
-                        <span className="ml-auto text-sm text-warm-600">
-                            {marcados.length} rollos ·{' '}
-                            <strong>{num(marcados.reduce((s, r) => s + Number(r.metros_actual), 0))} m</strong>
-                        </span>
-                    )}
+                        <Button loading={guardando} disabled={!lineas.length} onClick={guardar}>
+                            {id ? 'Guardar cambios' : 'Registrar pedido'}
+                        </Button>
+                    </div>
                 </div>
-
-                <DataTable
-                    columns={columnas}
-                    rows={rollos}
-                    loading={cargando}
-                    searchPlaceholder="Buscar por código, tela o color..."
-                    onRowClick={alternar}
-                    dense
-                />
             </div>
-        </Modal>
+        </Layout>
     );
 }

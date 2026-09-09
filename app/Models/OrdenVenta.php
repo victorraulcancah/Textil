@@ -139,9 +139,21 @@ class OrdenVenta extends Model
         return $this->belongsTo(User::class, 'usuario_despacha_id');
     }
 
+    /** Lo que pidió el cliente: producto y cantidad, sin fijar rollos. */
     public function detalles()
     {
-        return $this->hasMany(OrdenVentaRollo::class);
+        return $this->hasMany(OrdenVentaDetalle::class);
+    }
+
+    /** Los rollos que el almacén fue asignando a esas líneas. */
+    public function rollosAsignados()
+    {
+        return $this->hasManyThrough(
+            OrdenVentaRollo::class,
+            OrdenVentaDetalle::class,
+            'orden_venta_id',
+            'orden_venta_detalle_id',
+        );
     }
 
     public function notaVenta()
@@ -160,15 +172,34 @@ class OrdenVenta extends Model
         return in_array($estado, self::TRANSICIONES[$this->estado] ?? [], true);
     }
 
-    /** Mientras es borrador se le pueden agregar y quitar rollos. */
+    /** Mientras es borrador se le pueden agregar y quitar líneas. */
     public function esEditable(): bool
     {
         return $this->estado === self::BORRADOR;
     }
 
-    /** ¿El almacenero ya escaneó todos los rollos del pedido? */
+    /**
+     * ¿Está cubierto todo lo que pidió el cliente?
+     *
+     * Ya no se cuentan rollos escaneados contra una lista fija: cada línea
+     * pide unos metros y el almacenero los va cubriendo con los rollos que
+     * encuentra. El pedido está listo cuando ninguna línea queda corta.
+     */
     public function estaVerificada(): bool
     {
-        return $this->detalles()->whereNull('escaneado_at')->doesntExist();
+        $lineas = $this->relationLoaded('detalles') ? $this->detalles : $this->detalles()->with('rollos')->get();
+
+        return $lineas->isNotEmpty() && $lineas->every(fn ($d) => $d->estaCubierta());
+    }
+
+    /** Metros pedidos y metros ya cubiertos, para las pantallas. */
+    public function avance(): array
+    {
+        $lineas = $this->relationLoaded('detalles') ? $this->detalles : $this->detalles()->with('rollos')->get();
+
+        return [
+            'pedidos' => round((float) $lineas->sum('metros'), 2),
+            'asignados' => round($lineas->sum(fn ($d) => $d->metrosAsignados()), 2),
+        ];
     }
 }

@@ -5,23 +5,23 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * Una línea del pedido: un rollo y los metros que se llevan de él.
+ * Un rollo que el almacén asignó a una línea del pedido.
  *
- * Si los metros son menos que el metraje del rollo se corta un pedazo y el
- * rollo sigue existiendo; si son todos, el rollo sale entero.
+ * Se crea cuando el almacenero lo escanea: hasta ese momento el pedido solo
+ * dice "150 metros de Polinán negro" y nadie sabe con qué piezas se cubrirán.
+ *
+ * `metros` es cuánto se toma de ese rollo para esta línea, que puede ser menos
+ * de lo que mide: si faltan 20 m y el rollo tiene 58, se cortan 20 y el resto
+ * vuelve al stock.
  */
 class OrdenVentaRollo extends Model
 {
     protected $table = 'orden_venta_rollos';
 
     protected $fillable = [
-        'orden_venta_id',
+        'orden_venta_detalle_id',
         'rollo_id',
-        'producto_presentacion_id',
         'metros',
-        'precio_unitario',
-        'descuento',
-        'subtotal',
         'escaneado_at',
         'usuario_escanea_id',
     ];
@@ -30,16 +30,13 @@ class OrdenVentaRollo extends Model
     {
         return [
             'metros' => 'decimal:2',
-            'precio_unitario' => 'decimal:2',
-            'descuento' => 'decimal:2',
-            'subtotal' => 'decimal:2',
             'escaneado_at' => 'datetime',
         ];
     }
 
-    public function ordenVenta()
+    public function detalle()
     {
-        return $this->belongsTo(OrdenVenta::class);
+        return $this->belongsTo(OrdenVentaDetalle::class, 'orden_venta_detalle_id');
     }
 
     public function rollo()
@@ -47,14 +44,14 @@ class OrdenVentaRollo extends Model
         return $this->belongsTo(Rollo::class);
     }
 
-    /** ¿Se lleva el rollo entero o solo un pedazo? */
-    public function esParcial(): bool
+    public function usuario()
     {
-        return (float) $this->metros < (float) $this->rollo?->metros_actual;
+        return $this->belongsTo(User::class, 'usuario_escanea_id');
     }
 
-    public function presentacion()
+    /** ¿Se corta el rollo o se lleva entero? */
+    public function esParcial(): bool
     {
-        return $this->belongsTo(ProductoPresentacion::class, 'producto_presentacion_id');
+        return (float) $this->metros < (float) ($this->rollo?->metros_actual ?? 0);
     }
 }

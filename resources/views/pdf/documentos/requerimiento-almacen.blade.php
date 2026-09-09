@@ -9,50 +9,51 @@
         :items="[
             'Pedido' => $orden->documento,
             'Cliente' => $orden->cliente?->nombre ?: 'Cliente varios',
-            'Almacén' => $orden->almacen?->nombre ?: '—',
             'Fecha' => optional($orden->fecha_preparacion ?? $orden->fecha_emision)->format('d/m/Y H:i'),
+            'Entrega' => optional($orden->fecha_entrega)->format('d/m/Y') ?: '—',
             'Solicita' => $orden->vendedor?->name ?: '—',
             'Prepara' => $orden->usuarioPrepara?->name ?: '—',
         ]" />
 
     {{-- Sin precios: al almacenero no le sirven y no tiene por qué verlos.
-         Ordenado por ubicación para recorrer el rack una sola vez. --}}
+         Tampoco lleva rollos impresos, porque los elige él al preparar. --}}
     <x-pdf.items
         :columnas="[
             ['label' => '#', 'key' => 'n', 'width' => '28px'],
-            ['label' => 'Rollo', 'key' => 'codigo', 'width' => '115px'],
-            ['label' => 'Tela', 'key' => 'producto'],
-            ['label' => 'Color', 'key' => 'color', 'width' => '95px'],
-            ['label' => 'Ubicación', 'key' => 'ubicacion', 'width' => '150px'],
-            ['label' => 'Metros', 'key' => 'metros', 'align' => 'right', 'width' => '65px'],
-            ['label' => 'OK', 'key' => 'marca', 'align' => 'center', 'width' => '32px'],
+            ['label' => 'Código', 'key' => 'codigo', 'width' => '70px'],
+            ['label' => 'Producto', 'key' => 'producto'],
+            ['label' => 'Presentación', 'key' => 'presentacion', 'width' => '105px'],
+            ['label' => 'Pedido', 'key' => 'metros', 'align' => 'right', 'width' => '65px'],
+            ['label' => 'Cubierto', 'key' => 'asignado', 'align' => 'right', 'width' => '65px'],
+            ['label' => 'Falta', 'key' => 'pendiente', 'align' => 'right', 'width' => '60px'],
         ]"
-        :filas="collect($filas)->map(fn ($f) => $f + ['marca' => $f['escaneado'] ? 'X' : ''])->all()"
-        :minFilas="10" />
+        :filas="$filas"
+        :minFilas="8" />
 
     <table class="marco" style="margin: 6px 0 16px 0;">
         <tr>
-            <td class="strong upper" style="font-size: 10px;">Total: {{ $total_rollos }} rollos</td>
+            <td class="strong upper" style="font-size: 10px;">{{ $total_lineas }} producto(s)</td>
             <td class="strong upper right" style="font-size: 10px;">{{ $total_metros }} metros</td>
         </tr>
     </table>
 
-    @php $parciales = collect($filas)->where('parcial', true); @endphp
-    @if ($parciales->isNotEmpty())
+    {{-- Lo que ya se juntó. Sirve como constancia de qué salió del almacén. --}}
+    @php $conRollos = collect($filas)->filter(fn ($f) => $f['rollos'] !== ''); @endphp
+    @if ($conRollos->isNotEmpty())
+        <div class="strong upper" style="font-size: 8px; margin-bottom: 4px;">Rollos ya asignados</div>
         <table class="marco" style="margin-bottom: 14px;">
-            <tr><td>
-                <span class="strong upper" style="font-size: 8px;">Atención · rollos que se cortan</span><br>
-                @foreach ($parciales as $p)
-                    {{ $p['codigo'] }}: sacar <strong>{{ $p['metros'] }} m</strong>, el resto vuelve al rack.<br>
-                @endforeach
-            </td></tr>
+            @foreach ($conRollos as $f)
+                <tr><td>
+                    <span class="strong">{{ $f['producto'] }}</span> · {{ $f['rollos'] }}
+                </td></tr>
+            @endforeach
         </table>
     @endif
 
     <div class="muted" style="font-size: 8px;">
-        Escanea cada rollo antes de despachar: el sistema avisa si alguno no
-        corresponde a este requerimiento. La casilla OK es solo respaldo si la
-        pistola falla.
+        Baja del rack los metros que pide cada línea y escanea cada rollo: el sistema
+        los va sumando y avisa cuando la línea queda cubierta. Los rollos no vienen
+        impresos porque los eliges tú según lo que haya en el almacén.
     </div>
 
     <x-pdf.firmas :firmas="['Prepara', 'Verifica', 'Recibe']" />

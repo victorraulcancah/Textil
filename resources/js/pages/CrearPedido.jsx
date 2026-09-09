@@ -5,6 +5,7 @@ import api, { asList } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
+import ProductoPickerModal from '../components/ProductoPickerModal';
 import { Alert, Button, Input, SearchSelect, Select, Spinner } from '../components/ui';
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
@@ -46,6 +47,9 @@ export default function CrearPedido() {
 
     /** Líneas ya agregadas al pedido. */
     const [lineas, setLineas] = useState([]);
+
+    /** Buscador avanzado: se abre con lo que ya se haya escrito arriba. */
+    const [picker, setPicker] = useState({ open: false, query: '' });
 
     /** El renglón de arriba, donde se arma la línea antes de agregarla. */
     const [nueva, setNueva] = useState({
@@ -203,6 +207,49 @@ export default function CrearPedido() {
         });
     };
 
+    /**
+     * Alta en lote desde el buscador avanzado. Lo que ya está en el pedido no
+     * se duplica: se le suma la cantidad, igual que en la nota de venta.
+     */
+    const agregarDesdePicker = (seleccionados) => {
+        const utiles = seleccionados.filter((s) => s.presentacion && s.cantidad > 0);
+        if (!utiles.length) return;
+
+        setLineas((prev) => {
+            const next = [...prev];
+
+            utiles.forEach(({ producto, presentacion, cantidad }) => {
+                const i = next.findIndex(
+                    (l) => String(l.producto_presentacion_id) === String(presentacion.id),
+                );
+
+                if (i !== -1) {
+                    next[i] = {
+                        ...next[i],
+                        cantidad: String((Number(next[i].cantidad) || 0) + cantidad),
+                    };
+                    return;
+                }
+
+                next.push({
+                    producto_presentacion_id: String(presentacion.id),
+                    producto: producto.nombre,
+                    presentacion: presentacion.nombre,
+                    descripcion: '',
+                    cantidad: String(cantidad),
+                    precio_unitario: String(Number(presentacion.precio_venta) || 0),
+                });
+            });
+
+            return next;
+        });
+
+        setPicker((prev) => ({ ...prev, open: false }));
+        toast.success(
+            utiles.length === 1 ? 'Producto agregado al pedido.' : `${utiles.length} productos agregados al pedido.`,
+        );
+    };
+
     const cambiar = (i, campo, valor) =>
         setLineas((prev) => prev.map((l, j) => (j === i ? { ...l, [campo]: valor } : l)));
 
@@ -307,6 +354,8 @@ export default function CrearPedido() {
                                 label: p.nombre,
                                 keywords: p.codigo,
                             }))}
+                            searchTitle="Buscador avanzado con filtros"
+                            onSearch={(q) => setPicker({ open: true, query: q })}
                         />
 
                         <Input
@@ -506,6 +555,21 @@ export default function CrearPedido() {
                     </div>
                 </div>
             </div>
+
+            {/* El pedido no se ata a un almacén, así que aquí se lista el
+                catálogo entero con el stock sumado de todos los almacenes, y
+                se puede pedir incluso lo que está en cero. */}
+            <ProductoPickerModal
+                open={picker.open}
+                onClose={() => setPicker((prev) => ({ ...prev, open: false }))}
+                onSelect={agregarDesdePicker}
+                initialQuery={picker.query}
+                multiple
+                productos={productos}
+                stockPorProducto={stockPorProducto}
+                bloquearSinStock={false}
+                title="Buscar productos"
+            />
         </Layout>
     );
 }

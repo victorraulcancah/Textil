@@ -63,6 +63,12 @@ export default function ProductoPickerModal({
     stockFilter = false,
     productos: productosProp,
     stockPorProducto = {},
+    /**
+     * Impide marcar lo que está en cero. En una venta sí (sale del almacén al
+     * momento); en un pedido no, porque se prepara después y el vendedor puede
+     * comprometer tela que aún no ha llegado.
+     */
+    bloquearSinStock = true,
     title = 'Buscar producto',
 }) {
     const [filtros, setFiltros] = useState(filtrosVacios);
@@ -213,7 +219,7 @@ export default function ProductoPickerModal({
         if (presentacionesDe(producto).length === 0) return;
         // Sin existencias en el almacén no se puede marcar, aunque se liste.
         const disponible = stockPorProducto[String(producto.id)];
-        if (disponible != null && Number(disponible) <= 0) return;
+        if (bloquearSinStock && disponible != null && Number(disponible) <= 0) return;
         setMarcados((prev) => {
             const id = String(producto.id);
             const next = { ...prev };
@@ -435,7 +441,7 @@ export default function ProductoPickerModal({
                         const stock = stockDe(producto);
                         // El catálogo se lista entero, pero lo que no hay en el
                         // almacén se ve y no se puede elegir.
-                        const sinStock = stock != null && stock.valor <= 0;
+                        const sinStock = bloquearSinStock && stock != null && stock.valor <= 0;
                         const bloqueado = sinUnidades || sinStock;
 
                         return (

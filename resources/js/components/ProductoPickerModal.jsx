@@ -211,6 +211,9 @@ export default function ProductoPickerModal({
 
     const alternar = (producto) => {
         if (presentacionesDe(producto).length === 0) return;
+        // Sin existencias en el almacén no se puede marcar, aunque se liste.
+        const disponible = stockPorProducto[String(producto.id)];
+        if (disponible != null && Number(disponible) <= 0) return;
         setMarcados((prev) => {
             const id = String(producto.id);
             const next = { ...prev };
@@ -262,7 +265,7 @@ export default function ProductoPickerModal({
         else if (minimo > 0 && valor < minimo) tono = 'bg-amber-50 text-amber-700';
         else if (maximo > 0 && valor > maximo) tono = 'bg-blue-50 text-blue-700';
 
-        return { texto: `${numero(valor)}${abrev ? ` ${abrev}` : ''}`, tono };
+        return { valor, texto: `${numero(valor)}${abrev ? ` ${abrev}` : ''}`, tono };
     };
 
     return (
@@ -430,25 +433,29 @@ export default function ProductoPickerModal({
                         const presentacion = unidadDe(producto);
                         const marcado = Boolean(marcados[String(producto.id)]);
                         const stock = stockDe(producto);
+                        // El catálogo se lista entero, pero lo que no hay en el
+                        // almacén se ve y no se puede elegir.
+                        const sinStock = stock != null && stock.valor <= 0;
+                        const bloqueado = sinUnidades || sinStock;
 
                         return (
                             <div
                                 key={producto.id}
-                                onClick={() => multiple && alternar(producto)}
+                                onClick={() => multiple && !bloqueado && alternar(producto)}
                                 className={[
                                     'flex flex-wrap items-center gap-x-3 gap-y-2 border-l-4 px-3 py-2.5 transition',
                                     marcado
                                         ? 'border-l-primary-600 bg-primary-50/70'
                                         : 'border-l-transparent hover:bg-primary-50/40',
-                                    multiple && !sinUnidades ? 'cursor-pointer' : '',
-                                    sinUnidades ? 'opacity-60' : '',
+                                    multiple && !bloqueado ? 'cursor-pointer' : '',
+                                    bloqueado ? 'opacity-60' : '',
                                 ].join(' ')}
                             >
                                 {multiple && (
                                     <input
                                         type="checkbox"
                                         checked={marcado}
-                                        disabled={sinUnidades}
+                                        disabled={bloqueado}
                                         onChange={() => alternar(producto)}
                                         onClick={(e) => e.stopPropagation()}
                                         aria-label={`Seleccionar ${producto.nombre}`}
@@ -481,10 +488,15 @@ export default function ProductoPickerModal({
                                         {sinUnidades && (
                                             <span className="text-[11px] font-medium text-red-600">Sin unidades</span>
                                         )}
+                                        {sinStock && !sinUnidades && (
+                                            <span className="text-[11px] font-medium text-red-600">
+                                                Sin stock en este almacén
+                                            </span>
+                                        )}
                                     </div>
                                 </div>
 
-                                {!sinUnidades && (
+                                {!bloqueado && (
                                   <div
                                     className="flex w-full shrink-0 items-end gap-3 sm:w-auto"
                                     onClick={(e) => e.stopPropagation()}

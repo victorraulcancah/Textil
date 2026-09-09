@@ -223,6 +223,19 @@ export default function CrearVenta() {
         [productos, stockDelAlmacen],
     );
 
+    /**
+     * Lo mismo que stockDelAlmacen pero con una entrada por cada producto del
+     * catálogo. El buscador avanzado lista todo, y necesita saber que lo que
+     * no aparece en existencias está en cero para poder marcarlo como tal.
+     */
+    const stockDeTodos = useMemo(() => {
+        if (!form.almacen_id) return {};
+        return productos.reduce((acc, p) => {
+            acc[String(p.id)] = stockDelAlmacen[String(p.id)] ?? 0;
+            return acc;
+        }, {});
+    }, [productos, stockDelAlmacen, form.almacen_id]);
+
     const productosOptions = useMemo(
         () =>
             productosDisponibles.map((p) => ({
@@ -1231,14 +1244,16 @@ export default function CrearVenta() {
                 </div>
             </div>
 
+            {/* El buscador avanzado muestra el catálogo completo; lo que no
+                tiene stock en el almacén se ve pero no se puede agregar. */}
             <ProductoPickerModal
                 open={picker.open}
                 onClose={() => setPicker((prev) => ({ ...prev, open: false }))}
                 onSelect={agregarDesdePicker}
                 initialQuery={picker.query}
                 multiple
-                productos={productosDisponibles}
-                stockPorProducto={stockDelAlmacen}
+                productos={productos}
+                stockPorProducto={stockDeTodos}
                 title="Buscar productos"
             />
         </Layout>

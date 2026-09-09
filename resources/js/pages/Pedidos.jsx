@@ -26,21 +26,23 @@ const fecha = (v) => (v ? new Date(v).toLocaleDateString('es-PE') : '—');
 
 const COLOR_ESTADO = {
     borrador: 'gray',
-    pendiente: 'amber',
-    en_preparacion: 'blue',
-    despachada: 'blue',
-    facturada: 'green',
-    anulada: 'red',
+    solicitado: 'amber',
+    preparando: 'blue',
+    separado: 'blue',
+    despachado: 'blue',
+    facturado: 'green',
+    anulado: 'red',
 };
 
 const ESTADOS = [
     { value: '', label: 'Todos los estados' },
     { value: 'borrador', label: 'Borrador' },
-    { value: 'pendiente', label: 'Pendiente' },
-    { value: 'en_preparacion', label: 'En preparación' },
-    { value: 'despachada', label: 'Despachada' },
-    { value: 'facturada', label: 'Facturada' },
-    { value: 'anulada', label: 'Anulada' },
+    { value: 'solicitado', label: 'Solicitado' },
+    { value: 'preparando', label: 'Preparando' },
+    { value: 'separado', label: 'Separado' },
+    { value: 'despachado', label: 'Despachado' },
+    { value: 'facturado', label: 'Facturado' },
+    { value: 'anulado', label: 'Anulado' },
 ];
 
 /**
@@ -158,7 +160,7 @@ export default function Pedidos() {
             render: (row) => (
                 <span className="inline-flex items-center gap-2">
                     <Badge variant={COLOR_ESTADO[row.estado] ?? 'gray'}>{row.estado_label}</Badge>
-                    {row.estado === 'en_preparacion' && (
+                    {row.estado === 'preparando' && (
                         <span className="text-xs text-warm-500">
                             {row.verificados}/{row.total_rollos} escaneados
                         </span>
@@ -190,7 +192,7 @@ export default function Pedidos() {
                             <Edit className="h-4 w-4" />
                         </button>
                     )}
-                    {row.transiciones?.includes('anulada') && (
+                    {row.transiciones?.includes('anulado') && (
                         <button
                             aria-label="Anular"
                             onClick={() => setAnular(row)}
@@ -345,16 +347,15 @@ function DetallePedido({ pedido, procesando, onAccion, onFacturar, onPdf }) {
                     vista con el pedido ya en preparación, cuando ahí sería un
                     retroceso, no el paso que toca. */}
                 <div className="flex flex-wrap items-center gap-2">
-                    {/* El vendedor solo manda el pedido al almacén. Separar los
-                        rollos y prepararlos es trabajo del almacenero, y lo
-                        hace desde su propia bandeja. */}
-                    {pedido.estado === 'borrador' && puede('pendiente') && (
-                        <Button size="sm" loading={procesando} onClick={() => onAccion(pedido, 'enviar', 'Pedido enviado al almacén.')}>
+                    {/* El vendedor solo solicita. Preparar, separar y despachar
+                        es trabajo del almacenero, desde su propia bandeja. */}
+                    {pedido.estado === 'borrador' && puede('solicitado') && (
+                        <Button size="sm" loading={procesando} onClick={() => onAccion(pedido, 'solicitar', 'Pedido solicitado al almacén.')}>
                             <PackageCheck className="h-4 w-4" />
-                            Enviar al almacén
+                            Solicitar al almacén
                         </Button>
                     )}
-                    {pedido.estado === 'pendiente' && (
+                    {pedido.estado === 'solicitado' && (
                         <Button variant="secondary" size="sm" loading={procesando} onClick={() => onAccion(pedido, 'devolver', 'Los rollos volvieron a estar disponibles.')}>
                             <Undo2 className="h-4 w-4" />
                             Devolver a borrador
@@ -370,7 +371,7 @@ function DetallePedido({ pedido, procesando, onAccion, onFacturar, onPdf }) {
                             Requerimiento
                         </Button>
                     )}
-                    {pedido.estado === 'despachada' && puede('facturada') && (
+                    {pedido.estado === 'despachado' && puede('facturado') && (
                         <Button size="sm" onClick={onFacturar}>
                             <Receipt className="h-4 w-4" />
                             Emitir nota de venta
@@ -379,17 +380,23 @@ function DetallePedido({ pedido, procesando, onAccion, onFacturar, onPdf }) {
                 </div>
             </div>
 
-            {pedido.estado === 'pendiente' && (
+            {pedido.estado === 'solicitado' && (
                 <div className="border-b border-edge bg-amber-50/70 px-4 py-2 text-xs text-amber-800">
-                    Los rollos ya están reservados para este cliente. El pedido está en la
-                    bandeja del almacén, esperando a que lo tomen.
+                    Los rollos ya están reservados para este cliente. La solicitud está en la
+                    bandeja del almacén, esperando a que la atiendan.
                 </div>
             )}
 
-            {pedido.estado === 'en_preparacion' && (
+            {pedido.estado === 'preparando' && (
                 <div className="border-b border-edge bg-blue-50/60 px-4 py-2 text-xs text-blue-800">
-                    El almacén está preparando este pedido. El despacho se confirma desde
-                    Preparación y despacho, escaneando cada rollo.
+                    El almacén está juntando los rollos. Cuando los tenga todos escaneados
+                    dará el pedido por separado.
+                </div>
+            )}
+
+            {pedido.estado === 'separado' && (
+                <div className="border-b border-edge bg-blue-50/60 px-4 py-2 text-xs text-blue-800">
+                    Los rollos están apartados y verificados en el almacén, listos para salir.
                 </div>
             )}
 

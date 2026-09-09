@@ -22,22 +22,26 @@ class OrdenVenta extends Model
 
     /** Estados del pedido. */
     public const BORRADOR = 'borrador';
-    public const PENDIENTE = 'pendiente';
-    public const EN_PREPARACION = 'en_preparacion';
-    public const DESPACHADA = 'despachada';
-    public const FACTURADA = 'facturada';
-    public const ANULADA = 'anulada';
+    public const SOLICITADO = 'solicitado';
+    public const PREPARANDO = 'preparando';
+    public const SEPARADO = 'separado';
+    public const DESPACHADO = 'despachado';
+    public const FACTURADO = 'facturado';
+    public const ANULADO = 'anulado';
 
     public const ESTADOS = [
         self::BORRADOR => 'Borrador',
-        // "Pendiente" es como lo ve el almacén: el vendedor ya lo mandó y está
-        // esperando a que alguien lo tome. Se llamaba "separada", pero eso
-        // describía lo que le pasa a los rollos, no el estado del trabajo.
-        self::PENDIENTE => 'Pendiente',
-        self::EN_PREPARACION => 'En preparación',
-        self::DESPACHADA => 'Despachada',
-        self::FACTURADA => 'Facturada',
-        self::ANULADA => 'Anulada',
+        // El vendedor lo solicita al almacén: ahí se numera el requerimiento y
+        // el pedido aparece en la bandeja del almacenero.
+        self::SOLICITADO => 'Solicitado',
+        // Se pone solo, en cuanto el almacenero escanea el primer rollo: si ya
+        // está bajando tela del rack, el pedido está en preparación.
+        self::PREPARANDO => 'Preparando',
+        // Los rollos ya están apartados y verificados, esperando su salida.
+        self::SEPARADO => 'Separado',
+        self::DESPACHADO => 'Despachado',
+        self::FACTURADO => 'Facturado',
+        self::ANULADO => 'Anulado',
     ];
 
     /**
@@ -46,24 +50,28 @@ class OrdenVenta extends Model
      */
     public const ESTADO_ROLLO = [
         self::BORRADOR => Rollo::DISPONIBLE,
-        // Al mandarlo al almacén los rollos ya quedan reservados, aunque nadie
-        // los haya bajado del rack todavía: si no, otro vendedor podría
-        // venderlos mientras el pedido espera su turno.
-        self::PENDIENTE => Rollo::SEPARADO,
-        self::EN_PREPARACION => Rollo::EN_PREPARACION,
-        self::DESPACHADA => Rollo::DESPACHADO,
-        self::FACTURADA => Rollo::VENDIDO,
-        self::ANULADA => Rollo::DISPONIBLE,
+        // Al solicitarlo los rollos ya quedan reservados, aunque nadie los haya
+        // bajado del rack todavía: si no, otro vendedor podría venderlos
+        // mientras el pedido espera su turno en la bandeja.
+        self::SOLICITADO => Rollo::SEPARADO,
+        self::PREPARANDO => Rollo::EN_PREPARACION,
+        // Apartados pero todavía dentro del almacén: siguen en preparación
+        // hasta que salgan físicamente.
+        self::SEPARADO => Rollo::EN_PREPARACION,
+        self::DESPACHADO => Rollo::DESPACHADO,
+        self::FACTURADO => Rollo::VENDIDO,
+        self::ANULADO => Rollo::DISPONIBLE,
     ];
 
     /** A qué estados puede pasar el pedido desde el actual. */
     public const TRANSICIONES = [
-        self::BORRADOR => [self::PENDIENTE, self::ANULADA],
-        self::PENDIENTE => [self::EN_PREPARACION, self::BORRADOR, self::ANULADA],
-        self::EN_PREPARACION => [self::DESPACHADA, self::PENDIENTE, self::ANULADA],
-        self::DESPACHADA => [self::FACTURADA, self::ANULADA],
-        self::FACTURADA => [],
-        self::ANULADA => [],
+        self::BORRADOR => [self::SOLICITADO, self::ANULADO],
+        self::SOLICITADO => [self::PREPARANDO, self::BORRADOR, self::ANULADO],
+        self::PREPARANDO => [self::SEPARADO, self::SOLICITADO, self::ANULADO],
+        self::SEPARADO => [self::DESPACHADO, self::PREPARANDO, self::ANULADO],
+        self::DESPACHADO => [self::FACTURADO, self::ANULADO],
+        self::FACTURADO => [],
+        self::ANULADO => [],
     ];
 
     protected $fillable = [

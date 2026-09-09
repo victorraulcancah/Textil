@@ -81,13 +81,13 @@ class OrdenVentaController extends Controller
     }
 
     /**
-     * El vendedor manda el pedido al almacén: queda pendiente en la bandeja
-     * del almacenero y sus rollos quedan reservados.
+     * El vendedor solicita el pedido al almacén: se numera el requerimiento,
+     * los rollos quedan reservados y aparece en la bandeja del almacenero.
      */
-    public function enviar(OrdenVenta $ordenesVenta)
+    public function solicitar(OrdenVenta $ordenesVenta)
     {
         return new OrdenVentaResource(
-            $this->pedidos->enviarAlAlmacen($ordenesVenta)->load(self::RELACIONES)
+            $this->pedidos->solicitar($ordenesVenta)->load(self::RELACIONES)
         );
     }
 
@@ -99,11 +99,14 @@ class OrdenVentaController extends Controller
         );
     }
 
-    /** El almacenero toma el pedido y se numera su requerimiento de almacén. */
-    public function preparar(OrdenVenta $ordenesVenta)
+    /**
+     * El almacenero terminó de juntar los rollos: quedan apartados dentro del
+     * almacén, verificados y esperando su salida.
+     */
+    public function separar(OrdenVenta $ordenesVenta)
     {
         return new OrdenVentaResource(
-            $this->pedidos->enviarAPreparacion($ordenesVenta)->load(self::RELACIONES)
+            $this->pedidos->marcarSeparado($ordenesVenta)->load(self::RELACIONES)
         );
     }
 

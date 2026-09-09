@@ -39,10 +39,11 @@ export default function Despacho() {
     const cargar = useCallback(async () => {
         setCargando(true);
         try {
-            // Los dos estados que le tocan al almacén: los que acaban de
-            // llegar y los que ya tomó y está preparando.
+            // Los tres estados que le tocan al almacén: la solicitud recién
+            // llegada, la que está juntando y la que ya apartó pero no ha
+            // salido todavía.
             const { data } = await api.get('/ordenes-venta', {
-                params: { estados: 'pendiente,en_preparacion' },
+                params: { estados: 'solicitado,preparando,separado' },
             });
             const filas = asList({ data });
             setPedidos(filas);
@@ -86,6 +87,8 @@ export default function Despacho() {
         async (valor) => {
             if (!valor || !detalle) return { ok: false, texto: 'No hay pedido abierto.' };
 
+            const estadoAntes = detalle.estado;
+
             try {
                 const { data } = await api.post(`/ordenes-venta/${detalle.id}/escanear`, {
                     codigo: valor,
@@ -93,6 +96,13 @@ export default function Despacho() {
                 const texto = `Rollo correcto · ${num(data.metros)} m · ${data.verificados}/${data.total}`;
                 setUltimo({ ok: true, codigo: data.rollo.codigo, metros: data.metros, texto: 'Rollo correcto' });
                 await cargarDetalle(detalle.id);
+
+                // El primer escaneo cambia el estado por su cuenta: hay que
+                // refrescar la bandeja o seguiría diciendo "Solicitado". No se
+                // recarga en cada lectura porque con treinta rollos sería
+                // recargar la lista treinta veces.
+                if (estadoAntes === 'solicitado') await cargar();
+
                 return { ok: true, texto };
             } catch (err) {
                 const texto = err.response?.data?.message ?? 'No se pudo verificar el rollo.';
@@ -100,7 +110,7 @@ export default function Despacho() {
                 return { ok: false, texto };
             }
         },
-        [detalle, cargarDetalle],
+        [detalle, cargarDetalle, cargar],
     );
 
     const escanear = async (e) => {
@@ -128,25 +138,27 @@ export default function Despacho() {
     };
 
     /**
-     * El almacenero toma el pedido de la bandeja: se le numera el
-     * requerimiento y recién entonces puede imprimirlo y escanear.
+     * El almacenero terminó de juntar los rollos: quedan apartados en el
+     * almacén, verificados y esperando su salida.
      */
-    const tomar = async () => {
+    const separar = async () => {
         setTomando(true);
         try {
-            const { data } = await api.post(`/ordenes-venta/${detalle.id}/preparar`);
+            const { data } = await api.post(`/ordenes-venta/${detalle.id}/separar`);
             const orden = data?.data ?? data;
             setDetalle(orden);
-            toast.success(`${orden.requerimiento_numero} listo para preparar.`);
+            toast.success(`${orden.documento} separado y listo para salir.`);
             await cargar();
         } catch (err) {
-            toast.error(err.response?.data?.message ?? 'No se pudo tomar el pedido.');
+            toast.error(err.response?.data?.message ?? 'No se pudo dar por separado.');
         } finally {
             setTomando(false);
         }
     };
 
-    const pendiente = detalle?.estado === 'pendiente';
+    /** Todavía se pueden escanear rollos: solicitado o en plena preparación. */
+    const escaneando = ['solicitado', 'preparando'].includes(detalle?.estado);
+    const separado = detalle?.estado === 'separado';
     const verificados = (detalle?.detalles ?? []).filter((d) => d.escaneado).length;
     const total = detalle?.detalles?.length ?? 0;
     const completo = total > 0 && verificados === total;
@@ -155,7 +167,7 @@ export default function Despacho() {
         <Layout>
             <PageHeader
                 title="Preparación y despacho"
-                description="Escanea cada rollo antes de que salga del almacén"
+                description="Atiende las solicitudes de venta: escanea, separa y despacha"
             />
 
             {cargando ? (
@@ -164,7 +176,7 @@ export default function Despacho() {
                 </div>
             ) : pedidos.length === 0 ? (
                 <Alert variant="info">
-                    No hay pedidos por preparar. Cuando Ventas envíe uno al almacén aparecerá aquí.
+                    No hay solicitudes en la bandeja. Cuando Ventas solicite un pedido aparecerá aquí.
                 </Alert>
             ) : (
                 <div className="grid gap-4 lg:grid-cols-[19rem,1fr]">
@@ -193,10 +205,12 @@ export default function Despacho() {
                                                     <ClipboardList className="h-4 w-4 shrink-0 text-primary-600" />
                                                     <span className="truncate">{p.requerimiento_numero ?? p.documento}</span>
                                                 </span>
-                                                {/* Pendiente: aún nadie lo tomó. En preparación:
-                                                    cuántos rollos van escaneados. */}
-                                                {p.estado === 'pendiente' ? (
-                                                    <Badge variant="amber">Pendiente</Badge>
+                                                {/* Solicitado: nadie ha empezado. Si ya hay
+                                                    escaneos, cuántos rollos van. */}
+                                                {p.estado === 'solicitado' ? (
+                                                    <Badge variant="amber">Solicitado</Badge>
+                                                ) : p.estado === 'separado' ? (
+                                                    <Badge variant="green">Separado</Badge>
                                                 ) : (
                                                     <Badge variant={p.verificados === p.total_rollos ? 'green' : 'blue'}>
                                                         {p.verificados}/{p.total_rollos}
@@ -217,7 +231,7 @@ export default function Despacho() {
                     <section className="rounded-lg border border-edge bg-white shadow-sm">
                         {!detalle ? (
                             <p className="px-4 py-16 text-center text-sm text-warm-400">
-                                Elige un pedido para prepararlo.
+                                Elige una solicitud para atenderla.
                             </p>
                         ) : (
                             <>
@@ -232,52 +246,58 @@ export default function Despacho() {
                                         </p>
                                     </div>
                                     <div className="flex flex-wrap items-center gap-2">
-                                        {/* Mientras está pendiente no hay nada que
-                                            imprimir ni escanear: primero hay que
-                                            tomarlo, y ahí se numera el requerimiento. */}
-                                        {pendiente ? (
-                                            <Button size="sm" loading={tomando} onClick={tomar}>
+                                        <Button
+                                            variant="secondary"
+                                            size="sm"
+                                            onClick={() =>
+                                                setPdf({
+                                                    tipo: 'requerimiento-almacen',
+                                                    id: detalle.id,
+                                                    nombre: detalle.requerimiento_numero,
+                                                })
+                                            }
+                                        >
+                                            <FileText className="h-4 w-4" />
+                                            Imprimir
+                                        </Button>
+
+                                        {/* Mientras junta rollos, el botón cierra la
+                                            preparación. Ya separado, lo que queda es
+                                            entregarlos. */}
+                                        {separado ? (
+                                            <Button size="sm" loading={despachando} onClick={despachar}>
                                                 <PackageCheck className="h-4 w-4" />
-                                                Empezar preparación
+                                                Despachar
                                             </Button>
                                         ) : (
-                                            <>
-                                                <Button
-                                                    variant="secondary"
-                                                    size="sm"
-                                                    onClick={() =>
-                                                        setPdf({
-                                                            tipo: 'requerimiento-almacen',
-                                                            id: detalle.id,
-                                                            nombre: detalle.requerimiento_numero,
-                                                        })
-                                                    }
-                                                >
-                                                    <FileText className="h-4 w-4" />
-                                                    Imprimir
-                                                </Button>
-                                                <Button size="sm" loading={despachando} disabled={!completo} onClick={despachar}>
-                                                    <PackageCheck className="h-4 w-4" />
-                                                    Despachar
-                                                </Button>
-                                            </>
+                                            <Button size="sm" loading={tomando} disabled={!completo} onClick={separar}>
+                                                <PackageCheck className="h-4 w-4" />
+                                                Separado
+                                            </Button>
                                         )}
                                     </div>
                                 </div>
 
-                                {pendiente && (
+                                {detalle.estado === 'solicitado' && (
                                     <div className="border-b border-edge bg-amber-50/70 px-4 py-2.5 text-sm text-amber-800">
-                                        Los rollos están reservados para este cliente. Pulsa{' '}
-                                        <strong>Empezar preparación</strong> para tomar el pedido: se
-                                        numera el requerimiento y podrás bajarlos del rack e irlos
-                                        escaneando.
+                                        Los rollos están reservados para este cliente. Baja el
+                                        primero del rack y escanéalo: el pedido pasa a{' '}
+                                        <strong>Preparando</strong> solo.
+                                    </div>
+                                )}
+
+                                {separado && (
+                                    <div className="border-b border-edge bg-green-50 px-4 py-2.5 text-sm text-green-800">
+                                        Pedido separado y verificado. Los rollos están apartados
+                                        esperando su salida; pulsa <strong>Despachar</strong> cuando
+                                        se los lleven.
                                     </div>
                                 )}
 
                                 {/* La pistola escribe aquí y termina con Enter */}
                                 <form
                                     onSubmit={escanear}
-                                    className={cn('border-b border-edge px-4 py-3', pendiente && 'hidden')}
+                                    className={cn('border-b border-edge px-4 py-3', !escaneando && 'hidden')}
                                 >
                                     <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-warm-500">
                                         Escanea el rollo
@@ -348,9 +368,10 @@ export default function Despacho() {
                                     )}
                                 </form>
 
-                                {completo && (
+                                {completo && escaneando && (
                                     <div className="border-b border-edge bg-green-50 px-4 py-2 text-sm text-green-800">
-                                        Todos los rollos verificados. Ya se puede despachar.
+                                        Todos los rollos verificados. Pulsa <strong>Separado</strong>{' '}
+                                        para cerrar la preparación.
                                     </div>
                                 )}
 

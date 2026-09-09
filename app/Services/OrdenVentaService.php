@@ -17,12 +17,13 @@ use Illuminate\Support\Facades\DB;
  * en el inventario porque físicamente están en el almacén. El descuento
  * ocurre una sola vez, cuando se emite la nota de venta.
  *
- *   borrador → pendiente → en_preparacion → despachada → facturada
- *                                                     ↘ anulada
+ *   borrador → solicitado → preparando → separado → despachado → facturado
+ *                                                             ↘ anulado
  *
- * El corte entre quién hace qué está en "pendiente": hasta ahí es del
- * vendedor, de ahí en adelante es del almacén. El almacenero ve los pedidos
- * pendientes en su bandeja, los toma, baja los rollos del rack y los despacha.
+ * El corte entre quién hace qué está en "solicitado": hasta ahí es del
+ * vendedor, de ahí en adelante es del almacén. El almacenero ve las
+ * solicitudes en su bandeja, escanea los rollos —lo que pone el pedido en
+ * preparación solo— y cuando los tiene todos lo da por separado.
  *
  * El estado de cada rollo va pegado al del pedido: nadie lo mueve a mano.
  */
@@ -75,24 +76,28 @@ class OrdenVentaService
     }
 
     /**
-     * El vendedor manda el pedido al almacén.
+     * El vendedor solicita el pedido al almacén.
      *
-     * Los rollos quedan reservados para este cliente en el mismo acto: si se
-     * dejara para cuando el almacenero lo tome, otro vendedor podría venderlos
-     * mientras el pedido espera en la bandeja.
+     * Aquí pasan tres cosas: se numera el requerimiento —el papel con el que
+     * el almacenero baja al rack—, los rollos quedan reservados para este
+     * cliente, y el pedido aparece en la bandeja del almacén.
      *
-     * Aquí es donde se comprueba que los rollos sigan libres — entre que se
-     * armó el pedido y se confirmó, otro vendedor pudo haberlos tomado.
+     * La reserva es inmediata a propósito: si se dejara para cuando el
+     * almacenero lo tome, otro vendedor podría vender esos mismos rollos
+     * mientras el pedido espera su turno.
+     *
+     * Es también donde se comprueba que los rollos sigan libres — entre que se
+     * armó el pedido y se solicitó, otro vendedor pudo haberlos tomado.
      */
-    public function enviarAlAlmacen(OrdenVenta $orden): OrdenVenta
+    public function solicitar(OrdenVenta $orden): OrdenVenta
     {
-        $this->exigirTransicion($orden, OrdenVenta::PENDIENTE);
+        $this->exigirTransicion($orden, OrdenVenta::SOLICITADO);
 
         return DB::transaction(function () use ($orden) {
             $orden->load('detalles.rollo');
 
             if ($orden->detalles->isEmpty()) {
-                throw new \DomainException('El pedido no tiene rollos: agrega al menos uno antes de enviarlo al almacén.');
+                throw new \DomainException('El pedido no tiene rollos: agrega al menos uno antes de solicitarlo.');
             }
 
             $tomados = [];
@@ -129,8 +134,12 @@ class OrdenVentaService
             }
 
             $orden->update([
-                'estado' => OrdenVenta::PENDIENTE,
+                'estado' => OrdenVenta::SOLICITADO,
                 'fecha_separacion' => now(),
+                // El requerimiento se numera solo la primera vez: si el pedido
+                // va y vuelve, el almacenero sigue viendo el mismo papel.
+                'requerimiento_numero' => $orden->requerimiento_numero
+                    ?: 'RA-'.$this->siguienteNumero('requerimiento_almacen', 'RA'),
             ]);
 
             return $this->conRelaciones($orden->fresh());
@@ -163,14 +172,15 @@ class OrdenVentaService
     }
 
     /**
-     * El almacenero toma el pedido de su bandeja y empieza a prepararlo.
+     * El pedido pasa a "preparando".
      *
-     * Aquí se numera el requerimiento de almacén: es el papel con el que baja
-     * al rack a separar físicamente los rollos, ordenado por ubicación.
+     * No hay que pulsar nada: lo dispara el primer escaneo. Si el almacenero
+     * ya está bajando tela del rack, el pedido está en preparación, y pedirle
+     * además que avise sería un clic que nadie recordaría dar.
      */
-    public function enviarAPreparacion(OrdenVenta $orden): OrdenVenta
+    public function empezarPreparacion(OrdenVenta $orden): OrdenVenta
     {
-        $this->exigirTransicion($orden, OrdenVenta::EN_PREPARACION);
+        $this->exigirTransicion($orden, OrdenVenta::PREPARANDO);
 
         return DB::transaction(function () use ($orden) {
             $orden->load('detalles.rollo');
@@ -186,13 +196,9 @@ class OrdenVentaService
             }
 
             $orden->update([
-                'estado' => OrdenVenta::EN_PREPARACION,
+                'estado' => OrdenVenta::PREPARANDO,
                 'fecha_preparacion' => now(),
                 'usuario_prepara_id' => auth()->id(),
-                // El requerimiento se numera solo la primera vez: si el pedido
-                // va y vuelve, el almacenero sigue viendo el mismo papel.
-                'requerimiento_numero' => $orden->requerimiento_numero
-                    ?: 'RA-'.$this->siguienteNumero('requerimiento_almacen', 'RA'),
             ]);
 
             return $this->conRelaciones($orden->fresh());
@@ -200,14 +206,49 @@ class OrdenVentaService
     }
 
     /**
-     * El almacenero escanea un rollo con la pistola. Si no corresponde al
-     * pedido, se avisa: es la comprobación que evita despachar el rollo
-     * equivocado.
+     * El almacenero terminó: los rollos están apartados y verificados.
+     *
+     * Siguen dentro del almacén —salen recién con el despacho—, pero ya no se
+     * tocan: están en su sitio esperando a que el cliente pase a recogerlos.
+     */
+    public function marcarSeparado(OrdenVenta $orden): OrdenVenta
+    {
+        $this->exigirTransicion($orden, OrdenVenta::SEPARADO);
+
+        if (! $orden->estaVerificada()) {
+            $faltan = $orden->detalles()->whereNull('escaneado_at')->count();
+
+            throw new \DomainException(
+                "Faltan escanear {$faltan} rollo(s) antes de darlo por separado."
+            );
+        }
+
+        return DB::transaction(function () use ($orden) {
+            $orden->update([
+                'estado' => OrdenVenta::SEPARADO,
+                'fecha_separacion' => now(),
+            ]);
+
+            return $this->conRelaciones($orden->fresh());
+        });
+    }
+
+    /**
+     * El almacenero escanea un rollo con la pistola o con la cámara. Si no
+     * corresponde al pedido, se avisa: es la comprobación que evita despachar
+     * el rollo equivocado.
      */
     public function escanear(OrdenVenta $orden, string $codigo): array
     {
-        if ($orden->estado !== OrdenVenta::EN_PREPARACION) {
-            throw new \DomainException('Solo se pueden escanear rollos de un pedido en preparación.');
+        if (! in_array($orden->estado, [OrdenVenta::SOLICITADO, OrdenVenta::PREPARANDO], true)) {
+            throw new \DomainException(
+                'Solo se pueden escanear rollos de un pedido solicitado o en preparación.'
+            );
+        }
+
+        // El primer escaneo es lo que pone el pedido en preparación.
+        if ($orden->estado === OrdenVenta::SOLICITADO) {
+            $orden = $this->empezarPreparacion($orden);
         }
 
         $codigo = trim($codigo);
@@ -245,20 +286,14 @@ class OrdenVentaService
     }
 
     /**
-     * Los rollos salen del almacén. Se exige haberlos escaneado todos: es el
-     * punto del proceso que evita el error de despacho.
+     * Los rollos salen físicamente del almacén.
+     *
+     * Ya vienen verificados de "separado": aquí no se vuelve a comprobar nada,
+     * solo se deja constancia de quién y cuándo los entregó.
      */
     public function despachar(OrdenVenta $orden): OrdenVenta
     {
-        $this->exigirTransicion($orden, OrdenVenta::DESPACHADA);
-
-        if (! $orden->estaVerificada()) {
-            $faltan = $orden->detalles()->whereNull('escaneado_at')->count();
-
-            throw new \DomainException(
-                "Faltan escanear {$faltan} rollo(s) antes de despachar."
-            );
-        }
+        $this->exigirTransicion($orden, OrdenVenta::DESPACHADO);
 
         return DB::transaction(function () use ($orden) {
             $orden->load('detalles.rollo');
@@ -274,7 +309,7 @@ class OrdenVentaService
             }
 
             $orden->update([
-                'estado' => OrdenVenta::DESPACHADA,
+                'estado' => OrdenVenta::DESPACHADO,
                 'fecha_despacho' => now(),
                 'usuario_despacha_id' => auth()->id(),
             ]);
@@ -295,7 +330,7 @@ class OrdenVentaService
      */
     public function facturar(OrdenVenta $orden, array $datos = []): NotaVenta
     {
-        $this->exigirTransicion($orden, OrdenVenta::FACTURADA);
+        $this->exigirTransicion($orden, OrdenVenta::FACTURADO);
 
         return DB::transaction(function () use ($orden, $datos) {
             $orden->load(['detalles.rollo.producto.presentaciones.unidadBase', 'detalles.presentacion']);
@@ -350,7 +385,7 @@ class OrdenVentaService
                 }
             }
 
-            $orden->update(['estado' => OrdenVenta::FACTURADA]);
+            $orden->update(['estado' => OrdenVenta::FACTURADO]);
 
             return $nota->fresh(['detalles.rollo', 'cliente', 'almacen']);
         });
@@ -406,13 +441,13 @@ class OrdenVentaService
      */
     public function anular(OrdenVenta $orden, string $motivo): OrdenVenta
     {
-        $this->exigirTransicion($orden, OrdenVenta::ANULADA);
+        $this->exigirTransicion($orden, OrdenVenta::ANULADO);
 
         return DB::transaction(function () use ($orden, $motivo) {
             $this->liberarRollos($orden, RolloMovimiento::CANCELACION, $motivo);
 
             $orden->update([
-                'estado' => OrdenVenta::ANULADA,
+                'estado' => OrdenVenta::ANULADO,
                 'motivo_anulacion' => $motivo,
                 'usuario_anula_id' => auth()->id(),
                 'fecha_anulacion' => now(),

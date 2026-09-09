@@ -107,8 +107,8 @@ return [
                     // El almacenero mueve el pedido por el almacén, pero no lo
                     // crea ni lo cotiza: eso es de Ventas.
                     'patrones' => [
-                        'ordenes-venta/*/preparar' => 'editar',
                         'ordenes-venta/*/escanear' => 'editar',
+                        'ordenes-venta/*/separar' => 'editar',
                         'ordenes-venta/*/despachar' => 'editar',
                     ],
                     'acciones' => ['ver', 'editar'],

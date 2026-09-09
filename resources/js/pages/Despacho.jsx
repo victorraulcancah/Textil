@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Check, ClipboardList, FileText, PackageCheck, ScanLine, TriangleAlert } from 'lucide-react';
+import { Camera, Check, ClipboardList, FileText, PackageCheck, ScanLine, TriangleAlert } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
+import EscanerCamara from '../components/EscanerCamara';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
@@ -26,6 +27,8 @@ export default function Despacho() {
     const [detalle, setDetalle] = useState(null);
     const [despachando, setDespachando] = useState(false);
     const [tomando, setTomando] = useState(false);
+    /** Visor de la cámara abierto. */
+    const [camara, setCamara] = useState(false);
     const [pdf, setPdf] = useState(null);
 
     /** Último escaneo, para pintarlo en verde o en rojo. */
@@ -74,23 +77,39 @@ export default function Despacho() {
         inputRef.current?.focus();
     }, [detalle, ultimo]);
 
+    /**
+     * Verifica un código contra el pedido. Da igual de dónde venga: la pistola
+     * lo escribe en el campo y la cámara lo lee del QR, pero el resultado y el
+     * aviso son los mismos.
+     */
+    const verificar = useCallback(
+        async (valor) => {
+            if (!valor || !detalle) return { ok: false, texto: 'No hay pedido abierto.' };
+
+            try {
+                const { data } = await api.post(`/ordenes-venta/${detalle.id}/escanear`, {
+                    codigo: valor,
+                });
+                const texto = `Rollo correcto · ${num(data.metros)} m · ${data.verificados}/${data.total}`;
+                setUltimo({ ok: true, codigo: data.rollo.codigo, metros: data.metros, texto: 'Rollo correcto' });
+                await cargarDetalle(detalle.id);
+                return { ok: true, texto };
+            } catch (err) {
+                const texto = err.response?.data?.message ?? 'No se pudo verificar el rollo.';
+                setUltimo({ ok: false, codigo: valor, texto });
+                return { ok: false, texto };
+            }
+        },
+        [detalle, cargarDetalle],
+    );
+
     const escanear = async (e) => {
         e.preventDefault();
         const valor = codigo.trim();
-        if (!valor || !detalle) return;
+        if (!valor) return;
 
         setCodigo('');
-        try {
-            const { data } = await api.post(`/ordenes-venta/${detalle.id}/escanear`, { codigo: valor });
-            setUltimo({ ok: true, codigo: data.rollo.codigo, metros: data.metros, texto: 'Rollo correcto' });
-            await cargarDetalle(detalle.id);
-        } catch (err) {
-            setUltimo({
-                ok: false,
-                codigo: valor,
-                texto: err.response?.data?.message ?? 'No se pudo verificar el rollo.',
-            });
-        }
+        await verificar(valor);
     };
 
     const despachar = async () => {
@@ -291,6 +310,17 @@ export default function Despacho() {
                                         <Button type="submit" size="sm" disabled={!codigo.trim()}>
                                             Verificar
                                         </Button>
+                                        {/* La misma verificación, leyendo el QR de la etiqueta
+                                            con la cámara del celular. */}
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            size="sm"
+                                            onClick={() => setCamara(true)}
+                                            title="Escanear con la cámara"
+                                        >
+                                            <Camera className="h-4 w-4" />
+                                        </Button>
                                         <span className="text-sm font-medium text-warm-700">
                                             {verificados}/{total}
                                         </span>
@@ -360,6 +390,13 @@ export default function Despacho() {
                     </section>
                 </div>
             )}
+
+            <EscanerCamara
+                abierto={camara}
+                onCerrar={() => setCamara(false)}
+                onLeer={verificar}
+                titulo={detalle ? `${detalle.requerimiento_numero ?? detalle.documento} · ${verificados}/${total}` : 'Escanear rollo'}
+            />
 
             <PdfViewerModal
                 open={Boolean(pdf)}

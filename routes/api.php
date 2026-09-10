@@ -19,6 +19,7 @@ use App\Http\Controllers\CompraController;
 use App\Http\Controllers\ClienteController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EmpresaController;
+use App\Http\Controllers\ImportacionController;
 use App\Http\Controllers\MarcaController;
 use App\Http\Controllers\MetodoPagoController;
 use App\Http\Controllers\MotivoMovimientoController;
@@ -118,6 +119,12 @@ Route::middleware('auth:api')->group(function () {
     Route::get('rollos/{rollo}', [RolloController::class, 'show']);
     Route::post('rollos/ingresar', [RolloController::class, 'ingresar']);
     Route::post('rollos/{rollo}/trasladar', [RolloController::class, 'trasladar']);
+
+    // Importaciones: el embarque del que llegó cada rollo. Se abren solas al
+    // recepcionar, por eso no hay POST.
+    Route::get('importaciones', [ImportacionController::class, 'index']);
+    Route::get('importaciones/{importacione}', [ImportacionController::class, 'show']);
+    Route::put('importaciones/{importacione}', [ImportacionController::class, 'update']);
 
     // Pedidos: el recorrido hasta el despacho (no mueve stock)
     Route::get('ordenes-venta', [OrdenVentaController::class, 'index']);

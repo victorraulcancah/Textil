@@ -55,6 +55,7 @@ class Rollo extends Model
         'nivel',
         'posicion',
         'recepcion_compra_id',
+        'importacion_id',
         'cliente_id',
         'observaciones',
     ];
@@ -93,6 +94,12 @@ class Rollo extends Model
     public function cliente()
     {
         return $this->belongsTo(Cliente::class);
+    }
+
+    /** El embarque del que llegó este rollo, si se registró al recibirlo. */
+    public function importacion()
+    {
+        return $this->belongsTo(Importacion::class);
     }
 
     public function movimientos()

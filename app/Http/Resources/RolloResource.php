@@ -57,6 +57,15 @@ class RolloResource extends JsonResource
             'ubicacion' => $this->ubicacionLegible(),
 
             'recepcion_compra_id' => $this->recepcion_compra_id,
+
+            'importacion_id' => $this->importacion_id,
+            'importacion' => $this->whenLoaded('importacion', fn () => $this->importacion ? [
+                'id' => $this->importacion->id,
+                'codigo' => $this->importacion->codigo,
+                'documento' => $this->importacion->documento,
+                'fecha_llegada' => $this->importacion->fecha_llegada,
+            ] : null),
+
             'cliente_id' => $this->cliente_id,
             'cliente' => $this->whenLoaded('cliente', fn () => $this->cliente?->nombre),
 

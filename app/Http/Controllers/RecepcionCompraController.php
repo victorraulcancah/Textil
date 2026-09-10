@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Almacen;
 use App\Models\Compra;
+use App\Models\Importacion;
 use App\Models\ProductoColor;
 use App\Models\ProductoPresentacion;
 use App\Models\RecepcionCompra;
@@ -90,6 +91,12 @@ class RecepcionCompraController extends Controller
             'tipo_documento' => 'nullable|string|max:50',
             'fecha_recepcion' => 'required|date',
             'observaciones' => 'nullable|string',
+
+            // El embarque del que llega la mercadería. Se escribe aquí y se da
+            // de alta solo la primera vez que se nombra.
+            'importacion_codigo' => 'nullable|string|max:60',
+            'importacion_documento' => 'nullable|string|max:100',
+
             'detalles' => 'required|array|min:1',
             'detalles.*.compra_detalle_id' => 'required|exists:compra_detalles,id',
             'detalles.*.cantidad_recibida' => 'required|numeric|min:0.01',
@@ -102,6 +109,13 @@ class RecepcionCompraController extends Controller
             'detalles.*.rollos' => 'nullable|array',
             'detalles.*.rollos.*.metros' => 'required|numeric|min:0.01',
             'detalles.*.rollos.*.peso_kg' => 'nullable|numeric|min:0',
+
+            // Dónde se guardan los rollos de esta línea. Se pregunta al
+            // recibir porque es el único momento en que alguien lo sabe.
+            'detalles.*.pasillo' => 'nullable|string|max:20',
+            'detalles.*.rack' => 'nullable|string|max:20',
+            'detalles.*.nivel' => 'nullable|string|max:20',
+            'detalles.*.posicion' => 'nullable|string|max:20',
         ]);
 
         try {
@@ -137,6 +151,17 @@ class RecepcionCompraController extends Controller
 
                 $almacen = Almacen::findOrFail($data['almacen_id']);
                 $stock = app(StockService::class);
+
+                $importacion = Importacion::porCodigo(
+                    $data['importacion_codigo'] ?? null,
+                    $compra->proveedor_id,
+                    $data['fecha_recepcion'],
+                );
+
+                // El documento de embarque se completa si llega y aún no lo tiene.
+                if ($importacion && ! $importacion->documento && ! empty($data['importacion_documento'])) {
+                    $importacion->update(['documento' => $data['importacion_documento']]);
+                }
 
                 foreach ($data['detalles'] as $detalle) {
                     $linea = $compra->detalles->firstWhere('id', $detalle['compra_detalle_id']);
@@ -205,6 +230,13 @@ class RecepcionCompraController extends Controller
                             $detalle['codigo_proveedor'] ?? null,
                             auth()->id(),
                             actualizarStock: false,
+                            importacion: $importacion,
+                            ubicacion: [
+                                'pasillo' => $detalle['pasillo'] ?? null,
+                                'rack' => $detalle['rack'] ?? null,
+                                'nivel' => $detalle['nivel'] ?? null,
+                                'posicion' => $detalle['posicion'] ?? null,
+                            ],
                         );
                     }
                 }

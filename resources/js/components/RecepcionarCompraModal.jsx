@@ -43,6 +43,8 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
     const [guardando, setGuardando] = useState(false);
     const [datos, setDatos] = useState(null);
     const [almacenes, setAlmacenes] = useState([]);
+    /** Embarques ya registrados, solo para sugerir el código al escribirlo. */
+    const [importaciones, setImportaciones] = useState([]);
     /** Cantidad a recibir por línea: { [compra_detalle_id]: '5' } */
     const [cantidades, setCantidades] = useState({});
     /**
@@ -50,22 +52,35 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
      * Solo aplica a la mercadería que se maneja pieza por pieza (las telas).
      */
     const [rollosPorLinea, setRollosPorLinea] = useState({});
-    const [form, setForm] = useState({ almacen_id: '', fecha_recepcion: hoy(), observaciones: '' });
+    const [form, setForm] = useState({
+        almacen_id: '',
+        fecha_recepcion: hoy(),
+        observaciones: '',
+        // El embarque del que llega la mercadería. Se abre solo la primera vez
+        // que se escribe su código.
+        importacion_codigo: '',
+        importacion_documento: '',
+    });
 
     const cargar = useCallback(async () => {
         setCargando(true);
         try {
-            const [pendRes, almRes] = await Promise.all([
+            const [pendRes, almRes, impRes] = await Promise.all([
                 api.get(`/compras/${compraId}/pendientes-recepcion`),
                 api.get('/almacenes'),
+                // Los embarques ya conocidos, para sugerirlos al escribir.
+                api.get('/importaciones').catch(() => ({ data: [] })),
             ]);
             setDatos(pendRes.data);
             const lista = asList(almRes);
             setAlmacenes(lista);
+            setImportaciones(asList(impRes));
             setForm({
                 almacen_id: lista.length === 1 ? String(lista[0].id) : '',
                 fecha_recepcion: hoy(),
                 observaciones: '',
+                importacion_codigo: '',
+                importacion_documento: '',
             });
             // Por defecto se recibe todo lo pendiente; se ajusta lo que no llegó.
             setCantidades(
@@ -109,6 +124,11 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
                               rollos,
                               producto_color_id: cap.color_id || null,
                               codigo_proveedor: cap.codigo || null,
+                              // Dónde se guardan estos rollos dentro del almacén.
+                              pasillo: cap.pasillo || null,
+                              rack: cap.rack || null,
+                              nivel: cap.nivel || null,
+                              posicion: cap.posicion || null,
                           }
                         : {};
                 })(),
@@ -133,6 +153,8 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
                 tipo_documento: datos?.compra?.tipo_documento ?? null,
                 numero_documento: [datos?.compra?.serie, datos?.compra?.numero].filter(Boolean).join('-') || null,
                 observaciones: form.observaciones,
+                importacion_codigo: form.importacion_codigo || null,
+                importacion_documento: form.importacion_documento || null,
                 detalles,
             });
             toast.success('Recepción registrada.');
@@ -191,6 +213,43 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
                             placeholder="Opcional"
                             value={form.observaciones}
                             onChange={(e) => setForm((p) => ({ ...p, observaciones: e.target.value }))}
+                        />
+                    </div>
+
+                    {/* El embarque. Se escribe aquí porque es el único momento
+                        en que se tiene el papeleo delante. */}
+                    <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div>
+                            <Input
+                                label="Importación (opcional)"
+                                placeholder="IMP-2026-03"
+                                list="importaciones-conocidas"
+                                value={form.importacion_codigo}
+                                onChange={(e) =>
+                                    setForm((p) => ({ ...p, importacion_codigo: e.target.value }))
+                                }
+                            />
+                            <datalist id="importaciones-conocidas">
+                                {importaciones.map((i) => (
+                                    <option key={i.id} value={i.codigo}>
+                                        {[i.documento, i.rollos_count ? `${i.rollos_count} rollos` : null]
+                                            .filter(Boolean)
+                                            .join(' · ')}
+                                    </option>
+                                ))}
+                            </datalist>
+                            <p className="mt-1 text-xs text-warm-500">
+                                Si el código es nuevo se crea el embarque; si ya existe, los rollos se
+                                suman a él.
+                            </p>
+                        </div>
+                        <Input
+                            label="Documento de embarque"
+                            placeholder="BL, DUA, factura del exterior…"
+                            value={form.importacion_documento}
+                            onChange={(e) =>
+                                setForm((p) => ({ ...p, importacion_documento: e.target.value }))
+                            }
                         />
                     </div>
 
@@ -305,6 +364,44 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
                                                                         Un rollo por línea. Si pones dos números, el
                                                                         segundo es el peso en kilos.
                                                                     </p>
+                                                                </div>
+                                                            </div>
+
+                                                            {/* Dónde se guardan. Se aplica a todos los
+                                                                rollos de esta línea; después cada uno se
+                                                                puede mover por su cuenta. */}
+                                                            <div className="mt-3">
+                                                                <p className="mb-1 text-sm font-medium text-warm-800">
+                                                                    Ubicación en el almacén{' '}
+                                                                    <span className="font-normal text-warm-500">
+                                                                        (opcional)
+                                                                    </span>
+                                                                </p>
+                                                                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                                                                    <Input
+                                                                        placeholder="Pasillo"
+                                                                        aria-label="Pasillo"
+                                                                        value={cap?.pasillo ?? ''}
+                                                                        onChange={(e) => setCap('pasillo', e.target.value)}
+                                                                    />
+                                                                    <Input
+                                                                        placeholder="Rack"
+                                                                        aria-label="Rack"
+                                                                        value={cap?.rack ?? ''}
+                                                                        onChange={(e) => setCap('rack', e.target.value)}
+                                                                    />
+                                                                    <Input
+                                                                        placeholder="Nivel"
+                                                                        aria-label="Nivel"
+                                                                        value={cap?.nivel ?? ''}
+                                                                        onChange={(e) => setCap('nivel', e.target.value)}
+                                                                    />
+                                                                    <Input
+                                                                        placeholder="Posición"
+                                                                        aria-label="Posición"
+                                                                        value={cap?.posicion ?? ''}
+                                                                        onChange={(e) => setCap('posicion', e.target.value)}
+                                                                    />
                                                                 </div>
                                                             </div>
 

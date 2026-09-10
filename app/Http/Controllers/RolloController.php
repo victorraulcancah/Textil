@@ -23,7 +23,7 @@ use Illuminate\Http\Request;
 class RolloController extends Controller
 {
     /** Relaciones que acompañan a un rollo en las respuestas. */
-    private const RELACIONES = ['producto:id,codigo,nombre', 'color', 'almacen:id,nombre', 'cliente:id,nombre'];
+    private const RELACIONES = ['producto:id,codigo,nombre', 'color', 'almacen:id,nombre', 'cliente:id,nombre', 'importacion:id,codigo,documento,fecha_llegada'];
 
     public function __construct(private RolloService $rollos) {}
 
@@ -38,6 +38,7 @@ class RolloController extends Controller
             ->when($request->filled('producto_color_id'), fn ($q) => $q->where('producto_color_id', $request->producto_color_id))
             ->when($request->filled('almacen_id'), fn ($q) => $q->where('almacen_id', $request->almacen_id))
             ->when($request->filled('estado'), fn ($q) => $q->where('estado', $request->estado))
+            ->when($request->filled('importacion_id'), fn ($q) => $q->where('importacion_id', $request->importacion_id))
             ->when($request->boolean('solo_disponibles'), fn ($q) => $q->disponibles())
             ->entreMetros($request->input('metros_desde'), $request->input('metros_hasta'))
             ->when($request->filled('buscar'), function ($q) use ($request) {

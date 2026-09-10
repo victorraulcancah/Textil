@@ -5,6 +5,7 @@ import {
     Package,
     Printer,
     Ruler,
+    Ship,
     Tag,
 } from 'lucide-react';
 import api, { asList } from '../lib/api';
@@ -243,6 +244,19 @@ export default function StockPorRollo() {
                     <span className="truncate">{row.ubicacion}</span>
                 </span>
             ),
+        },
+        {
+            key: 'importacion',
+            label: 'Importación',
+            render: (row) =>
+                row.importacion ? (
+                    <span className="inline-flex items-center gap-1.5 text-warm-600">
+                        <Ship className="h-3.5 w-3.5 shrink-0 text-warm-400" />
+                        <span className="truncate">{row.importacion.codigo}</span>
+                    </span>
+                ) : (
+                    <span className="text-warm-400">—</span>
+                ),
         },
         {
             type: 'actions',

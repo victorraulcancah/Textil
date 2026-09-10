@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Almacen;
+use App\Models\Importacion;
 use App\Models\Producto;
 use App\Models\ProductoColor;
 use App\Models\RecepcionCompra;
@@ -50,8 +51,14 @@ class RolloService
         ?string $codigoProveedor = null,
         ?int $usuarioId = null,
         bool $actualizarStock = true,
+        ?Importacion $importacion = null,
+        array $ubicacion = [],
     ): Collection {
-        return DB::transaction(function () use ($producto, $color, $almacen, $lineas, $costoUnitario, $recepcion, $codigoProveedor, $usuarioId, $actualizarStock) {
+        // Solo las cuatro claves de sitio, para que nadie cuele otra cosa en
+        // el create() por pasar el array entero de un formulario.
+        $ubicacion = array_intersect_key($ubicacion, array_flip(['pasillo', 'rack', 'nivel', 'posicion']));
+
+        return DB::transaction(function () use ($producto, $color, $almacen, $lineas, $costoUnitario, $recepcion, $codigoProveedor, $usuarioId, $actualizarStock, $importacion, $ubicacion) {
             // Se continúa la numeración del color, no se reinicia: el rollo 19
             // de un segundo contenedor no puede chocar con el 19 del primero.
             $siguiente = $this->siguienteNumero($producto, $color);
@@ -79,7 +86,8 @@ class RolloService
                     'costo_unitario' => $costoUnitario,
                     'estado' => Rollo::DISPONIBLE,
                     'recepcion_compra_id' => $recepcion?->id,
-                ]);
+                    'importacion_id' => $importacion?->id,
+                ] + $ubicacion);
 
                 $this->registrar(
                     $rollo,

@@ -102,6 +102,12 @@ return [
                     'apis' => ['rollos'],
                     'pdf' => ['etiqueta-rollo'],
                 ],
+                'importaciones' => [
+                    'label' => 'Importaciones',
+                    // No hay alta: los embarques nacen en la recepción de compra.
+                    'apis' => ['importaciones'],
+                    'acciones' => ['ver', 'editar'],
+                ],
                 'despacho' => [
                     'label' => 'Preparación y despacho',
                     // El almacenero mueve el pedido por el almacén, pero no lo

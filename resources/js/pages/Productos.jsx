@@ -1169,8 +1169,8 @@ export default function Productos() {
                             </Button>
                         </div>
                         <p className="mb-3 text-xs text-warm-400">
-                            En qué colores existe esta tela. Es informativo: el stock no se
-                            separa por color.
+                            En qué colores existe esta tela. El código de cada color forma parte
+                            del código de sus rollos: tela A103 + color 01 → rollo A103-01-0001.
                         </p>
 
                         {colores.length === 0 ? (

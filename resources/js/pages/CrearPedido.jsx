@@ -34,6 +34,8 @@ export default function CrearPedido() {
     const [productos, setProductos] = useState([]);
     /** Stock disponible por producto, en unidad base. */
     const [stockPorProducto, setStockPorProducto] = useState({});
+    /** Filas de existencias (producto × almacén, con metros por color). */
+    const [existencias, setExistencias] = useState([]);
     const [cargando, setCargando] = useState(true);
     const [guardando, setGuardando] = useState(false);
     const [errores, setErrores] = useState({});
@@ -83,6 +85,9 @@ export default function CrearPedido() {
                     porProducto[pid] = (porProducto[pid] ?? 0) + Number(fila.stock_actual || 0);
                 }
                 setStockPorProducto(porProducto);
+                // Las filas completas, para que el buscador muestre el stock de
+                // cada almacén y por color.
+                setExistencias(asList(existenciasRes));
 
                 if (id) {
                     const { data } = await api.get(`/ordenes-venta/${id}`);
@@ -568,6 +573,8 @@ export default function CrearPedido() {
                 productos={productos}
                 stockPorProducto={stockPorProducto}
                 bloquearSinStock={false}
+                // Stock de cada almacén y por color, sin códigos de rollo.
+                existencias={existencias}
                 title="Buscar productos"
             />
         </Layout>

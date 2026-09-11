@@ -1288,6 +1288,9 @@ export default function CrearVenta() {
                 multiple
                 productos={productos}
                 stockPorProducto={stockDeTodos}
+                // Stock de cada almacén y por color, sin códigos de rollo.
+                existencias={existencias}
+                almacenId={form.almacen_id}
                 title="Buscar productos"
             />
         </Layout>

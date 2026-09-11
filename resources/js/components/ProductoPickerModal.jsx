@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Package, PackageSearch, Plus, RotateCcw, Search, X } from 'lucide-react';
+import { Package, PackageSearch, Plus, RotateCcw, Search, Warehouse, X } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { Button, Modal, SearchSelect, Select, Spinner } from './ui';
 
@@ -8,15 +8,24 @@ const normalize = (texto) =>
     String(texto ?? '')
         .normalize('NFD')
         .replace(/\p{M}/gu, '')
-        .toLowerCase();
+        .toLowerCase()
+        .trim();
 
 const money = (n) =>
     new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(n) || 0);
 
-const numero = (n) => new Intl.NumberFormat('es-PE').format(Number(n) || 0);
+const numero = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
+
+/** "punto" → "Punto": los valores de tipo de tejido se escriben a mano. */
+const capitalizar = (texto) => {
+    const t = String(texto ?? '').trim();
+    return t ? t.charAt(0).toUpperCase() + t.slice(1) : t;
+};
 
 const filtrosVacios = {
     texto: '',
+    tipoTejido: '',
+    color: '',
     categoria: '',
     subCategoria: '',
     marca: '',
@@ -45,13 +54,30 @@ const opcionesDe = (productos, clave) => {
 };
 
 /**
- * Buscador de productos en modal, con filtros por categoría, marca y sub-marca.
- * Compartido entre órdenes de compra, compras, ventas, etc.
+ * Cuántas unidades base son un metro. El stock va en unidad base (centímetros
+ * en la tela); se muestra en metros si el producto tiene formato por metro.
+ * null si el producto no se mide en metros (un cono, un cierre).
+ */
+const basePorMetro = (producto) => {
+    const porMetro = (producto?.presentaciones ?? []).find(
+        (p) => normalize(p.unidad_base?.abreviatura) === 'm',
+    );
+    const factor = Number(porMetro?.factor_conversion);
+    return factor > 0 ? factor : null;
+};
+
+/**
+ * Buscador de productos en modal, con filtros por tipo de tela, color,
+ * categoría y marca. Compartido entre compras, ventas y pedidos.
  *
  *   multiple = false → onSelect(producto, presentacion, cantidad)
  *   multiple = true  → onSelect([{ producto, presentacion, cantidad }, …]) al pulsar "Agregar"
  *
  * productos / stockPorProducto son opcionales; si no se pasan, el modal los carga solo.
+ *
+ * Con `existencias` muestra el stock de cada almacén y por color. Nunca
+ * muestra códigos de rollo: quien vende ve cuánta tela hay y dónde, pero los
+ * rollos concretos los elige el almacén.
  */
 export default function ProductoPickerModal({
     open,
@@ -69,6 +95,10 @@ export default function ProductoPickerModal({
      * comprometer tela que aún no ha llegado.
      */
     bloquearSinStock = true,
+    /** Filas de /existencias: producto × almacén, con metros por color. */
+    existencias = null,
+    /** Almacén de la venta, para resaltarlo entre los demás. */
+    almacenId = null,
     title = 'Buscar producto',
 }) {
     const [filtros, setFiltros] = useState(filtrosVacios);
@@ -84,6 +114,7 @@ export default function ProductoPickerModal({
 
     const productos = productosProp ?? productosPropios ?? [];
     const debeCargar = !productosProp && productosPropios === null;
+    const conDesglose = Array.isArray(existencias);
 
     // Carga propia solo si el padre no entregó el catálogo.
     useEffect(() => {
@@ -136,6 +167,52 @@ export default function ProductoPickerModal({
         [productos, filtros.marca],
     );
 
+    /** Tipos de tejido escritos en la ficha técnica (plano, punto…). */
+    const tipoTejidoOptions = useMemo(() => {
+        const mapa = new Map();
+        productos.forEach((p) => {
+            const clave = normalize(p.tipo_tejido);
+            if (clave && !mapa.has(clave)) mapa.set(clave, capitalizar(p.tipo_tejido));
+        });
+        return [...mapa.entries()]
+            .map(([value, label]) => ({ value, label }))
+            .sort((a, b) => a.label.localeCompare(b.label, 'es'));
+    }, [productos]);
+
+    /**
+     * Colores por nombre. Cada tela tiene sus propios colores, así que "Negro"
+     * de una y "Negro" de otra son registros distintos: se agrupan por nombre
+     * para poder buscar "todo lo que haya en negro".
+     */
+    const colorOptions = useMemo(() => {
+        const mapa = new Map();
+        productos.forEach((p) =>
+            (p.colores ?? []).forEach((c) => {
+                const clave = normalize(c.nombre);
+                if (clave && !mapa.has(clave)) mapa.set(clave, c.nombre);
+            }),
+        );
+        return [...mapa.entries()]
+            .map(([value, label]) => ({ value, label }))
+            .sort((a, b) => a.label.localeCompare(b.label, 'es'));
+    }, [productos]);
+
+    /** Stock de cada producto en cada almacén: { [productoId]: [fila, …] }. */
+    const stockPorAlmacen = useMemo(() => {
+        const mapa = {};
+        (existencias ?? []).forEach((fila) => {
+            const pid = String(fila.producto_id ?? fila.producto?.id ?? '');
+            if (!pid) return;
+            (mapa[pid] ??= []).push({
+                almacenId: String(fila.almacen_id ?? fila.almacen?.id ?? ''),
+                almacen: fila.almacen?.nombre ?? '—',
+                base: Number(fila.stock_actual) || 0,
+                colores: fila.colores ?? [],
+            });
+        });
+        return mapa;
+    }, [existencias]);
+
     const presentacionesDe = useCallback(
         (producto) => (producto?.presentaciones ?? []).filter((pres) => pres.activo !== false),
         [],
@@ -155,6 +232,10 @@ export default function ProductoPickerModal({
         const q = normalize(filtros.texto);
 
         return productos.filter((p) => {
+            if (filtros.tipoTejido && normalize(p.tipo_tejido) !== filtros.tipoTejido) return false;
+            if (filtros.color && !(p.colores ?? []).some((c) => normalize(c.nombre) === filtros.color)) {
+                return false;
+            }
             if (filtros.categoria && String(p.categoria?.id) !== filtros.categoria) return false;
             if (filtros.subCategoria && String(p.sub_categoria?.id) !== filtros.subCategoria) return false;
             if (filtros.marca && String(p.marca?.id) !== filtros.marca) return false;
@@ -183,10 +264,13 @@ export default function ProductoPickerModal({
                     p.codigo,
                     p.codigo_barras,
                     p.descripcion,
+                    p.tipo_tejido,
                     p.marca?.nombre,
                     p.sub_marca?.nombre,
                     p.categoria?.nombre,
                     p.sub_categoria?.nombre,
+                    // Escribir "azul" también encuentra las telas que vienen en azul.
+                    ...(p.colores ?? []).map((c) => c.nombre),
                 ]
                     .filter(Boolean)
                     .join(' '),
@@ -274,12 +358,58 @@ export default function ProductoPickerModal({
         return { valor, texto: `${numero(valor)}${abrev ? ` ${abrev}` : ''}`, tono };
     };
 
+    /**
+     * Stock del producto en cada almacén que tiene algo, en metros si la tela
+     * se mide así. Con un color filtrado, cuenta solo los metros de ese color
+     * (sale de los rollos, que son los que saben de colores).
+     */
+    const almacenesDe = (producto) => {
+        const filas = stockPorAlmacen[String(producto.id)] ?? [];
+        const factor = basePorMetro(producto);
+        const abrev = factor ? 'm' : (producto.unidad_medida?.abreviatura ?? '');
+
+        return filas
+            .map((f) => {
+                let cantidad = factor ? f.base / factor : f.base;
+                if (filtros.color) {
+                    cantidad = f.colores
+                        .filter((c) => normalize(c.nombre) === filtros.color)
+                        .reduce((s, c) => s + (Number(c.metros) || 0), 0);
+                }
+                return { ...f, cantidad, abrev: filtros.color ? 'm' : abrev };
+            })
+            .filter((f) => f.cantidad > 0)
+            .sort((a, b) => {
+                // El almacén de la venta va primero; el resto, de más a menos.
+                if (almacenId && a.almacenId === String(almacenId)) return -1;
+                if (almacenId && b.almacenId === String(almacenId)) return 1;
+                return b.cantidad - a.cantidad;
+            });
+    };
+
+    /** Metros por color sumando todos los almacenes. */
+    const coloresDe = (producto) => {
+        const mapa = new Map();
+        (stockPorAlmacen[String(producto.id)] ?? []).forEach((f) =>
+            f.colores.forEach((c) => {
+                const clave = normalize(c.nombre);
+                const previo = mapa.get(clave) ?? { nombre: c.nombre, hex: c.hex, metros: 0 };
+                previo.metros += Number(c.metros) || 0;
+                mapa.set(clave, previo);
+            }),
+        );
+        return [...mapa.entries()]
+            .filter(([clave, c]) => c.metros > 0 && (!filtros.color || clave === filtros.color))
+            .map(([, c]) => c)
+            .sort((a, b) => b.metros - a.metros);
+    };
+
     return (
         <Modal
             open={open}
             onClose={onClose}
             title={title}
-            description="Filtra por categoría, sub-categoría, marca o sub-marca; ajusta unidad y cantidad."
+            description="Filtra por tipo de tela, color, categoría o marca; mira cuánto hay en cada almacén y ajusta unidad y cantidad."
             size="3xl"
             footer={
                 <>
@@ -312,7 +442,7 @@ export default function ProductoPickerModal({
                                 type="text"
                                 value={filtros.texto}
                                 onChange={(e) => setFiltro({ texto: e.target.value })}
-                                placeholder="Nombre, código o código de barras…"
+                                placeholder="Nombre, código, color o código de barras…"
                                 className="block w-full rounded-md border-0 py-2 pl-9 pr-3 text-sm text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-primary-600"
                             />
                         </div>
@@ -343,6 +473,24 @@ export default function ProductoPickerModal({
                             </div>
                         </>
                     )}
+                </div>
+
+                {/* Lo que más se pregunta en una tienda de telas: qué tejido y en qué color. */}
+                <div className="grid grid-cols-2 gap-3">
+                    <SearchSelect
+                        value={filtros.tipoTejido}
+                        onChange={(v) => setFiltro({ tipoTejido: v })}
+                        options={tipoTejidoOptions}
+                        placeholder="Todos los tipos de tela"
+                        emptyText="Sin coincidencias"
+                    />
+                    <SearchSelect
+                        value={filtros.color}
+                        onChange={(v) => setFiltro({ color: v })}
+                        options={colorOptions}
+                        placeholder="Todos los colores"
+                        emptyText="Sin coincidencias"
+                    />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -443,6 +591,8 @@ export default function ProductoPickerModal({
                         // almacén se ve y no se puede elegir.
                         const sinStock = bloquearSinStock && stock != null && stock.valor <= 0;
                         const bloqueado = sinUnidades || sinStock;
+                        const almacenes = conDesglose ? almacenesDe(producto) : [];
+                        const colores = conDesglose ? coloresDe(producto) : [];
 
                         return (
                             <div
@@ -477,11 +627,13 @@ export default function ProductoPickerModal({
                                     <p className="truncate font-semibold text-warm-900">{producto.nombre}</p>
                                     <p className="truncate text-xs text-warm-500">
                                         Código: {producto.codigo ?? '—'}
+                                        {producto.tipo_tejido && ` · Tejido ${normalize(producto.tipo_tejido)}`}
                                         {producto.marca?.nombre && ` · ${producto.marca.nombre}`}
                                         {producto.categoria?.nombre && ` · ${producto.categoria.nombre}`}
                                     </p>
                                     <div className="mt-1 flex flex-wrap items-center gap-2">
-                                        {stock && (
+                                        {/* Con desglose por almacén, este total sobra. */}
+                                        {stock && !conDesglose && (
                                             <span
                                                 className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${stock.tono}`}
                                             >
@@ -500,6 +652,65 @@ export default function ProductoPickerModal({
                                             </span>
                                         )}
                                     </div>
+
+                                    {conDesglose && (
+                                        <div className="mt-1.5 space-y-1">
+                                            {/* Cuánto hay en cada almacén. */}
+                                            <div className="flex flex-wrap items-center gap-1.5">
+                                                {almacenes.length === 0 ? (
+                                                    <span className="text-[11px] text-warm-400">
+                                                        {filtros.color
+                                                            ? 'Sin ese color en ningún almacén'
+                                                            : 'Sin stock en ningún almacén'}
+                                                    </span>
+                                                ) : (
+                                                    almacenes.map((a) => {
+                                                        const esEste = almacenId && a.almacenId === String(almacenId);
+                                                        return (
+                                                            <span
+                                                                key={a.almacenId}
+                                                                className={[
+                                                                    'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px]',
+                                                                    esEste
+                                                                        ? 'bg-primary-50 font-semibold text-primary-700 ring-1 ring-inset ring-primary-200'
+                                                                        : 'bg-gray-100 text-warm-700',
+                                                                ].join(' ')}
+                                                                title={esEste ? 'Almacén de esta venta' : undefined}
+                                                            >
+                                                                <Warehouse className="h-3 w-3 shrink-0" />
+                                                                {a.almacen}
+                                                                <span className="tabular-nums">
+                                                                    · {numero(a.cantidad)}
+                                                                    {a.abrev ? ` ${a.abrev}` : ''}
+                                                                </span>
+                                                            </span>
+                                                        );
+                                                    })
+                                                )}
+                                            </div>
+
+                                            {/* Cuánto hay de cada color, sumando todos los almacenes. */}
+                                            {colores.length > 0 && (
+                                                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                                                    {colores.map((c) => (
+                                                        <span
+                                                            key={c.nombre}
+                                                            className="inline-flex items-center gap-1 text-[11px] text-warm-700"
+                                                        >
+                                                            <span
+                                                                className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-black/10"
+                                                                style={{ backgroundColor: c.hex || '#9ca3af' }}
+                                                            />
+                                                            {c.nombre}
+                                                            <span className="font-medium tabular-nums text-warm-900">
+                                                                {numero(c.metros)} m
+                                                            </span>
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
 
                                 {!bloqueado && (

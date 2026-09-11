@@ -490,7 +490,10 @@ export default function Productos() {
                         : 'Verifique los datos del producto.',
                 );
             } else {
-                toast.error('No se pudo guardar el producto.');
+                // El servidor rechaza cambios que dejarían el stock mal contado
+                // (409) y explica por qué. Repetirlo tal cual es más útil que un
+                // "no se pudo guardar" que obliga a adivinar.
+                toast.error(err.response?.data?.message ?? 'No se pudo guardar el producto.');
             }
         } finally {
             setSaving(false);

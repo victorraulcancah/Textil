@@ -198,6 +198,8 @@ class RecepcionCompraController extends Controller
                     $movimiento = $stock->entrada(
                         $presentacion, $almacen, $cantidad, $costoBase,
                         'recepcion', 'recepcion_compra', $recepcion->id, auth()->id(),
+                        // Con rollos, la línea se recibe en un color: queda en el kardex.
+                        colorId: ! empty($detalle['producto_color_id']) ? (int) $detalle['producto_color_id'] : null,
                     );
 
                     $recepcion->detalles()->create([

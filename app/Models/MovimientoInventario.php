@@ -22,7 +22,17 @@ class MovimientoInventario extends Model
         'saldo_stock',
         'fecha',
         'usuario_id',
+        'producto_color_id',
     ];
+
+    /**
+     * Color del movimiento, cuando nace de rollos concretos. Null en lo que no
+     * va por rollos o donde no se sabe (un ajuste, una venta sin rollo).
+     */
+    public function color()
+    {
+        return $this->belongsTo(ProductoColor::class, 'producto_color_id');
+    }
 
     protected function casts(): array
     {

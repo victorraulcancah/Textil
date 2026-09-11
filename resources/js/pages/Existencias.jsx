@@ -152,6 +152,48 @@ export default function Existencias() {
             ),
         },
         {
+            // Sale de los rollos: el stock del producto no distingue colores.
+            // Lo que no va por rollos (mercería) queda en "—".
+            key: 'color',
+            label: 'Color',
+            width: '220px',
+            getSearchValue: (row) => (row.colores ?? []).map((c) => c.nombre).join(' '),
+            render: (row) => {
+                const colores = row.colores ?? [];
+                if (colores.length === 0) return <span className="text-gray-400">—</span>;
+
+                return (
+                    <div className="flex flex-col gap-0.5">
+                        {colores.map((c) => (
+                            <span
+                                key={c.id ?? 'sin-color'}
+                                className="inline-flex items-center gap-1.5 text-xs text-warm-800"
+                                title={`${c.rollos} rollo(s)`}
+                            >
+                                <span
+                                    className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-black/10"
+                                    style={{ backgroundColor: c.hex || '#9ca3af' }}
+                                />
+                                <span className="truncate">{c.nombre}</span>
+                                <span className="ml-auto font-medium tabular-nums text-warm-900">
+                                    {new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(c.metros)} m
+                                </span>
+                            </span>
+                        ))}
+                        {row.descuadre_rollos ? (
+                            <span
+                                className="mt-0.5 w-fit rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700"
+                                title="El stock del producto y la suma de sus rollos no coinciden: algo movió uno sin el otro (una venta sin rollo, un ajuste)."
+                            >
+                                Descuadre: {row.descuadre_rollos > 0 ? '+' : ''}
+                                {new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(row.descuadre_rollos)} m
+                            </span>
+                        ) : null}
+                    </div>
+                );
+            },
+        },
+        {
             key: 'marca',
             label: 'Marca',
             width: '120px',

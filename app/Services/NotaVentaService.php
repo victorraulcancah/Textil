@@ -6,6 +6,9 @@ use App\Models\CuentaPorCobrar;
 use App\Models\MotivoMovimiento;
 use App\Models\MovimientoCaja;
 use App\Models\NotaVenta;
+use App\Models\NotaVentaDetalle;
+use App\Models\Rollo;
+use App\Models\RolloMovimiento;
 use App\Models\SerieDocumento;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -17,11 +20,16 @@ use Illuminate\Support\Facades\DB;
  * ingreso en caja y, si es al crédito, crea la cuenta por cobrar. Editar una
  * venta es deshacer las tres y volver a aplicarlas con los datos nuevos, todo
  * dentro de una transacción: si algo falla, no queda a medias.
+ *
+ * La tela, además, sale de un rollo concreto. En la venta de mostrador eso se
+ * resuelve aquí: se corta el rollo elegido. En la que viene de un pedido ya lo
+ * hizo el pedido al facturar, y aquí no se vuelve a cortar.
  */
 class NotaVentaService
 {
     public function __construct(
-        protected StockService $stockService
+        protected StockService $stockService,
+        protected RolloService $rollos,
     ) {}
 
     public function crear(array $data): NotaVenta
@@ -129,9 +137,22 @@ class NotaVentaService
         $nota->detalles()->createMany($data['detalles']);
         $nota->pagos()->createMany($data['pagos']);
 
-        $nota->load(['detalles.presentacion', 'almacen']);
+        $nota->load(['detalles.presentacion.producto', 'detalles.rollo', 'almacen']);
+
+        // La venta que viene de un pedido ya cortó sus rollos al facturar.
+        $deMostrador = ! $nota->orden_venta_id;
 
         foreach ($nota->detalles as $detalle) {
+            $rollo = $detalle->rollo;
+
+            if ($deMostrador) {
+                $this->exigirRollo($detalle, $nota);
+
+                if ($rollo) {
+                    $this->cortarRollo($rollo, $detalle, $nota);
+                }
+            }
+
             $this->stockService->salida(
                 $detalle->presentacion,
                 $nota->almacen,
@@ -141,7 +162,8 @@ class NotaVentaService
                 'nota_venta',
                 $nota->id,
                 auth()->id(),
-                $data['fecha_emision']
+                $data['fecha_emision'],
+                colorId: $rollo?->producto_color_id,
             );
         }
 
@@ -193,9 +215,25 @@ class NotaVentaService
     /** Deshace el efecto de la venta: devuelve stock, borra caja y deuda. */
     private function revertir(NotaVenta $nota, string $origen = 'edicion_nota_venta'): void
     {
-        $nota->load(['detalles.presentacion', 'almacen']);
+        $nota->load(['detalles.presentacion.producto', 'detalles.rollo', 'almacen']);
+
+        $deMostrador = ! $nota->orden_venta_id;
 
         foreach ($nota->detalles as $detalle) {
+            $rollo = $detalle->rollo;
+
+            // La tela vuelve al rollo del que se cortó, con su mismo código.
+            if ($deMostrador && $rollo) {
+                $this->rollos->devolver(
+                    $rollo,
+                    $detalle->presentacion->aMetros((float) $detalle->cantidad),
+                    RolloMovimiento::CANCELACION,
+                    'nota_venta',
+                    $nota->id,
+                    auth()->id(),
+                );
+            }
+
             $this->stockService->entrada(
                 $detalle->presentacion,
                 $nota->almacen,
@@ -205,7 +243,8 @@ class NotaVentaService
                 'nota_venta',
                 $nota->id,
                 auth()->id(),
-                now()->toDateTimeString()
+                now()->toDateTimeString(),
+                colorId: $rollo?->producto_color_id,
             );
         }
 
@@ -216,11 +255,70 @@ class NotaVentaService
         CuentaPorCobrar::where('nota_venta_id', $nota->id)->delete();
     }
 
+    /**
+     * Una tela que en este almacén se lleva por rollos no se puede vender
+     * "a granel": hay que decir de qué rollo sale. Si no, los metros del
+     * producto bajan y los de los rollos no, y los dos dejan de cuadrar.
+     */
+    private function exigirRollo(NotaVentaDetalle $detalle, NotaVenta $nota): void
+    {
+        $producto = $detalle->presentacion->producto;
+        $rollo = $detalle->rollo;
+
+        if (! $rollo) {
+            $vaPorRollos = Rollo::where('producto_id', $producto->id)
+                ->where('almacen_id', $nota->almacen_id)
+                ->where('metros_actual', '>', 0)
+                ->exists();
+
+            if ($vaPorRollos) {
+                throw new \DomainException(
+                    "\"{$producto->nombre}\" se lleva por rollos en {$nota->almacen->nombre}: elige de qué rollo sale la tela."
+                );
+            }
+
+            return;
+        }
+
+        if ((int) $rollo->producto_id !== (int) $producto->id) {
+            throw new \DomainException("El rollo {$rollo->codigo} no es de \"{$producto->nombre}\".");
+        }
+
+        if ((int) $rollo->almacen_id !== (int) $nota->almacen_id) {
+            throw new \DomainException("El rollo {$rollo->codigo} no está en {$nota->almacen->nombre}.");
+        }
+
+        if (! $rollo->estaDisponible()) {
+            $estado = Rollo::ESTADOS[$rollo->estado] ?? $rollo->estado;
+
+            throw new \DomainException("El rollo {$rollo->codigo} no está disponible: está {$estado}.");
+        }
+    }
+
+    /**
+     * Corta del rollo los metros de la línea. Si se lo lleva entero, el rollo
+     * queda vendido y con el cliente como dueño, igual que al facturar un
+     * pedido.
+     */
+    private function cortarRollo(Rollo $rollo, NotaVentaDetalle $detalle, NotaVenta $nota): void
+    {
+        $metros = $detalle->presentacion->aMetros((float) $detalle->cantidad);
+
+        $this->rollos->cortar($rollo, $metros, RolloMovimiento::VENTA, 'nota_venta', $nota->id, auth()->id());
+
+        $rollo = $rollo->fresh();
+
+        if ((float) $rollo->metros_actual <= 0) {
+            $this->rollos->cambiarEstado($rollo, Rollo::VENDIDO, RolloMovimiento::VENTA, 'nota_venta', $nota->id, auth()->id());
+            $rollo->update(['cliente_id' => $nota->cliente_id]);
+        }
+    }
+
     private function conRelaciones(NotaVenta $nota): NotaVenta
     {
         return $nota->load([
             'cliente', 'almacen', 'vendedor',
-            'detalles.presentacion.producto.marca', 'pagos.metodoPago',
+            'detalles.presentacion.producto.marca', 'detalles.rollo.color', 'pagos.metodoPago',
         ]);
     }
 }

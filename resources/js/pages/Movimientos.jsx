@@ -201,6 +201,27 @@ export default function Movimientos() {
             ),
         },
         {
+            // Solo lo saben los movimientos que nacen de rollos (recepciones y
+            // ventas que cortan un rollo). El resto queda en "—".
+            key: 'color',
+            label: 'Color',
+            width: '140px',
+            getSearchValue: (row) => row.color?.nombre,
+            render: (row) =>
+                row.color ? (
+                    <span className="inline-flex items-center gap-1.5 text-warm-800">
+                        <span
+                            className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-black/10"
+                            style={{ backgroundColor: row.color.hex || '#9ca3af' }}
+                        />
+                        <span className="truncate">{row.color.nombre}</span>
+                        {row.color.codigo && <span className="text-xs text-gray-400">({row.color.codigo})</span>}
+                    </span>
+                ) : (
+                    <span className="text-gray-400">—</span>
+                ),
+        },
+        {
             key: 'proveedor',
             label: 'Proveedor',
             width: '150px',

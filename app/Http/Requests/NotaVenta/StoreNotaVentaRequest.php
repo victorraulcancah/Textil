@@ -25,6 +25,9 @@ class StoreNotaVentaRequest extends FormRequest
             'serie' => 'nullable|string|max:10',
             'detalles' => 'required|array|min:1',
             'detalles.*.producto_presentacion_id' => 'required|exists:producto_presentaciones,id',
+            // De qué rollo sale la tela. Si el producto va por rollos en ese
+            // almacén, el servicio lo exige; aquí solo se comprueba que exista.
+            'detalles.*.rollo_id' => 'nullable|integer|exists:rollos,id',
             'detalles.*.cantidad' => 'required|numeric|min:0.01',
             'detalles.*.precio_unitario' => 'required|numeric|min:0',
             'detalles.*.descuento' => 'numeric|min:0',

@@ -250,6 +250,59 @@ class RolloService
     }
 
     /**
+     * Devuelve metros a un rollo: lo contrario de cortar. Pasa al anular o
+     * corregir una venta que ya había cortado tela de él.
+     *
+     * Si el rollo había quedado agotado o vendido, vuelve a estar disponible
+     * y sin dueño: la tela regresó al almacén.
+     */
+    public function devolver(
+        Rollo $rollo,
+        float $metros,
+        string $tipoMovimiento = RolloMovimiento::CANCELACION,
+        ?string $documentoTipo = null,
+        ?int $documentoId = null,
+        ?int $usuarioId = null,
+    ): Rollo {
+        return DB::transaction(function () use ($rollo, $metros, $tipoMovimiento, $documentoTipo, $documentoId, $usuarioId) {
+            $rollo = Rollo::lockForUpdate()->findOrFail($rollo->id);
+
+            $metros = round($metros, 2);
+            if ($metros <= 0) {
+                return $rollo;
+            }
+
+            $antes = (float) $rollo->metros_actual;
+            $despues = round($antes + $metros, 2);
+            $estadoAntes = $rollo->estado;
+            $estadoDespues = in_array($estadoAntes, [Rollo::AGOTADO, Rollo::VENDIDO], true)
+                ? Rollo::DISPONIBLE
+                : $estadoAntes;
+
+            $rollo->update([
+                'metros_actual' => $despues,
+                'estado' => $estadoDespues,
+                'cliente_id' => $estadoDespues === Rollo::DISPONIBLE ? null : $rollo->cliente_id,
+            ]);
+
+            $this->registrar(
+                $rollo,
+                $tipoMovimiento,
+                $metros,
+                $antes,
+                $despues,
+                $estadoAntes,
+                $estadoDespues,
+                $documentoTipo,
+                $documentoId,
+                $usuarioId,
+            );
+
+            return $rollo->refresh();
+        });
+    }
+
+    /**
      * Cambia la ubicación física del rollo, y de almacén si hace falta.
      *
      * @param  array{almacen_id?: int, pasillo?: ?string, rack?: ?string, nivel?: ?string, posicion?: ?string}  $destino

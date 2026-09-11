@@ -23,9 +23,10 @@ class StockService
         ?string $documentoTipo = null,
         ?int $documentoId = null,
         ?int $usuarioId = null,
-        ?string $fecha = null
+        ?string $fecha = null,
+        ?int $colorId = null,
     ): MovimientoInventario {
-        return DB::transaction(function () use ($presentacion, $almacen, $cantidadPresentacion, $costoUnitario, $origen, $documentoTipo, $documentoId, $usuarioId, $fecha) {
+        return DB::transaction(function () use ($presentacion, $almacen, $cantidadPresentacion, $costoUnitario, $origen, $documentoTipo, $documentoId, $usuarioId, $fecha, $colorId) {
             $factor = (float) $presentacion->factor_conversion ?: 1;
             $cantidadBase = $cantidadPresentacion * $factor;
 
@@ -51,7 +52,7 @@ class StockService
             return $this->registrarMovimiento(
                 $presentacion, $almacen, 'entrada', $origen,
                 $cantidadPresentacion, $cantidadBase, $costoEntrada, $costoAnterior, $costoActual,
-                $anterior, $nuevoStock, $documentoTipo, $documentoId, $usuarioId, $fecha
+                $anterior, $nuevoStock, $documentoTipo, $documentoId, $usuarioId, $fecha, $colorId
             );
         });
     }
@@ -69,9 +70,10 @@ class StockService
         ?string $documentoTipo = null,
         ?int $documentoId = null,
         ?int $usuarioId = null,
-        ?string $fecha = null
+        ?string $fecha = null,
+        ?int $colorId = null,
     ): MovimientoInventario {
-        return DB::transaction(function () use ($presentacion, $almacen, $cantidadPresentacion, $costoUnitario, $origen, $documentoTipo, $documentoId, $usuarioId, $fecha) {
+        return DB::transaction(function () use ($presentacion, $almacen, $cantidadPresentacion, $costoUnitario, $origen, $documentoTipo, $documentoId, $usuarioId, $fecha, $colorId) {
             $factor = (float) $presentacion->factor_conversion ?: 1;
             $cantidadBase = $cantidadPresentacion * $factor;
 
@@ -102,7 +104,7 @@ class StockService
             return $this->registrarMovimiento(
                 $presentacion, $almacen, 'salida', $origen,
                 -$cantidadPresentacion, -$cantidadBase, $costoPromedio, $costoPromedio, $costoPromedio,
-                $anterior, $stock->stock_actual, $documentoTipo, $documentoId, $usuarioId, $fecha
+                $anterior, $stock->stock_actual, $documentoTipo, $documentoId, $usuarioId, $fecha, $colorId
             );
         });
     }
@@ -192,10 +194,12 @@ class StockService
         ?string $documentoTipo = null,
         ?int $documentoId = null,
         ?int $usuarioId = null,
-        ?string $fecha = null
+        ?string $fecha = null,
+        ?int $colorId = null,
     ): MovimientoInventario {
         return MovimientoInventario::create([
             'producto_id' => $presentacion->producto_id,
+            'producto_color_id' => $colorId,
             'almacen_id' => $almacen->id,
             'tipo_movimiento' => $tipoMovimiento,
             'origen' => $origen,

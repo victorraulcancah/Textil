@@ -16,6 +16,8 @@ class MovimientoInventarioController extends Controller
             'producto.presentaciones:id,producto_id,nombre,factor_conversion,activo',
             'almacen:id,nombre',
             'usuario:id,name',
+            // El color, cuando el movimiento nace de rollos concretos.
+            'color:id,nombre,codigo,hex',
         ])
             ->latest('fecha')
             ->latest('id')

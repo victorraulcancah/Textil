@@ -55,7 +55,9 @@ class AlmacenController extends Controller
             'producto.unidadBase:id,nombre,abreviatura',
             'producto.unidadMedida:id,nombre,abreviatura',
             // Para poder expresar el stock en cada unidad derivada.
-            'producto.presentaciones:id,producto_id,nombre,factor_conversion,precio_venta,precio_compra,activo',
+            // Con su unidad, para saber cuál es el metro y pasar el stock a metros.
+            'producto.presentaciones:id,producto_id,nombre,factor_conversion,precio_venta,precio_compra,activo,unidad_base_id',
+            'producto.presentaciones.unidadBase:id,abreviatura',
             'almacen:id,nombre',
         ]);
 
@@ -64,7 +66,54 @@ class AlmacenController extends Controller
         }
 
         // Lo último cargado primero, igual que en el resto de listados.
-        return response()->json($query->latest('id')->get());
+        $filas = $query->latest('id')->get();
+
+        // El stock no distingue colores; los rollos sí. Se suman los metros de
+        // cada color por producto y almacén para mostrarlos en la fila.
+        $porColor = \App\Models\Rollo::query()
+            ->selectRaw('producto_id, almacen_id, producto_color_id, count(*) as rollos, sum(metros_actual) as metros')
+            ->where('metros_actual', '>', 0)
+            ->whereIn('producto_id', $filas->pluck('producto_id')->unique())
+            ->groupBy('producto_id', 'almacen_id', 'producto_color_id')
+            ->with('color:id,nombre,codigo,hex')
+            ->get()
+            ->groupBy(fn ($r) => $r->producto_id.'-'.$r->almacen_id);
+
+        $filas->each(function ($fila) use ($porColor) {
+            $grupo = $porColor->get($fila->producto_id.'-'.$fila->almacen_id, collect());
+
+            $fila->colores = $grupo
+                ->map(fn ($r) => [
+                    'id' => $r->producto_color_id,
+                    'nombre' => $r->color?->nombre ?? 'Sin color',
+                    'codigo' => $r->color?->codigo,
+                    'hex' => $r->color?->hex,
+                    'rollos' => (int) $r->rollos,
+                    'metros' => round((float) $r->metros, 2),
+                ])
+                ->sortByDesc('metros')
+                ->values();
+
+            // Lo que no va por rollos no tiene con qué comparar.
+            if ($grupo->isEmpty()) {
+                $fila->descuadre_rollos = null;
+
+                return;
+            }
+
+            // Si una venta o un ajuste movió el stock sin tocar los rollos, los
+            // dos totales se separan. Se avisa en vez de esconderlo.
+            $metrosRollos = round((float) $grupo->sum('metros'), 2);
+            $basePorMetro = max((float) ($fila->producto?->factorBasePorMetro() ?? 1), 0.0001);
+            $metrosStock = round((float) $fila->stock_actual / $basePorMetro, 2);
+
+            $fila->metros_en_rollos = $metrosRollos;
+            $fila->descuadre_rollos = abs($metrosStock - $metrosRollos) > 0.01
+                ? round($metrosStock - $metrosRollos, 2)
+                : 0;
+        });
+
+        return response()->json($filas);
     }
 
     public function store(Request $request)

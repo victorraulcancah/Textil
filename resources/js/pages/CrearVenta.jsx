@@ -15,6 +15,7 @@ import { useAuth } from "../lib/auth";
 import Layout from "../components/Layout";
 import MetodoCajaPicker from "../components/MetodoCajaPicker";
 import ProductoPickerModal from "../components/ProductoPickerModal";
+import SelectorRollo from "../components/SelectorRollo";
 import {
     Alert,
     Button,
@@ -152,6 +153,9 @@ export default function CrearVenta() {
                         producto_presentacion_id: String(
                             d.producto_presentacion_id,
                         ),
+                        // El rollo del que salió, para que al corregir la
+                        // venta la tela vuelva y se corte del mismo.
+                        rollo_id: d.rollo_id ? String(d.rollo_id) : "",
                         cantidad: String(Number(d.cantidad) || 0),
                         precio_unitario: String(Number(d.precio_unitario) || 0),
                     })),
@@ -360,6 +364,9 @@ export default function CrearVenta() {
             utiles.forEach(({ producto, presentacion, cantidad }) => {
                 const i = next.findIndex(
                     (it) =>
+                        // Una línea que ya tiene rollo no se engorda: más tela
+                        // del mismo producto puede salir de otro rollo.
+                        !it.rollo_id &&
                         String(it.producto_presentacion_id) ===
                         String(presentacion.id),
                 );
@@ -412,7 +419,10 @@ export default function CrearVenta() {
         // Si ya existe la misma presentación, se acumula en vez de duplicar la línea.
         const yaEsta = items.findIndex(
             (it) =>
-                String(it.producto_presentacion_id) ===
+                // Una línea que ya tiene rollo no se engorda: más tela
+                        // del mismo producto puede salir de otro rollo.
+                        !it.rollo_id &&
+                        String(it.producto_presentacion_id) ===
                 String(nuevo.producto_presentacion_id),
         );
         if (yaEsta !== -1) {
@@ -533,6 +543,8 @@ export default function CrearVenta() {
             const precio = Number(it.precio_unitario) || 0;
             return {
                 producto_presentacion_id: it.producto_presentacion_id,
+                // De qué rollo sale la tela; null en lo que no va por rollos.
+                rollo_id: it.rollo_id || null,
                 cantidad,
                 precio_unitario: precio,
                 descuento: 0,
@@ -799,6 +811,12 @@ export default function CrearVenta() {
                                         <th className="w-36 px-3 py-2.5">
                                             Unidad
                                         </th>
+                                        {/* De qué rollo sale la tela: así el
+                                            color queda en el kardex y los rollos
+                                            no se descuadran del stock. */}
+                                        <th className="w-64 px-3 py-2.5">
+                                            Rollo
+                                        </th>
                                         <th className="w-24 px-3 py-2.5 text-right">
                                             Disp.
                                         </th>
@@ -820,7 +838,7 @@ export default function CrearVenta() {
                                     {items.length === 0 && (
                                         <tr>
                                             <td
-                                                colSpan={9}
+                                                colSpan={10}
                                                 className="px-3 py-10 text-center text-sm text-warm-500"
                                             >
                                                 Busca un producto arriba para
@@ -870,6 +888,22 @@ export default function CrearVenta() {
                                                             it.producto_id,
                                                         )}
                                                         aria-label="Unidad"
+                                                    />
+                                                </td>
+                                                <td className="px-3 py-2">
+                                                    <SelectorRollo
+                                                        productoId={
+                                                            it.producto_id
+                                                        }
+                                                        almacenId={
+                                                            form.almacen_id
+                                                        }
+                                                        value={it.rollo_id}
+                                                        onChange={(v) =>
+                                                            setItem(i, {
+                                                                rollo_id: v,
+                                                            })
+                                                        }
                                                     />
                                                 </td>
                                                 <td className="px-3 py-2 text-right text-warm-500">

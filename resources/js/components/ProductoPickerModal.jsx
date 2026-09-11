@@ -481,14 +481,16 @@ export default function ProductoPickerModal({
                         value={filtros.tipoTejido}
                         onChange={(v) => setFiltro({ tipoTejido: v })}
                         options={tipoTejidoOptions}
-                        placeholder="Todos los tipos de tela"
+                        // Textos cortos: en el móvil van dos filtros por fila y
+                        // "Todos los tipos de tela" se cortaba en "Todos los…".
+                        placeholder="Tipo de tela"
                         emptyText="Sin coincidencias"
                     />
                     <SearchSelect
                         value={filtros.color}
                         onChange={(v) => setFiltro({ color: v })}
                         options={colorOptions}
-                        placeholder="Todos los colores"
+                        placeholder="Color"
                         emptyText="Sin coincidencias"
                     />
                 </div>
@@ -499,28 +501,28 @@ export default function ProductoPickerModal({
                         // Cambiar de categoría invalida la sub-categoría elegida.
                         onChange={(v) => setFiltro({ categoria: v, subCategoria: '' })}
                         options={categoriaOptions}
-                        placeholder="Todas las categorías"
+                        placeholder="Categoría"
                         emptyText="Sin coincidencias"
                     />
                     <SearchSelect
                         value={filtros.subCategoria}
                         onChange={(v) => setFiltro({ subCategoria: v })}
                         options={subCategoriaOptions}
-                        placeholder="Todas las sub-categorías"
+                        placeholder="Sub-categoría"
                         emptyText="Sin coincidencias"
                     />
                     <SearchSelect
                         value={filtros.marca}
                         onChange={(v) => setFiltro({ marca: v, subMarca: '' })}
                         options={marcaOptions}
-                        placeholder="Todas las marcas"
+                        placeholder="Marca"
                         emptyText="Sin coincidencias"
                     />
                     <SearchSelect
                         value={filtros.subMarca}
                         onChange={(v) => setFiltro({ subMarca: v })}
                         options={subMarcaOptions}
-                        placeholder="Todas las sub-marcas"
+                        placeholder="Sub-marca"
                         emptyText="Sin coincidencias"
                     />
                 </div>

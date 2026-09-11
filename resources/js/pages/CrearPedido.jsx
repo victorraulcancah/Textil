@@ -454,7 +454,57 @@ export default function CrearPedido() {
                                                 </span>
                                             )}
                                         </td>
-                                        <td className="px-3 py-2 text-warm-600">{l.presentacion}</td>
+                                        <td className="px-3 py-2">
+                                            {(() => {
+                                                // La línea no guarda el producto: se deduce de su
+                                                // presentación, así funciona también al editar.
+                                                const prod = productos.find((p) =>
+                                                    (p.presentaciones ?? []).some(
+                                                        (pr) => String(pr.id) === String(l.producto_presentacion_id),
+                                                    ),
+                                                );
+                                                const opciones = (prod?.presentaciones ?? []).filter(
+                                                    (pr) => pr.activo !== false,
+                                                );
+
+                                                if (opciones.length === 0) {
+                                                    return <span className="text-warm-600">{l.presentacion}</span>;
+                                                }
+
+                                                return (
+                                                    <Select
+                                                        value={String(l.producto_presentacion_id)}
+                                                        aria-label="Presentación"
+                                                        // Otra presentación, otro precio: se toma el
+                                                        // de venta de la nueva, igual que en la venta.
+                                                        onChange={(e) => {
+                                                            const elegida = opciones.find(
+                                                                (pr) => String(pr.id) === e.target.value,
+                                                            );
+                                                            setLineas((prev) =>
+                                                                prev.map((x, j) =>
+                                                                    j === i
+                                                                        ? {
+                                                                              ...x,
+                                                                              producto_presentacion_id: e.target.value,
+                                                                              presentacion: elegida?.nombre ?? x.presentacion,
+                                                                              precio_unitario:
+                                                                                  elegida?.precio_venta != null
+                                                                                      ? String(elegida.precio_venta)
+                                                                                      : x.precio_unitario,
+                                                                          }
+                                                                        : x,
+                                                                ),
+                                                            );
+                                                        }}
+                                                        options={opciones.map((pr) => ({
+                                                            value: String(pr.id),
+                                                            label: pr.nombre,
+                                                        }))}
+                                                    />
+                                                );
+                                            })()}
+                                        </td>
                                         <td className="px-3 py-2 text-right">
                                             <Input
                                                 type="number"

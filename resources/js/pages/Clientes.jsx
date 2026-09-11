@@ -264,7 +264,6 @@ export default function Clientes() {
                 }
             >
                 <form id="cliente-form" onSubmit={handleSubmit} className="space-y-4" noValidate>
-                    <Input label="Nombre" value={form.nombre} onChange={(e) => field('nombre', e.target.value)} error={formErrors.nombre} />
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                         <Select
                             label="Tipo doc."
@@ -297,6 +296,8 @@ export default function Clientes() {
                             )}
                         </div>
                     </div>
+                    {/* Debajo del documento: se llena solo al consultar DNI o RUC. */}
+                    <Input label="Nombre" value={form.nombre} onChange={(e) => field('nombre', e.target.value)} error={formErrors.nombre} />
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <Input label="Teléfono" value={form.telefono} onChange={(e) => field('telefono', e.target.value)} error={formErrors.telefono} />
                         <Input label="Email" type="email" value={form.email} onChange={(e) => field('email', e.target.value)} error={formErrors.email} />

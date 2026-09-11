@@ -663,7 +663,7 @@ export default function CrearVenta() {
 
             {/* Dos columnas: a la izquierda lo que se vende, a la derecha la
                 venta en sí y su total. */}
-            <div className="grid gap-4 lg:grid-cols-[1fr_22rem] lg:items-start">
+            <div className="grid gap-4 lg:grid-cols-[1fr_22rem] lg:items-start *:min-w-0">
                 <div className="space-y-4">
                     {/* Panel de búsqueda y alta de producto */}
                     <div className="rounded-xl border border-edge bg-white p-5 shadow-sm">

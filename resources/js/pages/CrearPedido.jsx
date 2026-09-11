@@ -339,7 +339,7 @@ export default function CrearPedido() {
                 </Button>
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-[1fr_22rem] lg:items-start">
+            <div className="grid gap-4 lg:grid-cols-[1fr_22rem] lg:items-start *:min-w-0">
                 {/* ── Productos ───────────────────────────────────────── */}
                 <section className="rounded-xl border border-edge bg-white p-5 shadow-sm">
                     <h2 className="text-base font-semibold text-warm-900">Productos</h2>

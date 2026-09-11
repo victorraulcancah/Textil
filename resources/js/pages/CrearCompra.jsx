@@ -686,7 +686,7 @@ export default function CrearCompra() {
             </div>
 
             {/* Pagos mixtos + Totales */}
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px] *:min-w-0">
                 <div className="space-y-6">
                     {/* Al crédito no se cobra al registrar: la compra genera una
                         cuenta por pagar y ahí se registran los pagos. */}

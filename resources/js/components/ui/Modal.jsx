@@ -49,8 +49,10 @@ export default function Modal({
                     role="dialog"
                     aria-modal="true"
                     aria-label={title}
+                    // min-w-0: como hijo de un flex, sin esto el panel no baja
+                    // del ancho de su contenido y en el móvil se sale de la pantalla.
                     className={cn(
-                        'relative z-10 flex max-h-[90vh] w-full flex-col rounded-2xl bg-white shadow-2xl',
+                        'relative z-10 flex max-h-[90vh] w-full min-w-0 flex-col rounded-2xl bg-white shadow-2xl',
                         sizes[size],
                     )}
                 >
@@ -72,7 +74,7 @@ export default function Modal({
                 <div className="flex-1 overflow-y-auto px-6 py-4">{children}</div>
 
                 {footer && (
-                    <div className="flex items-center justify-end gap-2 px-6 pb-5">
+                    <div className="flex flex-wrap items-center justify-end gap-2 px-6 pb-5">
                         {footer}
                     </div>
                 )}

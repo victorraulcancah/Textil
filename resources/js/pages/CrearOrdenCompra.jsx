@@ -533,7 +533,7 @@ export default function CrearOrdenCompra() {
             </div>
 
             {/* Observaciones + total */}
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px] *:min-w-0">
                 <div className="rounded-xl border border-edge bg-white p-5 shadow-sm">
                     <h2 className="mb-2 text-xs font-bold uppercase tracking-wide text-warm-500">Observaciones</h2>
                     <textarea

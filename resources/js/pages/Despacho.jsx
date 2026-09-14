@@ -410,6 +410,16 @@ export default function Despacho() {
                                                     <Check className="h-3.5 w-3.5" />
                                                 </span>
                                                 <span className="font-medium text-warm-900">{d.producto}</span>
+                                                {/* El color pedido: el almacenero debe bajar ese, no cualquiera. */}
+                                                {d.color && (
+                                                    <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-warm-700">
+                                                        <span
+                                                            className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-black/10"
+                                                            style={{ backgroundColor: d.color.hex || '#9ca3af' }}
+                                                        />
+                                                        {d.color.nombre}
+                                                    </span>
+                                                )}
                                                 <span className="text-warm-500">{d.presentacion}</span>
                                                 <span className="ml-auto font-medium text-warm-900">
                                                     {num(d.metros_asignados)} / {num(d.metros)} m
@@ -438,6 +448,11 @@ export default function Despacho() {
                                                             <span>{r.color ?? '—'}</span>
                                                             <span>{num(r.metros)} m</span>
                                                             {r.es_parcial && <Badge variant="amber">Cortar</Badge>}
+                                                            {/* Quién lo escaneó: puede haber varios almaceneros
+                                                                preparando el mismo pedido a la vez. */}
+                                                            {r.escaneado_por && (
+                                                                <span className="text-warm-400">· {r.escaneado_por}</span>
+                                                            )}
                                                             {escaneando && (
                                                                 <button
                                                                     type="button"

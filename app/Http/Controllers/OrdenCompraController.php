@@ -3,21 +3,40 @@
 namespace App\Http\Controllers;
 
 use App\Models\OrdenCompra;
+use App\Models\Proveedor;
 use App\Models\SerieDocumento;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class OrdenCompraController extends Controller
 {
-    /** Serie del correlativo interno de órdenes de compra. */
+    /** Serie del correlativo interno de respaldo, para proveedores sin código corto. */
     private const SERIE = 'OC0001';
 
+    /** Campos que solo tienen sentido en una compra al exterior. */
+    private const CAMPOS_EXTERIOR = [
+        'cargo_type', 'medio_transporte', 'incoterm', 'pais_origen', 'pais_destino',
+        'puerto_embarque', 'puerto_destino', 'numero_contenedor',
+        'fecha_embarque_estimada', 'elaborado_por', 'aprobado_por',
+    ];
+
     /**
-     * Siguiente código interno (ej. OC0001-00000019). Se llama dentro de la
-     * transacción para que el bloqueo evite correlativos duplicados.
+     * Código de la orden.
+     *
+     * Si el proveedor tiene código corto (KET), se usa su propia numeración:
+     * KET-001-26 — código del proveedor, correlativo de 3 dígitos por
+     * proveedor (no se reinicia cada año, así que a los 999 pasa a 4 dígitos
+     * sin romper nada) y los dos últimos dígitos del año de emisión.
+     *
+     * Sin código corto se usa el correlativo interno de siempre
+     * (OC0001-00000019), para no obligar a configurar nada de entrada.
      */
-    private function generarCodigo(): string
+    private function generarCodigo(Proveedor $proveedor, string $fechaEmision): string
     {
+        if ($proveedor->codigo_corto) {
+            return $this->generarCodigoProveedor($proveedor, $fechaEmision);
+        }
+
         $serieDoc = SerieDocumento::where('tipo_documento', 'orden_compra')
             ->where('serie', self::SERIE)
             ->lockForUpdate()
@@ -37,14 +56,37 @@ class OrdenCompraController extends Controller
         return $codigo;
     }
 
+    private function generarCodigoProveedor(Proveedor $proveedor, string $fechaEmision): string
+    {
+        $serie = 'PROV' . $proveedor->id;
+
+        $serieDoc = SerieDocumento::where('tipo_documento', 'orden_compra_proveedor')
+            ->where('serie', $serie)
+            ->lockForUpdate()
+            ->firstOrCreate(
+                ['tipo_documento' => 'orden_compra_proveedor', 'serie' => $serie],
+                ['numero_actual' => 0, 'activo' => true]
+            );
+
+        $anio = substr(date('y', strtotime($fechaEmision)), -2);
+
+        do {
+            $serieDoc->increment('numero_actual');
+            $codigo = sprintf('%s-%03d-%s', $proveedor->codigo_corto, $serieDoc->numero_actual, $anio);
+        } while (OrdenCompra::where('codigo', $codigo)->exists());
+
+        return $codigo;
+    }
+
     public function index()
     {
         return response()->json(
             OrdenCompra::with([
-                'proveedor:id,nombre',
+                'proveedor:id,nombre,codigo_corto',
                 'compras:id,orden_compra_id,correlativo,fecha',
                 // Detalle para la segunda tabla de la lista.
                 'detalles.presentacion.producto.marca',
+                'detalles.color:id,nombre,codigo,hex',
             ])
                 ->withCount(['detalles', 'compras'])
                 ->latest('id')
@@ -52,46 +94,73 @@ class OrdenCompraController extends Controller
         );
     }
 
-    public function store(Request $request)
+    private function reglas(): array
     {
-        $data = $request->validate([
-            // El código es interno: se genera solo si el cliente no manda uno.
-            'codigo' => 'nullable|string|max:50|unique:ordenes_compra,codigo',
+        return [
+            'tipo' => 'required|in:nacional,exterior',
             'proveedor_id' => 'required|exists:proveedores,id',
             'fecha_emision' => 'required|date',
             'fecha_entrega_estimada' => 'nullable|date',
-            'moneda' => 'nullable|string|max:10',
+            'moneda' => 'nullable|string|max:10|in:PEN,USD',
             'observaciones' => 'nullable|string',
+
+            // Solo se piden si tipo = exterior; una orden nacional los ignora.
+            'cargo_type' => 'nullable|string|max:20',
+            'medio_transporte' => 'nullable|string|max:20',
+            'incoterm' => 'nullable|string|max:20',
+            'pais_origen' => 'nullable|string|max:100',
+            'pais_destino' => 'nullable|string|max:100',
+            'puerto_embarque' => 'nullable|string|max:100',
+            'puerto_destino' => 'nullable|string|max:100',
+            'numero_contenedor' => 'nullable|string|max:50',
+            'fecha_embarque_estimada' => 'nullable|date',
+            'elaborado_por' => 'nullable|string|max:150',
+            'aprobado_por' => 'nullable|string|max:150',
+
             'detalles' => 'required|array|min:1',
             'detalles.*.producto_presentacion_id' => 'required|exists:producto_presentaciones,id',
+            'detalles.*.producto_color_id' => 'nullable|exists:producto_colores,id',
+            'detalles.*.rollos' => 'nullable|integer|min:0',
             'detalles.*.cantidad' => 'required|numeric|min:0.01',
             'detalles.*.precio_unitario' => 'required|numeric|min:0',
-        ]);
+        ];
+    }
+
+    public function store(Request $request)
+    {
+        $data = $request->validate($this->reglas());
 
         $orden = DB::transaction(function () use ($data) {
-            $orden = OrdenCompra::create([
-                'codigo' => $data['codigo'] ?? $this->generarCodigo(),
+            $proveedor = Proveedor::findOrFail($data['proveedor_id']);
+
+            $camposExterior = $data['tipo'] === 'exterior'
+                ? array_intersect_key($data, array_flip(self::CAMPOS_EXTERIOR))
+                : [];
+
+            $orden = OrdenCompra::create(array_merge([
+                'codigo' => $this->generarCodigo($proveedor, $data['fecha_emision']),
+                'tipo' => $data['tipo'],
                 'proveedor_id' => $data['proveedor_id'],
                 'fecha_emision' => $data['fecha_emision'],
                 'fecha_entrega_estimada' => $data['fecha_entrega_estimada'] ?? null,
-                'moneda' => $data['moneda'] ?? 'PEN',
+                'moneda' => $data['moneda'] ?? ($data['tipo'] === 'exterior' ? 'USD' : 'PEN'),
                 'observaciones' => $data['observaciones'] ?? null,
                 'estado' => 'pendiente',
                 'usuario_crea_id' => auth()->id(),
-            ]);
+            ], $camposExterior));
 
             $this->crearDetalles($orden, $data['detalles']);
 
             return $orden;
         });
 
-        return response()->json($orden->load(['proveedor:id,nombre', 'detalles.presentacion.producto']), 201);
+        return response()->json($orden->load(['proveedor:id,nombre,codigo_corto', 'detalles.presentacion.producto', 'detalles.color']), 201);
     }
 
     public function show(OrdenCompra $ordenesCompra)
     {
         return response()->json(
-            $ordenesCompra->load(['proveedor:id,nombre', 'detalles.presentacion.producto'])
+            $ordenesCompra->load(['proveedor', 'detalles.presentacion.producto', 'detalles.color'])
                 ->loadCount('compras')
         );
     }
@@ -109,14 +178,30 @@ class OrdenCompraController extends Controller
         }
 
         $data = $request->validate([
+            'tipo' => 'sometimes|required|in:nacional,exterior',
             'proveedor_id' => 'sometimes|required|exists:proveedores,id',
             'fecha_emision' => 'sometimes|required|date',
             'fecha_entrega_estimada' => 'nullable|date',
-            'moneda' => 'nullable|string|max:10',
+            'moneda' => 'nullable|string|max:10|in:PEN,USD',
             'estado' => 'nullable|string|max:50',
             'observaciones' => 'nullable|string',
+
+            'cargo_type' => 'nullable|string|max:20',
+            'medio_transporte' => 'nullable|string|max:20',
+            'incoterm' => 'nullable|string|max:20',
+            'pais_origen' => 'nullable|string|max:100',
+            'pais_destino' => 'nullable|string|max:100',
+            'puerto_embarque' => 'nullable|string|max:100',
+            'puerto_destino' => 'nullable|string|max:100',
+            'numero_contenedor' => 'nullable|string|max:50',
+            'fecha_embarque_estimada' => 'nullable|date',
+            'elaborado_por' => 'nullable|string|max:150',
+            'aprobado_por' => 'nullable|string|max:150',
+
             'detalles' => 'sometimes|required|array|min:1',
             'detalles.*.producto_presentacion_id' => 'required|exists:producto_presentaciones,id',
+            'detalles.*.producto_color_id' => 'nullable|exists:producto_colores,id',
+            'detalles.*.rollos' => 'nullable|integer|min:0',
             'detalles.*.cantidad' => 'required|numeric|min:0.01',
             'detalles.*.precio_unitario' => 'required|numeric|min:0',
         ]);
@@ -132,7 +217,7 @@ class OrdenCompraController extends Controller
         });
 
         return response()->json(
-            $ordenesCompra->fresh()->load(['proveedor:id,nombre', 'detalles.presentacion.producto'])
+            $ordenesCompra->fresh()->load(['proveedor', 'detalles.presentacion.producto', 'detalles.color'])
         );
     }
 
@@ -157,6 +242,8 @@ class OrdenCompraController extends Controller
             $precio = (float) $detalle['precio_unitario'];
             $orden->detalles()->create([
                 'producto_presentacion_id' => $detalle['producto_presentacion_id'],
+                'producto_color_id' => $detalle['producto_color_id'] ?? null,
+                'rollos' => $detalle['rollos'] ?? null,
                 'cantidad' => $cantidad,
                 'precio_unitario' => $precio,
                 'descuento' => 0,

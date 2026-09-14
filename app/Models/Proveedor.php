@@ -16,9 +16,17 @@ class Proveedor extends Model
     protected $fillable = [
         'nombre',
         'codigo',
+        // Código corto (3 caracteres) con el que el cliente arma su propia
+        // numeración de orden de compra: KET-001-26.
+        'codigo_corto',
         'ruc',
+        // Identificador tributario del proveedor extranjero: no todos usan
+        // RUC peruano.
+        'tax_id',
+        'pais',
         'direccion',
         'telefono',
+        'fax',
         'email',
         'contacto_nombre',
         'activo',

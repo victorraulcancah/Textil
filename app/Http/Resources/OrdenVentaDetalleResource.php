@@ -23,6 +23,15 @@ class OrdenVentaDetalleResource extends JsonResource
             'producto' => $this->whenLoaded('presentacion', fn () => $this->presentacion?->producto?->nombre),
             'producto_codigo' => $this->whenLoaded('presentacion', fn () => $this->presentacion?->producto?->codigo),
 
+            // Color pedido; null si esta línea no se pide por color.
+            'producto_color_id' => $this->producto_color_id,
+            'color' => $this->whenLoaded('color', fn () => $this->color ? [
+                'id' => $this->color->id,
+                'nombre' => $this->color->nombre,
+                'codigo' => $this->color->codigo,
+                'hex' => $this->color->hex,
+            ] : null),
+
             'cantidad' => (float) $this->cantidad,
             'descripcion' => $this->descripcion,
             'metros' => (float) $this->metros,
@@ -44,6 +53,9 @@ class OrdenVentaDetalleResource extends JsonResource
                 'metros_rollo' => (float) ($r->rollo?->metros_actual ?? 0),
                 'es_parcial' => $r->esParcial(),
                 'escaneado_at' => $r->escaneado_at,
+                // Quién lo escaneó: varios almaceneros pueden preparar el
+                // mismo pedido y hace falta saber quién trajo cuál rollo.
+                'escaneado_por' => $r->usuario?->name,
             ])->values()),
         ];
     }

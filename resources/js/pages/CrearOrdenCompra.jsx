@@ -7,12 +7,37 @@ import Layout from '../components/Layout';
 import ProductoPickerModal from '../components/ProductoPickerModal';
 import { Button, Input, SearchSelect, Select, Spinner } from '../components/ui';
 
-const money = (n) =>
-    new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(n) || 0);
+const money = (n, moneda = 'PEN') =>
+    new Intl.NumberFormat(moneda === 'USD' ? 'en-US' : 'es-PE', {
+        style: 'currency',
+        currency: moneda === 'USD' ? 'USD' : 'PEN',
+    }).format(Number(n) || 0);
 
 const hoy = () => new Date().toISOString().slice(0, 10);
 
-const panelVacio = { producto_id: '', producto_presentacion_id: '', cantidad: '1', precio_unitario: '0' };
+const panelVacio = {
+    producto_id: '',
+    producto_presentacion_id: '',
+    producto_color_id: '',
+    rollos: '',
+    cantidad: '1',
+    precio_unitario: '0',
+};
+
+/** Datos propios de una compra al exterior: se limpian al pasar a nacional. */
+const exteriorVacio = {
+    cargo_type: '',
+    medio_transporte: '',
+    incoterm: '',
+    pais_origen: '',
+    pais_destino: '',
+    puerto_embarque: '',
+    puerto_destino: '',
+    numero_contenedor: '',
+    fecha_embarque_estimada: '',
+    elaborado_por: '',
+    aprobado_por: '',
+};
 
 export default function CrearOrdenCompra() {
     const toast = useToast();
@@ -31,10 +56,13 @@ export default function CrearOrdenCompra() {
     const [formErrors, setFormErrors] = useState({});
 
     const [form, setForm] = useState({
+        tipo: 'nacional',
+        moneda: 'PEN',
         proveedor_id: '',
         fecha_emision: hoy(),
         fecha_entrega_estimada: '',
         observaciones: '',
+        ...exteriorVacio,
     });
 
     /** Panel superior de búsqueda/alta. */
@@ -70,15 +98,31 @@ export default function CrearOrdenCompra() {
             const { data: orden } = await api.get(`/ordenes-compra/${id}`);
             setCodigo(orden.codigo ?? '');
             setForm({
+                tipo: orden.tipo ?? 'nacional',
+                moneda: orden.moneda ?? 'PEN',
                 proveedor_id: orden.proveedor_id ? String(orden.proveedor_id) : '',
                 fecha_emision: (orden.fecha_emision ?? '').slice(0, 10),
                 fecha_entrega_estimada: (orden.fecha_entrega_estimada ?? '').slice(0, 10),
                 observaciones: orden.observaciones ?? '',
+                ...exteriorVacio,
+                cargo_type: orden.cargo_type ?? '',
+                medio_transporte: orden.medio_transporte ?? '',
+                incoterm: orden.incoterm ?? '',
+                pais_origen: orden.pais_origen ?? '',
+                pais_destino: orden.pais_destino ?? '',
+                puerto_embarque: orden.puerto_embarque ?? '',
+                puerto_destino: orden.puerto_destino ?? '',
+                numero_contenedor: orden.numero_contenedor ?? '',
+                fecha_embarque_estimada: (orden.fecha_embarque_estimada ?? '').slice(0, 10),
+                elaborado_por: orden.elaborado_por ?? '',
+                aprobado_por: orden.aprobado_por ?? '',
             });
             setItems(
                 (orden.detalles ?? []).map((d) => ({
                     producto_id: String(d.presentacion?.producto_id ?? d.presentacion?.producto?.id ?? ''),
                     producto_presentacion_id: String(d.producto_presentacion_id),
+                    producto_color_id: d.producto_color_id ? String(d.producto_color_id) : '',
+                    rollos: d.rollos != null ? String(d.rollos) : '',
                     cantidad: String(d.cantidad),
                     precio_unitario: String(d.precio_unitario),
                 })),
@@ -149,6 +193,9 @@ export default function CrearOrdenCompra() {
         setPanel({
             producto_id: productoId,
             producto_presentacion_id: presentacionId,
+            // Otro producto, otro color: nunca se hereda del anterior.
+            producto_color_id: '',
+            rollos: '',
             cantidad: '1',
             precio_unitario: presentacionId
                 ? String(Number(presentacionDe(productoId, presentacionId)?.precio_compra) || 0)
@@ -176,8 +223,12 @@ export default function CrearOrdenCompra() {
             const next = [...prev];
 
             utiles.forEach(({ producto, presentacion, cantidad }) => {
+                // El buscador no elige color, así que solo se acumula sobre
+                // líneas que tampoco lo tengan.
                 const i = next.findIndex(
-                    (it) => String(it.producto_presentacion_id) === String(presentacion.id),
+                    (it) =>
+                        String(it.producto_presentacion_id) === String(presentacion.id) &&
+                        !it.producto_color_id,
                 );
                 if (i !== -1) {
                     next[i] = {
@@ -188,6 +239,8 @@ export default function CrearOrdenCompra() {
                     next.push({
                         producto_id: String(producto.id),
                         producto_presentacion_id: String(presentacion.id),
+                        producto_color_id: '',
+                        rollos: '',
                         cantidad: String(cantidad),
                         precio_unitario: String(Number(presentacion.precio_compra) || 0),
                     });
@@ -213,13 +266,18 @@ export default function CrearOrdenCompra() {
         const nuevo = {
             producto_id: panel.producto_id,
             producto_presentacion_id: panel.producto_presentacion_id,
+            producto_color_id: panel.producto_color_id || '',
+            rollos: panel.rollos || '',
             cantidad: panel.cantidad,
             precio_unitario: panel.precio_unitario || '0',
         };
 
-        // Si ya existe la misma presentación, se acumula en vez de duplicar la línea.
+        // Se acumula en la misma línea si coincide presentación y color; un
+        // color distinto de la misma tela es una línea aparte.
         const yaEsta = items.findIndex(
-            (it) => String(it.producto_presentacion_id) === String(nuevo.producto_presentacion_id),
+            (it) =>
+                String(it.producto_presentacion_id) === String(nuevo.producto_presentacion_id) &&
+                String(it.producto_color_id || '') === String(nuevo.producto_color_id || ''),
         );
         if (yaEsta !== -1) {
             setItems((prev) =>
@@ -228,6 +286,7 @@ export default function CrearOrdenCompra() {
                         ? {
                               ...it,
                               cantidad: String((Number(it.cantidad) || 0) + (Number(nuevo.cantidad) || 0)),
+                              rollos: String((Number(it.rollos) || 0) + (Number(nuevo.rollos) || 0)),
                               precio_unitario: nuevo.precio_unitario,
                           }
                         : it,
@@ -268,15 +327,32 @@ export default function CrearOrdenCompra() {
         setSaving(true);
         setFormErrors({});
 
-        // El código es correlativo interno: lo asigna el backend.
+        // El código lo asigna el backend: correlativo del proveedor si tiene
+        // código corto (KET-001-26), o el correlativo interno si no.
         const payload = {
+            tipo: form.tipo,
             proveedor_id: form.proveedor_id,
             fecha_emision: form.fecha_emision,
             fecha_entrega_estimada: form.fecha_entrega_estimada || null,
-            moneda: 'PEN',
+            moneda: form.moneda,
             observaciones: form.observaciones,
+            // Los campos de embarque solo importan en una compra al exterior;
+            // se mandan igual, el backend los ignora si la orden es nacional.
+            cargo_type: form.cargo_type || null,
+            medio_transporte: form.medio_transporte || null,
+            incoterm: form.incoterm || null,
+            pais_origen: form.pais_origen || null,
+            pais_destino: form.pais_destino || null,
+            puerto_embarque: form.puerto_embarque || null,
+            puerto_destino: form.puerto_destino || null,
+            numero_contenedor: form.numero_contenedor || null,
+            fecha_embarque_estimada: form.fecha_embarque_estimada || null,
+            elaborado_por: form.elaborado_por || null,
+            aprobado_por: form.aprobado_por || null,
             detalles: items.map((it) => ({
                 producto_presentacion_id: it.producto_presentacion_id,
+                producto_color_id: it.producto_color_id || null,
+                rollos: it.rollos !== '' ? Number(it.rollos) : null,
                 cantidad: it.cantidad,
                 precio_unitario: it.precio_unitario || 0,
             })),
@@ -337,8 +413,36 @@ export default function CrearOrdenCompra() {
 
             {/* Datos de la orden */}
             <div className="mb-6 rounded-xl border border-edge bg-white shadow-sm">
-                <div className="border-b border-edge px-5 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-edge px-5 py-3">
                     <h2 className="text-xs font-bold uppercase tracking-wide text-warm-500">Datos de la orden</h2>
+
+                    {/* Nacional o al exterior: de eso depende si se piden los
+                        datos de embarque y en qué moneda se cotiza. */}
+                    <div className="inline-flex rounded-lg border border-edge bg-gray-50 p-0.5">
+                        {[
+                            { value: 'nacional', label: 'Nacional' },
+                            { value: 'exterior', label: 'Al exterior' },
+                        ].map((opcion) => (
+                            <button
+                                key={opcion.value}
+                                type="button"
+                                onClick={() =>
+                                    setForm((prev) => ({
+                                        ...prev,
+                                        tipo: opcion.value,
+                                        moneda: opcion.value === 'exterior' ? 'USD' : 'PEN',
+                                    }))
+                                }
+                                className={`rounded-md px-3 py-1 text-xs font-semibold transition ${
+                                    form.tipo === opcion.value
+                                        ? 'bg-white text-primary-700 shadow-sm'
+                                        : 'text-warm-500 hover:text-warm-700'
+                                }`}
+                            >
+                                {opcion.label}
+                            </button>
+                        ))}
+                    </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4 p-5 md:grid-cols-4">
                     {/* Al crear no se muestra: el correlativo lo asigna el backend
@@ -358,7 +462,10 @@ export default function CrearOrdenCompra() {
                             label="Proveedor"
                             value={form.proveedor_id}
                             onChange={(v) => setField('proveedor_id', v)}
-                            options={proveedores.map((p) => ({ value: String(p.id), label: p.nombre }))}
+                            options={proveedores.map((p) => ({
+                                value: String(p.id),
+                                label: p.codigo_corto ? `${p.nombre} (${p.codigo_corto})` : p.nombre,
+                            }))}
                             placeholder="Buscar proveedor…"
                             emptyText="Sin coincidencias"
                             error={formErrors.proveedor_id}
@@ -366,8 +473,113 @@ export default function CrearOrdenCompra() {
                     </div>
                     <Input label="Fecha emisión" type="date" value={form.fecha_emision} onChange={(e) => setField('fecha_emision', e.target.value)} error={formErrors.fecha_emision} />
                     <Input label="Entrega estimada" type="date" value={form.fecha_entrega_estimada} onChange={(e) => setField('fecha_entrega_estimada', e.target.value)} />
+                    <Select
+                        label="Moneda"
+                        value={form.moneda}
+                        onChange={(e) => setField('moneda', e.target.value)}
+                        options={[
+                            { value: 'PEN', label: 'Soles (PEN)' },
+                            { value: 'USD', label: 'Dólares (USD)' },
+                        ]}
+                    />
                 </div>
             </div>
+
+            {/* Datos de embarque: solo para una compra al exterior. */}
+            {form.tipo === 'exterior' && (
+                <div className="mb-6 rounded-xl border border-edge bg-white shadow-sm">
+                    <div className="border-b border-edge px-5 py-3">
+                        <h2 className="text-xs font-bold uppercase tracking-wide text-warm-500">
+                            Compra al exterior
+                        </h2>
+                        <p className="mt-0.5 text-xs text-warm-500">
+                            Para la orden de importación (Purchase Order) que se envía al proveedor.
+                        </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 p-5 md:grid-cols-4">
+                        <Select
+                            label="Tipo de carga"
+                            value={form.cargo_type}
+                            onChange={(e) => setField('cargo_type', e.target.value)}
+                            options={[
+                                { value: '', label: '—' },
+                                { value: 'FCL', label: 'FCL (contenedor completo)' },
+                                { value: 'LCL', label: 'LCL (carga consolidada)' },
+                            ]}
+                        />
+                        <Input
+                            label="N° de contenedor"
+                            placeholder="2X40 HC"
+                            value={form.numero_contenedor}
+                            onChange={(e) => setField('numero_contenedor', e.target.value)}
+                        />
+                        <Select
+                            label="Medio de embarque"
+                            value={form.medio_transporte}
+                            onChange={(e) => setField('medio_transporte', e.target.value)}
+                            options={[
+                                { value: '', label: '—' },
+                                { value: 'SEAFREIGHT', label: 'Marítimo (seafreight)' },
+                                { value: 'AIRFREIGHT', label: 'Aéreo (airfreight)' },
+                            ]}
+                        />
+                        <Select
+                            label="Incoterm"
+                            value={form.incoterm}
+                            onChange={(e) => setField('incoterm', e.target.value)}
+                            options={[
+                                { value: '', label: '—' },
+                                { value: 'FOB', label: 'FOB' },
+                                { value: 'CIF', label: 'CIF' },
+                                { value: 'CFR', label: 'CFR' },
+                                { value: 'EXW', label: 'EXW' },
+                                { value: 'DDP', label: 'DDP' },
+                            ]}
+                        />
+                        <Input
+                            label="País de origen"
+                            placeholder="CHINA - CN"
+                            value={form.pais_origen}
+                            onChange={(e) => setField('pais_origen', e.target.value)}
+                        />
+                        <Input
+                            label="País de destino"
+                            placeholder="PERÚ - PE"
+                            value={form.pais_destino}
+                            onChange={(e) => setField('pais_destino', e.target.value)}
+                        />
+                        <Input
+                            label="Puerto de embarque"
+                            placeholder="NINGBO"
+                            value={form.puerto_embarque}
+                            onChange={(e) => setField('puerto_embarque', e.target.value)}
+                        />
+                        <Input
+                            label="Puerto de llegada"
+                            placeholder="CHANCAY"
+                            value={form.puerto_destino}
+                            onChange={(e) => setField('puerto_destino', e.target.value)}
+                        />
+                        <Input
+                            label="Fecha de embarque"
+                            type="date"
+                            value={form.fecha_embarque_estimada}
+                            onChange={(e) => setField('fecha_embarque_estimada', e.target.value)}
+                        />
+                        <Input
+                            label="Elaborado por"
+                            value={form.elaborado_por}
+                            onChange={(e) => setField('elaborado_por', e.target.value)}
+                        />
+                        <Input
+                            label="Aprobado por"
+                            placeholder="Se llena al aprobar"
+                            value={form.aprobado_por}
+                            onChange={(e) => setField('aprobado_por', e.target.value)}
+                        />
+                    </div>
+                </div>
+            )}
 
             {/* Panel de búsqueda y alta de producto */}
             <div className="mb-6 rounded-xl border border-edge bg-white p-5 shadow-sm">
@@ -392,6 +604,34 @@ export default function CrearOrdenCompra() {
                         className="block w-full rounded-md border-0 bg-white px-3 py-2 text-sm text-warm-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400"
                     />
                 </div>
+
+                {/* Solo si la tela tiene colores registrados: hay insumos
+                    (hilos, cierres) que no se piden por color. */}
+                {productoPanel?.colores?.length > 0 && (
+                    <div className="mt-4 grid grid-cols-2 gap-4">
+                        <Select
+                            label="Color"
+                            value={panel.producto_color_id}
+                            onChange={(e) => setPanelCampo({ producto_color_id: e.target.value })}
+                            options={[
+                                { value: '', label: 'Cualquier color' },
+                                ...productoPanel.colores.map((c) => ({
+                                    value: String(c.id),
+                                    label: c.codigo ? `${c.nombre} (${c.codigo})` : c.nombre,
+                                })),
+                            ]}
+                        />
+                        <Input
+                            label="Rollos"
+                            type="number"
+                            min="0"
+                            step="1"
+                            placeholder="Cuántos rollos de ese color"
+                            value={panel.rollos}
+                            onChange={(e) => setPanelCampo({ rollos: e.target.value })}
+                        />
+                    </div>
+                )}
 
                 <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-4">
                     <div>
@@ -449,13 +689,15 @@ export default function CrearOrdenCompra() {
                     </span>
                 </div>
                 <div className="overflow-x-auto">
-                    <table className="w-full min-w-[820px] text-sm">
+                    <table className="w-full min-w-[980px] text-sm">
                         <thead>
                             <tr className="bg-primary-600 text-left text-xs font-semibold uppercase tracking-wide text-white">
                                 <th className="px-3 py-2.5 text-center">#</th>
                                 <th className="px-3 py-2.5">Código</th>
                                 <th className="px-3 py-2.5">Producto</th>
+                                <th className="px-3 py-2.5">Color</th>
                                 <th className="px-3 py-2.5">Unidad</th>
+                                <th className="px-3 py-2.5 text-right">Rollos</th>
                                 <th className="px-3 py-2.5 text-right">Cant</th>
                                 <th className="px-3 py-2.5 text-right">P.Unit</th>
                                 <th className="px-3 py-2.5 text-right">Subtotal</th>
@@ -465,7 +707,7 @@ export default function CrearOrdenCompra() {
                         <tbody className="divide-y divide-gray-100">
                             {items.length === 0 && (
                                 <tr>
-                                    <td colSpan={8} className="px-3 py-10 text-center text-sm text-warm-500">
+                                    <td colSpan={10} className="px-3 py-10 text-center text-sm text-warm-500">
                                         Busca un producto arriba para agregarlo a la orden
                                     </td>
                                 </tr>
@@ -474,12 +716,16 @@ export default function CrearOrdenCompra() {
                             {items.map((it, i) => {
                                 const producto = productoDe(it.producto_id);
                                 const subtotal = (Number(it.cantidad) || 0) * (Number(it.precio_unitario) || 0);
+                                const colorItem = (producto?.colores ?? []).find(
+                                    (c) => String(c.id) === String(it.producto_color_id),
+                                );
 
                                 return (
                                     <tr key={i}>
                                         <td className="px-3 py-2 text-center text-warm-500">{i + 1}</td>
                                         <td className="px-3 py-2 font-medium text-warm-900">{producto?.codigo ?? '—'}</td>
                                         <td className="px-3 py-2 font-semibold text-warm-900">{producto?.nombre ?? '—'}</td>
+                                        <td className="px-3 py-2 text-warm-600">{colorItem?.nombre ?? '—'}</td>
                                         <td className="px-3 py-2">
                                             <Select
                                                 value={it.producto_presentacion_id}
@@ -487,6 +733,17 @@ export default function CrearOrdenCompra() {
                                                 options={unidadesDe(it.producto_id)}
                                                 aria-label="Unidad"
                                                 className="min-w-[120px]"
+                                            />
+                                        </td>
+                                        <td className="px-3 py-2">
+                                            <Input
+                                                type="number"
+                                                min="0"
+                                                step="1"
+                                                value={it.rollos}
+                                                onChange={(e) => setItem(i, { rollos: e.target.value })}
+                                                aria-label="Rollos"
+                                                className="text-right"
                                             />
                                         </td>
                                         <td className="px-3 py-2">
@@ -511,7 +768,7 @@ export default function CrearOrdenCompra() {
                                                 className="text-right"
                                             />
                                         </td>
-                                        <td className="px-3 py-2 text-right font-semibold text-primary-600">{money(subtotal)}</td>
+                                        <td className="px-3 py-2 text-right font-semibold text-primary-600">{money(subtotal, form.moneda)}</td>
                                         <td className="px-3 py-2">
                                             <div className="flex items-center justify-center">
                                                 <button
@@ -550,7 +807,7 @@ export default function CrearOrdenCompra() {
                         <h2 className="mb-3 text-xs font-bold uppercase tracking-wide text-warm-500">Resumen</h2>
                         <div className="mt-1 flex items-center justify-between border-t border-edge pt-3">
                             <span className="text-sm font-bold uppercase tracking-wide text-primary-700">Total</span>
-                            <span className="text-2xl font-extrabold text-warm-900">{money(total)}</span>
+                            <span className="text-2xl font-extrabold text-warm-900">{money(total, form.moneda)}</span>
                         </div>
                         <div className="mt-5 flex flex-col gap-2">
                             <Button onClick={guardar} loading={saving} className="w-full justify-center">

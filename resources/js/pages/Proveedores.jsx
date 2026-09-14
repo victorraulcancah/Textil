@@ -9,9 +9,15 @@ import { Alert, Badge, Button, DataTable, Input, Modal } from '../components/ui'
 const emptyForm = {
     nombre: '',
     codigo: '',
+    // Solo para proveedores que emiten su propia numeración de orden de
+    // compra: KET-001-26. Opcional.
+    codigo_corto: '',
     ruc: '',
+    tax_id: '',
+    pais: '',
     direccion: '',
     telefono: '',
+    fax: '',
     email: '',
     contacto_nombre: '',
     activo: true,
@@ -60,9 +66,13 @@ export default function Proveedores() {
         setForm({
             nombre: p.nombre ?? '',
             codigo: p.codigo ?? '',
+            codigo_corto: p.codigo_corto ?? '',
             ruc: p.ruc ?? '',
+            tax_id: p.tax_id ?? '',
+            pais: p.pais ?? '',
             direccion: p.direccion ?? '',
             telefono: p.telefono ?? '',
+            fax: p.fax ?? '',
             email: p.email ?? '',
             contacto_nombre: p.contacto_nombre ?? '',
             activo: Boolean(p.activo),
@@ -129,7 +139,16 @@ export default function Proveedores() {
                 </span>
             ),
         },
-        { key: 'codigo', label: 'Código', render: (row) => <Badge variant="gray">{row.codigo}</Badge> },
+        {
+            key: 'codigo',
+            label: 'Código',
+            render: (row) => (
+                <span className="inline-flex items-center gap-1.5">
+                    <Badge variant="gray">{row.codigo}</Badge>
+                    {row.codigo_corto && <Badge variant="blue">{row.codigo_corto}</Badge>}
+                </span>
+            ),
+        },
         { key: 'ruc', label: 'RUC', render: (row) => row.ruc || <span className="text-gray-400">—</span> },
         {
             key: 'contacto_nombre',
@@ -238,9 +257,25 @@ export default function Proveedores() {
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <Input label="Nombre" value={form.nombre} onChange={(e) => field('nombre', e.target.value)} error={formErrors.nombre} />
                         <Input label="Código" value={form.codigo} onChange={(e) => field('codigo', e.target.value)} error={formErrors.codigo} />
+                        <div>
+                            <Input
+                                label="Código corto (3 letras)"
+                                placeholder="KET"
+                                maxLength={3}
+                                value={form.codigo_corto}
+                                onChange={(e) => field('codigo_corto', e.target.value.toUpperCase())}
+                                error={formErrors.codigo_corto}
+                            />
+                            <p className="mt-1 text-xs text-warm-400">
+                                Solo si el proveedor numera así sus órdenes: KET-001-26.
+                            </p>
+                        </div>
                         <Input label="RUC" value={form.ruc} onChange={(e) => field('ruc', e.target.value)} error={formErrors.ruc} />
+                        <Input label="Tax ID" placeholder="Del proveedor extranjero, si no tiene RUC" value={form.tax_id} onChange={(e) => field('tax_id', e.target.value)} error={formErrors.tax_id} />
+                        <Input label="País" value={form.pais} onChange={(e) => field('pais', e.target.value)} error={formErrors.pais} />
                         <Input label="Contacto" value={form.contacto_nombre} onChange={(e) => field('contacto_nombre', e.target.value)} error={formErrors.contacto_nombre} />
                         <Input label="Teléfono" value={form.telefono} onChange={(e) => field('telefono', e.target.value)} error={formErrors.telefono} />
+                        <Input label="Fax" value={form.fax} onChange={(e) => field('fax', e.target.value)} error={formErrors.fax} />
                         <Input label="Email" type="email" value={form.email} onChange={(e) => field('email', e.target.value)} error={formErrors.email} />
                     </div>
                     <Input label="Dirección" value={form.direccion} onChange={(e) => field('direccion', e.target.value)} error={formErrors.direccion} />

@@ -30,6 +30,8 @@ class StoreOrdenVentaRequest extends FormRequest
 
             'detalles' => 'required|array|min:1',
             'detalles.*.producto_presentacion_id' => 'required|exists:producto_presentaciones,id',
+            // Opcional: el almacén solo exige el color cuando la línea lo trae.
+            'detalles.*.producto_color_id' => 'nullable|exists:producto_colores,id',
             'detalles.*.cantidad' => 'required|numeric|min:0.01',
             'detalles.*.precio_unitario' => 'nullable|numeric|min:0',
             'detalles.*.descuento' => 'nullable|numeric|min:0',

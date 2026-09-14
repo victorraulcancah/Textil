@@ -22,6 +22,9 @@ class OrdenVentaDetalle extends Model
     protected $fillable = [
         'orden_venta_id',
         'producto_presentacion_id',
+        // Color pedido; opcional (hay insumos que no se piden por color). El
+        // almacén solo puede cubrir la línea con rollos de este color.
+        'producto_color_id',
         'cantidad',
         'descripcion',
         'metros',
@@ -49,6 +52,11 @@ class OrdenVentaDetalle extends Model
     public function presentacion()
     {
         return $this->belongsTo(ProductoPresentacion::class, 'producto_presentacion_id');
+    }
+
+    public function color()
+    {
+        return $this->belongsTo(ProductoColor::class, 'producto_color_id');
     }
 
     /** Los rollos que el almacén asignó a esta línea. */

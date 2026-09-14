@@ -193,7 +193,7 @@ class OrdenVentaService
         }
 
         $codigo = trim($codigo);
-        $rollo = Rollo::with('producto')->where('codigo', $codigo)->first();
+        $rollo = Rollo::with('producto', 'color')->where('codigo', $codigo)->first();
 
         if (! $rollo) {
             throw new \DomainException("No existe ningún rollo con el código {$codigo}.");
@@ -213,21 +213,40 @@ class OrdenVentaService
             );
         }
 
-        $orden->load('detalles.rollos', 'detalles.presentacion');
+        $orden->load('detalles.rollos', 'detalles.presentacion', 'detalles.color');
 
-        $linea = $orden->detalles->first(
-            fn ($d) => ! $d->estaCubierta()
-                && (int) $d->presentacion?->producto_id === (int) $rollo->producto_id
+        // Ya escaneado en esta orden: se avisa antes de nada, sea cual sea la
+        // línea a la que se intente sumar.
+        $yaEsta = $orden->detalles->contains(fn ($d) => $d->rollos->contains('rollo_id', $rollo->id));
+        if ($yaEsta) {
+            throw new \DomainException("El rollo {$codigo} ya está asignado a este pedido.");
+        }
+
+        $delMismoProducto = $orden->detalles->filter(
+            fn ($d) => ! $d->estaCubierta() && (int) $d->presentacion?->producto_id === (int) $rollo->producto_id
         );
 
-        if (! $linea) {
-            $yaEsta = $orden->detalles->contains(
-                fn ($d) => $d->rollos->contains('rollo_id', $rollo->id)
+        if ($delMismoProducto->isEmpty()) {
+            throw new \DomainException(
+                "El rollo {$codigo} es de {$rollo->producto?->nombre}, que no falta en el requerimiento {$orden->requerimiento_numero}."
             );
+        }
 
-            throw new \DomainException($yaEsta
-                ? "El rollo {$codigo} ya está asignado a este pedido."
-                : "El rollo {$codigo} es de {$rollo->producto?->nombre}, que no falta en el requerimiento {$orden->requerimiento_numero}.");
+        // De las líneas de esa tela, la que pide el color de este rollo (o la
+        // que no especificó color, si el rollo tampoco tiene). El color del
+        // pedido manda: un rollo Negro no puede cubrir una línea de Azul.
+        $linea = $delMismoProducto->first(
+            fn ($d) => (int) $d->producto_color_id === (int) $rollo->producto_color_id
+        ) ?? $delMismoProducto->first(fn ($d) => ! $d->producto_color_id);
+
+        if (! $linea) {
+            $colorPedido = $delMismoProducto->first()->color?->nombre;
+            $colorRollo = $rollo->color?->nombre ?? 'sin color';
+
+            throw new \DomainException(
+                "El rollo {$codigo} es {$colorRollo}, pero el requerimiento {$orden->requerimiento_numero} pide "
+                . ($colorPedido ? "{$rollo->producto?->nombre} {$colorPedido}." : "otro color de {$rollo->producto?->nombre}.")
+            );
         }
 
         return DB::transaction(function () use ($orden, $linea, $rollo, $codigo) {
@@ -531,6 +550,10 @@ class OrdenVentaService
 
             $orden->detalles()->create([
                 'producto_presentacion_id' => $presentacion->id,
+                // Opcional: hay insumos que no se piden por color. Cuando sí
+                // se especifica, el almacén solo puede cubrir la línea con
+                // rollos de ese color.
+                'producto_color_id' => $linea['producto_color_id'] ?? null,
                 'cantidad' => $cantidad,
                 'descripcion' => $linea['descripcion'] ?? null,
                 'metros' => $this->aMetros($presentacion, $cantidad),

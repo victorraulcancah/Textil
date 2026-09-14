@@ -32,6 +32,7 @@ class Producto extends Model
         'accion_tecnica',
         // Ficha técnica de tela (todo opcional).
         'composicion',
+        'codigo_arancelario',
         'ancho_cm',
         'gramaje',
         'peso_por_metro',

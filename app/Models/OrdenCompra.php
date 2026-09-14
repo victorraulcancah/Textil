@@ -15,6 +15,7 @@ class OrdenCompra extends Model
 
     protected $fillable = [
         'codigo',
+        'tipo',
         'proveedor_id',
         'solicitud_id',
         'fecha_emision',
@@ -25,6 +26,18 @@ class OrdenCompra extends Model
         'condicion_pago',
         'moneda',
         'tipo_cambio',
+        // Solo se llenan cuando tipo = exterior: es una compra de importación.
+        'cargo_type',
+        'medio_transporte',
+        'incoterm',
+        'pais_origen',
+        'pais_destino',
+        'puerto_embarque',
+        'puerto_destino',
+        'numero_contenedor',
+        'fecha_embarque_estimada',
+        'elaborado_por',
+        'aprobado_por',
     ];
 
     protected function casts(): array
@@ -32,6 +45,7 @@ class OrdenCompra extends Model
         return [
             'fecha_emision' => 'datetime',
             'fecha_entrega_estimada' => 'datetime',
+            'fecha_embarque_estimada' => 'date',
             'tipo_cambio' => 'decimal:4',
         ];
     }
@@ -39,6 +53,12 @@ class OrdenCompra extends Model
     public function proveedor()
     {
         return $this->belongsTo(Proveedor::class);
+    }
+
+    /** ¿Es una compra de importación? Solo ahí aplican los campos de embarque. */
+    public function esExterior(): bool
+    {
+        return $this->tipo === 'exterior';
     }
 
     public function solicitud()

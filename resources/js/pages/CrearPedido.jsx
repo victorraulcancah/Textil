@@ -57,6 +57,7 @@ export default function CrearPedido() {
     const [nueva, setNueva] = useState({
         producto_id: '',
         producto_presentacion_id: '',
+        producto_color_id: '',
         descripcion: '',
         cantidad: '',
         precio_unitario: '',
@@ -109,7 +110,9 @@ export default function CrearPedido() {
                     setLineas(
                         (p.detalles ?? []).map((d) => ({
                             producto_presentacion_id: String(d.producto_presentacion_id),
+                            producto_color_id: d.producto_color_id ? String(d.producto_color_id) : '',
                             producto: d.producto,
+                            color: d.color?.nombre ?? '',
                             presentacion: d.presentacion,
                             descripcion: d.descripcion ?? '',
                             cantidad: String(d.cantidad),
@@ -173,6 +176,8 @@ export default function CrearPedido() {
             ...prev,
             producto_presentacion_id: elegida ? String(elegida.id) : '',
             precio_unitario: elegida?.precio_venta != null ? String(elegida.precio_venta) : '',
+            // Otro producto, otro color: nunca se hereda de la línea anterior.
+            producto_color_id: '',
         }));
     }, [producto]);
 
@@ -191,11 +196,17 @@ export default function CrearPedido() {
     const agregar = () => {
         if (!puedeAgregar) return;
 
+        const colorElegido = (producto?.colores ?? []).find(
+            (c) => String(c.id) === String(nueva.producto_color_id),
+        );
+
         setLineas((prev) => [
             ...prev,
             {
                 producto_presentacion_id: nueva.producto_presentacion_id,
+                producto_color_id: nueva.producto_color_id || '',
                 producto: producto?.nombre,
+                color: colorElegido?.nombre ?? '',
                 presentacion: presentacion?.nombre,
                 descripcion: nueva.descripcion.trim(),
                 cantidad: nueva.cantidad,
@@ -206,6 +217,7 @@ export default function CrearPedido() {
         setNueva({
             producto_id: '',
             producto_presentacion_id: '',
+            producto_color_id: '',
             descripcion: '',
             cantidad: '',
             precio_unitario: '',
@@ -279,6 +291,7 @@ export default function CrearPedido() {
                 vendedor_id: user?.id,
                 detalles: lineas.map((l) => ({
                     producto_presentacion_id: Number(l.producto_presentacion_id),
+                    producto_color_id: l.producto_color_id ? Number(l.producto_color_id) : null,
                     cantidad: Number(l.cantidad) || 0,
                     precio_unitario: Number(l.precio_unitario) || 0,
                     descripcion: l.descripcion || null,
@@ -370,6 +383,25 @@ export default function CrearPedido() {
                             onChange={(e) => setNueva((prev) => ({ ...prev, descripcion: e.target.value }))}
                         />
 
+                        {/* Solo si la tela tiene colores registrados: hay
+                            insumos (hilos, cierres) que no se piden por color. */}
+                        {producto?.colores?.length > 0 && (
+                            <Select
+                                label="Color"
+                                value={nueva.producto_color_id}
+                                onChange={(e) =>
+                                    setNueva((prev) => ({ ...prev, producto_color_id: e.target.value }))
+                                }
+                                options={[
+                                    { value: '', label: 'Cualquier color' },
+                                    ...producto.colores.map((c) => ({
+                                        value: String(c.id),
+                                        label: c.codigo ? `${c.nombre} (${c.codigo})` : c.nombre,
+                                    })),
+                                ]}
+                            />
+                        )}
+
                         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                             <Input
                                 label="Stock"
@@ -445,6 +477,11 @@ export default function CrearPedido() {
                                     <tr key={i}>
                                         <td className="px-3 py-2">
                                             <span className="font-medium text-warm-900">{l.producto}</span>
+                                            {l.color && (
+                                                <span className="ml-1.5 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-warm-700">
+                                                    {l.color}
+                                                </span>
+                                            )}
                                             {l.descripcion && (
                                                 <span className="block text-xs text-warm-500">{l.descripcion}</span>
                                             )}

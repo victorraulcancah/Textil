@@ -14,6 +14,7 @@ class UpdateProductoRequest extends FormRequest
             'codigo' => ['required', 'string', 'max:255', Rule::unique('productos', 'codigo')->ignore($this->route('producto'))],
             'codigo_barras' => 'nullable|string|max:255',
             'nombre' => 'required|string|max:255',
+            'nombre_tecnico' => 'nullable|string|max:255',
             'descripcion_ticket' => 'nullable|string|max:255',
             'marca_id' => 'nullable|exists:marcas,id',
             'sub_marca_id' => 'nullable|exists:sub_marcas,id',
@@ -39,6 +40,7 @@ class UpdateProductoRequest extends FormRequest
 
             // Ficha técnica de tela (todo opcional: mercería y avíos no la usan).
             'composicion' => 'nullable|string|max:255',
+            'codigo_arancelario' => 'nullable|string|max:20',
             'ancho_cm' => 'nullable|numeric|min:0|max:999999',
             'gramaje' => 'nullable|numeric|min:0|max:999999',
             // Cuántos kilos pesa un metro de esta tela (58 m ~ 26 kg = 0.45).
@@ -47,6 +49,7 @@ class UpdateProductoRequest extends FormRequest
             'elasticidad' => 'nullable|in:ninguna,mono,bi',
             'encogimiento' => 'nullable|numeric|min:0|max:100',
             'minimo_compra' => 'nullable|numeric|min:0',
+            'unidad_minimo_compra' => 'nullable|in:metros,rollos',
             'usos' => 'nullable|string|max:5000',
             'propiedades' => 'nullable|string|max:5000',
             'cuidados' => 'nullable|string|max:5000',

@@ -19,6 +19,7 @@ const emptyProducto = {
     codigo: '',
     codigo_barras: '',
     nombre: '',
+    nombre_tecnico: '',
     descripcion_ticket: '',
     categoria_id: '',
     sub_categoria_id: '',
@@ -32,12 +33,14 @@ const emptyProducto = {
     // Ficha técnica de tela (opcional: mercería y avíos la dejan vacía).
     descripcion: '',
     composicion: '',
+    codigo_arancelario: '',
     ancho_cm: '',
     gramaje: '',
     peso_por_metro: '',
     tipo_tejido: '',
     elasticidad: '',
     minimo_compra: '',
+    unidad_minimo_compra: '',
     propiedades: '',
 };
 
@@ -205,6 +208,7 @@ export default function Productos() {
             codigo: prod.codigo ?? '',
             codigo_barras: prod.codigo_barras ?? '',
             nombre: prod.nombre ?? '',
+            nombre_tecnico: prod.nombre_tecnico ?? '',
             descripcion_ticket: prod.descripcion_ticket ?? '',
             categoria_id: relId('categoria_id', 'categoria'),
             sub_categoria_id: relId('sub_categoria_id', 'sub_categoria'),
@@ -217,12 +221,14 @@ export default function Productos() {
             activo: prod.activo !== false,
             descripcion: prod.descripcion ?? '',
             composicion: prod.composicion ?? '',
+            codigo_arancelario: prod.codigo_arancelario ?? '',
             ancho_cm: prod.ancho_cm ?? '',
             gramaje: prod.gramaje ?? '',
             peso_por_metro: prod.peso_por_metro ?? '',
             tipo_tejido: prod.tipo_tejido ?? '',
             elasticidad: prod.elasticidad ?? '',
             minimo_compra: prod.minimo_compra ?? '',
+            unidad_minimo_compra: prod.unidad_minimo_compra ?? '',
             propiedades: prod.propiedades ?? '',
         });
         setTab('general');
@@ -403,6 +409,7 @@ export default function Productos() {
         const payload = {
             codigo: form.codigo.trim(),
             nombre: form.nombre.trim(),
+            nombre_tecnico: str(form.nombre_tecnico),
             // La unidad base es el formato de venta más pequeño, calculado solo.
             unidad_medida_id: calculo.baseId,
             unidad_base_id: calculo.baseId,
@@ -419,12 +426,14 @@ export default function Productos() {
             stock_maximo: num(form.stock_maximo),
             descripcion: str(form.descripcion),
             composicion: str(form.composicion),
+            codigo_arancelario: str(form.codigo_arancelario),
             ancho_cm: num(form.ancho_cm),
             gramaje: num(form.gramaje),
             peso_por_metro: num(form.peso_por_metro),
             tipo_tejido: str(form.tipo_tejido),
             elasticidad: str(form.elasticidad),
             minimo_compra: num(form.minimo_compra),
+            unidad_minimo_compra: str(form.unidad_minimo_compra),
             propiedades: str(form.propiedades),
             presentaciones: buildPresentaciones(),
             colores: colores
@@ -774,7 +783,8 @@ export default function Productos() {
                         </h3>
                         <div className="grid gap-4 sm:grid-cols-3">
                             <Input
-                                label="Producto"
+                                label="Nombre comercial"
+                                placeholder="Con el que se vende"
                                 value={form.nombre}
                                 onChange={setField('nombre')}
                                 error={errors.nombre}
@@ -792,12 +802,19 @@ export default function Productos() {
                                 onChange={setField('codigo')}
                                 error={errors.codigo}
                             />
-                            <Input
-                                label="Código de barra"
-                                value={form.codigo_barras}
-                                onChange={setField('codigo_barras')}
-                                error={errors.codigo_barras}
-                            />
+                            <div className="sm:col-span-2">
+                                <Input
+                                    label="Código de barras"
+                                    placeholder="Opcional"
+                                    value={form.codigo_barras}
+                                    onChange={setField('codigo_barras')}
+                                    error={errors.codigo_barras}
+                                />
+                                <p className="mt-1 text-xs text-warm-400">
+                                    Para leerlo con un lector de código de barras en el punto de venta.
+                                    Se escribe a mano; si no lo usas, déjalo vacío.
+                                </p>
+                            </div>
                             <label className="flex items-end gap-2 pb-2 text-sm text-gray-700">
                                 <input
                                     type="checkbox"
@@ -1029,6 +1046,20 @@ export default function Productos() {
                         </p>
                         <div className="grid gap-4 sm:grid-cols-3">
                             <Input
+                                label="Nombre técnico"
+                                placeholder="Como la llama la fábrica, si es distinto"
+                                value={form.nombre_tecnico}
+                                onChange={setField('nombre_tecnico')}
+                                error={errors.nombre_tecnico}
+                            />
+                            <Input
+                                label="Partida arancelaria"
+                                placeholder="600632"
+                                value={form.codigo_arancelario}
+                                onChange={setField('codigo_arancelario')}
+                                error={errors.codigo_arancelario}
+                            />
+                            <Input
                                 label="Composición"
                                 placeholder="100% Algodón / 65% Poliéster 35% Algodón"
                                 value={form.composicion}
@@ -1056,16 +1087,51 @@ export default function Productos() {
                             />
                             {/* El packing list pesa cada rollo (58 m ~ 26 kg).
                                 Guardar la equivalencia permite detectar un
-                                metraje mal tecleado y vender por kilo. */}
-                            <Input
-                                label="Peso por metro (kg)"
-                                type="number"
-                                step="0.0001"
-                                placeholder="0.45"
-                                value={form.peso_por_metro}
-                                onChange={setField('peso_por_metro')}
-                                error={errors.peso_por_metro}
-                            />
+                                metraje mal tecleado y vender por kilo. Con
+                                ancho y gramaje ya cargados, no hace falta
+                                calcularlo a mano: peso = ancho(m) × gramaje ÷ 1000. */}
+                            <div>
+                                <div className="flex items-end gap-2">
+                                    <Input
+                                        label="Peso por metro (kg)"
+                                        type="number"
+                                        step="0.0001"
+                                        placeholder="0.45"
+                                        value={form.peso_por_metro}
+                                        onChange={setField('peso_por_metro')}
+                                        error={errors.peso_por_metro}
+                                        className="flex-1"
+                                    />
+                                    {form.ancho_cm > 0 && form.gramaje > 0 && (
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            className="mb-px shrink-0"
+                                            onClick={() =>
+                                                setForm((p) => ({
+                                                    ...p,
+                                                    peso_por_metro: (
+                                                        (Number(p.ancho_cm) / 100) *
+                                                        (Number(p.gramaje) / 1000)
+                                                    ).toFixed(4),
+                                                }))
+                                            }
+                                        >
+                                            Calcular
+                                        </Button>
+                                    )}
+                                </div>
+                                {form.ancho_cm > 0 && form.gramaje > 0 && (
+                                    <p className="mt-1 text-xs text-warm-400">
+                                        A partir del ancho y el gramaje:{' '}
+                                        {(
+                                            (Number(form.ancho_cm) / 100) *
+                                            (Number(form.gramaje) / 1000)
+                                        ).toFixed(4)}{' '}
+                                        kg/m
+                                    </p>
+                                )}
+                            </div>
                             <Select
                                 label="Tipo de tejido"
                                 value={form.tipo_tejido}
@@ -1089,15 +1155,29 @@ export default function Productos() {
                                 ]}
                                 error={errors.elasticidad}
                             />
-                            <Input
-                                label="Mínimo de compra"
-                                type="number"
-                                step="0.5"
-                                placeholder="5"
-                                value={form.minimo_compra}
-                                onChange={setField('minimo_compra')}
-                                error={errors.minimo_compra}
-                            />
+                            <div className="flex gap-2">
+                                <Input
+                                    label="Mínimo de compra"
+                                    type="number"
+                                    step="0.5"
+                                    placeholder="5"
+                                    value={form.minimo_compra}
+                                    onChange={setField('minimo_compra')}
+                                    error={errors.minimo_compra}
+                                    className="flex-1"
+                                />
+                                <Select
+                                    label="Unidad"
+                                    value={form.unidad_minimo_compra}
+                                    onChange={setField('unidad_minimo_compra')}
+                                    options={[
+                                        { value: '', label: '—' },
+                                        { value: 'metros', label: 'Metros' },
+                                        { value: 'rollos', label: 'Rollos' },
+                                    ]}
+                                    className="w-32 shrink-0"
+                                />
+                            </div>
                         </div>
                         {(form.ancho_cm || form.gramaje) && (
                             <p className="mt-2 text-xs text-warm-500">

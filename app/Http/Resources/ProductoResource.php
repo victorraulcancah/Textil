@@ -13,6 +13,7 @@ class ProductoResource extends JsonResource
             'codigo' => $this->codigo,
             'codigo_barras' => $this->codigo_barras,
             'nombre' => $this->nombre,
+            'nombre_tecnico' => $this->nombre_tecnico,
             'descripcion_ticket' => $this->descripcion_ticket,
             'marca' => new MarcaResource($this->whenLoaded('marca')),
             'sub_marca' => new SubMarcaResource($this->whenLoaded('subMarca')),
@@ -42,6 +43,7 @@ class ProductoResource extends JsonResource
 
             // Ficha técnica de tela (null en mercería y avíos).
             'composicion' => $this->composicion,
+            'codigo_arancelario' => $this->codigo_arancelario,
             'ancho_cm' => $this->ancho_cm,
             'gramaje' => $this->gramaje,
             'peso_por_metro' => $this->peso_por_metro,
@@ -49,6 +51,7 @@ class ProductoResource extends JsonResource
             'elasticidad' => $this->elasticidad,
             'encogimiento' => $this->encogimiento,
             'minimo_compra' => $this->minimo_compra,
+            'unidad_minimo_compra' => $this->unidad_minimo_compra,
             'usos' => $this->usos,
             'propiedades' => $this->propiedades,
             'cuidados' => $this->cuidados,

@@ -17,6 +17,9 @@ class Producto extends Model
         'codigo',
         'codigo_barras',
         'nombre',
+        // Cómo la llama la fábrica, cuando es distinto del nombre con el que
+        // se vende. Opcional.
+        'nombre_tecnico',
         'descripcion_ticket',
         'marca_id',
         'sub_marca_id',
@@ -40,6 +43,8 @@ class Producto extends Model
         'elasticidad',
         'encogimiento',
         'minimo_compra',
+        // En qué unidad se cuenta el mínimo de compra ('metros' o 'rollos').
+        'unidad_minimo_compra',
         'usos',
         'propiedades',
         'cuidados',

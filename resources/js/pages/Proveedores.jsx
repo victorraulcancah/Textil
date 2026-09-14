@@ -9,6 +9,8 @@ import { Alert, Badge, Button, DataTable, Input, Modal } from '../components/ui'
 const emptyForm = {
     nombre: '',
     codigo: '',
+    // De eso depende qué campos pide el formulario más abajo.
+    tipo: 'nacional',
     // Solo para proveedores que emiten su propia numeración de orden de
     // compra: KET-001-26. Opcional.
     codigo_corto: '',
@@ -66,6 +68,7 @@ export default function Proveedores() {
         setForm({
             nombre: p.nombre ?? '',
             codigo: p.codigo ?? '',
+            tipo: p.tipo ?? 'nacional',
             codigo_corto: p.codigo_corto ?? '',
             ruc: p.ruc ?? '',
             tax_id: p.tax_id ?? '',
@@ -136,6 +139,9 @@ export default function Proveedores() {
                 <span className="inline-flex items-center gap-2 font-medium text-warm-900">
                     <Building2 className="h-4 w-4 text-primary-600" />
                     {row.nombre}
+                    <Badge variant={row.tipo === 'extranjero' ? 'amber' : 'gray'}>
+                        {row.tipo === 'extranjero' ? 'Extranjero' : 'Nacional'}
+                    </Badge>
                 </span>
             ),
         },
@@ -254,8 +260,35 @@ export default function Proveedores() {
                 }
             >
                 <form id="proveedor-form" onSubmit={handleSubmit} className="space-y-4" noValidate>
+                    {/* Nacional o extranjero: de eso depende si se pide RUC o
+                        Tax ID, y si aplican país y fax. */}
+                    <div className="inline-flex rounded-lg border border-edge bg-gray-50 p-0.5">
+                        {[
+                            { value: 'nacional', label: 'Nacional' },
+                            { value: 'extranjero', label: 'Extranjero' },
+                        ].map((opcion) => (
+                            <button
+                                key={opcion.value}
+                                type="button"
+                                onClick={() => field('tipo', opcion.value)}
+                                className={`rounded-md px-3 py-1 text-xs font-semibold transition ${
+                                    form.tipo === opcion.value
+                                        ? 'bg-white text-primary-700 shadow-sm'
+                                        : 'text-warm-500 hover:text-warm-700'
+                                }`}
+                            >
+                                {opcion.label}
+                            </button>
+                        ))}
+                    </div>
+
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <Input label="Nombre" value={form.nombre} onChange={(e) => field('nombre', e.target.value)} error={formErrors.nombre} />
+                        <Input
+                            label={form.tipo === 'extranjero' ? 'Nombre o razón social' : 'Nombre'}
+                            value={form.nombre}
+                            onChange={(e) => field('nombre', e.target.value)}
+                            error={formErrors.nombre}
+                        />
                         <Input label="Código" value={form.codigo} onChange={(e) => field('codigo', e.target.value)} error={formErrors.codigo} />
                         <div>
                             <Input
@@ -270,12 +303,25 @@ export default function Proveedores() {
                                 Solo si el proveedor numera así sus órdenes: KET-001-26.
                             </p>
                         </div>
-                        <Input label="RUC" value={form.ruc} onChange={(e) => field('ruc', e.target.value)} error={formErrors.ruc} />
-                        <Input label="Tax ID" placeholder="Del proveedor extranjero, si no tiene RUC" value={form.tax_id} onChange={(e) => field('tax_id', e.target.value)} error={formErrors.tax_id} />
-                        <Input label="País" value={form.pais} onChange={(e) => field('pais', e.target.value)} error={formErrors.pais} />
+
+                        {form.tipo === 'extranjero' ? (
+                            <>
+                                <Input
+                                    label="Tax ID"
+                                    placeholder="Acepta letras, números y más de 11 caracteres"
+                                    value={form.tax_id}
+                                    onChange={(e) => field('tax_id', e.target.value)}
+                                    error={formErrors.tax_id}
+                                />
+                                <Input label="País" value={form.pais} onChange={(e) => field('pais', e.target.value)} error={formErrors.pais} />
+                                <Input label="Fax" value={form.fax} onChange={(e) => field('fax', e.target.value)} error={formErrors.fax} />
+                            </>
+                        ) : (
+                            <Input label="RUC" value={form.ruc} onChange={(e) => field('ruc', e.target.value)} error={formErrors.ruc} />
+                        )}
+
                         <Input label="Contacto" value={form.contacto_nombre} onChange={(e) => field('contacto_nombre', e.target.value)} error={formErrors.contacto_nombre} />
                         <Input label="Teléfono" value={form.telefono} onChange={(e) => field('telefono', e.target.value)} error={formErrors.telefono} />
-                        <Input label="Fax" value={form.fax} onChange={(e) => field('fax', e.target.value)} error={formErrors.fax} />
                         <Input label="Email" type="email" value={form.email} onChange={(e) => field('email', e.target.value)} error={formErrors.email} />
                     </div>
                     <Input label="Dirección" value={form.direccion} onChange={(e) => field('direccion', e.target.value)} error={formErrors.direccion} />

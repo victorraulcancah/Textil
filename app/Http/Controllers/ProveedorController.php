@@ -24,6 +24,9 @@ class ProveedorController extends Controller
 
         return [
             'nombre' => 'required|string|max:255',
+            // De esto depende qué campos pide el formulario: uno nacional se
+            // identifica por RUC, uno extranjero por Tax ID.
+            'tipo' => 'nullable|in:nacional,extranjero',
             'codigo' => "required|string|max:50|unique:proveedores,codigo{$excepto}",
             // Solo para armar el código de sus órdenes de compra (KET-001-26);
             // opcional porque no todos los proveedores emiten esa numeración.

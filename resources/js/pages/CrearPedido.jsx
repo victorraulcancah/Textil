@@ -15,6 +15,18 @@ const money = (n) =>
 const hoy = () => new Date().toISOString().slice(0, 10);
 
 /**
+ * "Rollo", "Metro" o null. Sirve para recordar qué unidad se viene usando y
+ * proponerla en el siguiente producto que se agregue, sin forzar nada: cada
+ * línea la puede cambiar por su cuenta.
+ */
+const tipoUnidad = (presentacion) => {
+    if (!presentacion) return null;
+    if ((presentacion.unidad_base?.abreviatura ?? '').toLowerCase() === 'm') return 'metro';
+    if (/rollo/i.test(presentacion.nombre ?? '')) return 'rollo';
+    return null;
+};
+
+/**
  * Alta y edición del pedido: lo que pide el cliente.
  *
  * Se pide por producto y cantidad —"120 metros de Polinán negro"— y no por
@@ -52,6 +64,12 @@ export default function CrearPedido() {
 
     /** Buscador avanzado: se abre con lo que ya se haya escrito arriba. */
     const [picker, setPicker] = useState({ open: false, query: '' });
+
+    /**
+     * 'rollo' | 'metro' | null. La unidad del primer producto agregado queda
+     * propuesta para los siguientes; cada línea la puede cambiar aparte.
+     */
+    const [unidadPreferida, setUnidadPreferida] = useState(null);
 
     /** El renglón de arriba, donde se arma la línea antes de agregarla. */
     const [nueva, setNueva] = useState({
@@ -154,23 +172,29 @@ export default function CrearPedido() {
     }, [producto, presentacion, stockPorProducto]);
 
     /**
-     * Al elegir producto se propone el formato en que se vende normalmente.
+     * Al elegir producto se propone un formato.
      *
-     * El metro si la tela lo tiene, porque es como se pide la tela; si no, el
-     * más pequeño. Proponer el menor a secas dejaba "Retazo (saldo)", que es
-     * un formato para restos y nadie pide así.
+     * Primero se intenta seguir con la unidad del último ítem agregado
+     * (rollo o metro): si el pedido viene en rollos, lo natural es seguir
+     * pidiendo rollos. Si esta tela no tiene esa unidad, o todavía no hay
+     * preferencia, se propone el metro (así se pide la tela) y si tampoco
+     * hay, el formato más pequeño — el mayor a secas dejaba "Retazo (saldo)",
+     * que es para restos y nadie pide así.
      */
     useEffect(() => {
         if (!producto) return;
 
         const activas = (producto.presentaciones ?? []).filter((p) => p.activo !== false);
+        const porPreferida = unidadPreferida
+            ? activas.find((p) => tipoUnidad(p) === unidadPreferida)
+            : null;
         const porMetro = activas.find(
             (p) => (p.unidad_base?.abreviatura ?? '').toLowerCase() === 'm',
         );
         const menor = [...activas].sort(
             (a, b) => (Number(a.factor_conversion) || 1) - (Number(b.factor_conversion) || 1),
         )[0];
-        const elegida = porMetro ?? menor;
+        const elegida = porPreferida ?? porMetro ?? menor;
 
         setNueva((prev) => ({
             ...prev,
@@ -199,6 +223,11 @@ export default function CrearPedido() {
         const colorElegido = (producto?.colores ?? []).find(
             (c) => String(c.id) === String(nueva.producto_color_id),
         );
+
+        // La unidad de este ítem queda propuesta para el siguiente, aunque
+        // nadie haya tocado el selector (el metro por defecto, por ejemplo).
+        const tipo = tipoUnidad(presentacion);
+        if (tipo) setUnidadPreferida(tipo);
 
         setLineas((prev) => [
             ...prev,
@@ -416,9 +445,19 @@ export default function CrearPedido() {
                             <Select
                                 label="Unidad"
                                 value={nueva.producto_presentacion_id}
-                                onChange={(e) =>
-                                    setNueva((prev) => ({ ...prev, producto_presentacion_id: e.target.value }))
-                                }
+                                onChange={(e) => {
+                                    const elegida = presentaciones.find(
+                                        (p) => String(p.id) === e.target.value,
+                                    );
+                                    // Se cambia esta línea nada más; la
+                                    // preferencia para las siguientes se
+                                    // actualiza al agregarla.
+                                    setNueva((prev) => ({
+                                        ...prev,
+                                        producto_presentacion_id: e.target.value,
+                                    }));
+                                    if (elegida) setUnidadPreferida(tipoUnidad(elegida));
+                                }}
                                 options={[
                                     { value: '', label: producto ? 'Elegir' : '—' },
                                     ...presentaciones.map((p) => ({ value: String(p.id), label: p.nombre })),

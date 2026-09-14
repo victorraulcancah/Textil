@@ -16,6 +16,9 @@ class Proveedor extends Model
     protected $fillable = [
         'nombre',
         'codigo',
+        // De eso depende qué campos pide el formulario: uno nacional se
+        // identifica por RUC, uno extranjero por Tax ID.
+        'tipo',
         // Código corto (3 caracteres) con el que el cliente arma su propia
         // numeración de orden de compra: KET-001-26.
         'codigo_corto',
@@ -42,5 +45,10 @@ class Proveedor extends Model
     public function ordenesCompra()
     {
         return $this->hasMany(OrdenCompra::class);
+    }
+
+    public function esExtranjero(): bool
+    {
+        return $this->tipo === 'extranjero';
     }
 }

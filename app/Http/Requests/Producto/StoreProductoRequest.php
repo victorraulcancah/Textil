@@ -22,6 +22,9 @@ class StoreProductoRequest extends FormRequest
             'codigo' => 'required|string|max:255|unique:productos,codigo',
             'codigo_barras' => 'nullable|string|max:255',
             'nombre' => 'required|string|max:255',
+            // Cómo la llama la fábrica, si es distinto del nombre con el que
+            // se vende.
+            'nombre_tecnico' => 'nullable|string|max:255',
             'descripcion_ticket' => 'nullable|string|max:255',
             'marca_id' => 'nullable|exists:marcas,id',
             'sub_marca_id' => 'nullable|exists:sub_marcas,id',
@@ -47,6 +50,8 @@ class StoreProductoRequest extends FormRequest
 
             // Ficha técnica de tela (todo opcional: mercería y avíos no la usan).
             'composicion' => 'nullable|string|max:255',
+            // Partida arancelaria (HS code), para la orden de compra al exterior.
+            'codigo_arancelario' => 'nullable|string|max:20',
             'ancho_cm' => 'nullable|numeric|min:0|max:999999',
             'gramaje' => 'nullable|numeric|min:0|max:999999',
             // Cuántos kilos pesa un metro de esta tela (58 m ~ 26 kg = 0.45).
@@ -55,6 +60,8 @@ class StoreProductoRequest extends FormRequest
             'elasticidad' => 'nullable|in:ninguna,mono,bi',
             'encogimiento' => 'nullable|numeric|min:0|max:100',
             'minimo_compra' => 'nullable|numeric|min:0',
+            // En qué se cuenta el mínimo: metros o rollos.
+            'unidad_minimo_compra' => 'nullable|in:metros,rollos',
             'usos' => 'nullable|string|max:5000',
             'propiedades' => 'nullable|string|max:5000',
             'cuidados' => 'nullable|string|max:5000',

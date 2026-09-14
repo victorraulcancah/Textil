@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ChevronRight, Layers, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
+import {
+    ChevronDown, ChevronRight, Layers, LayoutGrid, Loader2, MapPin, Pencil, Plus, Route, Trash2, Warehouse,
+} from 'lucide-react';
 import api from '../lib/api';
 import { useToast } from '../lib/toast';
 import { Button, Input } from './ui';
@@ -9,19 +11,28 @@ const SIGUIENTE = { piso: 'pasillo', pasillo: 'rack', rack: 'nivel', nivel: 'pos
 
 const ETIQUETA = { piso: 'Piso', pasillo: 'Pasillo', rack: 'Rack', nivel: 'Nivel', posicion: 'Posición' };
 
+const ETIQUETA_PLURAL = { pasillo: 'pasillos', rack: 'racks', nivel: 'niveles', posicion: 'posiciones' };
+
+const ICONO = { piso: Warehouse, pasillo: Route, rack: Layers, nivel: LayoutGrid, posicion: MapPin };
+
 /**
  * El árbol de ubicaciones de un almacén: piso → pasillo → rack → nivel →
  * posición. No todos los almacenes llegan a los 5 niveles —uno chico puede
  * quedarse en pasillo—, así que cada rama crece hasta donde a ese almacén
- * le sirve, y no más.
+ * le sirve, y no más. Cada nivel se puede colapsar para no perderse cuando
+ * el árbol crece.
  */
 export default function UbicacionesAlmacen({ almacenId }) {
     const toast = useToast();
     const [arbol, setArbol] = useState([]);
     const [cargando, setCargando] = useState(true);
-    const [creandoEn, setCreandoEn] = useState('raiz'); // id del padre, o 'raiz'; abierto de entrada
+    // Ids colapsados; por defecto todo empieza expandido.
+    const [colapsados, setColapsados] = useState(() => new Set());
+    const [creandoEn, setCreandoEn] = useState('raiz'); // id del padre, o 'raiz'
     const [nombreNuevo, setNombreNuevo] = useState('');
     const [guardando, setGuardando] = useState(false);
+    const [renombrando, setRenombrando] = useState(null); // id del nodo
+    const [nombreEdit, setNombreEdit] = useState('');
 
     const cargar = useCallback(async () => {
         if (!almacenId) return;
@@ -40,25 +51,48 @@ export default function UbicacionesAlmacen({ almacenId }) {
         cargar();
     }, [cargar]);
 
+    const alternarColapso = (id) => {
+        setColapsados((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id); else next.add(id);
+            return next;
+        });
+    };
+
     const abrirCrear = (padreId) => {
         setCreandoEn(padreId);
         setNombreNuevo('');
     };
 
-    const crear = async () => {
+    const crear = async (padreId) => {
         if (!nombreNuevo.trim()) return;
         setGuardando(true);
         try {
             await api.post(`/almacenes/${almacenId}/ubicaciones`, {
-                padre_id: creandoEn === 'raiz' ? null : creandoEn,
+                padre_id: padreId === 'raiz' ? null : padreId,
                 nombre: nombreNuevo.trim(),
             });
             setCreandoEn(null);
+            if (padreId !== 'raiz') setColapsados((prev) => { const n = new Set(prev); n.delete(padreId); return n; });
             await cargar();
         } catch (err) {
             toast.error(err.response?.data?.message ?? 'No se pudo crear la ubicación.');
         } finally {
             setGuardando(false);
+        }
+    };
+
+    const guardarRenombre = async (nodo) => {
+        if (!nombreEdit.trim() || nombreEdit === nodo.nombre) {
+            setRenombrando(null);
+            return;
+        }
+        try {
+            await api.put(`/almacen-ubicaciones/${nodo.id}`, { nombre: nombreEdit.trim() });
+            setRenombrando(null);
+            await cargar();
+        } catch {
+            toast.error('No se pudo renombrar.');
         }
     };
 
@@ -89,106 +123,121 @@ export default function UbicacionesAlmacen({ almacenId }) {
     }
 
     return (
-        <div className="space-y-2">
-            {arbol.length === 0 && creandoEn !== 'raiz' && (
-                <p className="mb-2 text-xs text-warm-400">
-                    Sin pisos todavía. Se pide en la recepción solo si los agregas aquí.
-                </p>
-            )}
+        <div className="rounded-lg border border-edge bg-white p-2">
+            <div className="flex flex-col">
+                {arbol.length === 0 && creandoEn !== 'raiz' && (
+                    <p className="px-2 py-3 text-center text-xs text-warm-400">
+                        Sin pisos todavía. Se pide en la recepción solo si los agregas aquí.
+                    </p>
+                )}
 
-            {arbol.map((nodo) => (
-                <Nodo
-                    key={nodo.id}
-                    nodo={nodo}
-                    nivel={0}
-                    creandoEn={creandoEn}
-                    nombreNuevo={nombreNuevo}
-                    setNombreNuevo={setNombreNuevo}
-                    onAbrirCrear={abrirCrear}
-                    onCrear={crear}
-                    onCancelarCrear={() => setCreandoEn(null)}
-                    onEliminar={eliminar}
-                    guardando={guardando}
-                    recargar={cargar}
-                    toast={toast}
-                />
-            ))}
+                {arbol.map((nodo) => (
+                    <Nodo
+                        key={nodo.id}
+                        nodo={nodo}
+                        nivel={0}
+                        colapsados={colapsados}
+                        onAlternarColapso={alternarColapso}
+                        creandoEn={creandoEn}
+                        nombreNuevo={nombreNuevo}
+                        setNombreNuevo={setNombreNuevo}
+                        onAbrirCrear={abrirCrear}
+                        onCrear={crear}
+                        onCancelarCrear={() => setCreandoEn(null)}
+                        guardando={guardando}
+                        renombrando={renombrando}
+                        nombreEdit={nombreEdit}
+                        setNombreEdit={setNombreEdit}
+                        onAbrirRenombrar={(n) => { setRenombrando(n.id); setNombreEdit(n.nombre); }}
+                        onGuardarRenombre={guardarRenombre}
+                        onEliminar={eliminar}
+                    />
+                ))}
 
-            {creandoEn === 'raiz' ? (
-                <FilaNueva
-                    placeholder="Nombre del piso (ej: Piso 1)"
-                    value={nombreNuevo}
-                    onChange={setNombreNuevo}
-                    onGuardar={crear}
-                    onCancelar={() => setCreandoEn(null)}
-                    guardando={guardando}
-                />
-            ) : (
-                <Button type="button" variant="secondary" size="sm" onClick={() => abrirCrear('raiz')}>
-                    <Plus className="h-3.5 w-3.5" /> Agregar piso
-                </Button>
-            )}
+                {creandoEn === 'raiz' ? (
+                    <FilaNueva
+                        nivel={0}
+                        placeholder="Nombre del piso (ej: Piso 1)"
+                        value={nombreNuevo}
+                        onChange={setNombreNuevo}
+                        onGuardar={() => crear('raiz')}
+                        onCancelar={() => setCreandoEn(null)}
+                        guardando={guardando}
+                    />
+                ) : (
+                    <button
+                        type="button"
+                        onClick={() => abrirCrear('raiz')}
+                        className="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-primary-600 hover:bg-primary-50"
+                    >
+                        <Plus className="h-3.5 w-3.5" /> Agregar piso
+                    </button>
+                )}
+            </div>
         </div>
     );
 }
 
-/** Un nodo del árbol, con sus hijos debajo (indentados) si los tiene. */
+/** Un nodo del árbol, con sus hijos debajo si está expandido. */
 function Nodo({
-    nodo, nivel, creandoEn, nombreNuevo, setNombreNuevo,
-    onAbrirCrear, onCrear, onCancelarCrear, onEliminar, guardando, recargar, toast,
+    nodo, nivel, colapsados, onAlternarColapso,
+    creandoEn, nombreNuevo, setNombreNuevo, onAbrirCrear, onCrear, onCancelarCrear, guardando,
+    renombrando, nombreEdit, setNombreEdit, onAbrirRenombrar, onGuardarRenombre, onEliminar,
 }) {
-    const [renombrando, setRenombrando] = useState(false);
-    const [nombreEdit, setNombreEdit] = useState(nodo.nombre);
-
-    const guardarRenombre = async () => {
-        if (!nombreEdit.trim() || nombreEdit === nodo.nombre) {
-            setRenombrando(false);
-            return;
-        }
-        try {
-            await api.put(`/almacen-ubicaciones/${nodo.id}`, { nombre: nombreEdit.trim() });
-            setRenombrando(false);
-            await recargar();
-        } catch {
-            toast.error('No se pudo renombrar.');
-        }
-    };
-
     const admiteHijos = SIGUIENTE[nodo.tipo] != null;
+    const tieneHijos = nodo.hijos.length > 0;
+    const colapsado = colapsados.has(nodo.id);
+    const Icono = ICONO[nodo.tipo];
+    const editando = renombrando === nodo.id;
+
+    const resumen = admiteHijos
+        ? `${nodo.hijos.length} ${ETIQUETA_PLURAL[SIGUIENTE[nodo.tipo]]}`
+        : nodo.rollos_count > 0
+            ? `${nodo.rollos_count} rollo(s)`
+            : 'vacío';
 
     return (
-        <div style={{ marginLeft: nivel * 20 }}>
-            <div className="group flex items-center gap-2 rounded-lg border border-edge bg-white px-3 py-2">
-                {nivel > 0 && <ChevronRight className="h-3.5 w-3.5 shrink-0 text-warm-300" />}
-                <Layers className="h-3.5 w-3.5 shrink-0 text-primary-500" />
-                <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-warm-500">
-                    {ETIQUETA[nodo.tipo]}
-                </span>
+        <div>
+            <div
+                className="group flex items-center gap-1.5 rounded-md px-2 py-1.5 hover:bg-gray-50"
+                style={{ paddingLeft: 8 + nivel * 18 }}
+            >
+                {(tieneHijos || admiteHijos) ? (
+                    <button
+                        type="button"
+                        onClick={() => onAlternarColapso(nodo.id)}
+                        className="shrink-0 text-warm-400 hover:text-warm-600"
+                    >
+                        {colapsado ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                    </button>
+                ) : (
+                    <span className="w-3.5 shrink-0" />
+                )}
 
-                {renombrando ? (
+                <Icono className="h-3.5 w-3.5 shrink-0 text-warm-500" />
+
+                {editando ? (
                     <input
                         autoFocus
                         value={nombreEdit}
                         onChange={(e) => setNombreEdit(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && guardarRenombre()}
-                        onBlur={guardarRenombre}
-                        className="flex-1 rounded border border-primary-300 px-1.5 py-0.5 text-sm"
+                        onKeyDown={(e) => e.key === 'Enter' && onGuardarRenombre(nodo)}
+                        onBlur={() => onGuardarRenombre(nodo)}
+                        className="flex-1 rounded border border-primary-300 px-1.5 py-0.5 text-[13px]"
                     />
                 ) : (
-                    <span className="flex-1 truncate text-sm font-medium text-warm-900">{nodo.nombre}</span>
+                    <span className="flex-1 truncate text-[13px] text-warm-900">{nodo.nombre}</span>
                 )}
 
-                {nodo.rollos_count > 0 && (
-                    <span className="shrink-0 text-[11px] text-warm-400">{nodo.rollos_count} rollo(s)</span>
-                )}
+                <span className="shrink-0 text-[11px] text-warm-400">{resumen}</span>
 
                 <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100">
                     {admiteHijos && (
                         <button
                             type="button"
                             title={`Agregar ${ETIQUETA[SIGUIENTE[nodo.tipo]].toLowerCase()}`}
-                            onClick={() => onAbrirCrear(nodo.id)}
-                            className="rounded p-1 text-primary-600 hover:bg-primary-50"
+                            onClick={() => { if (colapsado) onAlternarColapso(nodo.id); onAbrirCrear(nodo.id); }}
+                            className="rounded p-1 text-primary-600 hover:bg-primary-100"
                         >
                             <Plus className="h-3.5 w-3.5" />
                         </button>
@@ -196,8 +245,8 @@ function Nodo({
                     <button
                         type="button"
                         title="Renombrar"
-                        onClick={() => setRenombrando(true)}
-                        className="rounded p-1 text-warm-500 hover:bg-gray-100"
+                        onClick={() => onAbrirRenombrar(nodo)}
+                        className="rounded p-1 text-warm-500 hover:bg-gray-200"
                     >
                         <Pencil className="h-3.5 w-3.5" />
                     </button>
@@ -212,56 +261,65 @@ function Nodo({
                 </div>
             </div>
 
-            <div className="mt-1 space-y-1">
-                {nodo.hijos.map((hijo) => (
-                    <Nodo
-                        key={hijo.id}
-                        nodo={hijo}
-                        nivel={nivel + 1}
-                        creandoEn={creandoEn}
-                        nombreNuevo={nombreNuevo}
-                        setNombreNuevo={setNombreNuevo}
-                        onAbrirCrear={onAbrirCrear}
-                        onCrear={onCrear}
-                        onCancelarCrear={onCancelarCrear}
-                        onEliminar={onEliminar}
-                        guardando={guardando}
-                        recargar={recargar}
-                        toast={toast}
-                    />
-                ))}
+            {!colapsado && (
+                <>
+                    {nodo.hijos.map((hijo) => (
+                        <Nodo
+                            key={hijo.id}
+                            nodo={hijo}
+                            nivel={nivel + 1}
+                            colapsados={colapsados}
+                            onAlternarColapso={onAlternarColapso}
+                            creandoEn={creandoEn}
+                            nombreNuevo={nombreNuevo}
+                            setNombreNuevo={setNombreNuevo}
+                            onAbrirCrear={onAbrirCrear}
+                            onCrear={onCrear}
+                            onCancelarCrear={onCancelarCrear}
+                            guardando={guardando}
+                            renombrando={renombrando}
+                            nombreEdit={nombreEdit}
+                            setNombreEdit={setNombreEdit}
+                            onAbrirRenombrar={onAbrirRenombrar}
+                            onGuardarRenombre={onGuardarRenombre}
+                            onEliminar={onEliminar}
+                        />
+                    ))}
 
-                {creandoEn === nodo.id && (
-                    <div style={{ marginLeft: (nivel + 1) * 20 }}>
+                    {creandoEn === nodo.id && (
                         <FilaNueva
+                            nivel={nivel + 1}
                             placeholder={`Nombre del ${ETIQUETA[SIGUIENTE[nodo.tipo]].toLowerCase()}`}
                             value={nombreNuevo}
                             onChange={setNombreNuevo}
-                            onGuardar={onCrear}
+                            onGuardar={() => onCrear(nodo.id)}
                             onCancelar={onCancelarCrear}
                             guardando={guardando}
                         />
-                    </div>
-                )}
-            </div>
+                    )}
+                </>
+            )}
         </div>
     );
 }
 
 /** La fila para escribir el nombre de un nodo nuevo antes de guardarlo. */
-function FilaNueva({ placeholder, value, onChange, onGuardar, onCancelar, guardando }) {
+function FilaNueva({ nivel, placeholder, value, onChange, onGuardar, onCancelar, guardando }) {
     return (
-        <div className="flex items-center gap-2 rounded-lg border border-dashed border-primary-300 bg-primary-50/40 px-3 py-2">
+        <div className="flex items-center gap-1.5 py-1" style={{ paddingLeft: 8 + nivel * 18 }}>
             <Input
                 autoFocus
                 placeholder={placeholder}
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
                 onKeyDown={(e) => {
-                    if (e.key === 'Enter') onGuardar();
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        onGuardar();
+                    }
                     if (e.key === 'Escape') onCancelar();
                 }}
-                className="flex-1"
+                className="flex-1 py-1 text-xs"
             />
             <Button type="button" size="sm" onClick={onGuardar} loading={guardando}>
                 Agregar

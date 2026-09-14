@@ -412,6 +412,7 @@ export default function Almacenes() {
                 description={
                     editing ? `Modifica "${editing.nombre}"` : 'Agrega un nuevo almacén'
                 }
+                size="lg"
                 footer={
                     <>
                         <Button variant="secondary" onClick={() => setModalOpen(false)}>

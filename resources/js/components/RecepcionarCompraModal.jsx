@@ -524,12 +524,11 @@ function CascadaUbicacion({ arbol, cap, setCap }) {
                         aria-label={ETIQUETA_NIVEL[tipo] ?? 'Ubicación'}
                         value={seleccion[i] ?? ''}
                         onChange={(e) => elegir(i, e.target.value)}
-                    >
-                        <option value="">{ETIQUETA_NIVEL[tipo] ?? 'Ubicación'}…</option>
-                        {n.opciones.map((op) => (
-                            <option key={op.id} value={op.id}>{op.nombre}</option>
-                        ))}
-                    </Select>
+                        options={[
+                            { value: '', label: `${ETIQUETA_NIVEL[tipo] ?? 'Ubicación'}…` },
+                            ...n.opciones.map((op) => ({ value: op.id, label: op.nombre })),
+                        ]}
+                    />
                 );
             })}
         </div>

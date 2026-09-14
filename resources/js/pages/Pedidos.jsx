@@ -6,8 +6,10 @@ import {
     Edit,
     FileText,
     PackageCheck,
+    Plus,
     Printer,
     Receipt,
+    Trash2,
     Undo2,
 } from 'lucide-react';
 import api, { asList } from '../lib/api';
@@ -515,18 +517,25 @@ function AnularModal({ pedido, onClose, onAnulado }) {
  * Emitir la nota de venta del pedido despachado. Aquí sí se descuenta el
  * stock, así que se pide cómo paga el cliente, igual que en mostrador.
  */
+const emptyPago = () => ({ tipo: 'efectivo', cuentaId: '', billeteraId: '', monto: '' });
+
 function FacturarModal({ pedido, onClose, onFacturado }) {
     const toast = useToast();
     const [tipoPago, setTipoPago] = useState('contado');
-    const [metodo, setMetodo] = useState({ tipo: 'efectivo', cuentaId: '', billeteraId: '' });
+    const [pagos, setPagos] = useState([emptyPago()]);
+    /** Off = un solo método que cubre el total (el caso normal). On = varios métodos. */
+    const [mixto, setMixto] = useState(false);
     const [cuentas, setCuentas] = useState([]);
     const [billeteras, setBilleteras] = useState([]);
     const [guardando, setGuardando] = useState(false);
 
+    const total = Number(pedido?.total) || 0;
+
     useEffect(() => {
         if (!pedido) return;
         setTipoPago('contado');
-        setMetodo({ tipo: 'efectivo', cuentaId: '', billeteraId: '' });
+        setPagos([emptyPago()]);
+        setMixto(false);
         Promise.all([api.get('/cuentas-bancarias'), api.get('/billeteras-digitales')])
             .then(([cuentasRes, billeterasRes]) => {
                 setCuentas(asList(cuentasRes));
@@ -538,23 +547,47 @@ function FacturarModal({ pedido, onClose, onFacturado }) {
             });
     }, [pedido]);
 
+    const setPago = (i, patch) =>
+        setPagos((prev) => prev.map((p, idx) => (idx === i ? { ...p, ...patch } : p)));
+    const addPago = () => setPagos((prev) => [...prev, emptyPago()]);
+    const removePago = (i) =>
+        setPagos((prev) => (prev.length === 1 ? prev : prev.filter((_, idx) => idx !== i)));
+
+    const alternarMixto = () => {
+        setMixto((prev) => {
+            if (!prev && !Number(pagos[0].monto)) {
+                setPagos((ps) => ps.map((p, i) => (i === 0 ? { ...p, monto: String(total) } : p)));
+            }
+            if (prev) setPagos((ps) => ps.slice(0, 1));
+            return !prev;
+        });
+    };
+
+    /** En modo simple hay un solo pago que cubre el total. */
+    const pagosEfectivos = mixto ? pagos : [{ ...pagos[0], monto: String(total) }];
+    const pagado = pagosEfectivos.reduce((acc, p) => acc + (Number(p.monto) || 0), 0);
+    const saldo = total - pagado;
+    const esContado = tipoPago === 'contado';
+
     const emitir = async () => {
-        if (tipoPago === 'contado' && !metodo.tipo) {
-            return toast.error('Elige con qué paga el cliente.');
+        if (esContado && mixto && Math.abs(saldo) > 0.001) {
+            return toast.error('Los pagos deben sumar exactamente el total.');
         }
         setGuardando(true);
         try {
             const { data } = await api.post(`/ordenes-venta/${pedido.id}/facturar`, {
                 tipo_pago: tipoPago,
-                pagos: [
-                    {
-                        forma_pago: tipoPago === 'credito' ? 'credito' : metodo.tipo,
-                        cuenta_bancaria_id: metodo.tipo === 'transferencia' ? metodo.cuentaId || null : null,
-                        billetera_id: metodo.tipo === 'billetera' ? metodo.billeteraId || null : null,
-                        monto: pedido.total,
-                        fecha: new Date().toISOString().slice(0, 10),
-                    },
-                ],
+                pagos: esContado
+                    ? pagosEfectivos
+                          .filter((p) => p.tipo && Number(p.monto) > 0)
+                          .map((p) => ({
+                              forma_pago: p.tipo,
+                              cuenta_bancaria_id: p.tipo === 'transferencia' ? p.cuentaId || null : null,
+                              billetera_id: p.tipo === 'billetera' ? p.billeteraId || null : null,
+                              monto: Number(p.monto),
+                              fecha: new Date().toISOString().slice(0, 10),
+                          }))
+                    : [{ forma_pago: 'credito', monto: total, fecha: new Date().toISOString().slice(0, 10) }],
             });
             onFacturado(data?.data ?? data);
         } catch (err) {
@@ -584,24 +617,104 @@ function FacturarModal({ pedido, onClose, onFacturado }) {
                     al stock con su mismo código.
                 </Alert>
 
-                <Select
-                    label="Tipo de pago"
-                    value={tipoPago}
-                    onChange={(e) => setTipoPago(e.target.value)}
-                    options={[
-                        { value: 'contado', label: 'Contado' },
-                        { value: 'credito', label: 'Crédito' },
-                    ]}
-                />
-                {tipoPago === 'contado' && (
-                    <MetodoCajaPicker
-                        cuentas={cuentas}
-                        billeteras={billeteras}
-                        tipo={metodo.tipo}
-                        cuentaId={metodo.cuentaId}
-                        billeteraId={metodo.billeteraId}
-                        onChange={setMetodo}
+                <div className="flex items-center justify-between gap-3">
+                    <Select
+                        label="Tipo de pago"
+                        value={tipoPago}
+                        onChange={(e) => setTipoPago(e.target.value)}
+                        options={[
+                            { value: 'contado', label: 'Contado' },
+                            { value: 'credito', label: 'Crédito' },
+                        ]}
+                        className="flex-1"
                     />
+                    {esContado && (
+                        <button
+                            type="button"
+                            role="switch"
+                            aria-checked={mixto}
+                            onClick={alternarMixto}
+                            className="mt-5 inline-flex shrink-0 items-center gap-2 text-xs font-semibold text-warm-500 transition hover:text-warm-900"
+                        >
+                            Pago mixto
+                            <span className={`relative block h-5 w-9 rounded-full transition ${mixto ? 'bg-primary-600' : 'bg-gray-300'}`}>
+                                <span className={`absolute top-0.5 block h-4 w-4 rounded-full bg-white shadow transition-all ${mixto ? 'left-[1.125rem]' : 'left-0.5'}`} />
+                            </span>
+                        </button>
+                    )}
+                </div>
+
+                {esContado && !mixto && (
+                    <div className="space-y-3">
+                        <MetodoCajaPicker
+                            cuentas={cuentas}
+                            billeteras={billeteras}
+                            tipo={pagos[0].tipo}
+                            cuentaId={pagos[0].cuentaId}
+                            billeteraId={pagos[0].billeteraId}
+                            onChange={(m) => setPago(0, m)}
+                        />
+                        <div className="flex items-center justify-between rounded-lg bg-primary-50 px-3 py-2.5 text-sm">
+                            <span className="text-warm-500">Se cobra el total</span>
+                            <span className="font-bold text-primary-700">{money(total)}</span>
+                        </div>
+                    </div>
+                )}
+
+                {esContado && mixto && (
+                    <>
+                        <div className="space-y-3">
+                            {pagos.map((p, i) => (
+                                <div key={i} className="rounded-lg border border-edge p-3">
+                                    <MetodoCajaPicker
+                                        cuentas={cuentas}
+                                        billeteras={billeteras}
+                                        tipo={p.tipo}
+                                        cuentaId={p.cuentaId}
+                                        billeteraId={p.billeteraId}
+                                        onChange={(m) => setPago(i, m)}
+                                    />
+                                    <div className="mt-2 flex items-center gap-2">
+                                        <Input
+                                            type="number"
+                                            min="0"
+                                            step="any"
+                                            placeholder="Monto"
+                                            value={p.monto}
+                                            onChange={(e) => setPago(i, { monto: e.target.value })}
+                                            className="text-right"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => removePago(i)}
+                                            disabled={pagos.length === 1}
+                                            className="rounded-md p-2 text-red-600 transition hover:bg-red-50 disabled:opacity-40"
+                                            aria-label="Quitar"
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        <Button type="button" variant="ghost" size="sm" onClick={addPago}>
+                            <Plus className="h-4 w-4" /> Agregar pago
+                        </Button>
+
+                        <div className="flex justify-between border-t border-dashed border-edge pt-2 text-sm">
+                            <span className="text-warm-500">Cobrado</span>
+                            <span className="font-semibold text-green-600">{money(pagado)}</span>
+                        </div>
+                        {Math.abs(saldo) > 0.001 && (
+                            <div className="flex justify-between text-sm">
+                                <span className="text-warm-500">{saldo > 0 ? 'Falta cobrar' : 'Sobra'}</span>
+                                <span className={saldo > 0 ? 'font-semibold text-amber-600' : 'font-semibold text-red-600'}>
+                                    {money(Math.abs(saldo))}
+                                </span>
+                            </div>
+                        )}
+                    </>
                 )}
             </div>
         </Modal>

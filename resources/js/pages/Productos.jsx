@@ -5,7 +5,7 @@ import { calcularPresentaciones, describirContenido } from '../lib/unidades';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import PageHeader, { CreateButton } from '../components/PageHeader';
-import { Alert, Badge, Button, DataTable, Input, Modal, OptionSelect, Select, Tabs, cn } from '../components/ui';
+import { Alert, Badge, Button, DataTable, Input, Modal, OptionSelect, SearchSelect, Select, Tabs, cn } from '../components/ui';
 
 /**
  * Hasta 4 decimales: el costo por gramo puede ser S/ 0.0028. En USD porque las
@@ -1343,14 +1343,12 @@ export default function Productos() {
                                             className="h-[38px] w-12 shrink-0 cursor-pointer rounded-md border border-edge bg-white p-1"
                                         />
                                         <div className="min-w-[12rem] flex-1">
-                                            <Select
+                                            <SearchSelect
                                                 label="Color"
                                                 value={c.color_id || ''}
-                                                onChange={(e) => {
-                                                    const colorId = e.target.value;
-                                                    const elegido = coloresCatalogo.find(
-                                                        (col) => String(col.id) === colorId,
-                                                    );
+                                                placeholder={c.nombre ? `${c.nombre} (sin catálogo)` : 'Elegir color…'}
+                                                emptyText="Sin coincidencias"
+                                                onChange={(colorId, elegido) => {
                                                     setColores((prev) =>
                                                         prev.map((x, j) =>
                                                             j === i
@@ -1365,16 +1363,11 @@ export default function Productos() {
                                                         ),
                                                     );
                                                 }}
-                                                options={[
-                                                    {
-                                                        value: '',
-                                                        label: c.nombre ? `${c.nombre} (sin catálogo)` : 'Elegir color…',
-                                                    },
-                                                    ...coloresCatalogo.map((col) => ({
-                                                        value: String(col.id),
-                                                        label: `${col.codigo} — ${col.nombre}`,
-                                                    })),
-                                                ]}
+                                                options={coloresCatalogo.map((col) => ({
+                                                    value: String(col.id),
+                                                    label: `${col.codigo} — ${col.nombre}`,
+                                                    keywords: col.codigo,
+                                                }))}
                                             />
                                             {!c.color_id && c.nombre && (
                                                 <p className="mt-1 text-xs text-amber-600">

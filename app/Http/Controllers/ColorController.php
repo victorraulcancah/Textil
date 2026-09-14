@@ -26,15 +26,17 @@ class ColorController extends Controller
         $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
         $hoja = $spreadsheet->getActiveSheet();
         $hoja->setTitle('Colores');
-        $hoja->fromArray(['Código', 'Nombre', 'Estado'], null, 'A1');
-        $hoja->getStyle('A1:C1')->getFont()->setBold(true);
+        $hoja->fromArray(['Código', 'Nombre'], null, 'A1');
+        $hoja->getStyle('A1:B1')->getFont()->setBold(true);
 
         $fila = 2;
-        foreach (Color::orderBy('codigo')->get() as $color) {
-            $hoja->fromArray([$color->codigo, $color->nombre, $color->activo ? 'Activo' : 'Inactivo'], null, "A{$fila}");
+        // Solo los activos: uno inactivo no debería volver a aparecer como
+        // opción al re-cargar esta misma planilla.
+        foreach (Color::where('activo', true)->orderBy('codigo')->get() as $color) {
+            $hoja->fromArray([$color->codigo, $color->nombre], null, "A{$fila}");
             $fila++;
         }
-        foreach (['A', 'B', 'C'] as $col) {
+        foreach (['A', 'B'] as $col) {
             $hoja->getColumnDimension($col)->setAutoSize(true);
         }
 

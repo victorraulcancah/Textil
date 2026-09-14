@@ -56,7 +56,10 @@ class RolloService
     ): Collection {
         // Solo las cuatro claves de sitio, para que nadie cuele otra cosa en
         // el create() por pasar el array entero de un formulario.
-        $ubicacion = array_intersect_key($ubicacion, array_flip(['pasillo', 'rack', 'nivel', 'posicion']));
+        $ubicacion = array_intersect_key(
+            $ubicacion,
+            array_flip(['pasillo', 'rack', 'nivel', 'posicion', 'almacen_ubicacion_id']),
+        );
 
         return DB::transaction(function () use ($producto, $color, $almacen, $lineas, $costoUnitario, $recepcion, $codigoProveedor, $usuarioId, $actualizarStock, $importacion, $ubicacion) {
             // Se continúa la numeración del color, no se reinicia: el rollo 19

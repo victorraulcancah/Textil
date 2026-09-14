@@ -52,6 +52,12 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
      * Solo aplica a la mercadería que se maneja pieza por pieza (las telas).
      */
     const [rollosPorLinea, setRollosPorLinea] = useState({});
+    /**
+     * El árbol de ubicaciones del almacén elegido: piso → pasillo → rack →
+     * nivel → posición. Vacío si ese almacén todavía no lo tiene armado —
+     * ahí se sigue escribiendo la ubicación a mano, como antes.
+     */
+    const [arbolUbicaciones, setArbolUbicaciones] = useState([]);
     const [form, setForm] = useState({
         almacen_id: '',
         fecha_recepcion: hoy(),
@@ -101,6 +107,21 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
         if (open && compraId) cargar();
     }, [open, compraId, cargar]);
 
+    // Cambiar de almacén trae su propio árbol de ubicaciones (o ninguno).
+    useEffect(() => {
+        if (!form.almacen_id) {
+            setArbolUbicaciones([]);
+            return;
+        }
+        let vivo = true;
+        api.get(`/almacenes/${form.almacen_id}/ubicaciones`)
+            .then(({ data }) => vivo && setArbolUbicaciones(data))
+            .catch(() => vivo && setArbolUbicaciones([]));
+        return () => {
+            vivo = false;
+        };
+    }, [form.almacen_id]);
+
     const lineas = datos?.lineas ?? [];
     const conPendiente = useMemo(() => lineas.filter((l) => l.pendiente > 0), [lineas]);
 
@@ -125,6 +146,7 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
                               producto_color_id: cap.color_id || null,
                               codigo_proveedor: cap.codigo || null,
                               // Dónde se guardan estos rollos dentro del almacén.
+                              almacen_ubicacion_id: cap.almacen_ubicacion_id || null,
                               pasillo: cap.pasillo || null,
                               rack: cap.rack || null,
                               nivel: cap.nivel || null,
@@ -369,7 +391,9 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
 
                                                             {/* Dónde se guardan. Se aplica a todos los
                                                                 rollos de esta línea; después cada uno se
-                                                                puede mover por su cuenta. */}
+                                                                puede mover por su cuenta. Con el almacén
+                                                                ya armado en pisos, se elige de ahí; si no,
+                                                                se sigue escribiendo a mano. */}
                                                             <div className="mt-3">
                                                                 <p className="mb-1 text-sm font-medium text-warm-800">
                                                                     Ubicación en el almacén{' '}
@@ -377,32 +401,40 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
                                                                         (opcional)
                                                                     </span>
                                                                 </p>
-                                                                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                                                                    <Input
-                                                                        placeholder="Pasillo"
-                                                                        aria-label="Pasillo"
-                                                                        value={cap?.pasillo ?? ''}
-                                                                        onChange={(e) => setCap('pasillo', e.target.value)}
+                                                                {arbolUbicaciones.length > 0 ? (
+                                                                    <CascadaUbicacion
+                                                                        arbol={arbolUbicaciones}
+                                                                        cap={cap}
+                                                                        setCap={setCap}
                                                                     />
-                                                                    <Input
-                                                                        placeholder="Rack"
-                                                                        aria-label="Rack"
-                                                                        value={cap?.rack ?? ''}
-                                                                        onChange={(e) => setCap('rack', e.target.value)}
-                                                                    />
-                                                                    <Input
-                                                                        placeholder="Nivel"
-                                                                        aria-label="Nivel"
-                                                                        value={cap?.nivel ?? ''}
-                                                                        onChange={(e) => setCap('nivel', e.target.value)}
-                                                                    />
-                                                                    <Input
-                                                                        placeholder="Posición"
-                                                                        aria-label="Posición"
-                                                                        value={cap?.posicion ?? ''}
-                                                                        onChange={(e) => setCap('posicion', e.target.value)}
-                                                                    />
-                                                                </div>
+                                                                ) : (
+                                                                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                                                                        <Input
+                                                                            placeholder="Pasillo"
+                                                                            aria-label="Pasillo"
+                                                                            value={cap?.pasillo ?? ''}
+                                                                            onChange={(e) => setCap('pasillo', e.target.value)}
+                                                                        />
+                                                                        <Input
+                                                                            placeholder="Rack"
+                                                                            aria-label="Rack"
+                                                                            value={cap?.rack ?? ''}
+                                                                            onChange={(e) => setCap('rack', e.target.value)}
+                                                                        />
+                                                                        <Input
+                                                                            placeholder="Nivel"
+                                                                            aria-label="Nivel"
+                                                                            value={cap?.nivel ?? ''}
+                                                                            onChange={(e) => setCap('nivel', e.target.value)}
+                                                                        />
+                                                                        <Input
+                                                                            placeholder="Posición"
+                                                                            aria-label="Posición"
+                                                                            value={cap?.posicion ?? ''}
+                                                                            onChange={(e) => setCap('posicion', e.target.value)}
+                                                                        />
+                                                                    </div>
+                                                                )}
                                                             </div>
 
                                                             {leidos.length > 0 && (
@@ -448,5 +480,58 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
                 </>
             )}
         </Modal>
+    );
+}
+
+const ETIQUETA_NIVEL = { piso: 'Piso', pasillo: 'Pasillo', rack: 'Rack', nivel: 'Nivel', posicion: 'Posición' };
+
+/**
+ * Selects en cascada: piso → pasillo → rack → nivel → posición, hasta donde
+ * llegue el árbol de ese almacén. Cada select solo muestra las opciones que
+ * cuelgan de lo elegido en el anterior; el id final que importa es el del
+ * nivel más profundo que el usuario haya seleccionado.
+ */
+function CascadaUbicacion({ arbol, cap, setCap }) {
+    const seleccion = cap?.ubicacion_seleccion || [];
+
+    const niveles = useMemo(() => {
+        const resultado = [{ opciones: arbol }];
+        let nodos = arbol;
+        for (const idSeleccionado of seleccion) {
+            const nodo = nodos.find((n) => n.id === idSeleccionado);
+            if (!nodo || nodo.hijos.length === 0) break;
+            resultado.push({ opciones: nodo.hijos });
+            nodos = nodo.hijos;
+        }
+        return resultado;
+    }, [arbol, seleccion]);
+
+    const elegir = (profundidad, idElegido) => {
+        const nueva = seleccion.slice(0, profundidad);
+        if (idElegido) nueva.push(Number(idElegido));
+        setCap('ubicacion_seleccion', nueva);
+        setCap('almacen_ubicacion_id', nueva.length ? nueva[nueva.length - 1] : null);
+    };
+
+    return (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {niveles.map((n, i) => {
+                if (n.opciones.length === 0) return null;
+                const tipo = n.opciones[0]?.tipo;
+                return (
+                    <Select
+                        key={i}
+                        aria-label={ETIQUETA_NIVEL[tipo] ?? 'Ubicación'}
+                        value={seleccion[i] ?? ''}
+                        onChange={(e) => elegir(i, e.target.value)}
+                    >
+                        <option value="">{ETIQUETA_NIVEL[tipo] ?? 'Ubicación'}…</option>
+                        {n.opciones.map((op) => (
+                            <option key={op.id} value={op.id}>{op.nombre}</option>
+                        ))}
+                    </Select>
+                );
+            })}
+        </div>
     );
 }

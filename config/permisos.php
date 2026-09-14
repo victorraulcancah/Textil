@@ -95,7 +95,9 @@ return [
         'inventario' => [
             'label' => 'Inventario',
             'submodulos' => [
-                'almacenes' => ['label' => 'Almacenes', 'apis' => ['almacenes']],
+                // 'almacen-ubicaciones' es aparte porque "PUT /almacen-ubicaciones/5"
+                // no empieza con "almacenes/", que es lo único que matchea el prefijo.
+                'almacenes' => ['label' => 'Almacenes', 'apis' => ['almacenes', 'almacen-ubicaciones']],
                 'existencias' => ['label' => 'Existencias', 'apis' => ['existencias']],
                 'rollos' => [
                     'label' => 'Stock por rollo',

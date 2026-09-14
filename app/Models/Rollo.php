@@ -50,10 +50,15 @@ class Rollo extends Model
         'peso_kg',
         'costo_unitario',
         'estado',
+        // Texto libre, de antes de tener el árbol de ubicaciones. Se sigue
+        // mostrando en los rollos viejos que ya lo tenían así.
         'pasillo',
         'rack',
         'nivel',
         'posicion',
+        // La ubicación estructurada (piso → pasillo → rack → nivel →
+        // posición), cuando el almacén ya tiene su árbol configurado.
+        'almacen_ubicacion_id',
         'recepcion_compra_id',
         'importacion_id',
         'cliente_id',
@@ -102,6 +107,12 @@ class Rollo extends Model
         return $this->belongsTo(Importacion::class);
     }
 
+    /** La ubicación estructurada, si el almacén ya tiene su árbol armado. */
+    public function ubicacion()
+    {
+        return $this->belongsTo(AlmacenUbicacion::class, 'almacen_ubicacion_id');
+    }
+
     public function movimientos()
     {
         return $this->hasMany(RolloMovimiento::class)->latest('id');
@@ -133,9 +144,19 @@ class Rollo extends Model
         return $this->estado === self::DISPONIBLE && $this->metros_actual > 0;
     }
 
-    /** "Almacén 01 / Pasillo A / Rack 03 / Nivel 02 / Pos 05" */
+    /**
+     * "Almacén Principal / Piso 1 / Pasillo A / Rack 03" con el árbol de
+     * ubicaciones, o el texto libre de siempre en los rollos que no lo usan.
+     */
     public function ubicacionLegible(): string
     {
+        if ($this->almacen_ubicacion_id) {
+            $ubicacion = $this->relationLoaded('ubicacion') ? $this->ubicacion : $this->ubicacion()->first();
+            $partes = array_filter([$this->almacen?->nombre, $ubicacion?->rutaLegible()]);
+
+            return $partes ? implode(' / ', $partes) : 'Sin ubicación';
+        }
+
         $partes = array_filter([
             $this->almacen?->nombre,
             $this->pasillo ? "Pasillo {$this->pasillo}" : null,

@@ -112,6 +112,10 @@ class RecepcionCompraController extends Controller
 
             // Dónde se guardan los rollos de esta línea. Se pregunta al
             // recibir porque es el único momento en que alguien lo sabe.
+            // Si el almacén ya tiene su árbol de ubicaciones armado, se manda
+            // el nodo elegido; si no, se sigue aceptando el texto libre de
+            // siempre.
+            'detalles.*.almacen_ubicacion_id' => 'nullable|exists:almacen_ubicaciones,id',
             'detalles.*.pasillo' => 'nullable|string|max:20',
             'detalles.*.rack' => 'nullable|string|max:20',
             'detalles.*.nivel' => 'nullable|string|max:20',
@@ -175,6 +179,12 @@ class RecepcionCompraController extends Controller
                     $linea = $compra->detalles->firstWhere('id', $detalle['compra_detalle_id']);
                     if (! $linea || $linea->compra_id !== $compra->id) {
                         throw new \RuntimeException('Una de las líneas no pertenece a esta compra.');
+                    }
+
+                    if (! empty($detalle['almacen_ubicacion_id'])
+                        && ! Almacen::find($data['almacen_id'])->ubicaciones()->where('id', $detalle['almacen_ubicacion_id'])->exists()
+                    ) {
+                        throw new \RuntimeException('La ubicación elegida no pertenece a este almacén.');
                     }
 
                     $presentacionLinea = ProductoPresentacion::with('producto')
@@ -250,6 +260,7 @@ class RecepcionCompraController extends Controller
                             actualizarStock: false,
                             importacion: $importacion,
                             ubicacion: [
+                                'almacen_ubicacion_id' => $detalle['almacen_ubicacion_id'] ?? null,
                                 'pasillo' => $detalle['pasillo'] ?? null,
                                 'rack' => $detalle['rack'] ?? null,
                                 'nivel' => $detalle['nivel'] ?? null,

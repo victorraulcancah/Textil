@@ -3,6 +3,7 @@
 use App\Http\Controllers\AjusteInventarioController;
 use App\Http\Controllers\AlertaController;
 use App\Http\Controllers\AlmacenController;
+use App\Http\Controllers\AlmacenUbicacionController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BancoController;
 use App\Http\Controllers\BilleteraDigitalController;
@@ -95,6 +96,11 @@ Route::middleware('auth:api')->group(function () {
     // Inventario
     Route::get('existencias', [AlmacenController::class, 'existencias']);
     Route::apiResource('almacenes', AlmacenController::class);
+    // El árbol de ubicaciones del almacén: piso → pasillo → rack → nivel → posición.
+    Route::get('almacenes/{almacen}/ubicaciones', [AlmacenUbicacionController::class, 'index']);
+    Route::post('almacenes/{almacen}/ubicaciones', [AlmacenUbicacionController::class, 'store']);
+    Route::put('almacen-ubicaciones/{ubicacione}', [AlmacenUbicacionController::class, 'update']);
+    Route::delete('almacen-ubicaciones/{ubicacione}', [AlmacenUbicacionController::class, 'destroy']);
     Route::get('movimientos', [MovimientoInventarioController::class, 'index']);
     Route::apiResource('transferencias', TransferenciaController::class);
     Route::apiResource('motivos-traslado', MotivoTrasladoController::class)->except(['show']);

@@ -23,7 +23,12 @@ use Illuminate\Http\Request;
 class RolloController extends Controller
 {
     /** Relaciones que acompañan a un rollo en las respuestas. */
-    private const RELACIONES = ['producto:id,codigo,nombre', 'color', 'almacen:id,nombre', 'cliente:id,nombre', 'importacion:id,codigo,documento,fecha_llegada'];
+    private const RELACIONES = [
+        'producto:id,codigo,nombre', 'color', 'almacen:id,nombre', 'cliente:id,nombre',
+        'importacion:id,codigo,documento,fecha_llegada',
+        // Hasta 5 niveles: piso → pasillo → rack → nivel → posición.
+        'ubicacion.padre.padre.padre.padre',
+    ];
 
     public function __construct(private RolloService $rollos) {}
 

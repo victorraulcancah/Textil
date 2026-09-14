@@ -5,6 +5,7 @@ import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import { Alert, Badge, Button, DataTable, Input, Modal, Select } from '../components/ui';
+import UbicacionesAlmacen from '../components/UbicacionesAlmacen';
 
 const emptyForm = {
     nombre: '',
@@ -550,6 +551,17 @@ export default function Almacenes() {
                             </span>
                         </span>
                     </label>
+
+                    <div className="border-t border-edge pt-4">
+                        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+                            Ubicación del almacén
+                        </h3>
+                        <p className="mb-3 text-xs text-warm-400">
+                            Piso → pasillo → rack → nivel → posición. Se pide en la recepción de compra en
+                            vez de escribirla a mano; no hace falta llegar a los 5 niveles.
+                        </p>
+                        <UbicacionesAlmacen almacenId={editing?.id} />
+                    </div>
                 </form>
             </Modal>
 

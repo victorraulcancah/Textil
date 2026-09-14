@@ -85,4 +85,16 @@ class Almacen extends Model
     {
         return $this->hasMany(TomaInventario::class);
     }
+
+    /** Todas las ubicaciones del almacén, de cualquier nivel. */
+    public function ubicaciones()
+    {
+        return $this->hasMany(AlmacenUbicacion::class);
+    }
+
+    /** Los pisos: la raíz del árbol de ubicaciones. */
+    public function pisos()
+    {
+        return $this->ubicaciones()->whereNull('padre_id')->orderBy('orden')->orderBy('nombre');
+    }
 }

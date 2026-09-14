@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Compra;
 
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
@@ -30,6 +31,16 @@ class UpdateCompraRequest extends FormRequest
             'dias_credito' => 'nullable|integer|min:0',
             'fecha_vencimiento' => 'nullable|date',
             'flete' => 'nullable|numeric|min:0',
+
+            'es_importacion' => 'nullable|boolean',
+            'numero_importacion' => 'nullable|string|max:40',
+            'contenedor' => 'nullable|string|max:40',
+            'precinto' => 'nullable|string|max:40',
+            'bl' => 'nullable|string|max:60',
+            'pais_origen' => 'nullable|string|max:60',
+            'fecha_llegada' => 'nullable|date',
+            'moneda_origen' => 'nullable|in:PEN,USD,CNY,EUR',
+            'tipo_cambio' => 'nullable|numeric|min:0.0001',
             'observaciones' => 'nullable|string',
 
             'detalles' => 'sometimes|required|array|min:1',
@@ -43,6 +54,16 @@ class UpdateCompraRequest extends FormRequest
             'pagos.*.billetera_id' => 'nullable|exists:billeteras_digitales,id',
             'pagos.*.monto' => 'required_with:pagos|numeric|min:0',
         ];
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $v) {
+            $moneda = $this->input('moneda_origen');
+            if ($moneda && $moneda !== 'PEN' && ! $this->filled('tipo_cambio')) {
+                $v->errors()->add('tipo_cambio', 'Con la compra en otra moneda, el tipo de cambio es obligatorio.');
+            }
+        });
     }
 
     public function messages(): array

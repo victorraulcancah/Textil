@@ -57,6 +57,8 @@ class ProductoResource extends JsonResource
             'cuidados' => $this->cuidados,
 
             'precio_base' => $this->precio_base,
+            'moneda_compra' => $this->moneda_compra ?? 'PEN',
+            'moneda_venta' => $this->moneda_venta ?? 'PEN',
             'stock_minimo' => $this->stock_minimo,
             'stock_maximo' => $this->stock_maximo,
             'activo' => $this->activo,

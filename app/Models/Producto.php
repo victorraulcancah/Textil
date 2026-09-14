@@ -49,6 +49,11 @@ class Producto extends Model
         'propiedades',
         'cuidados',
         'precio_base',
+        // En qué moneda se compra y en qué moneda se vende esta tela. Son
+        // independientes: las compras al exterior son en USD y las ventas en
+        // PEN, aunque sea la misma tela.
+        'moneda_compra',
+        'moneda_venta',
         'stock_minimo',
         'stock_maximo',
         'activo',

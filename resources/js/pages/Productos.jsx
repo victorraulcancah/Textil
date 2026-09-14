@@ -7,11 +7,14 @@ import Layout from '../components/Layout';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import { Alert, Badge, Button, DataTable, Input, Modal, OptionSelect, Select, Tabs, cn } from '../components/ui';
 
-/** Soles con hasta 4 decimales: el costo por gramo puede ser S/ 0.0028. */
-const money = (n) =>
-    new Intl.NumberFormat('es-PE', {
+/**
+ * Hasta 4 decimales: el costo por gramo puede ser S/ 0.0028. En USD porque las
+ * compras al exterior se cotizan así; el resto del sistema sigue en soles.
+ */
+const money = (n, moneda = 'PEN') =>
+    new Intl.NumberFormat(moneda === 'USD' ? 'en-US' : 'es-PE', {
         style: 'currency',
-        currency: 'PEN',
+        currency: moneda === 'USD' ? 'USD' : 'PEN',
         maximumFractionDigits: 4,
     }).format(Number(n) || 0);
 
@@ -42,6 +45,10 @@ const emptyProducto = {
     minimo_compra: '',
     unidad_minimo_compra: '',
     propiedades: '',
+    // En qué moneda se compra y en qué moneda se vende esta tela. Suelen
+    // diferir: las compras al exterior son en dólares, las ventas en soles.
+    moneda_compra: 'PEN',
+    moneda_venta: 'PEN',
 };
 
 /** Pestañas del modal: el formulario es largo y se parte por temas. */
@@ -230,6 +237,8 @@ export default function Productos() {
             minimo_compra: prod.minimo_compra ?? '',
             unidad_minimo_compra: prod.unidad_minimo_compra ?? '',
             propiedades: prod.propiedades ?? '',
+            moneda_compra: prod.moneda_compra || 'PEN',
+            moneda_venta: prod.moneda_venta || 'PEN',
         });
         setTab('general');
         // Se reconstruye "compro / vendo" desde lo guardado.
@@ -435,6 +444,8 @@ export default function Productos() {
             minimo_compra: num(form.minimo_compra),
             unidad_minimo_compra: str(form.unidad_minimo_compra),
             propiedades: str(form.propiedades),
+            moneda_compra: form.moneda_compra || 'PEN',
+            moneda_venta: form.moneda_venta || 'PEN',
             presentaciones: buildPresentaciones(),
             colores: colores
                 .filter((c) => c.nombre.trim())
@@ -1370,9 +1381,32 @@ export default function Productos() {
                 <div className={cn('space-y-6', tab !== 'comercial' && 'hidden')}>
                     {/* Cómo lo compro */}
                     <section>
-                        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
-                            Cómo lo compro
-                        </h3>
+                        <div className="mb-2 flex items-center justify-between gap-3">
+                            <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+                                Cómo lo compro
+                            </h3>
+                            {/* Las compras al exterior se cotizan en dólares;
+                                las nacionales, en soles. Solo cambia cómo se
+                                lee la cifra de abajo, no la convierte. */}
+                            <div className="inline-flex items-center gap-1.5 text-xs">
+                                <span className="text-warm-500">Moneda:</span>
+                                {['PEN', 'USD'].map((m) => (
+                                    <button
+                                        key={m}
+                                        type="button"
+                                        onClick={() => setForm((p) => ({ ...p, moneda_compra: m }))}
+                                        className={cn(
+                                            'rounded-full px-2.5 py-1 font-semibold transition',
+                                            form.moneda_compra === m
+                                                ? 'bg-primary-600 text-white'
+                                                : 'bg-gray-100 text-warm-600 hover:bg-gray-200',
+                                        )}
+                                    >
+                                        {m}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
                         {/* Rejilla de 2x2, igual que Clasificación: cada campo con
                             su etiqueta encima y todos alineados. */}
                         <div className="grid gap-4 sm:grid-cols-2">
@@ -1389,7 +1423,7 @@ export default function Productos() {
                                 />
                             </FieldWithAdd>
                             <Input
-                                label={`¿Cuánto pagas por ${unidadCompraTexto}?`}
+                                label={`¿Cuánto pagas por ${unidadCompraTexto}? (${form.moneda_compra})`}
                                 type="number"
                                 step="any"
                                 min="0"
@@ -1423,18 +1457,48 @@ export default function Productos() {
 
                     {/* Cómo lo vendo */}
                     <section>
-                        <div className="mb-2 flex items-center justify-between">
+                        <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
                             <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-500">
                                 Cómo lo vendo
                             </h3>
-                            <Button variant="secondary" size="sm" onClick={addVenta}>
-                                <Plus className="h-4 w-4" />
-                                Agregar formato
-                            </Button>
+                            <div className="flex items-center gap-3">
+                                {/* Casi siempre soles; rara vez una tela se
+                                    vende al exterior también en dólares. */}
+                                <div className="inline-flex items-center gap-1.5 text-xs">
+                                    <span className="text-warm-500">Moneda:</span>
+                                    {['PEN', 'USD'].map((m) => (
+                                        <button
+                                            key={m}
+                                            type="button"
+                                            onClick={() => setForm((p) => ({ ...p, moneda_venta: m }))}
+                                            className={cn(
+                                                'rounded-full px-2.5 py-1 font-semibold transition',
+                                                form.moneda_venta === m
+                                                    ? 'bg-primary-600 text-white'
+                                                    : 'bg-gray-100 text-warm-600 hover:bg-gray-200',
+                                            )}
+                                        >
+                                            {m}
+                                        </button>
+                                    ))}
+                                </div>
+                                <Button variant="secondary" size="sm" onClick={addVenta}>
+                                    <Plus className="h-4 w-4" />
+                                    Agregar formato
+                                </Button>
+                            </div>
                         </div>
                         {errors.ventas && (
                             <Alert variant="warning" className="mb-2">
                                 {errors.ventas}
+                            </Alert>
+                        )}
+                        {form.moneda_compra !== form.moneda_venta && (
+                            <Alert variant="info" className="mb-2">
+                                Compras en {form.moneda_compra} y vendes en {form.moneda_venta}: la columna "Ganas"
+                                de esta tabla resta las dos cifras tal cual, sin convertir. Es solo de referencia —
+                                la ganancia real de cada compra se calcula con el tipo de cambio del día al
+                                recepcionarla.
                             </Alert>
                         )}
                         <div className="overflow-x-auto rounded-lg border border-edge">
@@ -1442,9 +1506,9 @@ export default function Productos() {
                                 <thead>
                                     <tr className="bg-primary-600 text-left text-xs text-white">
                                         <th className="px-2 py-2 font-medium">Vendo por</th>
-                                        <th className="px-2 py-2 font-medium">Me cuesta</th>
+                                        <th className="px-2 py-2 font-medium">Me cuesta ({form.moneda_compra})</th>
                                         <th className="px-2 py-2 font-medium">% ganancia</th>
-                                        <th className="px-2 py-2 font-medium">Precio de venta</th>
+                                        <th className="px-2 py-2 font-medium">Precio de venta ({form.moneda_venta})</th>
                                         <th className="px-2 py-2 font-medium">Ganas</th>
                                         <th className="w-10 px-2 py-2" />
                                     </tr>
@@ -1472,7 +1536,7 @@ export default function Productos() {
                                                     </select>
                                                 </td>
                                                 <td className="px-2 py-1.5 text-warm-600">
-                                                    {fila ? money(fila.precio_compra) : '—'}
+                                                    {fila ? money(fila.precio_compra, form.moneda_compra) : '—'}
                                                 </td>
                                                 <td className="px-2 py-1.5">
                                                     <input
@@ -1510,7 +1574,7 @@ export default function Productos() {
                                                                 ganancia < 0 ? 'text-red-600' : 'text-green-700'
                                                             }
                                                         >
-                                                            {money(ganancia)}
+                                                            {money(ganancia, form.moneda_venta)}
                                                         </span>
                                                     ) : (
                                                         '—'

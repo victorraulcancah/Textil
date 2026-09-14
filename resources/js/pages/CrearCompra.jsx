@@ -8,8 +8,8 @@ import MetodoCajaPicker from '../components/MetodoCajaPicker';
 import ProductoPickerModal from '../components/ProductoPickerModal';
 import { Button, Input, SearchSelect, Select, Spinner } from '../components/ui';
 
-const money = (n) =>
-    new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(n) || 0);
+const money = (n, moneda = 'PEN') =>
+    new Intl.NumberFormat('es-PE', { style: 'currency', currency: moneda || 'PEN' }).format(Number(n) || 0);
 
 const hoy = () => new Date().toISOString().slice(0, 10);
 
@@ -610,7 +610,7 @@ export default function CrearCompra() {
                                 <th className="px-3 py-2.5">Producto</th>
                                 <th className="px-3 py-2.5">Unidad</th>
                                 <th className="px-3 py-2.5 text-right">Cant</th>
-                                <th className="px-3 py-2.5 text-right">Costo</th>
+                                <th className="px-3 py-2.5 text-right">Costo ({form.moneda_origen || 'PEN'})</th>
                                 <th className="px-3 py-2.5 text-right">Subtotal</th>
                                 <th className="px-3 py-2.5 text-center">Acciones</th>
                             </tr>
@@ -663,8 +663,18 @@ export default function CrearCompra() {
                                                 aria-label="Costo unitario"
                                                 className="text-right"
                                             />
+                                            {/* Es lo que de verdad va a costear el stock: el
+                                                costo en dólares se convierte a soles al
+                                                recepcionar, con este tipo de cambio. */}
+                                            {form.moneda_origen === 'USD' && Number(form.tipo_cambio) > 0 && (
+                                                <p className="mt-0.5 text-right text-[11px] text-warm-400">
+                                                    ≈ {money((Number(it.costo_unitario) || 0) * Number(form.tipo_cambio), 'PEN')}
+                                                </p>
+                                            )}
                                         </td>
-                                        <td className="px-3 py-2 text-right font-semibold text-primary-600">{money(sub)}</td>
+                                        <td className="px-3 py-2 text-right font-semibold text-primary-600">
+                                            {money(sub, form.moneda_origen)}
+                                        </td>
                                         <td className="px-3 py-2">
                                             <div className="flex items-center justify-center">
                                                 <button
@@ -698,7 +708,7 @@ export default function CrearCompra() {
                             <p className="text-sm text-warm-500">
                                 Compra al crédito: queda registrada en{' '}
                                 <strong className="text-warm-900">Cuentas por Pagar</strong> por{' '}
-                                <strong className="text-warm-900">{money(total)}</strong>
+                                <strong className="text-warm-900">{money(total, form.moneda_origen)}</strong>
                                 {form.dias_credito > 0 && ` a ${form.dias_credito} días`}. Los pagos al
                                 proveedor se registran desde ahí.
                             </p>
@@ -742,7 +752,7 @@ export default function CrearCompra() {
                                 {esContado ? (
                                     <div className="flex items-center justify-between rounded-lg bg-primary-50 px-3 py-2.5 text-sm">
                                         <span className="text-warm-500">Se paga el total</span>
-                                        <span className="font-bold text-primary-700">{money(total)}</span>
+                                        <span className="font-bold text-primary-700">{money(total, form.moneda_origen)}</span>
                                     </div>
                                 ) : (
                                     <Input
@@ -894,7 +904,7 @@ export default function CrearCompra() {
                         <h2 className="mb-3 text-xs font-bold uppercase tracking-wide text-warm-500">Resumen</h2>
                         <div className="flex justify-between border-b border-dashed border-edge py-2 text-sm">
                             <span className="text-warm-500">Subtotal</span>
-                            <span className="font-medium text-warm-900">{money(subtotal)}</span>
+                            <span className="font-medium text-warm-900">{money(subtotal, form.moneda_origen)}</span>
                         </div>
                         <div className="flex items-center justify-between border-b border-dashed border-edge py-2 text-sm">
                             <span className="text-warm-500">Flete</span>
@@ -909,8 +919,13 @@ export default function CrearCompra() {
                         </div>
                         <div className="mt-3 flex items-center justify-between border-t border-edge pt-3">
                             <span className="text-sm font-bold uppercase tracking-wide text-primary-700">Total</span>
-                            <span className="text-2xl font-extrabold text-warm-900">{money(total)}</span>
+                            <span className="text-2xl font-extrabold text-warm-900">{money(total, form.moneda_origen)}</span>
                         </div>
+                        {form.moneda_origen === 'USD' && Number(form.tipo_cambio) > 0 && (
+                            <p className="mt-1 text-right text-xs text-warm-500">
+                                ≈ {money(total * Number(form.tipo_cambio), 'PEN')} al tipo de cambio de hoy
+                            </p>
+                        )}
 
                         <div className="mt-5 flex flex-col gap-2">
                             <Button onClick={guardar} loading={saving} className="w-full justify-center">

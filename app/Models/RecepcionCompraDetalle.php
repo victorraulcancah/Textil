@@ -18,6 +18,9 @@ class RecepcionCompraDetalle extends Model
         'cantidad_conforme',
         'cantidad_rechazada',
         'costo_unitario',
+        // El costo ya convertido a soles, con el que de verdad se valorizó
+        // el stock. Null en compras que ya eran en soles.
+        'costo_unitario_pen',
         'stock_anterior',
         'stock_nuevo',
         'lote',
@@ -33,6 +36,7 @@ class RecepcionCompraDetalle extends Model
             'cantidad_conforme' => 'decimal:2',
             'cantidad_rechazada' => 'decimal:2',
             'costo_unitario' => 'decimal:2',
+            'costo_unitario_pen' => 'decimal:4',
             'stock_anterior' => 'decimal:2',
             'stock_nuevo' => 'decimal:2',
             'fecha_vencimiento' => 'datetime',

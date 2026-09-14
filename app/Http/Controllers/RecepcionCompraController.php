@@ -122,6 +122,14 @@ class RecepcionCompraController extends Controller
             $recepcion = DB::transaction(function () use ($data) {
                 $compra = Compra::with('detalles')->lockForUpdate()->findOrFail($data['compra_id']);
 
+                // El stock siempre se valoriza en soles. Una compra en otra
+                // moneda trae su costo en esa moneda (lo que se pactó con el
+                // proveedor); aquí se convierte, así el costo promedio y las
+                // utilidades no mezclan monedas.
+                $tipoCambio = $compra->moneda_origen && $compra->moneda_origen !== 'PEN'
+                    ? (float) ($compra->tipo_cambio ?: 1)
+                    : 1.0;
+
                 if ($compra->estado === 'anulada') {
                     throw new \RuntimeException('La compra está anulada: no admite recepciones.');
                 }
@@ -187,16 +195,20 @@ class RecepcionCompraController extends Controller
                     }
 
                     $presentacion = $presentacionLinea;
+                    // Tal como está en la compra: en soles, o en dólares si
+                    // así se pactó con el proveedor.
                     $costoPresentacion = (float) $linea->costo_unitario;
+                    // El que de verdad se usa para valorizar el stock.
+                    $costoPresentacionPen = round($costoPresentacion * $tipoCambio, 4);
 
                     // StockService valoriza en unidad base; el costo es por presentación.
                     $factor = (float) $presentacion->factor_conversion ?: 1;
-                    $costoBase = $factor > 0 ? $costoPresentacion / $factor : $costoPresentacion;
+                    $costoBasePen = $factor > 0 ? $costoPresentacionPen / $factor : $costoPresentacionPen;
 
                     // El origen del movimiento es la recepción: la compra es el
                     // documento comercial, no el motivo del ingreso al almacén.
                     $movimiento = $stock->entrada(
-                        $presentacion, $almacen, $cantidad, $costoBase,
+                        $presentacion, $almacen, $cantidad, $costoBasePen,
                         'recepcion', 'recepcion_compra', $recepcion->id, auth()->id(),
                         // Con rollos, la línea se recibe en un color: queda en el kardex.
                         colorId: ! empty($detalle['producto_color_id']) ? (int) $detalle['producto_color_id'] : null,
@@ -210,7 +222,11 @@ class RecepcionCompraController extends Controller
                         'cantidad_recibida' => $cantidad,
                         'cantidad_conforme' => $cantidad,
                         'cantidad_rechazada' => 0,
+                        // El original (para trazabilidad con lo que se pactó)
+                        // y el convertido (para poder deshacer sin adivinar el
+                        // tipo de cambio del día que se usó).
                         'costo_unitario' => $costoPresentacion,
+                        'costo_unitario_pen' => $costoPresentacionPen,
                         // El movimiento guarda el saldo resultante en unidad base.
                         'stock_anterior' => (float) $movimiento->stock_anterior,
                         'stock_nuevo' => (float) $movimiento->saldo_stock,
@@ -227,7 +243,7 @@ class RecepcionCompraController extends Controller
                                 : null,
                             $almacen,
                             $detalle['rollos'],
-                            $this->costoPorMetro($presentacion, $costoPresentacion),
+                            $this->costoPorMetro($presentacion, $costoPresentacionPen),
                             $recepcion,
                             $detalle['codigo_proveedor'] ?? null,
                             auth()->id(),
@@ -292,7 +308,13 @@ class RecepcionCompraController extends Controller
                 foreach ($recepcionesCompra->detalles as $detalle) {
                     $presentacion = ProductoPresentacion::findOrFail($detalle->producto_presentacion_id);
                     $factor = (float) $presentacion->factor_conversion ?: 1;
-                    $costoBase = $factor > 0 ? (float) $detalle->costo_unitario / $factor : (float) $detalle->costo_unitario;
+                    // El costo ya en soles, tal como se usó al recibir. Las
+                    // recepciones de antes de esta columna no lo tienen: se
+                    // asume que ya estaban en soles (compra sin dólares).
+                    $costoPen = $detalle->costo_unitario_pen !== null
+                        ? (float) $detalle->costo_unitario_pen
+                        : (float) $detalle->costo_unitario;
+                    $costoBase = $factor > 0 ? $costoPen / $factor : $costoPen;
 
                     $stock->salida(
                         $presentacion, $almacen, (float) $detalle->cantidad_recibida, $costoBase,

@@ -4,7 +4,7 @@ import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import PageHeader, { CreateButton } from '../components/PageHeader';
-import { Alert, Badge, Button, DataTable, Input, Modal, Select } from '../components/ui';
+import { Alert, Badge, Button, DataTable, Input, Modal, Select, Tabs } from '../components/ui';
 import UbicacionesAlmacen from '../components/UbicacionesAlmacen';
 
 const emptyForm = {
@@ -68,10 +68,13 @@ export default function Almacenes() {
         load();
     }, [load]);
 
+    const [modalTab, setModalTab] = useState('general');
+
     const openCreate = () => {
         setEditing(null);
         setForm(emptyForm);
         setFormErrors({});
+        setModalTab('general');
         setModalOpen(true);
     };
 
@@ -87,6 +90,7 @@ export default function Almacenes() {
             predeterminado: Boolean(almacen.predeterminado),
         });
         setFormErrors({});
+        setModalTab('general');
         setModalOpen(true);
     };
 
@@ -419,143 +423,151 @@ export default function Almacenes() {
                     </>
                 }
             >
-                <form id="almacen-form" onSubmit={handleSubmit} className="space-y-4" noValidate>
-                    <Input
-                        label="Nombre"
-                        name="nombre"
-                        placeholder="Ej: Almacén Central"
-                        value={form.nombre}
-                        onChange={(e) => {
-                            setForm((prev) => ({ ...prev, nombre: e.target.value }));
-                            if (formErrors.nombre) {
-                                setFormErrors((prev) => ({ ...prev, nombre: undefined }));
-                            }
-                        }}
-                        error={formErrors.nombre}
-                    />
-                    <Input
-                        label="Código"
-                        name="codigo"
-                        placeholder="Ej: ALM-001"
-                        value={form.codigo}
-                        onChange={(e) => {
-                            setForm((prev) => ({ ...prev, codigo: e.target.value }));
-                            if (formErrors.codigo) {
-                                setFormErrors((prev) => ({ ...prev, codigo: undefined }));
-                            }
-                        }}
-                        error={formErrors.codigo}
-                    />
-                    <Select
-                        label="Tipo"
-                        name="tipo"
-                        value={form.tipo}
-                        onChange={(e) => setForm((prev) => ({ ...prev, tipo: e.target.value }))}
-                        options={[
-                            { value: 'principal', label: 'Principal' },
-                            { value: 'secundario', label: 'Secundario' },
-                            { value: 'tienda', label: 'Tienda' },
+                <form id="almacen-form" onSubmit={handleSubmit} noValidate>
+                    <Tabs
+                        items={[
+                            { key: 'general', label: 'Datos generales' },
+                            { key: 'ubicacion', label: 'Ubicación del almacén' },
                         ]}
+                        value={modalTab}
+                        onChange={setModalTab}
                     />
-                    <div>
-                        <Select
-                            label="¿En qué unidades vende este local?"
-                            value=""
+
+                    <div className={modalTab === 'general' ? 'space-y-4 pt-4' : 'hidden'}>
+                        <Input
+                            label="Nombre"
+                            name="nombre"
+                            placeholder="Ej: Almacén Central"
+                            value={form.nombre}
                             onChange={(e) => {
-                                const id = Number(e.target.value);
-                                if (!id) return;
-                                setForm((prev) => ({
-                                    ...prev,
-                                    unidades_venta: [...prev.unidades_venta, id],
-                                }));
+                                setForm((prev) => ({ ...prev, nombre: e.target.value }));
+                                if (formErrors.nombre) {
+                                    setFormErrors((prev) => ({ ...prev, nombre: undefined }));
+                                }
                             }}
+                            error={formErrors.nombre}
+                        />
+                        <Input
+                            label="Código"
+                            name="codigo"
+                            placeholder="Ej: ALM-001"
+                            value={form.codigo}
+                            onChange={(e) => {
+                                setForm((prev) => ({ ...prev, codigo: e.target.value }));
+                                if (formErrors.codigo) {
+                                    setFormErrors((prev) => ({ ...prev, codigo: undefined }));
+                                }
+                            }}
+                            error={formErrors.codigo}
+                        />
+                        <Select
+                            label="Tipo"
+                            name="tipo"
+                            value={form.tipo}
+                            onChange={(e) => setForm((prev) => ({ ...prev, tipo: e.target.value }))}
                             options={[
-                                { value: '', label: 'Agregar unidad…' },
-                                // Solo las que faltan: las ya elegidas se ven abajo.
-                                ...unidades
-                                    .filter((u) => !form.unidades_venta.includes(u.id))
-                                    .map((u) => ({ value: String(u.id), label: u.nombre })),
+                                { value: 'principal', label: 'Principal' },
+                                { value: 'secundario', label: 'Secundario' },
+                                { value: 'tienda', label: 'Tienda' },
                             ]}
                         />
+                        <div>
+                            <Select
+                                label="¿En qué unidades vende este local?"
+                                value=""
+                                onChange={(e) => {
+                                    const id = Number(e.target.value);
+                                    if (!id) return;
+                                    setForm((prev) => ({
+                                        ...prev,
+                                        unidades_venta: [...prev.unidades_venta, id],
+                                    }));
+                                }}
+                                options={[
+                                    { value: '', label: 'Agregar unidad…' },
+                                    // Solo las que faltan: las ya elegidas se ven abajo.
+                                    ...unidades
+                                        .filter((u) => !form.unidades_venta.includes(u.id))
+                                        .map((u) => ({ value: String(u.id), label: u.nombre })),
+                                ]}
+                            />
 
-                        {form.unidades_venta.length === 0 ? (
-                            <p className="mt-1.5 text-xs text-warm-500">
-                                Sin unidades elegidas: este local vende en todas.
-                            </p>
-                        ) : (
-                            <div className="mt-2 flex flex-wrap gap-1.5">
-                                {form.unidades_venta.map((id) => {
-                                    const unidad = unidades.find((u) => u.id === id);
-                                    return (
-                                        <span
-                                            key={id}
-                                            className="inline-flex items-center gap-1.5 rounded-full bg-primary-50 py-1 pl-3 pr-1.5 text-xs font-medium text-primary-700 ring-1 ring-inset ring-primary-200"
-                                        >
-                                            {unidad?.nombre ?? id}
-                                            <button
-                                                type="button"
-                                                aria-label={`Quitar ${unidad?.nombre ?? ''}`}
-                                                onClick={() =>
-                                                    setForm((prev) => ({
-                                                        ...prev,
-                                                        unidades_venta: prev.unidades_venta.filter((x) => x !== id),
-                                                    }))
-                                                }
-                                                className="rounded-full p-0.5 transition hover:bg-primary-100"
+                            {form.unidades_venta.length === 0 ? (
+                                <p className="mt-1.5 text-xs text-warm-500">
+                                    Sin unidades elegidas: este local vende en todas.
+                                </p>
+                            ) : (
+                                <div className="mt-2 flex flex-wrap gap-1.5">
+                                    {form.unidades_venta.map((id) => {
+                                        const unidad = unidades.find((u) => u.id === id);
+                                        return (
+                                            <span
+                                                key={id}
+                                                className="inline-flex items-center gap-1.5 rounded-full bg-primary-50 py-1 pl-3 pr-1.5 text-xs font-medium text-primary-700 ring-1 ring-inset ring-primary-200"
                                             >
-                                                <X className="h-3 w-3" />
-                                            </button>
-                                        </span>
-                                    );
-                                })}
-                            </div>
-                        )}
-                    </div>
-                    <Input
-                        label="Dirección"
-                        name="direccion"
-                        placeholder="Opcional"
-                        value={form.direccion}
-                        onChange={(e) => setForm((prev) => ({ ...prev, direccion: e.target.value }))}
-                        error={formErrors.direccion}
-                    />
-                    <label className="flex items-center gap-2 text-sm text-gray-700">
-                        <input
-                            type="checkbox"
-                            checked={form.activo}
-                            onChange={(e) =>
-                                setForm((prev) => ({ ...prev, activo: e.target.checked }))
-                            }
-                            className="h-4 w-4 rounded border-gray-300 accent-primary-600"
+                                                {unidad?.nombre ?? id}
+                                                <button
+                                                    type="button"
+                                                    aria-label={`Quitar ${unidad?.nombre ?? ''}`}
+                                                    onClick={() =>
+                                                        setForm((prev) => ({
+                                                            ...prev,
+                                                            unidades_venta: prev.unidades_venta.filter((x) => x !== id),
+                                                        }))
+                                                    }
+                                                    className="rounded-full p-0.5 transition hover:bg-primary-100"
+                                                >
+                                                    <X className="h-3 w-3" />
+                                                </button>
+                                            </span>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                        <Input
+                            label="Dirección"
+                            name="direccion"
+                            placeholder="Opcional"
+                            value={form.direccion}
+                            onChange={(e) => setForm((prev) => ({ ...prev, direccion: e.target.value }))}
+                            error={formErrors.direccion}
                         />
-                        <BadgeCheck className="h-4 w-4 text-primary-600" />
-                        Almacén activo
-                    </label>
-                    {/* Solo puede haber uno: al marcar este, el servidor
-                        desmarca el que lo estuviera. */}
-                    <label className="flex items-center gap-2 text-sm text-gray-700">
-                        <input
-                            type="checkbox"
-                            checked={form.predeterminado}
-                            disabled={!form.activo}
-                            onChange={(e) =>
-                                setForm((prev) => ({ ...prev, predeterminado: e.target.checked }))
-                            }
-                            className="h-4 w-4 rounded border-gray-300 accent-primary-600 disabled:opacity-40"
-                        />
-                        <Star className="h-4 w-4 text-amber-500" />
-                        <span>
-                            Almacén predeterminado
-                            <span className="ml-1 text-xs text-gray-400">
-                                — viene ya elegido al crear una nota de venta
+                        <label className="flex items-center gap-2 text-sm text-gray-700">
+                            <input
+                                type="checkbox"
+                                checked={form.activo}
+                                onChange={(e) =>
+                                    setForm((prev) => ({ ...prev, activo: e.target.checked }))
+                                }
+                                className="h-4 w-4 rounded border-gray-300 accent-primary-600"
+                            />
+                            <BadgeCheck className="h-4 w-4 text-primary-600" />
+                            Almacén activo
+                        </label>
+                        {/* Solo puede haber uno: al marcar este, el servidor
+                            desmarca el que lo estuviera. */}
+                        <label className="flex items-center gap-2 text-sm text-gray-700">
+                            <input
+                                type="checkbox"
+                                checked={form.predeterminado}
+                                disabled={!form.activo}
+                                onChange={(e) =>
+                                    setForm((prev) => ({ ...prev, predeterminado: e.target.checked }))
+                                }
+                                className="h-4 w-4 rounded border-gray-300 accent-primary-600 disabled:opacity-40"
+                            />
+                            <Star className="h-4 w-4 text-amber-500" />
+                            <span>
+                                Almacén predeterminado
+                                <span className="ml-1 text-xs text-gray-400">
+                                    — viene ya elegido al crear una nota de venta
+                                </span>
                             </span>
-                        </span>
-                    </label>
+                        </label>
+                    </div>
 
-                    <div className="border-t border-edge pt-4">
-                        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
-                            Ubicación del almacén
-                        </h3>
+                    <div className={modalTab === 'ubicacion' ? 'pt-4' : 'hidden'}>
                         <p className="mb-3 text-xs text-warm-400">
                             Piso → pasillo → rack → nivel → posición. Se pide en la recepción de compra en
                             vez de escribirla a mano; no hace falta llegar a los 5 niveles.

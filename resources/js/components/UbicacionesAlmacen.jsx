@@ -19,7 +19,7 @@ export default function UbicacionesAlmacen({ almacenId }) {
     const toast = useToast();
     const [arbol, setArbol] = useState([]);
     const [cargando, setCargando] = useState(true);
-    const [creandoEn, setCreandoEn] = useState(null); // id del padre, o 'raiz'
+    const [creandoEn, setCreandoEn] = useState('raiz'); // id del padre, o 'raiz'; abierto de entrada
     const [nombreNuevo, setNombreNuevo] = useState('');
     const [guardando, setGuardando] = useState(false);
 

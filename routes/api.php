@@ -99,6 +99,9 @@ Route::middleware('auth:api')->group(function () {
     Route::get('compras/{compra}/pendientes-recepcion', [RecepcionCompraController::class, 'pendientesDeCompra']);
     Route::apiResource('recepciones-compra', RecepcionCompraController::class);
     Route::post('recepciones-compra/{recepcionesCompra}/deshacer', [RecepcionCompraController::class, 'deshacer']);
+    // Lee el Excel del packing list y devuelve una vista previa; no crea nada
+    // todavía —recién se guarda cuando el almacenero confirma la recepción—.
+    Route::post('recepciones-compra/leer-packing-list', [RecepcionCompraController::class, 'leerPackingList']);
 
     // Inventario
     Route::get('existencias', [AlmacenController::class, 'existencias']);

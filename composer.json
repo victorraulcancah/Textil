@@ -12,6 +12,7 @@
         "laravel/framework": "^13.8",
         "laravel/reverb": "^1.11",
         "laravel/tinker": "^3.0",
+        "phpoffice/phpspreadsheet": "^5.9",
         "picqer/php-barcode-generator": "*",
         "spatie/laravel-permission": "^8.3",
         "tymon/jwt-auth": "*"

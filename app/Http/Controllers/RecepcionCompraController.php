@@ -109,6 +109,9 @@ class RecepcionCompraController extends Controller
             'detalles.*.rollos' => 'nullable|array',
             'detalles.*.rollos.*.metros' => 'required|numeric|min:0.01',
             'detalles.*.rollos.*.peso_kg' => 'nullable|numeric|min:0',
+            // Del packing list en Excel, cuando ya trae el código único de
+            // fábrica de ese rollo (si no viene, se genera como siempre).
+            'detalles.*.rollos.*.codigo' => 'nullable|string|max:100',
 
             // Dónde se guardan los rollos de esta línea. Se pregunta al
             // recibir porque es el único momento en que alguien lo sabe.
@@ -255,7 +258,7 @@ class RecepcionCompraController extends Controller
                             $detalle['rollos'],
                             $this->costoPorMetro($presentacion, $costoPresentacionPen),
                             $recepcion,
-                            $detalle['codigo_proveedor'] ?? null,
+                            ($detalle['codigo_proveedor'] ?? null) ?: $this->codigoBaseCompra($compra),
                             auth()->id(),
                             actualizarStock: false,
                             importacion: $importacion,
@@ -375,6 +378,135 @@ class RecepcionCompraController extends Controller
         return response()->json(['message' => 'Eliminado']);
     }
 
+    /**
+     * Lee el Excel del packing list del proveedor y arma una vista previa:
+     * qué línea de la compra y qué color corresponde a cada grupo de rollos,
+     * con su código, metraje y peso ya leídos. No crea nada —el almacenero
+     * revisa y recién al pulsar "Registrar recepción" se guarda de verdad—.
+     *
+     * Columnas esperadas (por nombre de cabecera, sin importar mayúsculas ni
+     * el orden de las columnas): Orden, Código único, Producto, Color,
+     * Metros, Peso neto. "Producto" y "Color" van por su código (el de
+     * `productos.codigo` y el de `producto_colores.codigo` o el del
+     * catálogo compartido de colores).
+     */
+    public function leerPackingList(Request $request)
+    {
+        $data = $request->validate([
+            'compra_id' => 'required|exists:compras,id',
+            'archivo' => 'required|file|mimes:xlsx,xls|max:5120',
+        ]);
+
+        $compra = Compra::with(['detalles.presentacion.producto.colores'])->findOrFail($data['compra_id']);
+
+        try {
+            $hoja = \PhpOffice\PhpSpreadsheet\IOFactory::load($data['archivo']->getRealPath())->getActiveSheet();
+        } catch (\Throwable $e) {
+            return response()->json(['message' => 'No se pudo leer el archivo: ¿es un Excel válido?'], 422);
+        }
+
+        $filas = $hoja->toArray(null, true, true, false);
+        if (count($filas) < 2) {
+            return response()->json(['message' => 'El archivo no tiene filas de datos.'], 422);
+        }
+
+        // La cabecera puede venir en cualquier orden de columnas: se ubica
+        // cada una por su nombre, no por posición fija.
+        $col = $this->mapaColumnas($filas[0]);
+        foreach (['codigo', 'producto', 'color', 'metros'] as $clave) {
+            if (! isset($col[$clave])) {
+                return response()->json([
+                    'message' => "Falta la columna \"{$clave}\" en el Excel. Se esperan: Orden, Código único, Producto, Color, Metros, Peso neto.",
+                ], 422);
+            }
+        }
+
+        $grupos = [];
+        $advertencias = [];
+
+        foreach (array_slice($filas, 1) as $i => $fila) {
+            $numeroFila = $i + 2;
+            $codigo = trim((string) ($fila[$col['codigo']] ?? ''));
+            $codigoProducto = trim((string) ($fila[$col['producto']] ?? ''));
+            $codigoColor = trim((string) ($fila[$col['color']] ?? ''));
+            $metros = (float) ($fila[$col['metros']] ?? 0);
+            $peso = isset($col['peso']) ? (float) ($fila[$col['peso']] ?? 0) : null;
+
+            if ($codigo === '' && $codigoProducto === '' && $metros <= 0) {
+                continue; // fila vacía, tolerada al final del archivo
+            }
+
+            if ($metros <= 0) {
+                $advertencias[] = "Fila {$numeroFila}: sin metros, se omite.";
+                continue;
+            }
+
+            $linea = $compra->detalles->first(
+                fn ($d) => $d->presentacion?->producto?->codigo === $codigoProducto
+            );
+            if (! $linea) {
+                $advertencias[] = "Fila {$numeroFila}: el producto \"{$codigoProducto}\" no está en esta compra.";
+                continue;
+            }
+
+            $productoColor = $linea->presentacion->producto->colores
+                ->first(fn ($c) => $c->codigo === $codigoColor);
+            if ($codigoColor !== '' && ! $productoColor) {
+                $advertencias[] = "Fila {$numeroFila}: el color \"{$codigoColor}\" no existe para \"{$codigoProducto}\".";
+                continue;
+            }
+
+            $clave = $linea->id.'-'.($productoColor?->id ?? '0');
+            $grupos[$clave] ??= [
+                'compra_detalle_id' => $linea->id,
+                'producto' => $linea->presentacion->producto->nombre,
+                'producto_color_id' => $productoColor?->id,
+                'color' => $productoColor?->nombre,
+                'color_codigo' => $productoColor?->codigo,
+                'rollos' => [],
+            ];
+            $grupos[$clave]['rollos'][] = [
+                'codigo' => $codigo !== '' ? $codigo : null,
+                'metros' => round($metros, 2),
+                'peso_kg' => $peso > 0 ? round($peso, 3) : null,
+            ];
+        }
+
+        return response()->json([
+            'detalles' => array_values($grupos),
+            'advertencias' => $advertencias,
+        ]);
+    }
+
+    /** Ubica cada columna esperada por el texto de su cabecera. */
+    private function mapaColumnas(array $cabecera): array
+    {
+        $alias = [
+            'codigo' => ['codigo unico', 'codigo unico del rollo', 'codigo', 'código único', 'código'],
+            'producto' => ['producto', 'tela', 'producto con color', 'codigo producto'],
+            'color' => ['color', 'codigo color'],
+            'metros' => ['metros', 'metraje', 'metraje de fabrica'],
+            'peso' => ['peso neto', 'peso', 'peso kg', 'peso (kg)'],
+            'orden' => ['orden', 'orden de compra'],
+        ];
+
+        $normalizar = fn ($t) => strtolower(trim((string) preg_replace('/\s+/', ' ', str_replace(
+            ['á', 'é', 'í', 'ó', 'ú'], ['a', 'e', 'i', 'o', 'u'], (string) $t
+        ))));
+
+        $mapa = [];
+        foreach ($cabecera as $indice => $texto) {
+            $texto = $normalizar($texto);
+            foreach ($alias as $clave => $nombres) {
+                if (in_array($texto, $nombres, true)) {
+                    $mapa[$clave] = $indice;
+                }
+            }
+        }
+
+        return $mapa;
+    }
+
     /** Ajusta el estado de la recepción y de la compra según lo que falte. */
     private function refrescarEstados(RecepcionCompra $recepcion, Compra $compra): void
     {
@@ -437,5 +569,25 @@ class RecepcionCompraController extends Controller
         $basePorMetro = max((float) ($presentacion->producto?->factorBasePorMetro() ?? 1), 1);
 
         return round($costoPresentacion / $factor * $basePorMetro, 4);
+    }
+
+    /**
+     * El prefijo del código de rollo cuando nadie escribió uno a mano:
+     * "KET-004-26" (código corto del proveedor + correlativo de la compra +
+     * año), igual a como el cliente arma su propia numeración de orden.
+     *
+     * Si el proveedor no tiene código corto cargado, se devuelve null y
+     * RolloService cae al esquema de siempre (producto + color).
+     */
+    private function codigoBaseCompra(Compra $compra): ?string
+    {
+        $corto = $compra->proveedor?->codigo_corto;
+        if (! $corto) {
+            return null;
+        }
+
+        $anio = ($compra->fecha ?? now())->format('y');
+
+        return sprintf('%s-%03d-%s', $corto, $compra->correlativo, $anio);
     }
 }

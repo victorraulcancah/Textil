@@ -36,6 +36,15 @@ function leerMetrajes(texto) {
         .filter((r) => r.metros > 0);
 }
 
+/**
+ * Los rollos de una línea: si vinieron de un Excel de packing list ya
+ * cargado, esos manda (traen su propio código de fábrica); si no, se leen
+ * del texto pegado a mano, como siempre.
+ */
+function rollosDe(cap) {
+    return cap?.rollosExcel?.length ? cap.rollosExcel : leerMetrajes(cap?.metrajes);
+}
+
 export default function RecepcionarCompraModal({ open, onClose, compraId, onDone }) {
     const toast = useToast();
 
@@ -58,6 +67,7 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
      * ahí se sigue escribiendo la ubicación a mano, como antes.
      */
     const [arbolUbicaciones, setArbolUbicaciones] = useState([]);
+    const [subiendoPackingList, setSubiendoPackingList] = useState(false);
     const [form, setForm] = useState({
         almacen_id: '',
         fecha_recepcion: hoy(),
@@ -107,6 +117,48 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
         if (open && compraId) cargar();
     }, [open, compraId, cargar]);
 
+    /**
+     * Lee el Excel del packing list y precarga cada línea con sus rollos:
+     * color, código de fábrica, metros y peso. No registra nada todavía —el
+     * almacenero sigue revisando y recién confirma con "Registrar recepción"—.
+     */
+    const cargarPackingListExcel = async (file) => {
+        if (!file) return;
+        setSubiendoPackingList(true);
+        try {
+            const form = new FormData();
+            form.append('compra_id', compraId);
+            form.append('archivo', file);
+            const { data } = await api.post('/recepciones-compra/leer-packing-list', form, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+            });
+
+            setRollosPorLinea((prev) => {
+                const next = { ...prev };
+                for (const d of data.detalles ?? []) {
+                    const clave = String(d.compra_detalle_id);
+                    next[clave] = {
+                        ...(next[clave] ?? {}),
+                        abierto: true,
+                        color_id: d.producto_color_id ? String(d.producto_color_id) : (next[clave]?.color_id ?? ''),
+                        rollosExcel: d.rollos,
+                    };
+                }
+                return next;
+            });
+
+            const leidos = (data.detalles ?? []).reduce((a, d) => a + d.rollos.length, 0);
+            if (leidos > 0) toast.success(`Se leyeron ${leidos} rollos del packing list.`);
+            if (data.advertencias?.length) {
+                toast.error(`${data.advertencias.length} fila(s) no se pudieron leer: ${data.advertencias[0]}`);
+            }
+        } catch (err) {
+            toast.error(err.response?.data?.message ?? 'No se pudo leer el packing list.');
+        } finally {
+            setSubiendoPackingList(false);
+        }
+    };
+
     // Cambiar de almacén trae su propio árbol de ubicaciones (o ninguno).
     useEffect(() => {
         if (!form.almacen_id) {
@@ -139,7 +191,7 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
                 cantidad_recibida: Number(cantidades[String(l.compra_detalle_id)]) || 0,
                 ...(() => {
                     const cap = rollosPorLinea[String(l.compra_detalle_id)];
-                    const rollos = leerMetrajes(cap?.metrajes);
+                    const rollos = rollosDe(cap);
                     return rollos.length
                         ? {
                               rollos,
@@ -275,6 +327,33 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
                         />
                     </div>
 
+                    {/* El packing list en Excel precarga los rollos de todas
+                        las líneas de un golpe: una fila por rollo, con su
+                        propio código de fábrica. Sin archivo, se sigue
+                        capturando a mano por línea, como siempre. */}
+                    <div className="mb-4">
+                        <label className="mb-1 block text-sm font-medium text-warm-800">
+                            Packing list (opcional)
+                        </label>
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="file"
+                                accept=".xlsx,.xls"
+                                disabled={subiendoPackingList}
+                                onChange={(e) => {
+                                    cargarPackingListExcel(e.target.files?.[0]);
+                                    e.target.value = '';
+                                }}
+                                className="block flex-1 text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-primary-50 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary-700 hover:file:bg-primary-100"
+                            />
+                            {subiendoPackingList && <Spinner className="h-4 w-4 text-primary-600" />}
+                        </div>
+                        <p className="mt-1 text-xs text-warm-400">
+                            Un Excel con una fila por rollo: código único, producto, color, metros y
+                            peso neto. Se reparte solo en la línea de cada producto.
+                        </p>
+                    </div>
+
                     {conPendiente.length === 0 ? (
                         <Alert variant="success">
                             Esta compra ya no tiene nada pendiente de recepcionar.
@@ -300,7 +379,7 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
                                         // Solo la mercadería con muestrario se
                                         // maneja rollo por rollo.
                                         const porRollos = (l.colores?.length ?? 0) > 0;
-                                        const leidos = leerMetrajes(cap?.metrajes);
+                                        const leidos = rollosDe(cap);
                                         const setCap = (campo, valor) =>
                                             setRollosPorLinea((prev) => ({
                                                 ...prev,
@@ -365,28 +444,59 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
                                                                         })),
                                                                     ]}
                                                                 />
-                                                                <Input
-                                                                    label="Código del proveedor"
-                                                                    placeholder="A103-3"
-                                                                    value={cap?.codigo ?? ''}
-                                                                    onChange={(e) => setCap('codigo', e.target.value)}
-                                                                />
                                                                 <div>
-                                                                    <label className="mb-1 block text-sm font-medium text-warm-800">
-                                                                        Metrajes del packing list
-                                                                    </label>
-                                                                    <textarea
-                                                                        rows={4}
-                                                                        value={cap?.metrajes ?? ''}
-                                                                        onChange={(e) => setCap('metrajes', e.target.value)}
-                                                                        placeholder={'Pega aquí el packing list, un rollo por línea:\n58   26.5\n58   26.6\n64   28.3'}
-                                                                        className="w-full rounded-md border border-edge px-3 py-2 font-mono text-sm shadow-sm outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-100"
+                                                                    <Input
+                                                                        label="Código de rollo (opcional)"
+                                                                        placeholder="Se arma solo si lo dejas vacío"
+                                                                        value={cap?.codigo ?? ''}
+                                                                        onChange={(e) => setCap('codigo', e.target.value)}
                                                                     />
-                                                                    <p className="mt-1 text-xs text-warm-500">
-                                                                        Un rollo por línea. Si pones dos números, el
-                                                                        segundo es el peso en kilos.
+                                                                    <p className="mt-1 text-xs text-warm-400">
+                                                                        Si el proveedor tiene código corto, el rollo
+                                                                        se numera solo (ej. KET-004-26-0001).
                                                                     </p>
                                                                 </div>
+                                                                {cap?.rollosExcel?.length ? (
+                                                                    <div>
+                                                                        <div className="mb-1 flex items-center justify-between">
+                                                                            <label className="block text-sm font-medium text-warm-800">
+                                                                                Rollos del Excel ({cap.rollosExcel.length})
+                                                                            </label>
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => setCap('rollosExcel', undefined)}
+                                                                                className="text-xs font-medium text-primary-600 hover:underline"
+                                                                            >
+                                                                                Quitar y escribir a mano
+                                                                            </button>
+                                                                        </div>
+                                                                        <div className="max-h-28 overflow-y-auto rounded-md border border-edge bg-white px-3 py-2 font-mono text-xs">
+                                                                            {cap.rollosExcel.map((r, i) => (
+                                                                                <div key={i}>
+                                                                                    {r.codigo ?? `#${i + 1}`} — {r.metros} m
+                                                                                    {r.peso_kg ? ` · ${r.peso_kg} kg` : ''}
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    </div>
+                                                                ) : (
+                                                                    <div>
+                                                                        <label className="mb-1 block text-sm font-medium text-warm-800">
+                                                                            Metrajes del packing list
+                                                                        </label>
+                                                                        <textarea
+                                                                            rows={4}
+                                                                            value={cap?.metrajes ?? ''}
+                                                                            onChange={(e) => setCap('metrajes', e.target.value)}
+                                                                            placeholder={'Pega aquí el packing list, un rollo por línea:\n58   26.5\n58   26.6\n64   28.3'}
+                                                                            className="w-full rounded-md border border-edge px-3 py-2 font-mono text-sm shadow-sm outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-100"
+                                                                        />
+                                                                        <p className="mt-1 text-xs text-warm-500">
+                                                                            Un rollo por línea. Si pones dos números, el
+                                                                            segundo es el peso en kilos.
+                                                                        </p>
+                                                                    </div>
+                                                                )}
                                                             </div>
 
                                                             {/* Dónde se guardan. Se aplica a todos los

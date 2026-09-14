@@ -53,8 +53,38 @@ class EtiquetaRolloPdf implements DocumentoPdf
             'codigo_color' => $rollo->color?->codigo,
             'codigo' => $rollo->codigo,
             'metros' => number_format((float) $rollo->metros_actual, 2),
+            // El neto es el que se pesó al llegar; si no se registró (rollos
+            // viejos, o ingresos que no lo piden), no se imprime la línea.
+            'peso_kg' => $rollo->peso_kg ? number_format((float) $rollo->peso_kg, 2) : null,
+            // La orden es todo el código del rollo menos su correlativo final:
+            // así queda siempre igual a lo que dice el propio código impreso,
+            // sin depender de que la recepción tenga la relación bien cargada.
+            'orden' => preg_replace('/-\d{4}$/', '', $rollo->codigo),
+            'posicion' => $this->posicion($rollo),
             'ubicacion' => $rollo->ubicacionLegible(),
         ] + $this->etiquetas->codigos($rollo->codigo);
+    }
+
+    /**
+     * "Rollo 3 de 8": la posición de este rollo entre los que llegaron del
+     * mismo producto y color en la misma recepción. Sin recepción (un rollo
+     * suelto, cargado a mano) no hay "de cuántos" que mostrar.
+     */
+    private function posicion(Rollo $rollo): ?string
+    {
+        if (! $rollo->recepcion_compra_id) {
+            return null;
+        }
+
+        $hermanos = Rollo::where('recepcion_compra_id', $rollo->recepcion_compra_id)
+            ->where('producto_id', $rollo->producto_id)
+            ->where('producto_color_id', $rollo->producto_color_id)
+            ->orderBy('numero')
+            ->pluck('id');
+
+        $indice = $hermanos->search($rollo->id);
+
+        return $indice === false ? null : sprintf('%03d de %03d', $indice + 1, $hermanos->count());
     }
 
     public function archivo(int $id): string

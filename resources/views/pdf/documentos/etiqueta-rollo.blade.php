@@ -51,6 +51,11 @@
             color: {{ config('theme.primary') }};
             line-height: 1;
         }
+        .metraje .peso {
+            font-size: 11px;
+            font-weight: normal;
+            color: {{ config('theme.muted') }};
+        }
 
         .codigos { margin-top: 6px; }
         .codigos td { vertical-align: middle; text-align: center; padding: 0 4px; }
@@ -73,7 +78,25 @@
                         <strong>{{ $e['color'] }}</strong>@if ($e['codigo_color']) ({{ $e['codigo_color'] }})@endif
                     </div>
                     <div class="codigo">{{ $e['codigo'] }}</div>
-                    <div class="metraje">{{ $e['metros'] }} m</div>
+                    <div class="metraje">
+                        {{ $e['metros'] }} m
+                        @if ($e['peso_kg'])
+                            <span class="peso">· {{ $e['peso_kg'] }} kg</span>
+                        @endif
+                    </div>
+                    @if ($e['orden'] || $e['posicion'])
+                        <div class="linea">
+                            @if ($e['orden'])
+                                <span class="et">Orden:</span> {{ $e['orden'] }}
+                            @endif
+                            @if ($e['orden'] && $e['posicion'])
+                                &nbsp;·&nbsp;
+                            @endif
+                            @if ($e['posicion'])
+                                <span class="et">Rollo</span> {{ $e['posicion'] }}
+                            @endif
+                        </div>
+                    @endif
                 </td>
                 @if ($e['qr'])
                     <td style="width: 88px; text-align: right;">

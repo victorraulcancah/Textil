@@ -76,11 +76,22 @@ class RolloService
                     continue;
                 }
 
+                // El packing list del proveedor a veces ya trae el código
+                // único de cada rollo (columna "código único"): se respeta
+                // tal cual en vez de generar uno, porque es el que la
+                // fábrica imprimió en su propia etiqueta. Sin ese dato, se
+                // arma como siempre.
+                $codigo = trim((string) ($linea['codigo'] ?? ''));
+                if ($codigo !== '' && Rollo::where('codigo', $codigo)->exists()) {
+                    throw new \RuntimeException("Ya existe un rollo con el código \"{$codigo}\".");
+                }
+                $codigo = $codigo !== '' ? $codigo : sprintf('%s-%04d', $prefijo, $siguiente);
+
                 $rollo = Rollo::create([
                     'producto_id' => $producto->id,
                     'producto_color_id' => $color?->id,
                     'almacen_id' => $almacen->id,
-                    'codigo' => sprintf('%s-%04d', $prefijo, $siguiente),
+                    'codigo' => $codigo,
                     'codigo_proveedor' => $codigoProveedor,
                     'numero' => $siguiente,
                     'metros_inicial' => $metros,

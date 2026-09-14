@@ -20,6 +20,8 @@ class CuentaPorPagar extends Model
         'monto_total',
         'monto_pagado',
         'saldo',
+        // En qué moneda es la deuda: la de la compra que la originó.
+        'moneda',
         'fecha_vencimiento',
         'estado',
     ];

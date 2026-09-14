@@ -797,12 +797,12 @@ export default function CrearCompra() {
 
                                 <div className="mt-3 flex justify-between border-t border-dashed border-edge pt-2 text-sm">
                                     <span className="text-warm-500">Pagado</span>
-                                    <span className="font-semibold text-green-600">{money(pagado)}</span>
+                                    <span className="font-semibold text-green-600">{money(pagado, form.moneda_origen)}</span>
                                 </div>
                                 {Math.abs(saldo) > 0.001 && (
                                     <div className="flex justify-between text-sm">
                                         <span className="text-warm-500">{saldo > 0 ? 'Saldo por pagar' : 'Exceso'}</span>
-                                        <span className={saldo > 0 ? 'font-semibold text-amber-600' : 'font-semibold text-red-600'}>{money(Math.abs(saldo))}</span>
+                                        <span className={saldo > 0 ? 'font-semibold text-amber-600' : 'font-semibold text-red-600'}>{money(Math.abs(saldo), form.moneda_origen)}</span>
                                     </div>
                                 )}
                             </>

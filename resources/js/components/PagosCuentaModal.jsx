@@ -5,8 +5,8 @@ import { useToast } from '../lib/toast';
 import MetodoCajaPicker from './MetodoCajaPicker';
 import { Alert, Badge, Button, Input, Modal } from './ui';
 
-const money = (n) =>
-    new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(n) || 0);
+const money = (n, moneda = 'PEN') =>
+    new Intl.NumberFormat('es-PE', { style: 'currency', currency: moneda || 'PEN' }).format(Number(n) || 0);
 
 const hoy = () => new Date().toISOString().slice(0, 10);
 
@@ -130,7 +130,7 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo, onSaved 
     };
 
     const anular = async (p) => {
-        if (!window.confirm(`¿Anular este pago de ${money(p.monto)}? Se revertirá el movimiento de caja.`)) return;
+        if (!window.confirm(`¿Anular este pago de ${money(p.monto, p.moneda || state.moneda)}? Se revertirá el movimiento de caja.`)) return;
         setSaving(true);
         try {
             const res = await api.delete(`${basePath}/pagos/${p.id}`);
@@ -156,9 +156,9 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo, onSaved 
             footer={<Button variant="secondary" onClick={onClose}>Cerrar</Button>}
         >
             <div className="mb-4 grid grid-cols-2 gap-3 rounded-xl border border-edge bg-gray-50 p-4 sm:grid-cols-4">
-                <div><p className="text-xs uppercase tracking-wide text-warm-500">Total</p><p className="font-semibold text-warm-900">{money(state.monto_total)}</p></div>
-                <div><p className="text-xs uppercase tracking-wide text-warm-500">Pagado</p><p className="font-semibold text-green-600">{money(state.monto_pagado)}</p></div>
-                <div><p className="text-xs uppercase tracking-wide text-warm-500">Saldo</p><p className="font-semibold text-red-600">{money(state.saldo)}</p></div>
+                <div><p className="text-xs uppercase tracking-wide text-warm-500">Total</p><p className="font-semibold text-warm-900">{money(state.monto_total, state.moneda)}</p></div>
+                <div><p className="text-xs uppercase tracking-wide text-warm-500">Pagado</p><p className="font-semibold text-green-600">{money(state.monto_pagado, state.moneda)}</p></div>
+                <div><p className="text-xs uppercase tracking-wide text-warm-500">Saldo</p><p className="font-semibold text-red-600">{money(state.saldo, state.moneda)}</p></div>
                 <div><p className="text-xs uppercase tracking-wide text-warm-500">Estado</p><div className="mt-0.5">{estadoBadge(state.estado)}</div></div>
             </div>
 
@@ -185,7 +185,7 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo, onSaved 
                         ) : (
                             <div key={p.id} className="flex items-center gap-3 px-3 py-2 text-sm">
                                 <Badge variant="blue">{metodoPagoLabel(p)}</Badge>
-                                <span className="font-medium text-warm-900">{money(p.monto)}</span>
+                                <span className="font-medium text-warm-900">{money(p.monto, p.moneda || state.moneda)}</span>
                                 <span className="text-warm-500">{p.fecha}</span>
                                 {p.referencia && <span className="text-warm-400">· {p.referencia}</span>}
                                 <div className="ml-auto flex items-center gap-1">
@@ -229,8 +229,8 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo, onSaved 
                     <div className="mt-3 flex items-center justify-between border-t border-dashed border-edge pt-3">
                         <div className="text-sm">
                             <span className="text-warm-500">A pagar: </span>
-                            <span className="font-semibold text-warm-900">{money(nuevoTotal)}</span>
-                            {nuevoTotal > saldo + 0.01 && <span className="ml-2 text-red-600">excede el saldo ({money(saldo)})</span>}
+                            <span className="font-semibold text-warm-900">{money(nuevoTotal, state.moneda)}</span>
+                            {nuevoTotal > saldo + 0.01 && <span className="ml-2 text-red-600">excede el saldo ({money(saldo, state.moneda)})</span>}
                         </div>
                         <Button onClick={registrar} loading={saving} disabled={nuevoTotal <= 0}>Registrar pago</Button>
                     </div>

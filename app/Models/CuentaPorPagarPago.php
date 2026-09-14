@@ -14,6 +14,7 @@ class CuentaPorPagarPago extends Model
         'cuenta_bancaria_id',
         'billetera_id',
         'monto',
+        'moneda',
         'movimiento_caja_id',
         'referencia',
         'fecha',

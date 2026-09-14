@@ -14,8 +14,8 @@ const ESTADOS = [
     { value: 'anulado', label: 'Anulado' },
 ];
 
-const money = (n) =>
-    new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(n) || 0);
+const money = (n, moneda = 'PEN') =>
+    new Intl.NumberFormat('es-PE', { style: 'currency', currency: moneda || 'PEN' }).format(Number(n) || 0);
 
 const fecha = (v) => (v ? new Date(v).toLocaleDateString('es-PE') : '—');
 
@@ -55,18 +55,23 @@ export default function CuentasPorPagar() {
             render: (row) => row.proveedor?.nombre ?? <span className="text-gray-400">—</span>,
         },
         { key: 'fecha_vencimiento', label: 'Vence', render: (row) => fecha(row.fecha_vencimiento) },
-        { key: 'monto_total', label: 'Total', align: 'right', render: (row) => money(row.monto_total) },
+        {
+            key: 'monto_total',
+            label: 'Total',
+            align: 'right',
+            render: (row) => money(row.monto_total, row.moneda),
+        },
         {
             key: 'monto_pagado',
             label: 'Pagado',
             align: 'right',
-            render: (row) => <span className="text-green-600">{money(row.monto_pagado)}</span>,
+            render: (row) => <span className="text-green-600">{money(row.monto_pagado, row.moneda)}</span>,
         },
         {
             key: 'saldo',
             label: 'Saldo',
             align: 'right',
-            render: (row) => <span className="font-medium text-red-600">{money(row.saldo)}</span>,
+            render: (row) => <span className="font-medium text-red-600">{money(row.saldo, row.moneda)}</span>,
         },
         { key: 'estado', label: 'Estado', render: (row) => estadoBadge(row.estado) },
         {

@@ -24,6 +24,9 @@ class MovimientoCaja extends Model
         'numero_operacion',
         'captura_url',
         'monto',
+        // En qué moneda es este movimiento; casi siempre soles, salvo el
+        // pago de una deuda que quedó pactada en otra moneda.
+        'moneda',
         'descripcion',
         'documento_referencia_tipo',
         'documento_referencia_id',

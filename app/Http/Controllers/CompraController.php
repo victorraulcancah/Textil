@@ -283,6 +283,8 @@ class CompraController extends Controller
             'saldo' => $saldo,
             'fecha_vencimiento' => $vencimiento,
             'estado' => $saldo <= 0 ? 'pagada' : ($pagado > 0 ? 'parcial' : 'pendiente'),
+            // La deuda queda en la moneda en la que se pactó la compra.
+            'moneda' => $compra->moneda_origen ?: 'PEN',
         ];
 
         $cuenta ? $cuenta->update($datos) : CuentaPorPagar::create($datos);
@@ -317,6 +319,9 @@ class CompraController extends Controller
                 'cuenta_bancaria_id' => $pago['metodo'] === 'transferencia' ? ($pago['cuenta_bancaria_id'] ?? null) : null,
                 'billetera_id' => $pago['metodo'] === 'billetera' ? ($pago['billetera_id'] ?? null) : null,
                 'monto' => (float) $pago['monto'],
+                // Lo que se pagó, en la moneda de la compra: si es en dólares,
+                // el monto ya viene en dólares, no hay que convertir nada.
+                'moneda' => $compra->moneda_origen ?: 'PEN',
             ]);
         }
     }

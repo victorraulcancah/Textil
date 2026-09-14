@@ -65,6 +65,9 @@ class CuentaPorPagarController extends Controller
                         'cuenta_bancaria_id' => $cuentaBancariaId,
                         'billetera_id' => $billeteraId,
                         'monto' => (float) $p['monto'],
+                        // La misma moneda de la deuda: es la plata que
+                        // realmente salió a pagarla.
+                        'moneda' => $cuenta->moneda ?: 'PEN',
                         'fecha' => $fecha,
                         'numero_operacion' => $p['referencia'] ?? null,
                         'documento_referencia_tipo' => 'cuenta_por_pagar',
@@ -77,6 +80,7 @@ class CuentaPorPagarController extends Controller
                     'cuenta_bancaria_id' => $cuentaBancariaId,
                     'billetera_id' => $billeteraId,
                     'monto' => (float) $p['monto'],
+                    'moneda' => $cuenta->moneda ?: 'PEN',
                     'referencia' => $p['referencia'] ?? null,
                     'movimiento_caja_id' => $mov?->id,
                     'fecha' => $fecha,

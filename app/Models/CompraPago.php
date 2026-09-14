@@ -14,6 +14,7 @@ class CompraPago extends Model
         'cuenta_bancaria_id',
         'billetera_id',
         'monto',
+        'moneda',
     ];
 
     protected function casts(): array

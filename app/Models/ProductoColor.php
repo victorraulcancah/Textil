@@ -14,6 +14,7 @@ class ProductoColor extends Model
 
     protected $fillable = [
         'producto_id',
+        'color_id',
         'nombre',
         'nombre_proveedor',
         'codigo',
@@ -30,6 +31,12 @@ class ProductoColor extends Model
     public function producto()
     {
         return $this->belongsTo(Producto::class);
+    }
+
+    /** El color del catálogo compartido, cuando viene de ahí y no es texto libre legado. */
+    public function color()
+    {
+        return $this->belongsTo(Color::class);
     }
 
     /** URL pública de la foto del color, o null si no tiene. */

@@ -9,6 +9,8 @@ import {
     BookOpen,
     Package,
     Tags,
+    Palette,
+    Layers3,
     BadgeDollarSign,
     Ruler,
     ShoppingCart,
@@ -63,6 +65,8 @@ export const navigation = [
         children: [
             { label: 'Productos', icon: Package, to: '/productos', permiso: 'catalogo.productos' },
             { label: 'Categorías', icon: Tags, to: '/categorias', permiso: 'catalogo.categorias' },
+            { label: 'Colores', icon: Palette, to: '/colores', permiso: 'catalogo.colores' },
+            { label: 'Familias y tipos de tela', icon: Layers3, to: '/tipos-tela', permiso: 'catalogo.tipos-tela' },
             { label: 'Marcas', icon: BadgeDollarSign, to: '/marcas', permiso: 'catalogo.marcas' },
             { label: 'Unidades de medida', icon: Ruler, to: '/unidades-medida', permiso: 'catalogo.unidades-medida' },
         ],

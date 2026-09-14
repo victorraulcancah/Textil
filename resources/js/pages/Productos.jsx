@@ -26,6 +26,8 @@ const emptyProducto = {
     descripcion_ticket: '',
     categoria_id: '',
     sub_categoria_id: '',
+    // Solo para telas: de ahí sale el código si se deja en blanco.
+    tipo_tela_id: '',
     marca_id: '',
     sub_marca_id: '',
     unidad_medida_id: '',
@@ -95,7 +97,7 @@ function pestanaConError(campos) {
 }
 
 /** Un color del muestrario: "Azul Marino - Cód. 402". */
-const colorVacio = () => ({ nombre: '', nombre_proveedor: '', codigo: '', hex: '#1f3a93' });
+const colorVacio = () => ({ color_id: '', nombre: '', nombre_proveedor: '', codigo: '', hex: '#1f3a93' });
 
 /** Un proveedor de la tela: la misma la puede traer más de uno. */
 const provVacio = () => ({
@@ -125,6 +127,10 @@ export default function Productos() {
     const [proveedores, setProveedores] = useState([]);
     const [subMarcas, setSubMarcas] = useState([]);
     const [unidades, setUnidades] = useState([]);
+    /** Catálogo compartido de colores: se crea una vez y toda tela lo elige de aquí. */
+    const [coloresCatalogo, setColoresCatalogo] = useState([]);
+    /** Familia + tipo de tela: de ahí sale el código "01-familia-tipo". */
+    const [tiposTela, setTiposTela] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
@@ -155,13 +161,15 @@ export default function Productos() {
         setLoading(true);
         setError(null);
         try {
-            const [prodsRes, catRes, marRes, subRes, uniRes, provRes] = await Promise.all([
+            const [prodsRes, catRes, marRes, subRes, uniRes, provRes, colRes, tipRes] = await Promise.all([
                 api.get('/productos'),
                 api.get('/categorias'),
                 api.get('/marcas'),
                 api.get('/sub-marcas'),
                 api.get('/unidades-medida'),
                 api.get('/proveedores'),
+                api.get('/colores'),
+                api.get('/tipos-tela'),
             ]);
             setProductos(asList(prodsRes));
             setCategorias(asList(catRes));
@@ -169,6 +177,8 @@ export default function Productos() {
             setSubMarcas(asList(subRes));
             setUnidades(asList(uniRes));
             setProveedores(asList(provRes));
+            setColoresCatalogo(asList(colRes));
+            setTiposTela(asList(tipRes));
         } catch {
             setError('No se pudieron cargar los productos.');
         } finally {
@@ -219,6 +229,7 @@ export default function Productos() {
             descripcion_ticket: prod.descripcion_ticket ?? '',
             categoria_id: relId('categoria_id', 'categoria'),
             sub_categoria_id: relId('sub_categoria_id', 'sub_categoria'),
+            tipo_tela_id: relId('tipo_tela_id', 'tipo_tela'),
             marca_id: relId('marca_id', 'marca'),
             sub_marca_id: relId('sub_marca_id', 'sub_marca'),
             unidad_medida_id: relId('unidad_medida_id', 'unidad_medida'),
@@ -284,6 +295,7 @@ export default function Productos() {
         );
         setColores(
             (Array.isArray(prod.colores) ? prod.colores : []).map((c) => ({
+                color_id: c.color_id ? String(c.color_id) : '',
                 nombre: c.nombre ?? '',
                 nombre_proveedor: c.nombre_proveedor ?? '',
                 codigo: c.codigo ?? '',
@@ -428,6 +440,7 @@ export default function Productos() {
             descripcion_ticket: str(form.descripcion_ticket),
             categoria_id: form.categoria_id || undefined,
             sub_categoria_id: form.sub_categoria_id || undefined,
+            tipo_tela_id: form.tipo_tela_id || undefined,
             marca_id: form.marca_id || undefined,
             sub_marca_id: form.sub_marca_id || undefined,
             factor_compra_base: calculo.factorCompraBase || undefined,
@@ -451,6 +464,7 @@ export default function Productos() {
                 .filter((c) => c.nombre.trim())
                 .map((c) => ({
                     nombre: c.nombre.trim(),
+                    color_id: c.color_id || undefined,
                     nombre_proveedor: str(c.nombre_proveedor),
                     codigo: str(c.codigo),
                     hex: str(c.hex),
@@ -535,7 +549,7 @@ export default function Productos() {
     };
 
     // ---- Creación rápida de catálogos ----
-    const handleQuickCreated = async (tipo, nuevo) => {
+    const handleQuickCreated = async (tipo, nuevo, quickInfo) => {
         await load();
         if (tipo === 'marca') setForm((p) => ({ ...p, marca_id: String(nuevo.id), sub_marca_id: '' }));
         if (tipo === 'submarca') setForm((p) => ({ ...p, sub_marca_id: String(nuevo.id) }));
@@ -543,6 +557,15 @@ export default function Productos() {
             setForm((p) => ({ ...p, categoria_id: String(nuevo.id), sub_categoria_id: '' }));
         if (tipo === 'subcategoria') setForm((p) => ({ ...p, sub_categoria_id: String(nuevo.id) }));
         // Unidad: no autoselecciona base; el usuario decide dónde usarla.
+        if (tipo === 'color' && quickInfo?.rowIndex != null) {
+            setColores((prev) =>
+                prev.map((x, j) =>
+                    j === quickInfo.rowIndex
+                        ? { ...x, color_id: String(nuevo.id), nombre: nuevo.nombre, codigo: nuevo.codigo, hex: nuevo.hex || x.hex }
+                        : x,
+                ),
+            );
+        }
     };
 
     // ---- Tabla lista ----
@@ -813,6 +836,37 @@ export default function Productos() {
                                 onChange={setField('codigo')}
                                 error={errors.codigo}
                             />
+                            <div>
+                                <Select
+                                    label="Tipo de tela (opcional)"
+                                    value={form.tipo_tela_id}
+                                    onChange={(e) => {
+                                        const tipoId = e.target.value;
+                                        const tipo = tiposTela.find((t) => String(t.id) === tipoId);
+                                        setForm((p) => ({
+                                            ...p,
+                                            tipo_tela_id: tipoId,
+                                            // Si no se escribió un código a mano,
+                                            // se muestra el que va a salir: familia + tipo.
+                                            codigo:
+                                                !p.codigo.trim() && tipo
+                                                    ? `01-${tipo.familia?.codigo ?? '00'}-${tipo.codigo}`
+                                                    : p.codigo,
+                                        }));
+                                    }}
+                                    options={[
+                                        { value: '', label: 'Sin asignar' },
+                                        ...tiposTela.map((t) => ({
+                                            value: String(t.id),
+                                            label: `01-${t.familia?.codigo ?? '00'}-${t.codigo} — ${t.nombre} (${t.familia?.nombre ?? ''})`,
+                                        })),
+                                    ]}
+                                />
+                                <p className="mt-1 text-xs text-warm-400">
+                                    Si lo eliges, el código de tela sale de aquí. Se administra en Catálogo
+                                    → Familias y tipos de tela.
+                                </p>
+                            </div>
                             <div className="sm:col-span-2">
                                 <Input
                                     label="Código de barras"
@@ -1288,19 +1342,59 @@ export default function Productos() {
                                             }
                                             className="h-[38px] w-12 shrink-0 cursor-pointer rounded-md border border-edge bg-white p-1"
                                         />
-                                        <Input
-                                            label="Nombre"
-                                            placeholder="Azul Marino"
-                                            className="min-w-[10rem] flex-1"
-                                            value={c.nombre}
-                                            onChange={(e) =>
-                                                setColores((prev) =>
-                                                    prev.map((x, j) =>
-                                                        j === i ? { ...x, nombre: e.target.value } : x,
-                                                    ),
-                                                )
-                                            }
-                                        />
+                                        <div className="min-w-[12rem] flex-1">
+                                            <Select
+                                                label="Color"
+                                                value={c.color_id || ''}
+                                                onChange={(e) => {
+                                                    const colorId = e.target.value;
+                                                    const elegido = coloresCatalogo.find(
+                                                        (col) => String(col.id) === colorId,
+                                                    );
+                                                    setColores((prev) =>
+                                                        prev.map((x, j) =>
+                                                            j === i
+                                                                ? {
+                                                                      ...x,
+                                                                      color_id: colorId,
+                                                                      nombre: elegido?.nombre ?? x.nombre,
+                                                                      codigo: elegido?.codigo ?? x.codigo,
+                                                                      hex: elegido?.hex || x.hex,
+                                                                  }
+                                                                : x,
+                                                        ),
+                                                    );
+                                                }}
+                                                options={[
+                                                    {
+                                                        value: '',
+                                                        label: c.nombre ? `${c.nombre} (sin catálogo)` : 'Elegir color…',
+                                                    },
+                                                    ...coloresCatalogo.map((col) => ({
+                                                        value: String(col.id),
+                                                        label: `${col.codigo} — ${col.nombre}`,
+                                                    })),
+                                                ]}
+                                            />
+                                            {!c.color_id && c.nombre && (
+                                                <p className="mt-1 text-xs text-amber-600">
+                                                    Color sin catálogo (de antes de tener este listado).
+                                                </p>
+                                            )}
+                                        </div>
+                                        {c.codigo && (
+                                            <Badge variant="blue" className="mb-2">
+                                                {c.codigo}
+                                            </Badge>
+                                        )}
+                                        <button
+                                            type="button"
+                                            title="Crear color nuevo en el catálogo"
+                                            onClick={() => setQuick({ tipo: 'color', rowIndex: i })}
+                                            className="mb-0.5 rounded-md p-1.5 text-emerald-600 transition hover:bg-emerald-50"
+                                        >
+                                            <PlusCircle className="h-5 w-5" />
+                                        </button>
                                         {/* El proveedor nombra los colores a su
                                             manera ("Verde oscuro (Ha Qing)") y la
                                             tienda a la suya ("ANTIQUE"). Con los dos
@@ -1317,19 +1411,6 @@ export default function Productos() {
                                                         j === i
                                                             ? { ...x, nombre_proveedor: e.target.value }
                                                             : x,
-                                                    ),
-                                                )
-                                            }
-                                        />
-                                        <Input
-                                            label="Código"
-                                            placeholder="402"
-                                            className="w-28"
-                                            value={c.codigo}
-                                            onChange={(e) =>
-                                                setColores((prev) =>
-                                                    prev.map((x, j) =>
-                                                        j === i ? { ...x, codigo: e.target.value } : x,
                                                     ),
                                                 )
                                             }
@@ -1782,6 +1863,13 @@ function QuickCreateModal({ quick, onClose, onCreated, marcaId, categoriaId, mar
                     }),
                     fields: [{ key: 'nombre', label: 'Nombre de subcategoría', required: true }],
                 };
+            case 'color':
+                return {
+                    title: 'Nuevo color',
+                    endpoint: '/colores',
+                    build: (v) => ({ nombre: v.nombre, activo: true }),
+                    fields: [{ key: 'nombre', label: 'Nombre del color', required: true }],
+                };
             case 'unidad':
                 return {
                     title: 'Nueva unidad de medida',
@@ -1820,7 +1908,7 @@ function QuickCreateModal({ quick, onClose, onCreated, marcaId, categoriaId, mar
             const res = await api.post(cfg.endpoint, cfg.build(values));
             const nuevo = res.data?.data ?? res.data;
             toast.success(`${cfg.title.replace('Nueva ', '').replace('Nuevo ', '')} creada.`);
-            await onCreated(quick.tipo, nuevo);
+            await onCreated(quick.tipo, nuevo, quick);
             onClose();
         } catch {
             toast.error('No se pudo crear. Verifica los datos.');

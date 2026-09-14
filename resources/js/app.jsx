@@ -12,6 +12,8 @@ import Usuarios from './pages/Usuarios';
 import Empresa from './pages/Empresa';
 import Productos from './pages/Productos';
 import Categorias from './pages/Categorias';
+import Colores from './pages/Colores';
+import TiposTela from './pages/TiposTela';
 import Marcas from './pages/Marcas';
 import SubMarcas from './pages/SubMarcas';
 import UnidadesMedida from './pages/UnidadesMedida';
@@ -61,6 +63,8 @@ const routes = [
     { path: '/auditoria', element: <Auditoria /> },
     { path: '/productos', element: <Productos /> },
     { path: '/categorias', element: <Categorias /> },
+    { path: '/colores', element: <Colores /> },
+    { path: '/tipos-tela', element: <TiposTela /> },
     { path: '/marcas', element: <Marcas /> },
     { path: '/sub-marcas', element: <SubMarcas /> },
     { path: '/unidades-medida', element: <UnidadesMedida /> },

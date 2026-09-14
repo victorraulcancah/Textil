@@ -25,6 +25,7 @@ class Producto extends Model
         'sub_marca_id',
         'categoria_id',
         'sub_categoria_id',
+        'tipo_tela_id',
         'unidad_medida_id',
         'unidad_compra_id',
         'unidad_base_id',
@@ -75,6 +76,9 @@ class Producto extends Model
      * Siguiente código correlativo (PROD001, PROD002…) para cuando no se envía
      * uno. Toma el mayor número usado con ese prefijo y avanza hasta encontrar
      * uno libre, por si hay huecos o códigos escritos a mano.
+     *
+     * Para telas con tipo de tela asignado se usa generarCodigoTela() en su
+     * lugar: el código sale de la familia y el tipo, no de un correlativo.
      */
     public static function generarCodigo(string $prefijo = 'PROD'): string
     {
@@ -92,6 +96,16 @@ class Producto extends Model
         return $codigo;
     }
 
+    /**
+     * El código de una tela sale de su tipo: "01-{familia}-{tipo}". A
+     * diferencia de generarCodigo(), no es un correlativo propio del
+     * producto —el tipo de tela ya es único—, así que basta con leerlo.
+     */
+    public static function generarCodigoTela(TipoTela $tipo): string
+    {
+        return $tipo->codigoCompleto();
+    }
+
     protected function casts(): array
     {
         return [
@@ -107,6 +121,7 @@ class Producto extends Model
     public function subMarca() { return $this->belongsTo(SubMarca::class); }
     public function categoria() { return $this->belongsTo(Categoria::class); }
     public function subCategoria() { return $this->belongsTo(Categoria::class, 'sub_categoria_id'); }
+    public function tipoTela() { return $this->belongsTo(TipoTela::class); }
     public function unidadMedida() { return $this->belongsTo(UnidadMedida::class); }
     public function unidadCompra() { return $this->belongsTo(UnidadMedida::class, 'unidad_compra_id'); }
     public function unidadBase() { return $this->belongsTo(UnidadMedida::class, 'unidad_base_id'); }

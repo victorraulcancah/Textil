@@ -2,17 +2,25 @@
 namespace App\Http\Requests\Producto;
 
 use App\Models\Producto;
+use App\Models\TipoTela;
 use Illuminate\Foundation\Http\FormRequest;
 
 class StoreProductoRequest extends FormRequest
 {
     public function authorize(): bool { return true; }
 
-    /** El formulario ya no pide código: si llega vacío, se genera uno. */
+    /**
+     * El formulario ya no pide código: si llega vacío, se genera uno. Si es
+     * una tela con tipo asignado, el código sale de su familia y tipo; si
+     * no, del correlativo genérico de siempre.
+     */
     protected function prepareForValidation(): void
     {
         if (blank($this->input('codigo'))) {
-            $this->merge(['codigo' => Producto::generarCodigo()]);
+            $tipo = $this->filled('tipo_tela_id') ? TipoTela::find($this->input('tipo_tela_id')) : null;
+            $this->merge([
+                'codigo' => $tipo ? Producto::generarCodigoTela($tipo) : Producto::generarCodigo(),
+            ]);
         }
     }
 
@@ -39,6 +47,8 @@ class StoreProductoRequest extends FormRequest
             'proveedores.*.principal' => 'nullable|boolean',
             'categoria_id' => 'nullable|exists:categorias,id',
             'sub_categoria_id' => 'nullable|exists:categorias,id',
+            // Solo para telas: de ahí sale el código si no se escribe uno a mano.
+            'tipo_tela_id' => 'nullable|exists:tipos_tela,id',
             'unidad_medida_id' => 'required|exists:unidades_medida,id',
             'unidad_compra_id' => 'nullable|exists:unidades_medida,id',
             'unidad_base_id' => 'nullable|exists:unidades_medida,id',
@@ -88,6 +98,8 @@ class StoreProductoRequest extends FormRequest
             // Gama de colores del muestrario (opcional).
             'colores' => 'nullable|array',
             'colores.*.nombre' => 'required|string|max:255',
+            // Del catálogo compartido, cuando se elige de ahí en vez de escribir texto libre.
+            'colores.*.color_id' => 'nullable|exists:colores,id',
             // Como lo llama el proveedor, para poder cruzar su packing list.
             'colores.*.nombre_proveedor' => 'nullable|string|max:255',
             'colores.*.codigo' => 'nullable|string|max:255',

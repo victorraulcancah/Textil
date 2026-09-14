@@ -36,24 +36,32 @@ export default function Despacho() {
     const [codigo, setCodigo] = useState('');
     const inputRef = useRef(null);
 
-    const cargar = useCallback(async () => {
-        setCargando(true);
-        try {
-            // Los tres estados que le tocan al almacén: la solicitud recién
-            // llegada, la que está juntando y la que ya apartó pero no ha
-            // salido todavía.
-            const { data } = await api.get('/ordenes-venta', {
-                params: { estados: 'solicitado,preparando,separado' },
-            });
-            const filas = asList({ data });
-            setPedidos(filas);
-            setSeleccionado((prev) => filas.find((p) => p.id === prev?.id) ?? filas[0] ?? null);
-        } catch {
-            toast.error('No se pudieron cargar los pedidos por preparar.');
-        } finally {
-            setCargando(false);
-        }
-    }, [toast]);
+    /**
+     * `silencioso` es para el refresco automático de fondo: sin spinner ni
+     * toast de error, para no interrumpir a quien está disparando la pistola
+     * solo porque hubo un hipo de red en un ciclo del sondeo.
+     */
+    const cargar = useCallback(
+        async (silencioso = false) => {
+            if (!silencioso) setCargando(true);
+            try {
+                // Los tres estados que le tocan al almacén: la solicitud recién
+                // llegada, la que está juntando y la que ya apartó pero no ha
+                // salido todavía.
+                const { data } = await api.get('/ordenes-venta', {
+                    params: { estados: 'solicitado,preparando,separado' },
+                });
+                const filas = asList({ data });
+                setPedidos(filas);
+                setSeleccionado((prev) => filas.find((p) => p.id === prev?.id) ?? filas[0] ?? null);
+            } catch {
+                if (!silencioso) toast.error('No se pudieron cargar los pedidos por preparar.');
+            } finally {
+                if (!silencioso) setCargando(false);
+            }
+        },
+        [toast],
+    );
 
     useEffect(() => {
         cargar();
@@ -64,14 +72,42 @@ export default function Despacho() {
         setDetalle(data?.data ?? data);
     }, []);
 
+    // Depende del id, no del objeto: el sondeo de fondo reemplaza el array de
+    // "pedidos" cada ciclo, así que "seleccionado" cambia de referencia aunque
+    // siga siendo el mismo pedido. Si este efecto dependiera del objeto,
+    // repetiría la carga y borraría el aviso de "Rollo correcto" cada 5 s.
+    const seleccionadoId = seleccionado?.id ?? null;
+
     useEffect(() => {
-        if (!seleccionado) {
+        if (!seleccionadoId) {
             setDetalle(null);
             return;
         }
         setUltimo(null);
-        cargarDetalle(seleccionado.id).catch(() => setDetalle(null));
-    }, [seleccionado, cargarDetalle]);
+        cargarDetalle(seleccionadoId).catch(() => setDetalle(null));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [seleccionadoId, cargarDetalle]);
+
+    /**
+     * Un pedido lo puede estar preparando más de un almacenero a la vez, cada
+     * uno en su propio navegador: sin esto, ninguno ve lo que el otro va
+     * escaneando hasta recargar la página a mano. Se refresca en silencio —
+     * sin spinner ni error visible— para no interrumpir a quien está
+     * disparando la pistola.
+     */
+    const seleccionadoIdRef = useRef(null);
+    seleccionadoIdRef.current = seleccionado?.id ?? null;
+
+    useEffect(() => {
+        const intervalo = setInterval(() => {
+            cargar(true).catch(() => {});
+            if (seleccionadoIdRef.current) {
+                cargarDetalle(seleccionadoIdRef.current).catch(() => {});
+            }
+        }, 5000);
+
+        return () => clearInterval(intervalo);
+    }, [cargar, cargarDetalle]);
 
     // El foco vuelve al campo de escaneo tras cada disparo.
     useEffect(() => {

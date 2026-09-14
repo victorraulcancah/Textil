@@ -20,9 +20,9 @@ class ProductoController extends Controller
 {
     private const RELATIONS = [
         'marca', 'subMarca', 'proveedores:id,nombre', 'categoria', 'subCategoria', 'unidadMedida',
-        'unidadCompra', 'unidadBase',
+        'unidadCompra', 'unidadBase', 'tipoTela.familia',
         'presentaciones.unidadBase', 'presentaciones.complementario',
-        'colores',
+        'colores.color',
         'lotes',
     ];
 
@@ -160,6 +160,8 @@ class ProductoController extends Controller
             }
 
             $datos = [
+                // Del catálogo compartido, cuando se eligió de ahí (no de texto libre legado).
+                'color_id' => $c['color_id'] ?? null,
                 'codigo' => $c['codigo'] ?? null,
                 // El proveedor nombra los colores a su manera; se guarda tal
                 // cual para poder cruzar su packing list en el próximo embarque.

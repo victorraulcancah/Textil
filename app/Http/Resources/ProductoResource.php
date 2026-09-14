@@ -29,6 +29,18 @@ class ProductoResource extends JsonResource
             ])->values()),
             'categoria' => new CategoriaResource($this->whenLoaded('categoria')),
             'sub_categoria' => new CategoriaResource($this->whenLoaded('subCategoria')),
+            // Solo para telas: de ahí sale el código "01-familia-tipo".
+            'tipo_tela_id' => $this->tipo_tela_id,
+            'tipo_tela' => $this->whenLoaded('tipoTela', fn () => [
+                'id' => $this->tipoTela->id,
+                'codigo' => $this->tipoTela->codigo,
+                'nombre' => $this->tipoTela->nombre,
+                'familia' => $this->tipoTela->relationLoaded('familia') ? [
+                    'id' => $this->tipoTela->familia->id,
+                    'codigo' => $this->tipoTela->familia->codigo,
+                    'nombre' => $this->tipoTela->familia->nombre,
+                ] : null,
+            ]),
             'unidad_medida' => new UnidadMedidaResource($this->whenLoaded('unidadMedida')),
             'unidad_compra' => new UnidadMedidaResource($this->whenLoaded('unidadCompra')),
             // El id va suelto porque el listado no carga la relación y el

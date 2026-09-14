@@ -46,6 +46,8 @@ class DatabaseSeeder extends Seeder
             MetodosPagoSeeder::class,
             MotivosMovimientoSeeder::class,
             CatalogSeeder::class,
+            ColoresSeeder::class,
+            FamiliasYTiposTelaSeeder::class,
             DemoSeeder::class,
             DashboardDemoSeeder::class,
         ]);

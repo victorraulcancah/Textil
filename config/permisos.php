@@ -77,6 +77,8 @@ return [
             'submodulos' => [
                 'productos' => ['label' => 'Productos', 'apis' => ['productos', 'presentaciones']],
                 'categorias' => ['label' => 'Categorías', 'apis' => ['categorias']],
+                'colores' => ['label' => 'Colores', 'apis' => ['colores']],
+                'tipos-tela' => ['label' => 'Familias y tipos de tela', 'apis' => ['familias-tela', 'tipos-tela']],
                 'marcas' => ['label' => 'Marcas', 'apis' => ['marcas', 'sub-marcas']],
                 'unidades-medida' => ['label' => 'Unidades de medida', 'apis' => ['unidades-medida']],
             ],

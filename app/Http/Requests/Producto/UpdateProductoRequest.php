@@ -29,6 +29,7 @@ class UpdateProductoRequest extends FormRequest
             'proveedores.*.principal' => 'nullable|boolean',
             'categoria_id' => 'nullable|exists:categorias,id',
             'sub_categoria_id' => 'nullable|exists:categorias,id',
+            'tipo_tela_id' => 'nullable|exists:tipos_tela,id',
             'unidad_medida_id' => 'required|exists:unidades_medida,id',
             'unidad_compra_id' => 'nullable|exists:unidades_medida,id',
             'unidad_base_id' => 'nullable|exists:unidades_medida,id',
@@ -76,6 +77,17 @@ class UpdateProductoRequest extends FormRequest
             'lote.numero_lote' => 'nullable|string|max:255',
             'lote.fecha_vencimiento' => 'nullable|date',
             'lote.stock_inicial' => 'nullable|numeric|min:0',
+
+            // Gama de colores del muestrario (opcional).
+            'colores' => 'nullable|array',
+            'colores.*.nombre' => 'required|string|max:255',
+            // Del catálogo compartido, cuando se elige de ahí en vez de escribir texto libre.
+            'colores.*.color_id' => 'nullable|exists:colores,id',
+            // Como lo llama el proveedor, para poder cruzar su packing list.
+            'colores.*.nombre_proveedor' => 'nullable|string|max:255',
+            'colores.*.codigo' => 'nullable|string|max:255',
+            'colores.*.hex' => 'nullable|string|max:9',
+            'colores.*.activo' => 'boolean',
         ];
     }
 
@@ -88,15 +100,6 @@ class UpdateProductoRequest extends FormRequest
             'unidad_medida_id.required' => 'La unidad de medida es obligatoria',
             'presentaciones.*.nombre.required' => 'El nombre de la unidad derivada es obligatorio',
             'presentaciones.*.factor_conversion.required' => 'El factor es obligatorio',
-            // Gama de colores del muestrario (opcional).
-            'colores' => 'nullable|array',
-            'colores.*.nombre' => 'required|string|max:255',
-            // Como lo llama el proveedor, para poder cruzar su packing list.
-            'colores.*.nombre_proveedor' => 'nullable|string|max:255',
-            'colores.*.codigo' => 'nullable|string|max:255',
-            'colores.*.hex' => 'nullable|string|max:9',
-            'colores.*.activo' => 'boolean',
-
         ];
     }
 }

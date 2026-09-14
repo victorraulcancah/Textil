@@ -16,8 +16,10 @@ use App\Http\Controllers\MiCajaController;
 use App\Http\Controllers\MovimientoCajaController;
 use App\Http\Controllers\TarjetaBancariaController;
 use App\Http\Controllers\CategoriaController;
+use App\Http\Controllers\ColorController;
 use App\Http\Controllers\CompraController;
 use App\Http\Controllers\ClienteController;
+use App\Http\Controllers\FamiliaTelaController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EmpresaController;
 use App\Http\Controllers\ImportacionController;
@@ -39,6 +41,7 @@ use App\Http\Controllers\RecepcionCompraController;
 use App\Http\Controllers\ReporteController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SubMarcaController;
+use App\Http\Controllers\TipoTelaController;
 use App\Http\Controllers\TomaInventarioController;
 use App\Http\Controllers\TransferenciaController;
 use App\Http\Controllers\UnidadMedidaController;
@@ -75,6 +78,10 @@ Route::middleware('auth:api')->group(function () {
 
     // Catálogo
     Route::apiResource('categorias', CategoriaController::class);
+    // Compartidos entre telas: color y familia/tipo de tela.
+    Route::apiResource('colores', ColorController::class)->except(['show']);
+    Route::apiResource('familias-tela', FamiliaTelaController::class)->except(['show']);
+    Route::apiResource('tipos-tela', TipoTelaController::class)->except(['show']);
     Route::apiResource('marcas', MarcaController::class);
     Route::apiResource('sub-marcas', SubMarcaController::class);
     // Antes del apiResource: si no, {producto} capturaría "…/imagen".

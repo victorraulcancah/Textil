@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Edit, Palette, Trash2 } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Download, Edit, FileSpreadsheet, Palette, Trash2 } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
@@ -29,6 +29,10 @@ export default function Colores() {
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [deleting, setDeleting] = useState(false);
 
+    const [importando, setImportando] = useState(false);
+    const [exportando, setExportando] = useState(false);
+    const archivoRef = useRef(null);
+
     const load = useCallback(async () => {
         setLoading(true);
         setError(null);
@@ -51,6 +55,55 @@ export default function Colores() {
         setForm(emptyForm);
         setErrors({});
         setModalOpen(true);
+    };
+
+    /**
+     * Carga masiva desde el Excel del cliente: una fila por color, con su
+     * nombre y —si lo trae— su propio código. Así se puede seguir cargando
+     * el catálogo en lote, en vez de crear uno por uno.
+     */
+    const importarExcel = async (file) => {
+        if (!file) return;
+        setImportando(true);
+        try {
+            const form = new FormData();
+            form.append('archivo', file);
+            const { data } = await api.post('/colores/importar-excel', form, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+            });
+            if (data.creados > 0) toast.success(`Se crearon ${data.creados} color(es).`);
+            if (data.advertencias?.length) {
+                toast.error(`${data.advertencias.length} fila(s) no se cargaron: ${data.advertencias[0]}`);
+            }
+            if (!data.creados && !data.advertencias?.length) {
+                toast.error('El archivo no tenía colores nuevos que cargar.');
+            }
+            await load();
+        } catch (err) {
+            toast.error(err.response?.data?.message ?? 'No se pudo leer el Excel.');
+        } finally {
+            setImportando(false);
+        }
+    };
+
+    /** Descarga el catálogo completo, con las mismas columnas que espera "Cargar Excel". */
+    const exportarExcel = async () => {
+        setExportando(true);
+        try {
+            const { data } = await api.get('/colores/exportar-excel', { responseType: 'blob' });
+            const url = URL.createObjectURL(data);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `colores-${new Date().toISOString().slice(0, 10)}.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 4000);
+        } catch {
+            toast.error('No se pudo exportar el catálogo.');
+        } finally {
+            setExportando(false);
+        }
     };
 
     const openEdit = (color) => {
@@ -156,8 +209,39 @@ export default function Colores() {
             <PageHeader
                 title="Colores"
                 description="El catálogo de colores: se crea una vez y todas las telas lo eligen de aquí"
-                actions={<CreateButton onClick={openCreate}>Crear color</CreateButton>}
+                actions={
+                    <>
+                        <input
+                            ref={archivoRef}
+                            type="file"
+                            accept=".xlsx,.xls"
+                            className="hidden"
+                            onChange={(e) => {
+                                importarExcel(e.target.files?.[0]);
+                                e.target.value = '';
+                            }}
+                        />
+                        <Button variant="secondary" loading={exportando} onClick={exportarExcel}>
+                            <Download className="h-4 w-4" />
+                            Exportar Excel
+                        </Button>
+                        <Button
+                            variant="secondary"
+                            loading={importando}
+                            onClick={() => archivoRef.current?.click()}
+                        >
+                            <FileSpreadsheet className="h-4 w-4" />
+                            Cargar Excel
+                        </Button>
+                        <CreateButton onClick={openCreate}>Crear color</CreateButton>
+                    </>
+                }
             />
+
+            <p className="mb-4 text-xs text-warm-400">
+                El Excel debe traer las columnas "Código" y "Nombre" (una fila por color). Si un color no
+                trae código, el sistema le asigna el siguiente libre.
+            </p>
 
             {error && <Alert variant="error" className="mb-4">{error}</Alert>}
 

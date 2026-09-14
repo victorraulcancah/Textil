@@ -80,6 +80,8 @@ Route::middleware('auth:api')->group(function () {
     Route::apiResource('categorias', CategoriaController::class);
     // Compartidos entre telas: color y familia/tipo de tela.
     Route::apiResource('colores', ColorController::class)->except(['show']);
+    Route::post('colores/importar-excel', [ColorController::class, 'importarExcel']);
+    Route::get('colores/exportar-excel', [ColorController::class, 'exportarExcel']);
     Route::apiResource('familias-tela', FamiliaTelaController::class)->except(['show']);
     Route::apiResource('tipos-tela', TipoTelaController::class)->except(['show']);
     Route::apiResource('marcas', MarcaController::class);

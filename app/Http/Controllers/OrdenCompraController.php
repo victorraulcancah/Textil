@@ -26,9 +26,15 @@ class OrdenCompraController extends Controller
                 ['numero_actual' => 0, 'activo' => true]
             );
 
-        $serieDoc->increment('numero_actual');
+        // El contador puede ir por detrás de los códigos que ya existen: los
+        // datos de ejemplo y los códigos escritos a mano no lo tocan. Se salta
+        // los usados en vez de chocar contra la clave única.
+        do {
+            $serieDoc->increment('numero_actual');
+            $codigo = self::SERIE . '-' . str_pad($serieDoc->numero_actual, 8, '0', STR_PAD_LEFT);
+        } while (OrdenCompra::where('codigo', $codigo)->exists());
 
-        return self::SERIE . '-' . str_pad($serieDoc->numero_actual, 8, '0', STR_PAD_LEFT);
+        return $codigo;
     }
 
     public function index()

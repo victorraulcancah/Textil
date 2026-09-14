@@ -242,7 +242,12 @@ class CompraController extends Controller
                 ['numero_actual' => 0, 'activo' => true],
             );
 
-        $serie->increment('numero_actual');
+        // El contador puede ir por detrás de lo ya usado (datos de ejemplo, o
+        // compras cargadas a mano): se saltan los correlativos ocupados para no
+        // repetir el número interno de un documento.
+        do {
+            $serie->increment('numero_actual');
+        } while (Compra::where('correlativo', $serie->numero_actual)->exists());
 
         return $serie->numero_actual;
     }

@@ -15,6 +15,7 @@ import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
+import MetodoCajaPicker from '../components/MetodoCajaPicker';
 import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
 import DetalleCard from '../components/ui/DetalleCard';
 import { Alert, Badge, Button, DataTable, Input, Modal, Select } from '../components/ui';
@@ -516,25 +517,40 @@ function AnularModal({ pedido, onClose, onAnulado }) {
  */
 function FacturarModal({ pedido, onClose, onFacturado }) {
     const toast = useToast();
-    const [forma, setForma] = useState('efectivo');
     const [tipoPago, setTipoPago] = useState('contado');
+    const [metodo, setMetodo] = useState({ tipo: 'efectivo', cuentaId: '', billeteraId: '' });
+    const [cuentas, setCuentas] = useState([]);
+    const [billeteras, setBilleteras] = useState([]);
     const [guardando, setGuardando] = useState(false);
 
     useEffect(() => {
-        if (pedido) {
-            setForma('efectivo');
-            setTipoPago('contado');
-        }
+        if (!pedido) return;
+        setTipoPago('contado');
+        setMetodo({ tipo: 'efectivo', cuentaId: '', billeteraId: '' });
+        Promise.all([api.get('/cuentas-bancarias'), api.get('/billeteras-digitales')])
+            .then(([cuentasRes, billeterasRes]) => {
+                setCuentas(asList(cuentasRes));
+                setBilleteras(asList(billeterasRes));
+            })
+            .catch(() => {
+                setCuentas([]);
+                setBilleteras([]);
+            });
     }, [pedido]);
 
     const emitir = async () => {
+        if (tipoPago === 'contado' && !metodo.tipo) {
+            return toast.error('Elige con qué paga el cliente.');
+        }
         setGuardando(true);
         try {
             const { data } = await api.post(`/ordenes-venta/${pedido.id}/facturar`, {
                 tipo_pago: tipoPago,
                 pagos: [
                     {
-                        forma_pago: tipoPago === 'credito' ? 'credito' : forma,
+                        forma_pago: tipoPago === 'credito' ? 'credito' : metodo.tipo,
+                        cuenta_bancaria_id: metodo.tipo === 'transferencia' ? metodo.cuentaId || null : null,
+                        billetera_id: metodo.tipo === 'billetera' ? metodo.billeteraId || null : null,
                         monto: pedido.total,
                         fecha: new Date().toISOString().slice(0, 10),
                     },
@@ -568,29 +584,25 @@ function FacturarModal({ pedido, onClose, onFacturado }) {
                     al stock con su mismo código.
                 </Alert>
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                    <Select
-                        label="Tipo de pago"
-                        value={tipoPago}
-                        onChange={(e) => setTipoPago(e.target.value)}
-                        options={[
-                            { value: 'contado', label: 'Contado' },
-                            { value: 'credito', label: 'Crédito' },
-                        ]}
+                <Select
+                    label="Tipo de pago"
+                    value={tipoPago}
+                    onChange={(e) => setTipoPago(e.target.value)}
+                    options={[
+                        { value: 'contado', label: 'Contado' },
+                        { value: 'credito', label: 'Crédito' },
+                    ]}
+                />
+                {tipoPago === 'contado' && (
+                    <MetodoCajaPicker
+                        cuentas={cuentas}
+                        billeteras={billeteras}
+                        tipo={metodo.tipo}
+                        cuentaId={metodo.cuentaId}
+                        billeteraId={metodo.billeteraId}
+                        onChange={setMetodo}
                     />
-                    {tipoPago === 'contado' && (
-                        <Select
-                            label="Forma de pago"
-                            value={forma}
-                            onChange={(e) => setForma(e.target.value)}
-                            options={[
-                                { value: 'efectivo', label: 'Efectivo' },
-                                { value: 'transferencia', label: 'Transferencia' },
-                                { value: 'billetera', label: 'Billetera digital' },
-                            ]}
-                        />
-                    )}
-                </div>
+                )}
             </div>
         </Modal>
     );

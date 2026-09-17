@@ -8,7 +8,7 @@ import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
 import DetalleCard from '../components/ui/DetalleCard';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
-import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select, Spinner } from '../components/ui';
+import { Alert, Badge, Button, DataTable, DateRangePicker, Input, Modal, SearchSelect, Select, Spinner } from '../components/ui';
 
 const fecha = (v) => (v ? new Date(v).toLocaleDateString('es-PE') : '—');
 const formaLabel = { efectivo: 'Efectivo', transferencia: 'Transferencia', tarjeta: 'Tarjeta', yape: 'Yape', plin: 'Plin', credito: 'Crédito', otro: 'Otro' };
@@ -35,6 +35,9 @@ export default function NotasVenta() {
         la pena pedirlos al backend. */
     const [fCliente, setFCliente] = useState('');
     const [fAlmacen, setFAlmacen] = useState('');
+    const [fVendedor, setFVendedor] = useState('');
+    const [fDesde, setFDesde] = useState('');
+    const [fHasta, setFHasta] = useState('');
 
     const [anularTarget, setAnularTarget] = useState(null);
     const [motivo, setMotivo] = useState('');
@@ -111,6 +114,19 @@ export default function NotasVenta() {
             ),
         },
         { key: 'fecha_emision', label: 'Fecha', render: (row) => (row.fecha_emision ? new Date(row.fecha_emision).toLocaleDateString('es-PE') : '—') },
+        { key: 'almacen', label: 'Almacén', render: (row) => row.almacen?.nombre ?? '—' },
+        { key: 'vendedor', label: 'Vendedor', render: (row) => row.vendedor?.name ?? '—' },
+        {
+            key: 'pedido',
+            label: 'Pedido',
+            getSearchValue: (row) => row.orden_venta?.documento,
+            render: (row) =>
+                row.orden_venta ? (
+                    <Badge variant="blue">{row.orden_venta.documento}</Badge>
+                ) : (
+                    <span className="text-xs text-warm-400">Mostrador</span>
+                ),
+        },
         {
             key: 'tipo_pago',
             label: 'Pago',
@@ -207,14 +223,25 @@ export default function NotasVenta() {
                         (!fEstado || n.estado === fEstado) &&
                         (!fPago || n.tipo_pago === fPago) &&
                         (!fCliente || String(n.cliente?.id) === String(fCliente)) &&
-                        (!fAlmacen || String(n.almacen_id) === String(fAlmacen)),
+                        (!fAlmacen || String(n.almacen_id) === String(fAlmacen)) &&
+                        (!fVendedor || String(n.vendedor_id) === String(fVendedor)) &&
+                        (!fDesde || (n.fecha_emision && n.fecha_emision.slice(0, 10) >= fDesde)) &&
+                        (!fHasta || (n.fecha_emision && n.fecha_emision.slice(0, 10) <= fHasta)),
                 )}
                 loading={loading}
                 onRowClick={(row) => { setSeleccionada(row); sheet.abrir(); }}
                 rowClassName={(row) => (row.id === seleccionada?.id ? 'bg-primary-50' : undefined)}
                 searchPlaceholder="Buscar ventas..."
                 filterable
-                filterCount={(fEstado ? 1 : 0) + (fPago ? 1 : 0) + (fCliente ? 1 : 0) + (fAlmacen ? 1 : 0)}
+                filterCount={
+                    (fEstado ? 1 : 0) +
+                    (fPago ? 1 : 0) +
+                    (fCliente ? 1 : 0) +
+                    (fAlmacen ? 1 : 0) +
+                    (fVendedor ? 1 : 0) +
+                    (fDesde ? 1 : 0) +
+                    (fHasta ? 1 : 0)
+                }
                 filters={
                     <div className="space-y-2">
                         <Select
@@ -261,13 +288,37 @@ export default function NotasVenta() {
                                 ).entries(),
                             ].map(([value, label]) => ({ value, label }))}
                         />
-                        {(fEstado || fPago || fCliente || fAlmacen) && (
+                        <SearchSelect
+                            label="Vendedor"
+                            value={fVendedor}
+                            onChange={(v) => setFVendedor(v ?? '')}
+                            placeholder="Todos"
+                            emptyText="Sin coincidencias"
+                            options={[
+                                ...new Map(
+                                    notas.filter((n) => n.vendedor_id).map((n) => [String(n.vendedor_id), n.vendedor?.name]),
+                                ).entries(),
+                            ].map(([value, label]) => ({ value, label }))}
+                        />
+                        <DateRangePicker
+                            label="Rango de fecha"
+                            desde={fDesde}
+                            hasta={fHasta}
+                            onChange={(d, h) => {
+                                setFDesde(d);
+                                setFHasta(h);
+                            }}
+                        />
+                        {(fEstado || fPago || fCliente || fAlmacen || fVendedor || fDesde || fHasta) && (
                             <button
                                 onClick={() => {
                                     setFEstado('');
                                     setFPago('');
                                     setFCliente('');
                                     setFAlmacen('');
+                                    setFVendedor('');
+                                    setFDesde('');
+                                    setFHasta('');
                                 }}
                                 className="text-xs font-medium text-red-600 hover:text-red-700"
                             >

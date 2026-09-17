@@ -15,6 +15,7 @@ class NotaVentaResource extends JsonResource
             'cliente_id' => $this->cliente_id,
             'almacen_id' => $this->almacen_id,
             'vendedor_id' => $this->vendedor_id,
+            'orden_venta_id' => $this->orden_venta_id,
             'fecha_emision' => $this->fecha_emision,
             'moneda' => $this->moneda,
             'tipo_pago' => $this->tipo_pago,
@@ -29,6 +30,11 @@ class NotaVentaResource extends JsonResource
             'cliente' => $this->whenLoaded('cliente'),
             'almacen' => $this->whenLoaded('almacen'),
             'vendedor' => UserResource::make($this->whenLoaded('vendedor')),
+            // El pedido del que nació esta nota, si no fue venta de mostrador.
+            'orden_venta' => $this->whenLoaded('ordenVenta', fn () => [
+                'id' => $this->ordenVenta->id,
+                'documento' => $this->ordenVenta->documento,
+            ]),
             'detalles' => NotaVentaDetalleResource::collection($this->whenLoaded('detalles')),
             'pagos' => NotaVentaPagoResource::collection($this->whenLoaded('pagos')),
             'usuario_anula' => UserResource::make($this->whenLoaded('usuarioAnula')),

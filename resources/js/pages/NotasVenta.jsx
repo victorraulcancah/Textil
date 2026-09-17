@@ -8,7 +8,7 @@ import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
 import DetalleCard from '../components/ui/DetalleCard';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
-import { Alert, Badge, Button, DataTable, Input, Modal, Select, Spinner } from '../components/ui';
+import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select, Spinner } from '../components/ui';
 
 const fecha = (v) => (v ? new Date(v).toLocaleDateString('es-PE') : '—');
 const formaLabel = { efectivo: 'Efectivo', transferencia: 'Transferencia', tarjeta: 'Tarjeta', yape: 'Yape', plin: 'Plin', credito: 'Crédito', otro: 'Otro' };
@@ -31,6 +31,10 @@ export default function NotasVenta() {
     const [error, setError] = useState(null);
     const [fEstado, setFEstado] = useState('');
     const [fPago, setFPago] = useState('');
+    /** Cliente y almacén: se filtran entre las ventas ya cargadas, no valen
+        la pena pedirlos al backend. */
+    const [fCliente, setFCliente] = useState('');
+    const [fAlmacen, setFAlmacen] = useState('');
 
     const [anularTarget, setAnularTarget] = useState(null);
     const [motivo, setMotivo] = useState('');
@@ -201,14 +205,16 @@ export default function NotasVenta() {
                 rows={notas.filter(
                     (n) =>
                         (!fEstado || n.estado === fEstado) &&
-                        (!fPago || n.tipo_pago === fPago),
+                        (!fPago || n.tipo_pago === fPago) &&
+                        (!fCliente || String(n.cliente?.id) === String(fCliente)) &&
+                        (!fAlmacen || String(n.almacen_id) === String(fAlmacen)),
                 )}
                 loading={loading}
                 onRowClick={(row) => { setSeleccionada(row); sheet.abrir(); }}
                 rowClassName={(row) => (row.id === seleccionada?.id ? 'bg-primary-50' : undefined)}
                 searchPlaceholder="Buscar ventas..."
                 filterable
-                filterCount={(fEstado ? 1 : 0) + (fPago ? 1 : 0)}
+                filterCount={(fEstado ? 1 : 0) + (fPago ? 1 : 0) + (fCliente ? 1 : 0) + (fAlmacen ? 1 : 0)}
                 filters={
                     <div className="space-y-2">
                         <Select
@@ -231,11 +237,37 @@ export default function NotasVenta() {
                                 { value: 'credito', label: 'Crédito' },
                             ]}
                         />
-                        {(fEstado || fPago) && (
+                        <SearchSelect
+                            label="Cliente"
+                            value={fCliente}
+                            onChange={(v) => setFCliente(v ?? '')}
+                            placeholder="Todos"
+                            emptyText="Sin coincidencias"
+                            options={[
+                                ...new Map(
+                                    notas.filter((n) => n.cliente?.id).map((n) => [String(n.cliente.id), n.cliente.nombre]),
+                                ).entries(),
+                            ].map(([value, label]) => ({ value, label }))}
+                        />
+                        <SearchSelect
+                            label="Almacén"
+                            value={fAlmacen}
+                            onChange={(v) => setFAlmacen(v ?? '')}
+                            placeholder="Todos"
+                            emptyText="Sin coincidencias"
+                            options={[
+                                ...new Map(
+                                    notas.filter((n) => n.almacen_id).map((n) => [String(n.almacen_id), n.almacen?.nombre ?? n.almacen]),
+                                ).entries(),
+                            ].map(([value, label]) => ({ value, label }))}
+                        />
+                        {(fEstado || fPago || fCliente || fAlmacen) && (
                             <button
                                 onClick={() => {
                                     setFEstado('');
                                     setFPago('');
+                                    setFCliente('');
+                                    setFAlmacen('');
                                 }}
                                 className="text-xs font-medium text-red-600 hover:text-red-700"
                             >

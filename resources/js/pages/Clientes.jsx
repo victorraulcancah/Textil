@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Edit, IdCard, Mail, Phone, Trash2, User } from 'lucide-react';
+import { Edit, IdCard, Mail, MapPin, Phone, Trash2, User } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import ConsultarDocumento from '../components/ConsultarDocumento';
@@ -26,6 +26,7 @@ export default function Clientes() {
     const [error, setError] = useState(null);
     const [fTipoDoc, setFTipoDoc] = useState('');
     const [fEstado, setFEstado] = useState('');
+    const [fEjecutivo, setFEjecutivo] = useState('');
 
     const [modalOpen, setModalOpen] = useState(false);
     const [editing, setEditing] = useState(null);
@@ -176,6 +177,19 @@ export default function Clientes() {
                 ),
         },
         {
+            key: 'direccion',
+            label: 'Dirección',
+            render: (row) =>
+                row.direccion ? (
+                    <span className="inline-flex items-center gap-1.5 text-gray-700">
+                        <MapPin className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                        <span className="max-w-[16rem] truncate" title={row.direccion}>{row.direccion}</span>
+                    </span>
+                ) : (
+                    <span className="text-gray-400">—</span>
+                ),
+        },
+        {
             key: 'ejecutivo',
             label: 'Ejecutivo',
             getSearchValue: (row) => row.ejecutivo?.name,
@@ -220,12 +234,13 @@ export default function Clientes() {
                 rows={clientes.filter(
                     (c) =>
                         (!fTipoDoc || c.tipo_documento === fTipoDoc) &&
-                        (!fEstado || (fEstado === 'activo' ? c.activo : !c.activo)),
+                        (!fEstado || (fEstado === 'activo' ? c.activo : !c.activo)) &&
+                        (!fEjecutivo || String(c.ejecutivo_id) === String(fEjecutivo)),
                 )}
                 loading={loading}
                 searchPlaceholder="Buscar clientes..."
                 filterable
-                filterCount={(fTipoDoc ? 1 : 0) + (fEstado ? 1 : 0)}
+                filterCount={(fTipoDoc ? 1 : 0) + (fEstado ? 1 : 0) + (fEjecutivo ? 1 : 0)}
                 filters={
                     <div className="space-y-2">
                         <Select
@@ -250,11 +265,20 @@ export default function Clientes() {
                                 { value: 'inactivo', label: 'Inactivos' },
                             ]}
                         />
-                        {(fTipoDoc || fEstado) && (
+                        <SearchSelect
+                            label="Ejecutivo comercial"
+                            value={fEjecutivo}
+                            onChange={(v) => setFEjecutivo(v ?? '')}
+                            placeholder="Todos"
+                            emptyText="Sin coincidencias"
+                            options={usuarios.map((u) => ({ value: String(u.id), label: u.name }))}
+                        />
+                        {(fTipoDoc || fEstado || fEjecutivo) && (
                             <button
                                 onClick={() => {
                                     setFTipoDoc('');
                                     setFEstado('');
+                                    setFEjecutivo('');
                                 }}
                                 className="text-xs font-medium text-red-600 hover:text-red-700"
                             >

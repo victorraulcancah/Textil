@@ -20,7 +20,7 @@ import PdfViewerModal from '../components/PdfViewerModal';
 import MetodoCajaPicker from '../components/MetodoCajaPicker';
 import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
 import DetalleCard from '../components/ui/DetalleCard';
-import { Alert, Badge, Button, DataTable, Input, Modal, Select } from '../components/ui';
+import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select } from '../components/ui';
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
 const money = (n) =>
@@ -62,6 +62,10 @@ export default function Pedidos() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [estado, setEstado] = useState('');
+    /** Cliente y almacén: no valen la pena pedirlos al backend, se filtran
+        entre los pedidos ya cargados. */
+    const [fCliente, setFCliente] = useState('');
+    const [fAlmacen, setFAlmacen] = useState('');
 
     const [seleccionado, setSeleccionado] = useState(null);
     const [detalle, setDetalle] = useState(null);
@@ -209,6 +213,16 @@ export default function Pedidos() {
         },
     ];
 
+    /** Solo los clientes y almacenes que de verdad aparecen en el listado. */
+    const clientesPresentes = [...new Set(pedidos.map((p) => p.cliente).filter(Boolean))]
+        .sort((a, b) => a.localeCompare(b, 'es'))
+        .map((nombre) => ({ value: nombre, label: nombre }));
+    const almacenesPresentes = [
+        ...new Map(pedidos.filter((p) => p.almacen_id).map((p) => [String(p.almacen_id), p.almacen])).entries(),
+    ].map(([value, label]) => ({ value, label }));
+
+    const filtrosActivos = (estado ? 1 : 0) + (fCliente ? 1 : 0) + (fAlmacen ? 1 : 0);
+
     const filtros = (
         <div className="flex flex-wrap items-end gap-3">
             <Select
@@ -218,13 +232,45 @@ export default function Pedidos() {
                 options={ESTADOS}
                 className="w-52"
             />
-            {estado && (
-                <Button variant="ghost" size="sm" onClick={() => setEstado('')}>
+            <SearchSelect
+                label="Cliente"
+                value={fCliente}
+                onChange={(v) => setFCliente(v ?? '')}
+                placeholder="Todos"
+                emptyText="Sin coincidencias"
+                options={clientesPresentes}
+                className="w-56"
+            />
+            <SearchSelect
+                label="Almacén"
+                value={fAlmacen}
+                onChange={(v) => setFAlmacen(v ?? '')}
+                placeholder="Todos"
+                emptyText="Sin coincidencias"
+                options={almacenesPresentes}
+                className="w-56"
+            />
+            {filtrosActivos > 0 && (
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                        setEstado('');
+                        setFCliente('');
+                        setFAlmacen('');
+                    }}
+                >
                     Limpiar
                 </Button>
             )}
         </div>
     );
+
+    const pedidosFiltrados = pedidos.filter((p) => {
+        if (fCliente && p.cliente !== fCliente) return false;
+        if (fAlmacen && String(p.almacen_id) !== String(fAlmacen)) return false;
+        return true;
+    });
 
     return (
         <Layout>
@@ -238,12 +284,12 @@ export default function Pedidos() {
 
             <DataTable
                 columns={columnas}
-                rows={pedidos}
+                rows={pedidosFiltrados}
                 loading={loading}
                 searchPlaceholder="Buscar pedido o cliente..."
                 filterable
                 filters={filtros}
-                filterCount={estado ? 1 : 0}
+                filterCount={filtrosActivos}
                 onRowClick={(row) => {
                     setSeleccionado(row);
                     sheet.abrir();

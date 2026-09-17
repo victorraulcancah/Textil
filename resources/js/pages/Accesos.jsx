@@ -240,7 +240,7 @@ export default function Accesos() {
                                         return (
                                             <div key={modulo.key} className="rounded-lg border border-edge">
                                                 {/* Nivel 1: módulo */}
-                                                <div className="group flex items-center gap-2 bg-gray-50 px-3 py-2">
+                                                <div className="flex items-center gap-2 bg-gray-50 px-3 py-2">
                                                     <input
                                                         type="checkbox"
                                                         checked={todos}
@@ -264,25 +264,24 @@ export default function Accesos() {
                                                             {modulo.label}
                                                         </span>
                                                     </button>
-                                                    {/* Marcar/quitar todo un módulo de un clic: el checkbox
-                                                        hace lo mismo, pero como botón mudo no se nota que
-                                                        también sirve para eso. */}
-                                                    <span className="hidden items-center gap-2 text-xs group-hover:flex">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => alternarGrupo(delModulo, true)}
-                                                            className="font-medium text-primary-600 hover:underline"
-                                                        >
-                                                            Todo
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => alternarGrupo(delModulo, false)}
-                                                            className="font-medium text-warm-500 hover:underline"
-                                                        >
-                                                            Nada
-                                                        </button>
-                                                    </span>
+                                                    {/* Marcar/quitar todo un módulo de un clic: siempre
+                                                        visibles, para que se vean también en el celular. */}
+                                                    <Button
+                                                        type="button"
+                                                        variant="secondary"
+                                                        size="sm"
+                                                        onClick={() => alternarGrupo(delModulo, true)}
+                                                    >
+                                                        Todo
+                                                    </Button>
+                                                    <Button
+                                                        type="button"
+                                                        variant="secondary"
+                                                        size="sm"
+                                                        onClick={() => alternarGrupo(delModulo, false)}
+                                                    >
+                                                        Nada
+                                                    </Button>
                                                     <Badge
                                                         variant={
                                                             marcados === 0
@@ -305,7 +304,7 @@ export default function Accesos() {
                                                             return (
                                                                 <div
                                                                     key={sub.key}
-                                                                    className="group flex flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2"
+                                                                    className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2"
                                                                 >
                                                                     {/* Nivel 2: submódulo */}
                                                                     <div className="flex min-w-[13rem] flex-1 items-center gap-2">
@@ -328,25 +327,25 @@ export default function Accesos() {
                                                                                 {sub.label}
                                                                             </span>
                                                                         </label>
-                                                                        {/* Mismo atajo que a nivel de módulo, pero para este submódulo solo. */}
-                                                                        <span className="hidden items-center gap-1.5 text-xs group-hover:flex">
-                                                                            <button
-                                                                                type="button"
-                                                                                onClick={() => alternarGrupo(delSub, true)}
-                                                                                className="font-medium text-primary-600 hover:underline"
-                                                                            >
-                                                                                Todo
-                                                                            </button>
-                                                                            <span className="text-warm-300">·</span>
-                                                                            <button
-                                                                                type="button"
-                                                                                onClick={() => alternarGrupo(delSub, false)}
-                                                                                className="font-medium text-warm-500 hover:underline"
-                                                                            >
-                                                                                Nada
-                                                                            </button>
-                                                                        </span>
                                                                     </div>
+                                                                    {/* Mismo atajo que a nivel de módulo, pero para
+                                                                        este submódulo solo. Siempre visible. */}
+                                                                    <Button
+                                                                        type="button"
+                                                                        variant="ghost"
+                                                                        size="sm"
+                                                                        onClick={() => alternarGrupo(delSub, true)}
+                                                                    >
+                                                                        Todo
+                                                                    </Button>
+                                                                    <Button
+                                                                        type="button"
+                                                                        variant="ghost"
+                                                                        size="sm"
+                                                                        onClick={() => alternarGrupo(delSub, false)}
+                                                                    >
+                                                                        Nada
+                                                                    </Button>
 
                                                                     {/* Nivel 3: acciones */}
                                                                     <div className="flex flex-wrap items-center gap-3">

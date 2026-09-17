@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, FileText, Package, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, FileText, Package, Pencil, Plus, Ship, Trash2 } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import ProductoPickerModal from '../components/ProductoPickerModal';
-import { Button, Input, SearchSelect, Select, Spinner } from '../components/ui';
+import { Button, Input, Modal, SearchSelect, Select, Spinner } from '../components/ui';
 
 const money = (n, moneda = 'PEN') =>
     new Intl.NumberFormat(moneda === 'USD' ? 'en-US' : 'es-PE', {
@@ -71,6 +71,8 @@ export default function CrearOrdenCompra() {
     const [items, setItems] = useState([]);
     /** Buscador avanzado de productos. */
     const [picker, setPicker] = useState({ open: false, query: '' });
+    /** Los datos de embarque son muchos campos: se editan en un modal aparte. */
+    const [modalExterior, setModalExterior] = useState(false);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -411,401 +413,433 @@ export default function CrearOrdenCompra() {
                 </div>
             </div>
 
-            {/* Datos de la orden */}
-            <div className="mb-6 rounded-xl border border-edge bg-white shadow-sm">
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-edge px-5 py-3">
-                    <h2 className="text-xs font-bold uppercase tracking-wide text-warm-500">Datos de la orden</h2>
-
-                    {/* Nacional o al exterior: de eso depende si se piden los
-                        datos de embarque y en qué moneda se cotiza. */}
-                    <div className="inline-flex rounded-lg border border-edge bg-gray-50 p-0.5">
-                        {[
-                            { value: 'nacional', label: 'Nacional' },
-                            { value: 'exterior', label: 'Al exterior' },
-                        ].map((opcion) => (
-                            <button
-                                key={opcion.value}
-                                type="button"
-                                onClick={() =>
-                                    setForm((prev) => ({
-                                        ...prev,
-                                        tipo: opcion.value,
-                                        moneda: opcion.value === 'exterior' ? 'USD' : 'PEN',
-                                    }))
-                                }
-                                className={`rounded-md px-3 py-1 text-xs font-semibold transition ${
-                                    form.tipo === opcion.value
-                                        ? 'bg-white text-primary-700 shadow-sm'
-                                        : 'text-warm-500 hover:text-warm-700'
-                                }`}
-                            >
-                                {opcion.label}
-                            </button>
-                        ))}
-                    </div>
+            <Modal
+                open={modalExterior}
+                onClose={() => setModalExterior(false)}
+                title="Compra al exterior"
+                description="Para la orden de importación (Purchase Order) que se envía al proveedor."
+                size="2xl"
+                footer={
+                    <Button type="button" onClick={() => setModalExterior(false)}>
+                        Listo
+                    </Button>
+                }
+            >
+                <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                    <Select
+                        label="Tipo de carga"
+                        value={form.cargo_type}
+                        onChange={(e) => setField('cargo_type', e.target.value)}
+                        options={[
+                            { value: '', label: '—' },
+                            { value: 'FCL', label: 'FCL (contenedor completo)' },
+                            { value: 'LCL', label: 'LCL (carga consolidada)' },
+                        ]}
+                    />
+                    <Input
+                        label="N° de contenedor"
+                        placeholder="2X40 HC"
+                        value={form.numero_contenedor}
+                        onChange={(e) => setField('numero_contenedor', e.target.value)}
+                    />
+                    <Select
+                        label="Medio de embarque"
+                        value={form.medio_transporte}
+                        onChange={(e) => setField('medio_transporte', e.target.value)}
+                        options={[
+                            { value: '', label: '—' },
+                            { value: 'SEAFREIGHT', label: 'Marítimo (seafreight)' },
+                            { value: 'AIRFREIGHT', label: 'Aéreo (airfreight)' },
+                        ]}
+                    />
+                    <Select
+                        label="Incoterm"
+                        value={form.incoterm}
+                        onChange={(e) => setField('incoterm', e.target.value)}
+                        options={[
+                            { value: '', label: '—' },
+                            { value: 'FOB', label: 'FOB' },
+                            { value: 'CIF', label: 'CIF' },
+                            { value: 'CFR', label: 'CFR' },
+                            { value: 'EXW', label: 'EXW' },
+                            { value: 'DDP', label: 'DDP' },
+                        ]}
+                    />
+                    <Input
+                        label="País de origen"
+                        placeholder="CHINA - CN"
+                        value={form.pais_origen}
+                        onChange={(e) => setField('pais_origen', e.target.value)}
+                    />
+                    <Input
+                        label="País de destino"
+                        placeholder="PERÚ - PE"
+                        value={form.pais_destino}
+                        onChange={(e) => setField('pais_destino', e.target.value)}
+                    />
+                    <Input
+                        label="Puerto de embarque"
+                        placeholder="NINGBO"
+                        value={form.puerto_embarque}
+                        onChange={(e) => setField('puerto_embarque', e.target.value)}
+                    />
+                    <Input
+                        label="Puerto de llegada"
+                        placeholder="CHANCAY"
+                        value={form.puerto_destino}
+                        onChange={(e) => setField('puerto_destino', e.target.value)}
+                    />
+                    <Input
+                        label="Fecha de embarque"
+                        type="date"
+                        value={form.fecha_embarque_estimada}
+                        onChange={(e) => setField('fecha_embarque_estimada', e.target.value)}
+                    />
+                    <Input
+                        label="Elaborado por"
+                        value={form.elaborado_por}
+                        onChange={(e) => setField('elaborado_por', e.target.value)}
+                    />
+                    <Input
+                        label="Aprobado por"
+                        placeholder="Se llena al aprobar"
+                        value={form.aprobado_por}
+                        onChange={(e) => setField('aprobado_por', e.target.value)}
+                    />
                 </div>
-                <div className="grid grid-cols-2 gap-4 p-5 md:grid-cols-4">
-                    {/* Al crear no se muestra: el correlativo lo asigna el backend
-                        y todavía no existe. Al editar sí, como referencia. */}
-                    {editando && (
-                        <div>
-                            <label className="mb-1 block text-sm font-medium text-gray-700">Código</label>
+            </Modal>
+
+            {/* Productos a la izquierda, datos de la orden a la derecha. */}
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_380px] *:min-w-0">
+                {/* Columna izquierda: buscador y tabla de productos */}
+                <div className="space-y-6">
+                    {/* Panel de búsqueda y alta de producto */}
+                    <div className="rounded-xl border border-edge bg-white p-5 shadow-sm">
+                        <h2 className="mb-3 text-sm font-semibold text-warm-900">Buscar Producto</h2>
+
+                        <SearchSelect
+                            value={panel.producto_id}
+                            onChange={elegirProducto}
+                            options={productosOptions}
+                            placeholder="Buscar producto por nombre o código…"
+                            emptyText="Sin coincidencias"
+                            searchTitle="Buscador avanzado con filtros"
+                            onSearch={(q) => setPicker({ open: true, query: q })}
+                        />
+
+                        <div className="mt-4">
+                            <label className="mb-1 block text-sm font-medium text-gray-700">Descripción</label>
                             <input
                                 readOnly
-                                value={codigo}
-                                className="block w-full rounded-md border-0 bg-gray-50 px-3 py-2 text-sm text-gray-500 shadow-sm ring-1 ring-inset ring-gray-300"
+                                value={productoPanel?.descripcion ?? productoPanel?.nombre ?? ''}
+                                placeholder="—"
+                                className="block w-full rounded-md border-0 bg-white px-3 py-2 text-sm text-warm-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400"
                             />
                         </div>
-                    )}
-                    <div className="md:col-span-2">
-                        <SearchSelect
-                            label="Proveedor"
-                            value={form.proveedor_id}
-                            onChange={(v) => setField('proveedor_id', v)}
-                            options={proveedores.map((p) => ({
-                                value: String(p.id),
-                                label: p.codigo_corto ? `${p.nombre} (${p.codigo_corto})` : p.nombre,
-                            }))}
-                            placeholder="Buscar proveedor…"
-                            emptyText="Sin coincidencias"
-                            error={formErrors.proveedor_id}
-                        />
+
+                        {/* Solo si la tela tiene colores registrados: hay insumos
+                            (hilos, cierres) que no se piden por color. */}
+                        {productoPanel?.colores?.length > 0 && (
+                            <div className="mt-4 grid grid-cols-2 gap-4">
+                                <Select
+                                    label="Color"
+                                    value={panel.producto_color_id}
+                                    onChange={(e) => setPanelCampo({ producto_color_id: e.target.value })}
+                                    options={[
+                                        { value: '', label: 'Cualquier color' },
+                                        ...productoPanel.colores.map((c) => ({
+                                            value: String(c.id),
+                                            label: c.codigo ? `${c.nombre} (${c.codigo})` : c.nombre,
+                                        })),
+                                    ]}
+                                />
+                                <Input
+                                    label="Rollos"
+                                    type="number"
+                                    min="0"
+                                    step="1"
+                                    placeholder="Cuántos rollos de ese color"
+                                    value={panel.rollos}
+                                    onChange={(e) => setPanelCampo({ rollos: e.target.value })}
+                                />
+                            </div>
+                        )}
+
+                        <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-4">
+                            <div>
+                                <label className="mb-1 block text-sm font-medium text-gray-700">Stock</label>
+                                <input
+                                    readOnly
+                                    value={stockPanel}
+                                    placeholder="—"
+                                    className="block w-full rounded-md border-0 bg-gray-50 px-3 py-2 text-center text-sm text-gray-500 shadow-sm ring-1 ring-inset ring-gray-300"
+                                />
+                            </div>
+                            <Select
+                                label="Unidad"
+                                value={panel.producto_presentacion_id}
+                                disabled={!panel.producto_id}
+                                onChange={(e) => elegirUnidad(e.target.value)}
+                                options={[
+                                    { value: '', label: panel.producto_id ? 'Unidad…' : '—' },
+                                    ...unidadesPanel,
+                                ]}
+                            />
+                            <Input
+                                label="Cantidad"
+                                type="number"
+                                min="0"
+                                step="any"
+                                value={panel.cantidad}
+                                onChange={(e) => setPanelCampo({ cantidad: e.target.value })}
+                                className="text-center"
+                            />
+                            <Input
+                                label="Precio"
+                                type="number"
+                                min="0"
+                                step="any"
+                                value={panel.precio_unitario}
+                                onChange={(e) => setPanelCampo({ precio_unitario: e.target.value })}
+                                className="text-center"
+                            />
+                        </div>
+
+                        <Button type="button" onClick={agregarProducto} className="mt-4 w-full justify-center md:w-auto md:min-w-[280px]">
+                            <Plus className="h-4 w-4" /> Agregar Producto
+                        </Button>
                     </div>
-                    <Input label="Fecha emisión" type="date" value={form.fecha_emision} onChange={(e) => setField('fecha_emision', e.target.value)} error={formErrors.fecha_emision} />
-                    <Input label="Entrega estimada" type="date" value={form.fecha_entrega_estimada} onChange={(e) => setField('fecha_entrega_estimada', e.target.value)} />
-                    <Select
-                        label="Moneda"
-                        value={form.moneda}
-                        onChange={(e) => setField('moneda', e.target.value)}
-                        options={[
-                            { value: 'PEN', label: 'Soles (PEN)' },
-                            { value: 'USD', label: 'Dólares (USD)' },
-                        ]}
-                    />
-                </div>
-            </div>
 
-            {/* Datos de embarque: solo para una compra al exterior. */}
-            {form.tipo === 'exterior' && (
-                <div className="mb-6 rounded-xl border border-edge bg-white shadow-sm">
-                    <div className="border-b border-edge px-5 py-3">
-                        <h2 className="text-xs font-bold uppercase tracking-wide text-warm-500">
-                            Compra al exterior
-                        </h2>
-                        <p className="mt-0.5 text-xs text-warm-500">
-                            Para la orden de importación (Purchase Order) que se envía al proveedor.
-                        </p>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4 p-5 md:grid-cols-4">
-                        <Select
-                            label="Tipo de carga"
-                            value={form.cargo_type}
-                            onChange={(e) => setField('cargo_type', e.target.value)}
-                            options={[
-                                { value: '', label: '—' },
-                                { value: 'FCL', label: 'FCL (contenedor completo)' },
-                                { value: 'LCL', label: 'LCL (carga consolidada)' },
-                            ]}
-                        />
-                        <Input
-                            label="N° de contenedor"
-                            placeholder="2X40 HC"
-                            value={form.numero_contenedor}
-                            onChange={(e) => setField('numero_contenedor', e.target.value)}
-                        />
-                        <Select
-                            label="Medio de embarque"
-                            value={form.medio_transporte}
-                            onChange={(e) => setField('medio_transporte', e.target.value)}
-                            options={[
-                                { value: '', label: '—' },
-                                { value: 'SEAFREIGHT', label: 'Marítimo (seafreight)' },
-                                { value: 'AIRFREIGHT', label: 'Aéreo (airfreight)' },
-                            ]}
-                        />
-                        <Select
-                            label="Incoterm"
-                            value={form.incoterm}
-                            onChange={(e) => setField('incoterm', e.target.value)}
-                            options={[
-                                { value: '', label: '—' },
-                                { value: 'FOB', label: 'FOB' },
-                                { value: 'CIF', label: 'CIF' },
-                                { value: 'CFR', label: 'CFR' },
-                                { value: 'EXW', label: 'EXW' },
-                                { value: 'DDP', label: 'DDP' },
-                            ]}
-                        />
-                        <Input
-                            label="País de origen"
-                            placeholder="CHINA - CN"
-                            value={form.pais_origen}
-                            onChange={(e) => setField('pais_origen', e.target.value)}
-                        />
-                        <Input
-                            label="País de destino"
-                            placeholder="PERÚ - PE"
-                            value={form.pais_destino}
-                            onChange={(e) => setField('pais_destino', e.target.value)}
-                        />
-                        <Input
-                            label="Puerto de embarque"
-                            placeholder="NINGBO"
-                            value={form.puerto_embarque}
-                            onChange={(e) => setField('puerto_embarque', e.target.value)}
-                        />
-                        <Input
-                            label="Puerto de llegada"
-                            placeholder="CHANCAY"
-                            value={form.puerto_destino}
-                            onChange={(e) => setField('puerto_destino', e.target.value)}
-                        />
-                        <Input
-                            label="Fecha de embarque"
-                            type="date"
-                            value={form.fecha_embarque_estimada}
-                            onChange={(e) => setField('fecha_embarque_estimada', e.target.value)}
-                        />
-                        <Input
-                            label="Elaborado por"
-                            value={form.elaborado_por}
-                            onChange={(e) => setField('elaborado_por', e.target.value)}
-                        />
-                        <Input
-                            label="Aprobado por"
-                            placeholder="Se llena al aprobar"
-                            value={form.aprobado_por}
-                            onChange={(e) => setField('aprobado_por', e.target.value)}
-                        />
-                    </div>
-                </div>
-            )}
-
-            {/* Panel de búsqueda y alta de producto */}
-            <div className="mb-6 rounded-xl border border-edge bg-white p-5 shadow-sm">
-                <h2 className="mb-3 text-sm font-semibold text-warm-900">Buscar Producto</h2>
-
-                <SearchSelect
-                    value={panel.producto_id}
-                    onChange={elegirProducto}
-                    options={productosOptions}
-                    placeholder="Buscar producto por nombre o código…"
-                    emptyText="Sin coincidencias"
-                    searchTitle="Buscador avanzado con filtros"
-                    onSearch={(q) => setPicker({ open: true, query: q })}
-                />
-
-                <div className="mt-4">
-                    <label className="mb-1 block text-sm font-medium text-gray-700">Descripción</label>
-                    <input
-                        readOnly
-                        value={productoPanel?.descripcion ?? productoPanel?.nombre ?? ''}
-                        placeholder="—"
-                        className="block w-full rounded-md border-0 bg-white px-3 py-2 text-sm text-warm-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400"
-                    />
-                </div>
-
-                {/* Solo si la tela tiene colores registrados: hay insumos
-                    (hilos, cierres) que no se piden por color. */}
-                {productoPanel?.colores?.length > 0 && (
-                    <div className="mt-4 grid grid-cols-2 gap-4">
-                        <Select
-                            label="Color"
-                            value={panel.producto_color_id}
-                            onChange={(e) => setPanelCampo({ producto_color_id: e.target.value })}
-                            options={[
-                                { value: '', label: 'Cualquier color' },
-                                ...productoPanel.colores.map((c) => ({
-                                    value: String(c.id),
-                                    label: c.codigo ? `${c.nombre} (${c.codigo})` : c.nombre,
-                                })),
-                            ]}
-                        />
-                        <Input
-                            label="Rollos"
-                            type="number"
-                            min="0"
-                            step="1"
-                            placeholder="Cuántos rollos de ese color"
-                            value={panel.rollos}
-                            onChange={(e) => setPanelCampo({ rollos: e.target.value })}
-                        />
-                    </div>
-                )}
-
-                <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-4">
-                    <div>
-                        <label className="mb-1 block text-sm font-medium text-gray-700">Stock</label>
-                        <input
-                            readOnly
-                            value={stockPanel}
-                            placeholder="—"
-                            className="block w-full rounded-md border-0 bg-gray-50 px-3 py-2 text-center text-sm text-gray-500 shadow-sm ring-1 ring-inset ring-gray-300"
-                        />
-                    </div>
-                    <Select
-                        label="Unidad"
-                        value={panel.producto_presentacion_id}
-                        disabled={!panel.producto_id}
-                        onChange={(e) => elegirUnidad(e.target.value)}
-                        options={[
-                            { value: '', label: panel.producto_id ? 'Unidad…' : '—' },
-                            ...unidadesPanel,
-                        ]}
-                    />
-                    <Input
-                        label="Cantidad"
-                        type="number"
-                        min="0"
-                        step="any"
-                        value={panel.cantidad}
-                        onChange={(e) => setPanelCampo({ cantidad: e.target.value })}
-                        className="text-center"
-                    />
-                    <Input
-                        label="Precio"
-                        type="number"
-                        min="0"
-                        step="any"
-                        value={panel.precio_unitario}
-                        onChange={(e) => setPanelCampo({ precio_unitario: e.target.value })}
-                        className="text-center"
-                    />
-                </div>
-
-                <Button type="button" onClick={agregarProducto} className="mt-4 w-full justify-center md:w-auto md:min-w-[280px]">
-                    <Plus className="h-4 w-4" /> Agregar Producto
-                </Button>
-            </div>
-
-            {/* Productos agregados */}
-            <div className="mb-6 rounded-xl border border-edge bg-white shadow-sm">
-                <div className="flex items-center justify-between border-b border-edge px-5 py-3">
-                    <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-warm-900">
-                        <Package className="h-4 w-4 text-primary-600" /> Productos
-                    </h2>
-                    <span className="text-xs text-warm-500">
-                        {items.length} {items.length === 1 ? 'ítem agregado' : 'ítems agregados'}
-                    </span>
-                </div>
-                <div className="overflow-x-auto">
-                    <table className="w-full min-w-[980px] text-sm">
-                        <thead>
-                            <tr className="bg-primary-600 text-left text-xs font-semibold uppercase tracking-wide text-white">
-                                <th className="px-3 py-2.5 text-center">#</th>
-                                <th className="px-3 py-2.5">Código</th>
-                                <th className="px-3 py-2.5">Producto</th>
-                                <th className="px-3 py-2.5">Color</th>
-                                <th className="px-3 py-2.5">Unidad</th>
-                                <th className="px-3 py-2.5 text-right">Rollos</th>
-                                <th className="px-3 py-2.5 text-right">Cant</th>
-                                <th className="px-3 py-2.5 text-right">P.Unit</th>
-                                <th className="px-3 py-2.5 text-right">Subtotal</th>
-                                <th className="px-3 py-2.5 text-center">Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                            {items.length === 0 && (
-                                <tr>
-                                    <td colSpan={10} className="px-3 py-10 text-center text-sm text-warm-500">
-                                        Busca un producto arriba para agregarlo a la orden
-                                    </td>
-                                </tr>
-                            )}
-
-                            {items.map((it, i) => {
-                                const producto = productoDe(it.producto_id);
-                                const subtotal = (Number(it.cantidad) || 0) * (Number(it.precio_unitario) || 0);
-                                const colorItem = (producto?.colores ?? []).find(
-                                    (c) => String(c.id) === String(it.producto_color_id),
-                                );
-
-                                return (
-                                    <tr key={i}>
-                                        <td className="px-3 py-2 text-center text-warm-500">{i + 1}</td>
-                                        <td className="px-3 py-2 font-medium text-warm-900">{producto?.codigo ?? '—'}</td>
-                                        <td className="px-3 py-2 font-semibold text-warm-900">{producto?.nombre ?? '—'}</td>
-                                        <td className="px-3 py-2 text-warm-600">{colorItem?.nombre ?? '—'}</td>
-                                        <td className="px-3 py-2">
-                                            <Select
-                                                value={it.producto_presentacion_id}
-                                                onChange={(e) => cambiarUnidadItem(i, e.target.value)}
-                                                options={unidadesDe(it.producto_id)}
-                                                aria-label="Unidad"
-                                                className="min-w-[120px]"
-                                            />
-                                        </td>
-                                        <td className="px-3 py-2">
-                                            <Input
-                                                type="number"
-                                                min="0"
-                                                step="1"
-                                                value={it.rollos}
-                                                onChange={(e) => setItem(i, { rollos: e.target.value })}
-                                                aria-label="Rollos"
-                                                className="text-right"
-                                            />
-                                        </td>
-                                        <td className="px-3 py-2">
-                                            <Input
-                                                type="number"
-                                                min="0"
-                                                step="any"
-                                                value={it.cantidad}
-                                                onChange={(e) => setItem(i, { cantidad: e.target.value })}
-                                                aria-label="Cantidad"
-                                                className="text-right"
-                                            />
-                                        </td>
-                                        <td className="px-3 py-2">
-                                            <Input
-                                                type="number"
-                                                min="0"
-                                                step="any"
-                                                value={it.precio_unitario}
-                                                onChange={(e) => setItem(i, { precio_unitario: e.target.value })}
-                                                aria-label="Precio unitario"
-                                                className="text-right"
-                                            />
-                                        </td>
-                                        <td className="px-3 py-2 text-right font-semibold text-primary-600">{money(subtotal, form.moneda)}</td>
-                                        <td className="px-3 py-2">
-                                            <div className="flex items-center justify-center">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => quitarItem(i)}
-                                                    aria-label="Quitar"
-                                                    className="rounded-md p-1.5 text-red-600 transition hover:bg-red-50"
-                                                >
-                                                    <Trash2 className="h-4 w-4" />
-                                                </button>
-                                            </div>
-                                        </td>
+                    {/* Productos agregados */}
+                    <div className="rounded-xl border border-edge bg-white shadow-sm">
+                        <div className="flex items-center justify-between border-b border-edge px-5 py-3">
+                            <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-warm-900">
+                                <Package className="h-4 w-4 text-primary-600" /> Productos
+                            </h2>
+                            <span className="text-xs text-warm-500">
+                                {items.length} {items.length === 1 ? 'ítem agregado' : 'ítems agregados'}
+                            </span>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full min-w-[980px] text-sm">
+                                <thead>
+                                    <tr className="bg-primary-600 text-left text-xs font-semibold uppercase tracking-wide text-white">
+                                        <th className="px-3 py-2.5 text-center">#</th>
+                                        <th className="px-3 py-2.5">Código</th>
+                                        <th className="px-3 py-2.5">Producto</th>
+                                        <th className="px-3 py-2.5">Color</th>
+                                        <th className="px-3 py-2.5">Unidad</th>
+                                        <th className="px-3 py-2.5 text-right">Rollos</th>
+                                        <th className="px-3 py-2.5 text-right">Cant</th>
+                                        <th className="px-3 py-2.5 text-right">P.Unit</th>
+                                        <th className="px-3 py-2.5 text-right">Subtotal</th>
+                                        <th className="px-3 py-2.5 text-center">Acciones</th>
                                     </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {items.length === 0 && (
+                                        <tr>
+                                            <td colSpan={10} className="px-3 py-10 text-center text-sm text-warm-500">
+                                                Busca un producto arriba para agregarlo a la orden
+                                            </td>
+                                        </tr>
+                                    )}
 
-            {/* Observaciones + total */}
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px] *:min-w-0">
-                <div className="rounded-xl border border-edge bg-white p-5 shadow-sm">
-                    <h2 className="mb-2 text-xs font-bold uppercase tracking-wide text-warm-500">Observaciones</h2>
-                    <textarea
-                        rows={3}
-                        value={form.observaciones}
-                        onChange={(e) => setField('observaciones', e.target.value)}
-                        placeholder="Notas para el proveedor o internas…"
-                        className="block w-full resize-none rounded-lg border-0 bg-white p-3 text-sm text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-primary-600"
-                    />
+                                    {items.map((it, i) => {
+                                        const producto = productoDe(it.producto_id);
+                                        const subtotal = (Number(it.cantidad) || 0) * (Number(it.precio_unitario) || 0);
+                                        const colorItem = (producto?.colores ?? []).find(
+                                            (c) => String(c.id) === String(it.producto_color_id),
+                                        );
+
+                                        return (
+                                            <tr key={i}>
+                                                <td className="px-3 py-2 text-center text-warm-500">{i + 1}</td>
+                                                <td className="px-3 py-2 font-medium text-warm-900">{producto?.codigo ?? '—'}</td>
+                                                <td className="px-3 py-2 font-semibold text-warm-900">{producto?.nombre ?? '—'}</td>
+                                                <td className="px-3 py-2 text-warm-600">{colorItem?.nombre ?? '—'}</td>
+                                                <td className="px-3 py-2">
+                                                    <Select
+                                                        value={it.producto_presentacion_id}
+                                                        onChange={(e) => cambiarUnidadItem(i, e.target.value)}
+                                                        options={unidadesDe(it.producto_id)}
+                                                        aria-label="Unidad"
+                                                        className="min-w-[120px]"
+                                                    />
+                                                </td>
+                                                <td className="px-3 py-2">
+                                                    <Input
+                                                        type="number"
+                                                        min="0"
+                                                        step="1"
+                                                        value={it.rollos}
+                                                        onChange={(e) => setItem(i, { rollos: e.target.value })}
+                                                        aria-label="Rollos"
+                                                        className="text-right"
+                                                    />
+                                                </td>
+                                                <td className="px-3 py-2">
+                                                    <Input
+                                                        type="number"
+                                                        min="0"
+                                                        step="any"
+                                                        value={it.cantidad}
+                                                        onChange={(e) => setItem(i, { cantidad: e.target.value })}
+                                                        aria-label="Cantidad"
+                                                        className="text-right"
+                                                    />
+                                                </td>
+                                                <td className="px-3 py-2">
+                                                    <Input
+                                                        type="number"
+                                                        min="0"
+                                                        step="any"
+                                                        value={it.precio_unitario}
+                                                        onChange={(e) => setItem(i, { precio_unitario: e.target.value })}
+                                                        aria-label="Precio unitario"
+                                                        className="text-right"
+                                                    />
+                                                </td>
+                                                <td className="px-3 py-2 text-right font-semibold text-primary-600">{money(subtotal, form.moneda)}</td>
+                                                <td className="px-3 py-2">
+                                                    <div className="flex items-center justify-center">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => quitarItem(i)}
+                                                            aria-label="Quitar"
+                                                            className="rounded-md p-1.5 text-red-600 transition hover:bg-red-50"
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
 
-                <div className="lg:sticky lg:top-6 lg:self-start">
+                {/* Columna derecha: datos de la orden, embarque, observaciones, resumen */}
+                <div className="space-y-6 lg:sticky lg:top-6 lg:self-start">
+                    {/* Datos de la orden */}
+                    <div className="rounded-xl border border-edge bg-white shadow-sm">
+                        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-edge px-5 py-3">
+                            <h2 className="text-xs font-bold uppercase tracking-wide text-warm-500">Datos de la orden</h2>
+
+                            {/* Nacional o al exterior: de eso depende si se piden los
+                                datos de embarque y en qué moneda se cotiza. */}
+                            <div className="inline-flex rounded-lg border border-edge bg-gray-50 p-0.5">
+                                {[
+                                    { value: 'nacional', label: 'Nacional' },
+                                    { value: 'exterior', label: 'Al exterior' },
+                                ].map((opcion) => (
+                                    <button
+                                        key={opcion.value}
+                                        type="button"
+                                        onClick={() =>
+                                            setForm((prev) => ({
+                                                ...prev,
+                                                tipo: opcion.value,
+                                                moneda: opcion.value === 'exterior' ? 'USD' : 'PEN',
+                                            }))
+                                        }
+                                        className={`rounded-md px-3 py-1 text-xs font-semibold transition ${
+                                            form.tipo === opcion.value
+                                                ? 'bg-white text-primary-700 shadow-sm'
+                                                : 'text-warm-500 hover:text-warm-700'
+                                        }`}
+                                    >
+                                        {opcion.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 p-5">
+                            {/* Al crear no se muestra: el correlativo lo asigna el backend
+                                y todavía no existe. Al editar sí, como referencia. */}
+                            {editando && (
+                                <div className="col-span-2">
+                                    <label className="mb-1 block text-sm font-medium text-gray-700">Código</label>
+                                    <input
+                                        readOnly
+                                        value={codigo}
+                                        className="block w-full rounded-md border-0 bg-gray-50 px-3 py-2 text-sm text-gray-500 shadow-sm ring-1 ring-inset ring-gray-300"
+                                    />
+                                </div>
+                            )}
+                            <div className="col-span-2">
+                                <SearchSelect
+                                    label="Proveedor"
+                                    value={form.proveedor_id}
+                                    onChange={(v) => setField('proveedor_id', v)}
+                                    options={proveedores.map((p) => ({
+                                        value: String(p.id),
+                                        label: p.codigo_corto ? `${p.nombre} (${p.codigo_corto})` : p.nombre,
+                                    }))}
+                                    placeholder="Buscar proveedor…"
+                                    emptyText="Sin coincidencias"
+                                    error={formErrors.proveedor_id}
+                                />
+                            </div>
+                            <Input label="Fecha emisión" type="date" value={form.fecha_emision} onChange={(e) => setField('fecha_emision', e.target.value)} error={formErrors.fecha_emision} />
+                            <Input label="Entrega estimada" type="date" value={form.fecha_entrega_estimada} onChange={(e) => setField('fecha_entrega_estimada', e.target.value)} />
+                            <div className="col-span-2">
+                                <Select
+                                    label="Moneda"
+                                    value={form.moneda}
+                                    onChange={(e) => setField('moneda', e.target.value)}
+                                    options={[
+                                        { value: 'PEN', label: 'Soles (PEN)' },
+                                        { value: 'USD', label: 'Dólares (USD)' },
+                                    ]}
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Datos de embarque: solo para una orden al exterior. Son muchos
+                        campos, así que se editan en un modal aparte. */}
+                    {form.tipo === 'exterior' && (
+                        <div className="rounded-xl border border-edge bg-white p-5 shadow-sm">
+                            <div className="flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-50 text-primary-600">
+                                        <Ship className="h-4 w-4" />
+                                    </div>
+                                    <h2 className="text-sm font-semibold text-warm-900">Compra al exterior</h2>
+                                </div>
+                                <Button type="button" variant="secondary" size="sm" onClick={() => setModalExterior(true)}>
+                                    <Pencil className="h-4 w-4" /> Editar
+                                </Button>
+                            </div>
+                            <p className="mt-2 text-xs text-warm-500">
+                                {form.puerto_embarque || form.incoterm || form.cargo_type
+                                    ? [form.cargo_type, form.incoterm, form.puerto_embarque && `desde ${form.puerto_embarque}`]
+                                          .filter(Boolean)
+                                          .join(' · ')
+                                    : 'Para la orden de importación (Purchase Order) que se envía al proveedor.'}
+                            </p>
+                        </div>
+                    )}
+
+                    <div className="rounded-xl border border-edge bg-white p-5 shadow-sm">
+                        <h2 className="mb-2 text-xs font-bold uppercase tracking-wide text-warm-500">Observaciones</h2>
+                        <textarea
+                            rows={3}
+                            value={form.observaciones}
+                            onChange={(e) => setField('observaciones', e.target.value)}
+                            placeholder="Notas para el proveedor o internas…"
+                            className="block w-full resize-none rounded-lg border-0 bg-white p-3 text-sm text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-primary-600"
+                        />
+                    </div>
+
+                    {/* Resumen */}
                     <div className="rounded-xl border border-edge bg-white p-5 shadow-sm">
                         <h2 className="mb-3 text-xs font-bold uppercase tracking-wide text-warm-500">Resumen</h2>
-                        <div className="mt-1 flex items-center justify-between border-t border-edge pt-3">
+                        <div className="flex items-center justify-between border-t border-edge pt-3">
                             <span className="text-sm font-bold uppercase tracking-wide text-primary-700">Total</span>
                             <span className="text-2xl font-extrabold text-warm-900">{money(total, form.moneda)}</span>
                         </div>

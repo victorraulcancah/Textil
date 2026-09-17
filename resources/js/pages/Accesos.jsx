@@ -240,7 +240,7 @@ export default function Accesos() {
                                         return (
                                             <div key={modulo.key} className="rounded-lg border border-edge">
                                                 {/* Nivel 1: módulo */}
-                                                <div className="flex items-center gap-2 bg-gray-50 px-3 py-2">
+                                                <div className="group flex items-center gap-2 bg-gray-50 px-3 py-2">
                                                     <input
                                                         type="checkbox"
                                                         checked={todos}
@@ -258,23 +258,42 @@ export default function Accesos() {
                                                                 [modulo.key]: !abierto,
                                                             }))
                                                         }
-                                                        className="flex flex-1 items-center justify-between gap-2 text-left"
+                                                        className="flex flex-1 items-center gap-2 text-left"
                                                     >
                                                         <span className="text-sm font-semibold text-warm-900">
                                                             {modulo.label}
                                                         </span>
-                                                        <Badge
-                                                            variant={
-                                                                marcados === 0
-                                                                    ? 'gray'
-                                                                    : todos
-                                                                      ? 'green'
-                                                                      : 'amber'
-                                                            }
-                                                        >
-                                                            {marcados}/{delModulo.length}
-                                                        </Badge>
                                                     </button>
+                                                    {/* Marcar/quitar todo un módulo de un clic: el checkbox
+                                                        hace lo mismo, pero como botón mudo no se nota que
+                                                        también sirve para eso. */}
+                                                    <span className="hidden items-center gap-2 text-xs group-hover:flex">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => alternarGrupo(delModulo, true)}
+                                                            className="font-medium text-primary-600 hover:underline"
+                                                        >
+                                                            Todo
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => alternarGrupo(delModulo, false)}
+                                                            className="font-medium text-warm-500 hover:underline"
+                                                        >
+                                                            Nada
+                                                        </button>
+                                                    </span>
+                                                    <Badge
+                                                        variant={
+                                                            marcados === 0
+                                                                ? 'gray'
+                                                                : todos
+                                                                  ? 'green'
+                                                                  : 'amber'
+                                                        }
+                                                    >
+                                                        {marcados}/{delModulo.length}
+                                                    </Badge>
                                                 </div>
 
                                                 {abierto && (
@@ -286,28 +305,48 @@ export default function Accesos() {
                                                             return (
                                                                 <div
                                                                     key={sub.key}
-                                                                    className="flex flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2"
+                                                                    className="group flex flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2"
                                                                 >
                                                                     {/* Nivel 2: submódulo */}
-                                                                    <label className="flex min-w-[13rem] flex-1 cursor-pointer items-center gap-2">
-                                                                        <input
-                                                                            type="checkbox"
-                                                                            checked={subTodos}
-                                                                            ref={(el) => {
-                                                                                if (el)
-                                                                                    el.indeterminate =
-                                                                                        delSub.some((p) => permisos.has(p)) &&
-                                                                                        !subTodos;
-                                                                            }}
-                                                                            onChange={(e) =>
-                                                                                alternarGrupo(delSub, e.target.checked)
-                                                                            }
-                                                                            className="h-4 w-4 rounded border-gray-300 accent-primary-600"
-                                                                        />
-                                                                        <span className="text-sm text-warm-900">
-                                                                            {sub.label}
+                                                                    <div className="flex min-w-[13rem] flex-1 items-center gap-2">
+                                                                        <label className="flex cursor-pointer items-center gap-2">
+                                                                            <input
+                                                                                type="checkbox"
+                                                                                checked={subTodos}
+                                                                                ref={(el) => {
+                                                                                    if (el)
+                                                                                        el.indeterminate =
+                                                                                            delSub.some((p) => permisos.has(p)) &&
+                                                                                            !subTodos;
+                                                                                }}
+                                                                                onChange={(e) =>
+                                                                                    alternarGrupo(delSub, e.target.checked)
+                                                                                }
+                                                                                className="h-4 w-4 rounded border-gray-300 accent-primary-600"
+                                                                            />
+                                                                            <span className="text-sm text-warm-900">
+                                                                                {sub.label}
+                                                                            </span>
+                                                                        </label>
+                                                                        {/* Mismo atajo que a nivel de módulo, pero para este submódulo solo. */}
+                                                                        <span className="hidden items-center gap-1.5 text-xs group-hover:flex">
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => alternarGrupo(delSub, true)}
+                                                                                className="font-medium text-primary-600 hover:underline"
+                                                                            >
+                                                                                Todo
+                                                                            </button>
+                                                                            <span className="text-warm-300">·</span>
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => alternarGrupo(delSub, false)}
+                                                                                className="font-medium text-warm-500 hover:underline"
+                                                                            >
+                                                                                Nada
+                                                                            </button>
                                                                         </span>
-                                                                    </label>
+                                                                    </div>
 
                                                                     {/* Nivel 3: acciones */}
                                                                     <div className="flex flex-wrap items-center gap-3">

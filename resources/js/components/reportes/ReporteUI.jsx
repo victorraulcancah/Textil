@@ -602,14 +602,27 @@ export function ReportTable({
 /*  Exportar                                                           */
 /* ------------------------------------------------------------------ */
 
-/** Descarga un CSV (separador ;, con BOM para que Excel lo abra en UTF-8). */
-export function descargarCsv(nombre, headers, rows) {
-    const csv = [headers, ...rows].map((r) => r.join(';')).join('\n');
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+/**
+ * Descarga un Excel de verdad: una tabla HTML con las cabeceras que Office
+ * reconoce como libro de Excel, así abre con columnas y formato en vez del
+ * texto plano de un CSV. No hace falta ninguna librería de por medio.
+ */
+export function descargarExcel(nombre, headers, rows) {
+    const celda = (v) => `<td>${v ?? ''}</td>`;
+    const fila = (celdas) => `<tr>${celdas.map(celda).join('')}</tr>`;
+    const html = `<html xmlns:x="urn:schemas-microsoft-com:office:excel">
+<head><meta charset="utf-8"><!--[if gte mso 9]><xml>
+<x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>
+<x:Name>Reporte</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
+</x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook>
+</xml><![endif]--></head>
+<body><table>${fila(headers)}${rows.map(fila).join('')}</table></body></html>`;
+
+    const blob = new Blob(['﻿' + html], { type: 'application/vnd.ms-excel' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = nombre;
+    a.download = nombre.replace(/\.csv$/i, '.xls');
     a.click();
     URL.revokeObjectURL(url);
 }

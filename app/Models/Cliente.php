@@ -20,6 +20,7 @@ class Cliente extends Model
         'direccion',
         'telefono',
         'email',
+        'ejecutivo_id',
         'activo',
     ];
 
@@ -28,5 +29,11 @@ class Cliente extends Model
         return [
             'activo' => 'boolean',
         ];
+    }
+
+    /** El vendedor a cargo de este cliente. Sin uno, solo lo ve quien tenga "ver todo". */
+    public function ejecutivo()
+    {
+        return $this->belongsTo(User::class, 'ejecutivo_id');
     }
 }

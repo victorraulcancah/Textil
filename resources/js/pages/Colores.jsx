@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Download, Edit, FileSpreadsheet, Palette, Trash2 } from 'lucide-react';
 import api, { asList } from '../lib/api';
+import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import PageHeader, { CreateButton } from '../components/PageHeader';
@@ -16,6 +17,7 @@ const emptyForm = { nombre: '', hex: '', activo: true };
  */
 export default function Colores() {
     const toast = useToast();
+    const { puede } = useAuth();
     const [colores, setColores] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -211,28 +213,34 @@ export default function Colores() {
                 description="El catálogo de colores: se crea una vez y todas las telas lo eligen de aquí"
                 actions={
                     <>
-                        <input
-                            ref={archivoRef}
-                            type="file"
-                            accept=".xlsx,.xls"
-                            className="hidden"
-                            onChange={(e) => {
-                                importarExcel(e.target.files?.[0]);
-                                e.target.value = '';
-                            }}
-                        />
-                        <Button variant="secondary" loading={exportando} onClick={exportarExcel}>
-                            <Download className="h-4 w-4" />
-                            Exportar Excel
-                        </Button>
-                        <Button
-                            variant="secondary"
-                            loading={importando}
-                            onClick={() => archivoRef.current?.click()}
-                        >
-                            <FileSpreadsheet className="h-4 w-4" />
-                            Cargar Excel
-                        </Button>
+                        {puede('catalogo.colores.importar') && (
+                            <input
+                                ref={archivoRef}
+                                type="file"
+                                accept=".xlsx,.xls"
+                                className="hidden"
+                                onChange={(e) => {
+                                    importarExcel(e.target.files?.[0]);
+                                    e.target.value = '';
+                                }}
+                            />
+                        )}
+                        {puede('catalogo.colores.exportar') && (
+                            <Button variant="secondary" loading={exportando} onClick={exportarExcel}>
+                                <Download className="h-4 w-4" />
+                                Exportar Excel
+                            </Button>
+                        )}
+                        {puede('catalogo.colores.importar') && (
+                            <Button
+                                variant="secondary"
+                                loading={importando}
+                                onClick={() => archivoRef.current?.click()}
+                            >
+                                <FileSpreadsheet className="h-4 w-4" />
+                                Cargar Excel
+                            </Button>
+                        )}
                         <CreateButton onClick={openCreate}>Crear color</CreateButton>
                     </>
                 }

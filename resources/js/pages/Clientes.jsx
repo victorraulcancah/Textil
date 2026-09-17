@@ -5,7 +5,7 @@ import { useToast } from '../lib/toast';
 import ConsultarDocumento from '../components/ConsultarDocumento';
 import Layout from '../components/Layout';
 import PageHeader, { CreateButton } from '../components/PageHeader';
-import { Alert, Badge, Button, DataTable, Input, Modal, Select } from '../components/ui';
+import { Alert, Badge, Button, DataTable, Input, Modal, Select, SearchSelect } from '../components/ui';
 
 const emptyForm = {
     nombre: '',
@@ -14,12 +14,14 @@ const emptyForm = {
     direccion: '',
     telefono: '',
     email: '',
+    ejecutivo_id: '',
     activo: true,
 };
 
 export default function Clientes() {
     const toast = useToast();
     const [clientes, setClientes] = useState([]);
+    const [usuarios, setUsuarios] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [fTipoDoc, setFTipoDoc] = useState('');
@@ -38,7 +40,12 @@ export default function Clientes() {
         setLoading(true);
         setError(null);
         try {
-            setClientes(asList(await api.get('/clientes')));
+            const [clientesRes, usuariosRes] = await Promise.all([
+                api.get('/clientes'),
+                api.get('/usuarios-selector').catch(() => ({ data: [] })),
+            ]);
+            setClientes(asList(clientesRes));
+            setUsuarios(asList(usuariosRes));
         } catch {
             setError('No se pudieron cargar los clientes.');
         } finally {
@@ -66,6 +73,7 @@ export default function Clientes() {
             direccion: c.direccion ?? '',
             telefono: c.telefono ?? '',
             email: c.email ?? '',
+            ejecutivo_id: c.ejecutivo_id ? String(c.ejecutivo_id) : '',
             activo: Boolean(c.activo),
         });
         setFormErrors({});
@@ -166,6 +174,12 @@ export default function Clientes() {
                 ) : (
                     <span className="text-gray-400">—</span>
                 ),
+        },
+        {
+            key: 'ejecutivo',
+            label: 'Ejecutivo',
+            getSearchValue: (row) => row.ejecutivo?.name,
+            render: (row) => row.ejecutivo?.name ?? <span className="text-gray-400">—</span>,
         },
         {
             key: 'activo',
@@ -303,6 +317,18 @@ export default function Clientes() {
                         <Input label="Email" type="email" value={form.email} onChange={(e) => field('email', e.target.value)} error={formErrors.email} />
                     </div>
                     <Input label="Dirección" value={form.direccion} onChange={(e) => field('direccion', e.target.value)} error={formErrors.direccion} />
+                    <SearchSelect
+                        label="Ejecutivo comercial"
+                        placeholder="Sin asignar"
+                        value={form.ejecutivo_id}
+                        onChange={(value) => field('ejecutivo_id', value)}
+                        options={usuarios.map((u) => ({ value: String(u.id), label: u.name }))}
+                        error={formErrors.ejecutivo_id}
+                    />
+                    <p className="-mt-2 text-xs text-warm-400">
+                        Quien tenga a cargo este cliente. Sin "Ver todo" en Clientes, cada vendedor solo ve
+                        los suyos.
+                    </p>
                     <label className="flex items-center gap-2 text-sm text-gray-700">
                         <input type="checkbox" checked={form.activo} onChange={(e) => field('activo', e.target.checked)}
                             className="h-4 w-4 rounded border-gray-300 accent-primary-600" />

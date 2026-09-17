@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Coins, Download, PackageOpen, Percent, PiggyBank, Receipt, TrendingUp } from 'lucide-react';
 import api from '../lib/api';
+import { useAuth } from '../lib/auth';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import { Alert, Button, Select, Spinner, cn } from '../components/ui';
 import {
     AMBER, BLUE, ChartCard, GREEN, KpiCard, PRIMARY, PeriodoPicker, RankingChart, ReportTable, ShareBar, TendenciaChart,
-    descargarCsv, etiquetaPeriodo, money, num, pct, rangoPreset, textoRango,
+    descargarExcel, etiquetaPeriodo, money, num, pct, rangoPreset, textoRango,
 } from '../components/reportes/ReporteUI';
 
 const VER_POR = [
@@ -68,6 +69,7 @@ function EstadoResultados({ tot }) {
 }
 
 export default function Utilidades() {
+    const { puede } = useAuth();
     const [[desde, hasta], setRango] = useState(() => rangoPreset('mes'));
     const [verPor, setVerPor] = useState('auto');
     const [data, setData] = useState(null);
@@ -139,7 +141,7 @@ export default function Utilidades() {
             etiquetaPeriodo(f.grupo, agrupar, true), f.num_ventas, f.ventas, f.costo, f.ganancia, f.margen_ganancia,
             ...(esTiempo ? [f.gastos, f.utilidad_neta, f.margen] : [f.participacion]),
         ]);
-        descargarCsv(`utilidades_${agrupar}_${desde}_${hasta}.csv`, headers, rows);
+        descargarExcel(`utilidades_${agrupar}_${desde}_${hasta}.xls`, headers, rows);
     };
 
     return (
@@ -150,9 +152,11 @@ export default function Utilidades() {
                 actions={
                     <>
                         {loading && data && <Spinner size="sm" className="text-primary-600" />}
-                        <Button variant="secondary" onClick={exportCsv} disabled={!filas.length}>
-                            <Download className="h-4 w-4" /> Exportar CSV
-                        </Button>
+                        {puede('reportes.utilidades.exportar') && (
+                            <Button variant="secondary" onClick={exportCsv} disabled={!filas.length}>
+                                <Download className="h-4 w-4" /> Exportar Excel
+                            </Button>
+                        )}
                     </>
                 }
             />

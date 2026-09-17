@@ -3,12 +3,13 @@ import {
     Award, Coins, Contact, Download, Package, PackageOpen, Percent, PieChart, ReceiptText, Tags, TrendingUp, Users,
 } from 'lucide-react';
 import api from '../lib/api';
+import { useAuth } from '../lib/auth';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import { Alert, Button, Spinner, Tabs } from '../components/ui';
 import {
     AMBER, ChartCard, GREEN, HeroBanner, KpiCard, PRIMARY, PeriodoPicker, ReportTable, ShareBar, TendenciaChart,
-    descargarCsv, fechaLarga, money, num, pct, rangoPreset, textoRango,
+    descargarExcel, fechaLarga, money, num, pct, rangoPreset, textoRango,
 } from '../components/reportes/ReporteUI';
 
 const TABS = [
@@ -26,6 +27,7 @@ const SERIES = [
 ];
 
 export default function Ganancias() {
+    const { puede } = useAuth();
     const [[desde, hasta], setRango] = useState(() => rangoPreset('mes'));
     const [tab, setTab] = useState('producto');
     const [data, setData] = useState(null);
@@ -97,7 +99,7 @@ export default function Ganancias() {
         const rows = filas.map((f) => [
             f.grupo, f.detalle ?? '', f.fecha ?? '', f.unidades, f.num_ventas, f.ventas, f.costo, f.ganancia, f.margen_ganancia, f.margen_bruto, f.participacion,
         ]);
-        descargarCsv(`ganancias_${tab}_${desde}_${hasta}.csv`, headers, rows);
+        descargarExcel(`ganancias_${tab}_${desde}_${hasta}.xls`, headers, rows);
     };
 
     return (
@@ -106,9 +108,11 @@ export default function Ganancias() {
                 title="Ganancias"
                 description="Cuánto ganas en lo que vendes: precio de venta − costo del producto (sin gastos, solo soles, sin IGV)"
                 actions={
-                    <Button variant="secondary" onClick={exportCsv} disabled={!filas.length}>
-                        <Download className="h-4 w-4" /> Exportar CSV
-                    </Button>
+                    puede('reportes.ganancias.exportar') && (
+                        <Button variant="secondary" onClick={exportCsv} disabled={!filas.length}>
+                            <Download className="h-4 w-4" /> Exportar Excel
+                        </Button>
+                    )
                 }
             />
 

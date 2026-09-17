@@ -21,6 +21,17 @@ class UserController extends Controller
         return response()->json(User::with('empresa', 'caja', 'roles')->latest('id')->get());
     }
 
+    /**
+     * Lista liviana para pickers (ej. "ejecutivo comercial" al crear un
+     * cliente): solo id y nombre, sin permiso de gestión de usuarios —
+     * cualquiera que pueda crear el registro que lo usa debe poder elegir
+     * a quién asignárselo, no solo un administrador.
+     */
+    public function selector(): JsonResponse
+    {
+        return response()->json(User::orderBy('name')->get(['id', 'name']));
+    }
+
     public function store(StoreUserRequest $request): JsonResponse
     {
         $data = $request->validated();

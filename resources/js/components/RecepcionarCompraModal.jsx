@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { PackageCheck } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { opcionesAlmacen } from '../lib/almacenes';
+import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
 import { Alert, Button, Input, Modal, Select, Spinner } from './ui';
 
@@ -47,6 +48,7 @@ function rollosDe(cap) {
 
 export default function RecepcionarCompraModal({ open, onClose, compraId, onDone }) {
     const toast = useToast();
+    const { puede } = useAuth();
 
     const [cargando, setCargando] = useState(false);
     const [guardando, setGuardando] = useState(false);
@@ -331,28 +333,30 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
                         las líneas de un golpe: una fila por rollo, con su
                         propio código de fábrica. Sin archivo, se sigue
                         capturando a mano por línea, como siempre. */}
-                    <div className="mb-4">
-                        <label className="mb-1 block text-sm font-medium text-warm-800">
-                            Packing list (opcional)
-                        </label>
-                        <div className="flex items-center gap-2">
-                            <input
-                                type="file"
-                                accept=".xlsx,.xls"
-                                disabled={subiendoPackingList}
-                                onChange={(e) => {
-                                    cargarPackingListExcel(e.target.files?.[0]);
-                                    e.target.value = '';
-                                }}
-                                className="block flex-1 text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-primary-50 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary-700 hover:file:bg-primary-100"
-                            />
-                            {subiendoPackingList && <Spinner className="h-4 w-4 text-primary-600" />}
+                    {puede('compras.recepciones-compra.importar') && (
+                        <div className="mb-4">
+                            <label className="mb-1 block text-sm font-medium text-warm-800">
+                                Packing list (opcional)
+                            </label>
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="file"
+                                    accept=".xlsx,.xls"
+                                    disabled={subiendoPackingList}
+                                    onChange={(e) => {
+                                        cargarPackingListExcel(e.target.files?.[0]);
+                                        e.target.value = '';
+                                    }}
+                                    className="block flex-1 text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-primary-50 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary-700 hover:file:bg-primary-100"
+                                />
+                                {subiendoPackingList && <Spinner className="h-4 w-4 text-primary-600" />}
+                            </div>
+                            <p className="mt-1 text-xs text-warm-400">
+                                Un Excel con una fila por rollo: código único, producto, color, metros y
+                                peso neto. Se reparte solo en la línea de cada producto.
+                            </p>
                         </div>
-                        <p className="mt-1 text-xs text-warm-400">
-                            Un Excel con una fila por rollo: código único, producto, color, metros y
-                            peso neto. Se reparte solo en la línea de cada producto.
-                        </p>
-                    </div>
+                    )}
 
                     {conPendiente.length === 0 ? (
                         <Alert variant="success">

@@ -49,17 +49,33 @@ class OrdenVentaController extends Controller
             ->withCount('detalles')
             ->when($request->filled('estado'), fn ($q) => $q->where('estado', $request->estado))
             // La bandeja del almacén necesita dos estados a la vez: los que
-            // están esperando y los que ya se están preparando.
+            // están esperando y los que ya se están preparando. Ese filtro
+            // ("estados", en plural) es justo lo que distingue a Despacho de
+            // la pantalla de Pedidos del vendedor —Despacho nunca lo manda
+            // solo—: por eso "ver solo lo mío" no se aplica ahí, o ningún
+            // almacenero vería los pedidos de los demás vendedores.
             ->when($request->filled('estados'), fn ($q) => $q->whereIn(
                 'estado',
                 array_filter(explode(',', (string) $request->input('estados')))
             ))
+            ->when(
+                ! $request->filled('estados') && ! $this->puedeVerTodo($request),
+                fn ($q) => $q->where('vendedor_id', $request->user()->id),
+            )
             ->when($request->filled('cliente_id'), fn ($q) => $q->where('cliente_id', $request->cliente_id))
             ->when($request->filled('almacen_id'), fn ($q) => $q->where('almacen_id', $request->almacen_id))
             ->latest('id')
             ->get();
 
         return OrdenVentaResource::collection($ordenes)->toArray($request);
+    }
+
+    /** El super-admin y quien tenga "ver todo" ven los pedidos de todos los vendedores. */
+    private function puedeVerTodo(Request $request): bool
+    {
+        $user = $request->user();
+
+        return $user->hasRole(config('permisos.super_admin')) || $user->can('ventas.pedidos.ver_todo');
     }
 
     public function show(OrdenVenta $ordenesVenta)

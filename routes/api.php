@@ -193,6 +193,10 @@ Route::post('movimientos-caja', [MovimientoCajaController::class, 'store']);
 
     // Gestión
     Route::apiResource('empresas', EmpresaController::class);
+    // Fuera del árbol de permisos a propósito: es un picker liviano (nombre e
+    // id nomás), no la gestión de usuarios. Se llama distinto a "users" para
+    // que Permisos::paraPeticion() no lo confunda con esa ruta protegida.
+    Route::get('usuarios-selector', [UserController::class, 'selector']);
     Route::get('users', [UserController::class, 'index']);
     Route::post('users', [UserController::class, 'store']);
     Route::get('users/{id}', [UserController::class, 'show']);

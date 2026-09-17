@@ -22,10 +22,17 @@ return [
     // Etiqueta de cada acción.
     'acciones' => [
         'ver' => 'Ver',
+        // Solo la tienen los submódulos que declaran su propio dueño
+        // (vendedor, ejecutivo): sin ella, "ver" muestra nada más lo propio.
+        'ver_todo' => 'Ver todo',
         'crear' => 'Crear',
         'editar' => 'Editar',
         'eliminar' => 'Eliminar',
         'imprimir' => 'Imprimir',
+        // Cargar o descargar un Excel es su propia acción: alguien puede
+        // necesitar exportar el catálogo sin poder importarlo (o al revés).
+        'importar' => 'Importar',
+        'exportar' => 'Exportar',
     ],
 
     // Las que tiene cualquier submódulo. "Imprimir" no está aquí: solo la
@@ -56,11 +63,18 @@ return [
         'ventas' => [
             'label' => 'Ventas',
             'submodulos' => [
-                'clientes' => ['label' => 'Clientes', 'apis' => ['clientes']],
+                'clientes' => [
+                    'label' => 'Clientes',
+                    'apis' => ['clientes'],
+                    // Sin "ver todo", cada quien ve solo los clientes a su cargo.
+                    'acciones' => ['ver', 'ver_todo', 'crear', 'editar', 'eliminar'],
+                ],
                 'pedidos' => [
                     'label' => 'Pedidos',
                     'apis' => ['ordenes-venta'],
                     'pdf' => ['orden-venta', 'requerimiento-almacen'],
+                    // Sin "ver todo", cada vendedor ve solo los pedidos que tomó.
+                    'acciones' => ['ver', 'ver_todo', 'crear', 'editar', 'eliminar'],
                 ],
                 'notas-venta' => [
                     'label' => 'Notas de venta',
@@ -77,7 +91,19 @@ return [
             'submodulos' => [
                 'productos' => ['label' => 'Productos', 'apis' => ['productos', 'presentaciones']],
                 'categorias' => ['label' => 'Categorías', 'apis' => ['categorias']],
-                'colores' => ['label' => 'Colores', 'apis' => ['colores']],
+                'colores' => [
+                    'label' => 'Colores',
+                    'apis' => ['colores'],
+                    'acciones' => ['ver', 'crear', 'editar', 'eliminar', 'importar', 'exportar'],
+                    // Son POST/GET sobre "colores", igual que crear uno solo
+                    // o listarlos: sin esto, importar el Excel exigiría el
+                    // mismo permiso que crear un color a mano, y exportar el
+                    // mismo que solo verlos.
+                    'patrones' => [
+                        'colores/importar-excel' => 'importar',
+                        'colores/exportar-excel' => 'exportar',
+                    ],
+                ],
                 'tipos-tela' => ['label' => 'Familias y tipos de tela', 'apis' => ['familias-tela', 'tipos-tela']],
                 'marcas' => ['label' => 'Marcas', 'apis' => ['marcas', 'sub-marcas']],
                 'unidades-medida' => ['label' => 'Unidades de medida', 'apis' => ['unidades-medida']],
@@ -90,7 +116,14 @@ return [
                 'proveedores' => ['label' => 'Proveedores', 'apis' => ['proveedores']],
                 'ordenes-compra' => ['label' => 'Órdenes de compra', 'apis' => ['ordenes-compra'], 'pdf' => ['orden-compra']],
                 'compras' => ['label' => 'Compras', 'apis' => ['compras'], 'pdf' => ['compra']],
-                'recepciones-compra' => ['label' => 'Recepciones de compra', 'apis' => ['recepciones-compra'], 'pdf' => ['recepcion-compra']],
+                'recepciones-compra' => [
+                    'label' => 'Recepciones de compra',
+                    'apis' => ['recepciones-compra'],
+                    'pdf' => ['recepcion-compra'],
+                    'acciones' => ['ver', 'crear', 'editar', 'eliminar', 'importar'],
+                    // Leer el packing list es distinto de registrar la recepción.
+                    'patrones' => ['recepciones-compra/leer-packing-list' => 'importar'],
+                ],
             ],
         ],
 
@@ -152,8 +185,8 @@ return [
         'reportes' => [
             'label' => 'Reportes',
             'submodulos' => [
-                'ganancias' => ['label' => 'Ganancias', 'apis' => ['reportes/ganancias'], 'acciones' => ['ver']],
-                'utilidades' => ['label' => 'Utilidades', 'apis' => ['reportes/utilidades'], 'acciones' => ['ver']],
+                'ganancias' => ['label' => 'Ganancias', 'apis' => ['reportes/ganancias'], 'acciones' => ['ver', 'exportar']],
+                'utilidades' => ['label' => 'Utilidades', 'apis' => ['reportes/utilidades'], 'acciones' => ['ver', 'exportar']],
             ],
         ],
 

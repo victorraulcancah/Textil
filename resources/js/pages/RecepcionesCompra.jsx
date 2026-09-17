@@ -8,7 +8,7 @@ import DetalleCard from '../components/ui/DetalleCard';
 import PageHeader from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
 import ActionsMenu from '../components/ActionsMenu';
-import { Alert, Badge, Button, DataTable, Modal } from '../components/ui';
+import { Alert, Badge, Button, DataTable, DateRangePicker, Modal, SearchSelect, Select } from '../components/ui';
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
 
@@ -33,6 +33,14 @@ export default function RecepcionesCompra() {
     const [deshacerTarget, setDeshacerTarget] = useState(null);
     const [pdfTarget, setPdfTarget] = useState(null);
     const [procesando, setProcesando] = useState(false);
+
+    /** Se filtran entre las recepciones ya cargadas, no valen la pena
+        pedirlos al backend. */
+    const [fEstado, setFEstado] = useState('');
+    const [fProveedor, setFProveedor] = useState('');
+    const [fAlmacen, setFAlmacen] = useState('');
+    const [fDesde, setFDesde] = useState('');
+    const [fHasta, setFHasta] = useState('');
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -185,11 +193,81 @@ export default function RecepcionesCompra() {
 
             <DataTable
                 columns={columnasRecepcion}
-                rows={recepciones}
+                rows={recepciones.filter((r) => {
+                    if (fEstado === 'inactiva' && r.activo) return false;
+                    if (fEstado && fEstado !== 'inactiva' && (r.estado !== fEstado || !r.activo)) return false;
+                    if (fProveedor && String(r.proveedor_id) !== String(fProveedor)) return false;
+                    if (fAlmacen && String(r.almacen_id) !== String(fAlmacen)) return false;
+                    if (fDesde && (!r.fecha_recepcion || r.fecha_recepcion.slice(0, 10) < fDesde)) return false;
+                    if (fHasta && (!r.fecha_recepcion || r.fecha_recepcion.slice(0, 10) > fHasta)) return false;
+                    return true;
+                })}
                 loading={loading}
                 searchPlaceholder="Buscar recepciones..."
                 onRowClick={(row) => { setSeleccionada(row); sheet.abrir(); }}
                 rowClassName={(row) => (row.id === seleccionada?.id ? 'bg-primary-50' : undefined)}
+                filterable
+                filterCount={(fEstado ? 1 : 0) + (fProveedor ? 1 : 0) + (fAlmacen ? 1 : 0) + (fDesde ? 1 : 0) + (fHasta ? 1 : 0)}
+                filters={
+                    <div className="space-y-2">
+                        <Select
+                            label="Estado"
+                            value={fEstado}
+                            onChange={(e) => setFEstado(e.target.value)}
+                            options={[
+                                { value: '', label: 'Todos' },
+                                ...Object.entries(estadoInfo).map(([value, info]) => ({ value, label: info.label })),
+                            ]}
+                        />
+                        <SearchSelect
+                            label="Proveedor"
+                            value={fProveedor}
+                            onChange={(v) => setFProveedor(v ?? '')}
+                            placeholder="Todos"
+                            emptyText="Sin coincidencias"
+                            options={[
+                                ...new Map(
+                                    recepciones.filter((r) => r.proveedor_id).map((r) => [String(r.proveedor_id), r.proveedor?.nombre]),
+                                ).entries(),
+                            ].map(([value, label]) => ({ value, label }))}
+                        />
+                        <SearchSelect
+                            label="Almacén"
+                            value={fAlmacen}
+                            onChange={(v) => setFAlmacen(v ?? '')}
+                            placeholder="Todos"
+                            emptyText="Sin coincidencias"
+                            options={[
+                                ...new Map(
+                                    recepciones.filter((r) => r.almacen_id).map((r) => [String(r.almacen_id), r.almacen?.nombre]),
+                                ).entries(),
+                            ].map(([value, label]) => ({ value, label }))}
+                        />
+                        <DateRangePicker
+                            label="Rango de fecha"
+                            desde={fDesde}
+                            hasta={fHasta}
+                            onChange={(d, h) => {
+                                setFDesde(d);
+                                setFHasta(h);
+                            }}
+                        />
+                        {(fEstado || fProveedor || fAlmacen || fDesde || fHasta) && (
+                            <button
+                                onClick={() => {
+                                    setFEstado('');
+                                    setFProveedor('');
+                                    setFAlmacen('');
+                                    setFDesde('');
+                                    setFHasta('');
+                                }}
+                                className="text-xs font-medium text-red-600 hover:text-red-700"
+                            >
+                                Limpiar filtros
+                            </button>
+                        )}
+                    </div>
+                }
                 height="34vh"
                 dense
             />

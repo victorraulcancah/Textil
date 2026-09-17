@@ -4,7 +4,7 @@ import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import PageHeader, { CreateButton } from '../components/PageHeader';
-import { Alert, Badge, Button, DataTable, Input, Modal } from '../components/ui';
+import { Alert, Badge, Button, DataTable, Input, Modal, Select } from '../components/ui';
 
 const emptyForm = {
     nombre: '',
@@ -39,6 +39,9 @@ export default function Proveedores() {
 
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [deleting, setDeleting] = useState(false);
+
+    const [filterTipo, setFilterTipo] = useState('');
+    const [filterEstado, setFilterEstado] = useState('');
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -238,9 +241,51 @@ export default function Proveedores() {
 
             <DataTable
                 columns={columns}
-                rows={proveedores}
+                rows={proveedores.filter((p) => {
+                    if (filterTipo && p.tipo !== filterTipo) return false;
+                    if (filterEstado === 'activos' && !p.activo) return false;
+                    if (filterEstado === 'inactivos' && p.activo) return false;
+                    return true;
+                })}
                 loading={loading}
                 searchPlaceholder="Buscar proveedores..."
+                filterable
+                filterCount={(filterTipo ? 1 : 0) + (filterEstado ? 1 : 0)}
+                filters={
+                    <div className="space-y-2">
+                        <Select
+                            label="Tipo"
+                            value={filterTipo}
+                            onChange={(e) => setFilterTipo(e.target.value)}
+                            options={[
+                                { value: '', label: 'Todos' },
+                                { value: 'nacional', label: 'Nacional' },
+                                { value: 'extranjero', label: 'Extranjero' },
+                            ]}
+                        />
+                        <Select
+                            label="Estado"
+                            value={filterEstado}
+                            onChange={(e) => setFilterEstado(e.target.value)}
+                            options={[
+                                { value: '', label: 'Todos' },
+                                { value: 'activos', label: 'Solo activos' },
+                                { value: 'inactivos', label: 'Solo inactivos' },
+                            ]}
+                        />
+                        {(filterTipo || filterEstado) && (
+                            <button
+                                onClick={() => {
+                                    setFilterTipo('');
+                                    setFilterEstado('');
+                                }}
+                                className="text-xs font-medium text-red-600 hover:text-red-700"
+                            >
+                                Limpiar filtros
+                            </button>
+                        )}
+                    </div>
+                }
             />
 
             <Modal

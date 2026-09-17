@@ -10,7 +10,7 @@ import PageHeader, { CreateButton } from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
 import ActionsMenu from '../components/ActionsMenu';
 import RecepcionarCompraModal from '../components/RecepcionarCompraModal';
-import { Alert, Badge, Button, DataTable, Input, Modal } from '../components/ui';
+import { Alert, Badge, Button, DataTable, DateRangePicker, Input, Modal, SearchSelect, Select } from '../components/ui';
 
 const estadoCompra = {
     registrada: { label: 'Registrada', variant: 'green' },
@@ -43,6 +43,14 @@ export default function Compras() {
     /** Compra cuyo detalle se muestra en la segunda tabla. */
     const [seleccionada, setSeleccionada] = useState(null);
     const sheet = useSheet();
+
+    /** Se filtran entre las compras ya cargadas, no valen la pena pedirlos
+        al backend. */
+    const [fEstado, setFEstado] = useState('');
+    const [fPago, setFPago] = useState('');
+    const [fProveedor, setFProveedor] = useState('');
+    const [fDesde, setFDesde] = useState('');
+    const [fHasta, setFHasta] = useState('');
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -224,11 +232,78 @@ export default function Compras() {
 
             <DataTable
                 columns={columns}
-                rows={compras}
+                rows={compras.filter((c) => {
+                    if (fEstado && c.estado !== fEstado) return false;
+                    if (fPago && c.forma_pago !== fPago) return false;
+                    if (fProveedor && String(c.proveedor_id) !== String(fProveedor)) return false;
+                    if (fDesde && (!c.fecha || c.fecha.slice(0, 10) < fDesde)) return false;
+                    if (fHasta && (!c.fecha || c.fecha.slice(0, 10) > fHasta)) return false;
+                    return true;
+                })}
                 loading={loading}
                 searchPlaceholder="Buscar compras..."
                 onRowClick={(row) => { setSeleccionada(row); sheet.abrir(); }}
                 rowClassName={(row) => (row.id === seleccionada?.id ? 'bg-primary-50' : undefined)}
+                filterable
+                filterCount={(fEstado ? 1 : 0) + (fPago ? 1 : 0) + (fProveedor ? 1 : 0) + (fDesde ? 1 : 0) + (fHasta ? 1 : 0)}
+                filters={
+                    <div className="space-y-2">
+                        <Select
+                            label="Estado"
+                            value={fEstado}
+                            onChange={(e) => setFEstado(e.target.value)}
+                            options={[
+                                { value: '', label: 'Todos' },
+                                ...Object.entries(estadoCompra).map(([value, info]) => ({ value, label: info.label })),
+                            ]}
+                        />
+                        <Select
+                            label="Forma de pago"
+                            value={fPago}
+                            onChange={(e) => setFPago(e.target.value)}
+                            options={[
+                                { value: '', label: 'Todas' },
+                                { value: 'contado', label: 'Contado' },
+                                { value: 'credito', label: 'Crédito' },
+                            ]}
+                        />
+                        <SearchSelect
+                            label="Proveedor"
+                            value={fProveedor}
+                            onChange={(v) => setFProveedor(v ?? '')}
+                            placeholder="Todos"
+                            emptyText="Sin coincidencias"
+                            options={[
+                                ...new Map(
+                                    compras.filter((c) => c.proveedor_id).map((c) => [String(c.proveedor_id), c.proveedor?.nombre]),
+                                ).entries(),
+                            ].map(([value, label]) => ({ value, label }))}
+                        />
+                        <DateRangePicker
+                            label="Rango de fecha"
+                            desde={fDesde}
+                            hasta={fHasta}
+                            onChange={(d, h) => {
+                                setFDesde(d);
+                                setFHasta(h);
+                            }}
+                        />
+                        {(fEstado || fPago || fProveedor || fDesde || fHasta) && (
+                            <button
+                                onClick={() => {
+                                    setFEstado('');
+                                    setFPago('');
+                                    setFProveedor('');
+                                    setFDesde('');
+                                    setFHasta('');
+                                }}
+                                className="text-xs font-medium text-red-600 hover:text-red-700"
+                            >
+                                Limpiar filtros
+                            </button>
+                        )}
+                    </div>
+                }
                 height="34vh"
                 dense
             />

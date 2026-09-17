@@ -8,7 +8,7 @@ import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
 import DetalleCard from '../components/ui/DetalleCard';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
-import { Alert, Badge, Button, DataTable, Modal, SearchSelect, Select } from '../components/ui';
+import { Alert, Badge, Button, DataTable, DateRangePicker, Modal, SearchSelect, Select } from '../components/ui';
 
 const money = (n) => new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(n) || 0);
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
@@ -40,6 +40,8 @@ export default function OrdenesCompra() {
     const [filterEstado, setFilterEstado] = useState('');
     const [filterCompra, setFilterCompra] = useState('');
     const [filterProveedor, setFilterProveedor] = useState('');
+    const [filterDesde, setFilterDesde] = useState('');
+    const [filterHasta, setFilterHasta] = useState('');
     const [activeFilters, setActiveFilters] = useState({});
 
     const load = useCallback(async () => {
@@ -80,12 +82,16 @@ export default function OrdenesCompra() {
         if (filterEstado) next.estado = filterEstado;
         if (filterCompra) next.compra = filterCompra;
         if (filterProveedor) next.proveedor = filterProveedor;
+        if (filterDesde) next.desde = filterDesde;
+        if (filterHasta) next.hasta = filterHasta;
         setActiveFilters(next);
     };
     const clearFilters = () => {
         setFilterEstado('');
         setFilterCompra('');
         setFilterProveedor('');
+        setFilterDesde('');
+        setFilterHasta('');
         setActiveFilters({});
     };
     const filtered = ordenes.filter((o) => {
@@ -93,6 +99,8 @@ export default function OrdenesCompra() {
         if (activeFilters.compra === 'si' && !(o.compras_count > 0)) return false;
         if (activeFilters.compra === 'no' && o.compras_count > 0) return false;
         if (activeFilters.proveedor && String(o.proveedor_id) !== activeFilters.proveedor) return false;
+        if (activeFilters.desde && (!o.fecha_emision || o.fecha_emision.slice(0, 10) < activeFilters.desde)) return false;
+        if (activeFilters.hasta && (!o.fecha_emision || o.fecha_emision.slice(0, 10) > activeFilters.hasta)) return false;
         return true;
     });
     const filterCount = Object.keys(activeFilters).length;
@@ -112,6 +120,15 @@ export default function OrdenesCompra() {
                 placeholder="Todos" emptyText="Sin coincidencias"
                 options={proveedoresOptions}
                 className="w-52" />
+            <DateRangePicker
+                label="Rango de fecha"
+                desde={filterDesde}
+                hasta={filterHasta}
+                onChange={(d, h) => {
+                    setFilterDesde(d);
+                    setFilterHasta(h);
+                }}
+            />
             <Button variant="primary" size="sm" onClick={applyFilters}>Aplicar</Button>
             {filterCount > 0 && <Button variant="ghost" size="sm" onClick={clearFilters}>Limpiar</Button>}
         </div>

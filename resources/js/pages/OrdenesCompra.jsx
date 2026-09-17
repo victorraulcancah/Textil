@@ -8,7 +8,7 @@ import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
 import DetalleCard from '../components/ui/DetalleCard';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
-import { Alert, Badge, Button, DataTable, Modal, Select } from '../components/ui';
+import { Alert, Badge, Button, DataTable, Modal, SearchSelect, Select } from '../components/ui';
 
 const money = (n) => new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(n) || 0);
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
@@ -108,8 +108,9 @@ export default function OrdenesCompra() {
             <Select label="Compra" value={filterCompra} onChange={(e) => setFilterCompra(e.target.value)}
                 options={[{ value: '', label: 'Todas' }, { value: 'no', label: 'Sin compra' }, { value: 'si', label: 'Transformadas' }]}
                 className="w-40" />
-            <Select label="Proveedor" value={filterProveedor} onChange={(e) => setFilterProveedor(e.target.value)}
-                options={[{ value: '', label: 'Todos' }, ...proveedoresOptions]}
+            <SearchSelect label="Proveedor" value={filterProveedor} onChange={(v) => setFilterProveedor(v ?? '')}
+                placeholder="Todos" emptyText="Sin coincidencias"
+                options={proveedoresOptions}
                 className="w-52" />
             <Button variant="primary" size="sm" onClick={applyFilters}>Aplicar</Button>
             {filterCount > 0 && <Button variant="ghost" size="sm" onClick={clearFilters}>Limpiar</Button>}

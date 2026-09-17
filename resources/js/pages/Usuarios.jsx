@@ -4,7 +4,7 @@ import api from '../lib/api';
 import ConsultarDocumento from '../components/ConsultarDocumento';
 import Layout from '../components/Layout';
 import PageHeader, { CreateButton } from '../components/PageHeader';
-import { Alert, Badge, Button, DataTable, Input, Modal, Select } from '../components/ui';
+import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select } from '../components/ui';
 
 export default function Usuarios() {
     const [users, setUsers] = useState([]);
@@ -322,20 +322,18 @@ export default function Usuarios() {
                         ]}
                         error={errors.role}
                     />
-                    <Select
+                    <SearchSelect
                         label="Empresa"
-                        name="empresa_id"
                         value={form.empresa_id}
-                        onChange={(e) =>
-                            setForm((prev) => ({ ...prev, empresa_id: e.target.value }))
+                        onChange={(v) =>
+                            setForm((prev) => ({ ...prev, empresa_id: v ?? '' }))
                         }
-                        options={[
-                            { value: '', label: 'Sin empresa' },
-                            ...empresas.map((emp) => ({
-                                value: String(emp.id),
-                                label: emp.nombre_comercial,
-                            })),
-                        ]}
+                        placeholder="Sin empresa"
+                        emptyText="Sin coincidencias"
+                        options={empresas.map((emp) => ({
+                            value: String(emp.id),
+                            label: emp.nombre_comercial,
+                        }))}
                         error={errors.empresa_id}
                     />
                 </form>

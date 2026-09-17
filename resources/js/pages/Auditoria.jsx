@@ -3,7 +3,7 @@ import { Eye, ShieldCheck } from 'lucide-react';
 import api from '../lib/api';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
-import { Alert, Badge, Button, DataTable, Input, Modal, Select } from '../components/ui';
+import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select } from '../components/ui';
 
 const fechaHora = (v) => (v ? new Date(v).toLocaleString('es-PE') : '—');
 
@@ -108,11 +108,13 @@ export default function Auditoria() {
                     ...(opciones.modulos ?? []).map((m) => ({ value: m, label: m })),
                 ]}
             />
-            <Select
+            <SearchSelect
                 label="Usuario"
                 value={fUsuario}
-                onChange={(e) => setFUsuario(e.target.value)}
-                options={[{ value: '', label: 'Todos' }, ...(opciones.usuarios ?? [])]}
+                onChange={(v) => setFUsuario(v ?? '')}
+                placeholder="Todos"
+                emptyText="Sin coincidencias"
+                options={opciones.usuarios ?? []}
             />
             <div className="grid grid-cols-2 gap-2">
                 <Input label="Desde" type="date" value={fDesde} onChange={(e) => setFDesde(e.target.value)} />

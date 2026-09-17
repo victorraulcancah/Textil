@@ -4,7 +4,7 @@ import api, { asList } from '../lib/api';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import PagosCuentaModal from '../components/PagosCuentaModal';
-import { Alert, Badge, Button, DataTable, Select } from '../components/ui';
+import { Alert, Badge, Button, DataTable, SearchSelect, Select } from '../components/ui';
 
 const ESTADOS = [
     { value: '', label: 'Todos los estados' },
@@ -30,6 +30,7 @@ export default function CuentasPorPagar() {
     const [error, setError] = useState(null);
     const [pagoCuenta, setPagoCuenta] = useState(null);
     const [fEstado, setFEstado] = useState('');
+    const [fProveedor, setFProveedor] = useState('');
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -98,17 +99,39 @@ export default function CuentasPorPagar() {
 
             <DataTable
                 columns={columns}
-                rows={fEstado ? rows.filter((r) => r.estado === fEstado) : rows}
+                rows={rows.filter((r) => {
+                    if (fEstado && r.estado !== fEstado) return false;
+                    if (fProveedor && String(r.proveedor_id) !== String(fProveedor)) return false;
+                    return true;
+                })}
                 loading={loading}
                 searchPlaceholder="Buscar por proveedor..."
                 emptyMessage="No hay cuentas por pagar registradas."
                 filterable
-                filterCount={fEstado ? 1 : 0}
+                filterCount={(fEstado ? 1 : 0) + (fProveedor ? 1 : 0)}
                 filters={
                     <div className="space-y-2">
                         <Select label="Estado" value={fEstado} onChange={(e) => setFEstado(e.target.value)} options={ESTADOS} />
-                        {fEstado && (
-                            <button onClick={() => setFEstado('')} className="text-xs font-medium text-red-600 hover:text-red-700">
+                        <SearchSelect
+                            label="Proveedor"
+                            value={fProveedor}
+                            onChange={(v) => setFProveedor(v ?? '')}
+                            placeholder="Todos"
+                            emptyText="Sin coincidencias"
+                            options={[
+                                ...new Map(
+                                    rows.filter((r) => r.proveedor_id).map((r) => [String(r.proveedor_id), r.proveedor?.nombre]),
+                                ).entries(),
+                            ].map(([value, label]) => ({ value, label }))}
+                        />
+                        {(fEstado || fProveedor) && (
+                            <button
+                                onClick={() => {
+                                    setFEstado('');
+                                    setFProveedor('');
+                                }}
+                                className="text-xs font-medium text-red-600 hover:text-red-700"
+                            >
                                 Limpiar filtros
                             </button>
                         )}

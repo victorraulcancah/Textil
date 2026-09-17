@@ -20,7 +20,7 @@ import PdfViewerModal from '../components/PdfViewerModal';
 import MetodoCajaPicker from '../components/MetodoCajaPicker';
 import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
 import DetalleCard from '../components/ui/DetalleCard';
-import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select } from '../components/ui';
+import { Alert, Badge, Button, DataTable, DateRangePicker, Input, Modal, SearchSelect, Select } from '../components/ui';
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
 const money = (n) =>
@@ -62,10 +62,14 @@ export default function Pedidos() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [estado, setEstado] = useState('');
-    /** Cliente y almacén: no valen la pena pedirlos al backend, se filtran
-        entre los pedidos ya cargados. */
+    /** Cliente, almacén, fecha y requerimiento: no valen la pena pedirlos al
+        backend, se filtran entre los pedidos ya cargados. */
     const [fCliente, setFCliente] = useState('');
     const [fAlmacen, setFAlmacen] = useState('');
+    const [fVendedor, setFVendedor] = useState('');
+    const [fDesde, setFDesde] = useState('');
+    const [fHasta, setFHasta] = useState('');
+    const [fRequerimiento, setFRequerimiento] = useState('');
 
     const [seleccionado, setSeleccionado] = useState(null);
     const [detalle, setDetalle] = useState(null);
@@ -140,6 +144,8 @@ export default function Pedidos() {
             label: 'Fecha',
             render: (row) => fecha(row.fecha_emision),
         },
+        { key: 'almacen', label: 'Almacén', render: (row) => row.almacen ?? '—' },
+        { key: 'vendedor', label: 'Vendedor', render: (row) => row.vendedor ?? '—' },
         {
             key: 'total_lineas',
             label: 'Productos',
@@ -220,8 +226,26 @@ export default function Pedidos() {
     const almacenesPresentes = [
         ...new Map(pedidos.filter((p) => p.almacen_id).map((p) => [String(p.almacen_id), p.almacen])).entries(),
     ].map(([value, label]) => ({ value, label }));
+    const requerimientosPresentes = [...new Set(pedidos.map((p) => p.requerimiento_numero).filter(Boolean))]
+        .sort((a, b) => a.localeCompare(b, 'es'))
+        .map((num_) => ({ value: num_, label: num_ }));
 
-    const filtrosActivos = (estado ? 1 : 0) + (fCliente ? 1 : 0) + (fAlmacen ? 1 : 0);
+    const filtrosActivos =
+        (estado ? 1 : 0) +
+        (fCliente ? 1 : 0) +
+        (fAlmacen ? 1 : 0) +
+        (fDesde ? 1 : 0) +
+        (fHasta ? 1 : 0) +
+        (fRequerimiento ? 1 : 0);
+
+    const limpiarTodo = () => {
+        setEstado('');
+        setFCliente('');
+        setFAlmacen('');
+        setFDesde('');
+        setFHasta('');
+        setFRequerimiento('');
+    };
 
     const filtros = (
         <div className="flex flex-wrap items-end gap-3">
@@ -250,16 +274,27 @@ export default function Pedidos() {
                 options={almacenesPresentes}
                 className="w-56"
             />
+            <SearchSelect
+                label="Requerimiento"
+                value={fRequerimiento}
+                onChange={(v) => setFRequerimiento(v ?? '')}
+                placeholder="Todos"
+                emptyText="Sin coincidencias"
+                options={requerimientosPresentes}
+                className="w-48"
+            />
+            <DateRangePicker
+                label="Rango de fecha"
+                desde={fDesde}
+                hasta={fHasta}
+                onChange={(d, h) => {
+                    setFDesde(d);
+                    setFHasta(h);
+                }}
+                className="w-full"
+            />
             {filtrosActivos > 0 && (
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                        setEstado('');
-                        setFCliente('');
-                        setFAlmacen('');
-                    }}
-                >
+                <Button variant="ghost" size="sm" onClick={limpiarTodo}>
                     Limpiar
                 </Button>
             )}
@@ -269,6 +304,9 @@ export default function Pedidos() {
     const pedidosFiltrados = pedidos.filter((p) => {
         if (fCliente && p.cliente !== fCliente) return false;
         if (fAlmacen && String(p.almacen_id) !== String(fAlmacen)) return false;
+        if (fRequerimiento && p.requerimiento_numero !== fRequerimiento) return false;
+        if (fDesde && (!p.fecha_emision || p.fecha_emision < fDesde)) return false;
+        if (fHasta && (!p.fecha_emision || p.fecha_emision > fHasta)) return false;
         return true;
     });
 

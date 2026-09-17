@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
     ArrowLeft,
     Package,
+    Pencil,
     Plus,
     ReceiptText,
     Trash2,
@@ -20,6 +21,7 @@ import {
     Alert,
     Button,
     Input,
+    Modal,
     SearchSelect,
     Select,
     Spinner,
@@ -89,6 +91,8 @@ export default function CrearVenta() {
     const [pagos, setPagos] = useState([emptyPago()]);
     /** Off = un solo método de pago (el caso normal). On = varios métodos. */
     const [mixto, setMixto] = useState(false);
+    /** El cobro son varios campos: se edita en un modal aparte. */
+    const [modalCobro, setModalCobro] = useState(false);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -977,37 +981,153 @@ export default function CrearVenta() {
                         </div>
                     </div>
 
-                    <div className="rounded-xl border border-edge bg-white p-5 shadow-sm">
-                        <div className="mb-4 flex items-center justify-between">
-                            <h2 className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-warm-500">
-                                <Wallet className="h-4 w-4" /> Cobro
+                </div>
+
+                <div className="space-y-4 lg:sticky lg:top-6">
+                    <div className="rounded-xl border border-edge bg-white shadow-sm">
+                        <div className="border-b border-edge px-5 py-3">
+                            <h2 className="text-xs font-bold uppercase tracking-wide text-warm-500">
+                                Datos de la venta
                             </h2>
-                            {esContado && (
-                                <button
-                                    type="button"
-                                    role="switch"
-                                    aria-checked={mixto}
-                                    onClick={alternarMixto}
-                                    className="inline-flex items-center gap-2 text-xs font-semibold text-warm-500 transition hover:text-warm-900"
-                                >
-                                    Pago mixto
-                                    <span
-                                        className={`relative block h-5 w-9 rounded-full transition ${mixto ? "bg-primary-600" : "bg-gray-300"}`}
+                        </div>
+                        <div className="grid grid-cols-1 gap-4 p-5">
+                            <Input
+                                label="Fecha"
+                                type="date"
+                                value={form.fecha_emision}
+                                onChange={(e) =>
+                                    setField("fecha_emision", e.target.value)
+                                }
+                            />
+                            <div>
+                                <SearchSelect
+                                    label={
+                                        esContado
+                                            ? "Cliente (opcional)"
+                                            : "Cliente"
+                                    }
+                                    value={form.cliente_id}
+                                    onChange={(v) => setField("cliente_id", v)}
+                                    options={clientes.map((c) => ({
+                                        value: String(c.id),
+                                        label:
+                                            c.nombre ??
+                                            c.razon_social ??
+                                            `#${c.id}`,
+                                        keywords: c.numero_documento ?? "",
+                                    }))}
+                                    placeholder={CLIENTE_GENERICO}
+                                    emptyText="Sin coincidencias"
+                                />
+                                {/* Sin cliente la venta va al genérico; a crédito no se puede. */}
+                                {!form.cliente_id && (
+                                    <p
+                                        className={`mt-1 text-xs ${esContado ? "text-warm-500" : "text-red-600"}`}
                                     >
-                                        <span
-                                            className={`absolute top-0.5 block h-4 w-4 rounded-full bg-white shadow transition-all ${mixto ? "left-[1.125rem]" : "left-0.5"}`}
-                                        />
-                                    </span>
-                                </button>
+                                        {esContado
+                                            ? `Sin cliente se registra como "${CLIENTE_GENERICO}".`
+                                            : "Una venta al crédito necesita un cliente identificado."}
+                                    </p>
+                                )}
+                            </div>
+                            <Select
+                                label="Almacén"
+                                value={form.almacen_id}
+                                // Cambiar de almacén invalida los productos ya elegidos.
+                                onChange={(e) => {
+                                    setField("almacen_id", e.target.value);
+                                    setItems([]);
+                                    limpiarPanel();
+                                }}
+                                options={[
+                                    { value: "", label: "Selecciona…" },
+                                    ...opcionesAlmacen(
+                                        almacenes,
+                                        form.almacen_id,
+                                    ),
+                                ]}
+                            />
+                            <Select
+                                label="Tipo de pago"
+                                value={form.tipo_pago}
+                                onChange={(e) =>
+                                    setField("tipo_pago", e.target.value)
+                                }
+                                options={[
+                                    { value: "contado", label: "Contado" },
+                                    { value: "credito", label: "Crédito" },
+                                ]}
+                            />
+                        </div>
+                    </div>
+
+                    <div className="rounded-xl border border-edge bg-white p-5 shadow-sm">
+                        <div className="flex items-center justify-between gap-3">
+                            <div>
+                                <h2 className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-warm-500">
+                                    <Wallet className="h-4 w-4" /> Cobro
+                                </h2>
+                                {esContado ? (
+                                    <>
+                                        <p className="mt-1 text-sm text-warm-900">
+                                            {mixto
+                                                ? `${pagos.length} métodos · Cobrado ${money(pagado)}`
+                                                : `${pagos[0].tipo === "efectivo" ? "Efectivo" : pagos[0].tipo === "transferencia" ? "Transferencia" : "Billetera"} · ${money(total)}`}
+                                        </p>
+                                        {mixto && Math.abs(saldo) > 0.001 && (
+                                            <p
+                                                className={`mt-0.5 text-xs font-semibold ${saldo > 0 ? "text-amber-600" : "text-red-600"}`}
+                                            >
+                                                {saldo > 0 ? "Falta cobrar" : "Vuelto"}: {money(Math.abs(saldo))}
+                                            </p>
+                                        )}
+                                    </>
+                                ) : (
+                                    <p className="mt-1 text-sm text-warm-500">
+                                        Al crédito: queda como cuenta por cobrar.
+                                    </p>
+                                )}
+                            </div>
+                            {esContado && (
+                                <Button type="button" variant="secondary" onClick={() => setModalCobro(true)}>
+                                    <Pencil className="h-4 w-4" /> Editar cobro
+                                </Button>
                             )}
                         </div>
+                    </div>
 
-                        {!esContado ? (
-                            <Alert variant="info">
-                                Venta al crédito: queda como cuenta por cobrar
-                                del cliente, sin cobro ahora.
-                            </Alert>
-                        ) : !mixto ? (
+                    <Modal
+                        open={modalCobro}
+                        onClose={() => setModalCobro(false)}
+                        title="Cobro"
+                        size="lg"
+                        footer={
+                            <Button type="button" onClick={() => setModalCobro(false)}>
+                                Listo
+                            </Button>
+                        }
+                    >
+                        <div className="mb-4 flex items-center justify-between">
+                            <span className="text-sm font-medium text-warm-700">Modo de cobro</span>
+                            <button
+                                type="button"
+                                role="switch"
+                                aria-checked={mixto}
+                                onClick={alternarMixto}
+                                className="inline-flex items-center gap-2 text-xs font-semibold text-warm-500 transition hover:text-warm-900"
+                            >
+                                Pago mixto
+                                <span
+                                    className={`relative block h-5 w-9 rounded-full transition ${mixto ? "bg-primary-600" : "bg-gray-300"}`}
+                                >
+                                    <span
+                                        className={`absolute top-0.5 block h-4 w-4 rounded-full bg-white shadow transition-all ${mixto ? "left-[1.125rem]" : "left-0.5"}`}
+                                    />
+                                </span>
+                            </button>
+                        </div>
+
+                        {!mixto ? (
                             <div className="space-y-3">
                                 <MetodoCajaPicker
                                     cuentas={cuentas}
@@ -1133,7 +1253,7 @@ export default function CrearVenta() {
                                 )}
                             </>
                         )}
-                    </div>
+                    </Modal>
 
                     <div className="rounded-xl border border-edge bg-white p-5 shadow-sm">
                         <h2 className="mb-2 text-xs font-bold uppercase tracking-wide text-warm-500">
@@ -1148,85 +1268,6 @@ export default function CrearVenta() {
                             placeholder="Notas de esta venta…"
                             className="block w-full resize-none rounded-lg border-0 bg-white p-3 text-sm text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-primary-600"
                         />
-                    </div>
-                </div>
-
-                <div className="space-y-4 lg:sticky lg:top-6">
-                    <div className="rounded-xl border border-edge bg-white shadow-sm">
-                        <div className="border-b border-edge px-5 py-3">
-                            <h2 className="text-xs font-bold uppercase tracking-wide text-warm-500">
-                                Datos de la venta
-                            </h2>
-                        </div>
-                        <div className="grid grid-cols-1 gap-4 p-5">
-                            <Input
-                                label="Fecha"
-                                type="date"
-                                value={form.fecha_emision}
-                                onChange={(e) =>
-                                    setField("fecha_emision", e.target.value)
-                                }
-                            />
-                            <div>
-                                <SearchSelect
-                                    label={
-                                        esContado
-                                            ? "Cliente (opcional)"
-                                            : "Cliente"
-                                    }
-                                    value={form.cliente_id}
-                                    onChange={(v) => setField("cliente_id", v)}
-                                    options={clientes.map((c) => ({
-                                        value: String(c.id),
-                                        label:
-                                            c.nombre ??
-                                            c.razon_social ??
-                                            `#${c.id}`,
-                                        keywords: c.numero_documento ?? "",
-                                    }))}
-                                    placeholder={CLIENTE_GENERICO}
-                                    emptyText="Sin coincidencias"
-                                />
-                                {/* Sin cliente la venta va al genérico; a crédito no se puede. */}
-                                {!form.cliente_id && (
-                                    <p
-                                        className={`mt-1 text-xs ${esContado ? "text-warm-500" : "text-red-600"}`}
-                                    >
-                                        {esContado
-                                            ? `Sin cliente se registra como "${CLIENTE_GENERICO}".`
-                                            : "Una venta al crédito necesita un cliente identificado."}
-                                    </p>
-                                )}
-                            </div>
-                            <Select
-                                label="Almacén"
-                                value={form.almacen_id}
-                                // Cambiar de almacén invalida los productos ya elegidos.
-                                onChange={(e) => {
-                                    setField("almacen_id", e.target.value);
-                                    setItems([]);
-                                    limpiarPanel();
-                                }}
-                                options={[
-                                    { value: "", label: "Selecciona…" },
-                                    ...opcionesAlmacen(
-                                        almacenes,
-                                        form.almacen_id,
-                                    ),
-                                ]}
-                            />
-                            <Select
-                                label="Tipo de pago"
-                                value={form.tipo_pago}
-                                onChange={(e) =>
-                                    setField("tipo_pago", e.target.value)
-                                }
-                                options={[
-                                    { value: "contado", label: "Contado" },
-                                    { value: "credito", label: "Crédito" },
-                                ]}
-                            />
-                        </div>
                     </div>
 
                     <div className="rounded-xl border border-edge bg-white p-5 shadow-sm">

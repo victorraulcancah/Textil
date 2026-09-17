@@ -22,7 +22,8 @@ export default function Categorias() {
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [deleting, setDeleting] = useState(false);
 
-    const [filterNivel, setFilterNivel] = useState('');
+    const [filterEstado, setFilterEstado] = useState('');
+    const [filterPadre, setFilterPadre] = useState('');
     const [activeFilters, setActiveFilters] = useState({});
 
     const load = useCallback(async () => {
@@ -49,6 +50,10 @@ export default function Categorias() {
         setModalOpen(true);
     };
 
+    /** Solo dos niveles: una categoría es siempre raíz, una sub-categoría
+        siempre cuelga de una raíz (nunca de otra sub-categoría). */
+    const esSubcategoria = tab === 'subcategorias';
+
     const openEdit = (cat) => {
         setEditing(cat);
         setForm({
@@ -65,15 +70,21 @@ export default function Categorias() {
         setSaving(true);
         setErrors({});
 
+        if (esSubcategoria && !form.categoria_padre_id) {
+            setErrors({ categoria_padre_id: 'Elige la categoría a la que pertenece.' });
+            setSaving(false);
+            return;
+        }
+
+        // Solo dos niveles: una sub-categoría es siempre nivel 2 de una raíz;
+        // una categoría es siempre raíz, sin padre, sin importar lo que
+        // hubiera quedado en el formulario.
         const payload = {
             nombre: form.nombre,
             activo: form.activo,
+            categoria_padre_id: esSubcategoria ? form.categoria_padre_id : null,
+            nivel: esSubcategoria ? 2 : 1,
         };
-        if (form.categoria_padre_id) {
-            payload.categoria_padre_id = form.categoria_padre_id;
-            const padre = categorias.find((c) => String(c.id) === form.categoria_padre_id);
-            payload.nivel = (padre?.nivel ?? 1) + 1;
-        }
 
         try {
             if (editing) {
@@ -115,22 +126,27 @@ export default function Categorias() {
 
     const applyFilters = () => {
         const next = {};
-        if (filterNivel) next.nivel = filterNivel;
+        if (filterEstado) next.estado = filterEstado;
+        if (filterPadre) next.padre = filterPadre;
         setActiveFilters(next);
     };
 
     const clearFilters = () => {
-        setFilterNivel('');
+        setFilterEstado('');
+        setFilterPadre('');
         setActiveFilters({});
     };
 
     const filtered = categorias
         .filter((c) => (tab === 'categorias' ? !c.categoria_padre_id : Boolean(c.categoria_padre_id)))
-        .filter((c) => !activeFilters.nivel || String(c.nivel) === activeFilters.nivel);
+        .filter((c) => !activeFilters.estado || (activeFilters.estado === 'activos' ? c.activo : !c.activo))
+        .filter((c) => !activeFilters.padre || String(c.categoria_padre_id) === String(activeFilters.padre));
 
     const filterCount = Object.keys(activeFilters).length;
 
+    /** Solo categorías raíz: una sub-categoría nunca cuelga de otra sub-categoría. */
     const parentOptions = categorias
+        .filter((c) => !c.categoria_padre_id)
         .filter((c) => !editing || c.id !== editing.id)
         .map((c) => ({ value: String(c.id), label: c.nombre }));
 
@@ -149,16 +165,16 @@ export default function Categorias() {
                 </span>
             ),
         },
-        {
-            key: 'padre',
-            label: 'Categoría padre',
-            render: (row) => row.padre?.nombre ?? <span className="text-gray-400">—</span>,
-        },
-        {
-            key: 'nivel',
-            label: 'Nivel',
-            render: (row) => <Badge variant="blue">Nivel {row.nivel ?? 1}</Badge>,
-        },
+        // Solo tiene sentido en Sub-categorías: en Categorías siempre es raíz.
+        ...(esSubcategoria
+            ? [
+                  {
+                      key: 'padre',
+                      label: 'Categoría',
+                      render: (row) => row.padre?.nombre ?? <span className="text-gray-400">—</span>,
+                  },
+              ]
+            : []),
         {
             key: 'activo',
             label: 'Estado',
@@ -196,15 +212,29 @@ export default function Categorias() {
 
     const filters = (
         <div className="flex flex-wrap items-end gap-3">
+            {esSubcategoria && (
+                <SearchSelect
+                    label="Categoría padre"
+                    value={filterPadre}
+                    onChange={(v) => setFilterPadre(v ?? '')}
+                    placeholder="Todas"
+                    emptyText="Sin coincidencias"
+                    options={categorias
+                        .filter((c) => !c.categoria_padre_id)
+                        .map((c) => ({ value: String(c.id), label: c.nombre }))}
+                    className="w-56"
+                />
+            )}
             <Select
-                label="Nivel"
-                value={filterNivel}
-                onChange={(e) => setFilterNivel(e.target.value)}
+                label="Estado"
+                value={filterEstado}
+                onChange={(e) => setFilterEstado(e.target.value)}
                 options={[
                     { value: '', label: 'Todos' },
-                    ...[1, 2, 3].map((n) => ({ value: String(n), label: `Nivel ${n}` })),
+                    { value: 'activos', label: 'Solo activos' },
+                    { value: 'inactivos', label: 'Solo inactivos' },
                 ]}
-                className="w-40"
+                className="w-44"
             />
             <Button variant="primary" size="sm" onClick={applyFilters}>
                 Aplicar
@@ -280,20 +310,24 @@ export default function Categorias() {
                         }}
                         error={errors.nombre}
                     />
-                    <SearchSelect
-                        label="Categoría padre (opcional)"
-                        value={form.categoria_padre_id}
-                        onChange={(v) =>
-                            setForm((prev) => ({
-                                ...prev,
-                                categoria_padre_id: v ?? '',
-                            }))
-                        }
-                        placeholder="Ninguna"
-                        emptyText="Sin coincidencias"
-                        options={parentOptions}
-                        error={errors.categoria_padre_id}
-                    />
+                    {/* Solo las sub-categorías tienen padre; una categoría
+                        siempre es raíz. */}
+                    {esSubcategoria && (
+                        <SearchSelect
+                            label="Categoría"
+                            value={form.categoria_padre_id}
+                            onChange={(v) =>
+                                setForm((prev) => ({
+                                    ...prev,
+                                    categoria_padre_id: v ?? '',
+                                }))
+                            }
+                            placeholder="Elige la categoría…"
+                            emptyText="Sin coincidencias"
+                            options={parentOptions}
+                            error={errors.categoria_padre_id}
+                        />
+                    )}
                     <label className="flex items-center gap-2 text-sm text-gray-700">
                         <input
                             type="checkbox"

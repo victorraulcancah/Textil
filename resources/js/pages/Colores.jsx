@@ -5,7 +5,7 @@ import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import PageHeader, { CreateButton } from '../components/PageHeader';
-import { Alert, Badge, Button, DataTable, Input, Modal } from '../components/ui';
+import { Alert, Badge, Button, DataTable, Input, Modal, Select } from '../components/ui';
 
 const emptyForm = { nombre: '', hex: '', activo: true };
 
@@ -34,6 +34,9 @@ export default function Colores() {
     const [importando, setImportando] = useState(false);
     const [exportando, setExportando] = useState(false);
     const archivoRef = useRef(null);
+
+    const [filterEstado, setFilterEstado] = useState('');
+    const [filterConMuestra, setFilterConMuestra] = useState('');
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -253,7 +256,55 @@ export default function Colores() {
 
             {error && <Alert variant="error" className="mb-4">{error}</Alert>}
 
-            <DataTable columns={columns} rows={colores} loading={loading} searchPlaceholder="Buscar colores..." />
+            <DataTable
+                columns={columns}
+                rows={colores.filter((c) => {
+                    if (filterEstado === 'activos' && !c.activo) return false;
+                    if (filterEstado === 'inactivos' && c.activo) return false;
+                    if (filterConMuestra === 'con' && !c.hex) return false;
+                    if (filterConMuestra === 'sin' && c.hex) return false;
+                    return true;
+                })}
+                loading={loading}
+                searchPlaceholder="Buscar colores..."
+                filterable
+                filterCount={(filterEstado ? 1 : 0) + (filterConMuestra ? 1 : 0)}
+                filters={
+                    <div className="space-y-2">
+                        <Select
+                            label="Estado"
+                            value={filterEstado}
+                            onChange={(e) => setFilterEstado(e.target.value)}
+                            options={[
+                                { value: '', label: 'Todos' },
+                                { value: 'activos', label: 'Solo activos' },
+                                { value: 'inactivos', label: 'Solo inactivos' },
+                            ]}
+                        />
+                        <Select
+                            label="Muestra de color"
+                            value={filterConMuestra}
+                            onChange={(e) => setFilterConMuestra(e.target.value)}
+                            options={[
+                                { value: '', label: 'Todos' },
+                                { value: 'con', label: 'Con muestra' },
+                                { value: 'sin', label: 'Sin muestra' },
+                            ]}
+                        />
+                        {(filterEstado || filterConMuestra) && (
+                            <button
+                                onClick={() => {
+                                    setFilterEstado('');
+                                    setFilterConMuestra('');
+                                }}
+                                className="text-xs font-medium text-red-600 hover:text-red-700"
+                            >
+                                Limpiar filtros
+                            </button>
+                        )}
+                    </div>
+                }
+            />
 
             <Modal
                 open={modalOpen}

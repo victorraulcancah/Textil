@@ -155,6 +155,9 @@ export default function Productos() {
     const [quick, setQuick] = useState(null); // { tipo }
 
     const [filterEstado, setFilterEstado] = useState('');
+    const [filterCategoria, setFilterCategoria] = useState('');
+    const [filterMarca, setFilterMarca] = useState('');
+    const [filterTipoTela, setFilterTipoTela] = useState('');
     const [activeFilters, setActiveFilters] = useState({});
 
     const load = useCallback(async () => {
@@ -724,14 +727,26 @@ export default function Productos() {
         },
     ];
 
-    const applyFilters = () => setActiveFilters(filterEstado ? { estado: filterEstado } : {});
+    const applyFilters = () =>
+        setActiveFilters({
+            ...(filterEstado ? { estado: filterEstado } : {}),
+            ...(filterCategoria ? { categoria: filterCategoria } : {}),
+            ...(filterMarca ? { marca: filterMarca } : {}),
+            ...(filterTipoTela ? { tipoTela: filterTipoTela } : {}),
+        });
     const clearFilters = () => {
         setFilterEstado('');
+        setFilterCategoria('');
+        setFilterMarca('');
+        setFilterTipoTela('');
         setActiveFilters({});
     };
     const filteredProductos = productos.filter((p) => {
-        if (activeFilters.estado === 'activos') return p.activo !== false;
-        if (activeFilters.estado === 'inactivos') return p.activo === false;
+        if (activeFilters.estado === 'activos' && p.activo === false) return false;
+        if (activeFilters.estado === 'inactivos' && p.activo !== false) return false;
+        if (activeFilters.categoria && String(p.categoria?.id) !== String(activeFilters.categoria)) return false;
+        if (activeFilters.marca && String(p.marca?.id) !== String(activeFilters.marca)) return false;
+        if (activeFilters.tipoTela && String(p.tipo_tela_id) !== String(activeFilters.tipoTela)) return false;
         return true;
     });
     const filterCount = Object.keys(activeFilters).length;
@@ -748,6 +763,33 @@ export default function Productos() {
                     { value: 'inactivos', label: 'Solo inactivos' },
                 ]}
                 className="w-44"
+            />
+            <SearchSelect
+                label="Categoría"
+                value={filterCategoria}
+                onChange={(v) => setFilterCategoria(v ?? '')}
+                placeholder="Todas"
+                emptyText="Sin coincidencias"
+                options={categoriasRaiz.map((c) => ({ value: String(c.id), label: c.nombre }))}
+                className="w-52"
+            />
+            <SearchSelect
+                label="Marca"
+                value={filterMarca}
+                onChange={(v) => setFilterMarca(v ?? '')}
+                placeholder="Todas"
+                emptyText="Sin coincidencias"
+                options={marcas.map((m) => ({ value: String(m.id), label: m.nombre }))}
+                className="w-52"
+            />
+            <SearchSelect
+                label="Tipo de tela"
+                value={filterTipoTela}
+                onChange={(v) => setFilterTipoTela(v ?? '')}
+                placeholder="Todos"
+                emptyText="Sin coincidencias"
+                options={tiposTela.map((t) => ({ value: String(t.id), label: t.nombre }))}
+                className="w-52"
             />
             <Button variant="primary" size="sm" onClick={applyFilters}>
                 Aplicar

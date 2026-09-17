@@ -10,7 +10,7 @@ class CategoriaController extends Controller
 {
     public function index()
     {
-        return CategoriaResource::collection(Categoria::orderBy('nombre')->get());
+        return CategoriaResource::collection(Categoria::with('padre')->orderBy('nombre')->get());
     }
 
     public function store(Request $request)

@@ -36,6 +36,7 @@ export default function Marcas() {
 
     const [filterMarca, setFilterMarca] = useState('');
     const [filterEstado, setFilterEstado] = useState('');
+    const [filterEstadoSub, setFilterEstadoSub] = useState('');
     const [activeFilters, setActiveFilters] = useState({});
 
     const load = useCallback(async () => {
@@ -190,6 +191,7 @@ export default function Marcas() {
     const applyFilters = () => {
         const next = {};
         if (filterMarca) next.marca = filterMarca;
+        if (filterEstadoSub) next.estadoSub = filterEstadoSub;
         setActiveFilters(next);
     };
 
@@ -202,12 +204,17 @@ export default function Marcas() {
     const clearFilters = () => {
         setFilterMarca('');
         setFilterEstado('');
+        setFilterEstadoSub('');
         setActiveFilters({});
     };
 
-    const filteredSubs = subMarcas.filter(
-        (s) => !activeFilters.marca || String(s.marca_id) === activeFilters.marca,
-    );
+    const filteredSubs = subMarcas
+        .filter((s) => !activeFilters.marca || String(s.marca_id) === activeFilters.marca)
+        .filter((s) => {
+            if (activeFilters.estadoSub === 'activos') return s.activo !== false;
+            if (activeFilters.estadoSub === 'inactivos') return s.activo === false;
+            return true;
+        });
 
     const filteredMarcas = marcas.filter((m) => {
         if (activeFilters.estado === 'activos') return m.activo !== false;
@@ -347,6 +354,17 @@ export default function Marcas() {
                 emptyText="Sin coincidencias"
                 options={marcas.map((m) => ({ value: String(m.id), label: m.nombre }))}
                 className="w-48"
+            />
+            <Select
+                label="Estado"
+                value={filterEstadoSub}
+                onChange={(e) => setFilterEstadoSub(e.target.value)}
+                options={[
+                    { value: '', label: 'Todos' },
+                    { value: 'activos', label: 'Solo activas' },
+                    { value: 'inactivos', label: 'Solo inactivas' },
+                ]}
+                className="w-44"
             />
             <Button variant="primary" size="sm" onClick={applyFilters}>
                 Aplicar

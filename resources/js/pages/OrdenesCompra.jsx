@@ -129,8 +129,6 @@ export default function OrdenesCompra() {
                     setFilterHasta(h);
                 }}
             />
-            <Button variant="primary" size="sm" onClick={applyFilters}>Aplicar</Button>
-            {filterCount > 0 && <Button variant="ghost" size="sm" onClick={clearFilters}>Limpiar</Button>}
         </div>
     );
 
@@ -236,6 +234,8 @@ export default function OrdenesCompra() {
                 filterable
                 filters={filters}
                 filterCount={filterCount}
+                onApplyFilters={applyFilters}
+                onClearFilters={clearFilters}
                 onRowClick={(row) => { setSeleccionada(row); sheet.abrir(); }}
                 rowClassName={(row) => (row.id === seleccionada?.id ? 'bg-primary-50' : undefined)}
                 height="34vh"

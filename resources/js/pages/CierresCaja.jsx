@@ -123,14 +123,6 @@ export default function CierresCaja() {
                 ]}
                 className="w-48"
             />
-            <Button variant="primary" size="sm" onClick={aplicarFiltros}>
-                Aplicar
-            </Button>
-            {filtrosCount > 0 && (
-                <Button variant="ghost" size="sm" onClick={limpiarFiltros}>
-                    Limpiar
-                </Button>
-            )}
         </div>
     );
 
@@ -332,6 +324,8 @@ export default function CierresCaja() {
                 filterable
                 filters={filtros}
                 filterCount={filtrosCount}
+                onApplyFilters={aplicarFiltros}
+                onClearFilters={limpiarFiltros}
                 emptyMessage="Todavía no hay cierres de caja registrados."
                 height="350px"
                 onRowClick={(row) => { setSeleccionado(row); sheet.abrir(); }}

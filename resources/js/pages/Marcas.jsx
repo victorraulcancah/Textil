@@ -366,14 +366,6 @@ export default function Marcas() {
                 ]}
                 className="w-44"
             />
-            <Button variant="primary" size="sm" onClick={applyFilters}>
-                Aplicar
-            </Button>
-            {filterCount > 0 && (
-                <Button variant="ghost" size="sm" onClick={clearFilters}>
-                    Limpiar
-                </Button>
-            )}
         </div>
     );
 
@@ -390,14 +382,6 @@ export default function Marcas() {
                 ]}
                 className="w-44"
             />
-            <Button variant="primary" size="sm" onClick={applyEstadoFilters}>
-                Aplicar
-            </Button>
-            {filterCount > 0 && (
-                <Button variant="ghost" size="sm" onClick={clearFilters}>
-                    Limpiar
-                </Button>
-            )}
         </div>
     );
 
@@ -437,6 +421,8 @@ export default function Marcas() {
                     filterable
                     filters={marcaFilters}
                     filterCount={filterCount}
+                    onApplyFilters={applyEstadoFilters}
+                    onClearFilters={clearFilters}
                 />
             ) : (
                 <DataTable
@@ -447,6 +433,8 @@ export default function Marcas() {
                     filterable
                     filters={subFilters}
                     filterCount={filterCount}
+                    onApplyFilters={applyFilters}
+                    onClearFilters={clearFilters}
                 />
             )}
 

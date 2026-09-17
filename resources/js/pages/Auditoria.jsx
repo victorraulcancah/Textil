@@ -120,12 +120,6 @@ export default function Auditoria() {
                 <Input label="Desde" type="date" value={fDesde} onChange={(e) => setFDesde(e.target.value)} />
                 <Input label="Hasta" type="date" value={fHasta} onChange={(e) => setFHasta(e.target.value)} />
             </div>
-            <div className="flex gap-2 pt-1">
-                <Button size="sm" onClick={aplicar}>Aplicar</Button>
-                {Object.keys(aplicados).length > 0 && (
-                    <Button variant="ghost" size="sm" onClick={limpiar}>Limpiar</Button>
-                )}
-            </div>
         </div>
     );
 
@@ -227,6 +221,8 @@ export default function Auditoria() {
                 filterable
                 filters={filtros}
                 filterCount={Object.keys(aplicados).length}
+                onApplyFilters={aplicar}
+                onClearFilters={limpiar}
                 emptyMessage="No hay movimientos registrados."
             />
 

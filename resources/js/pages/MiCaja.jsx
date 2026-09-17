@@ -229,14 +229,6 @@ export default function MiCaja() {
                 ]}
                 className="w-48"
             />
-            <Button variant="primary" size="sm" onClick={aplicarFiltros}>
-                Aplicar
-            </Button>
-            {filtrosCount > 0 && (
-                <Button variant="ghost" size="sm" onClick={limpiarFiltros}>
-                    Limpiar
-                </Button>
-            )}
         </div>
     );
 
@@ -308,6 +300,8 @@ export default function MiCaja() {
                                 filterable
                                 filters={filtros}
                                 filterCount={filtrosCount}
+                                onApplyFilters={aplicarFiltros}
+                                onClearFilters={limpiarFiltros}
                                 toggleableColumns={false}
                                 emptyMessage={
                                     filtrosCount > 0

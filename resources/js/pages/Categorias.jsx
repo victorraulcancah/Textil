@@ -236,14 +236,6 @@ export default function Categorias() {
                 ]}
                 className="w-44"
             />
-            <Button variant="primary" size="sm" onClick={applyFilters}>
-                Aplicar
-            </Button>
-            {filterCount > 0 && (
-                <Button variant="ghost" size="sm" onClick={clearFilters}>
-                    Limpiar
-                </Button>
-            )}
         </div>
     );
 
@@ -278,6 +270,8 @@ export default function Categorias() {
                 filterable
                 filters={filters}
                 filterCount={filterCount}
+                onApplyFilters={applyFilters}
+                onClearFilters={clearFilters}
             />
 
             <Modal

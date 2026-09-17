@@ -204,6 +204,11 @@ export default function DataTable({
     filterable = false,
     filters = null,
     filterCount = 0,
+    /** Si se pasan, el dropdown de filtros pone su propio pie con "Aplicar"/
+        "Limpiar" fijo abajo (no se pierde de vista al bajar con muchos
+        filtros); si no, se asume que `filters` ya trae sus propios botones. */
+    onApplyFilters = null,
+    onClearFilters = null,
     toggleableColumns = true,
     loading = false,
     emptyMessage = 'No hay registros para mostrar',
@@ -461,7 +466,42 @@ export default function DataTable({
                                         <p className="px-2 pb-2 pt-0.5 text-xs font-semibold uppercase tracking-wider text-gray-500">
                                             Filtros
                                         </p>
-                                        <div className="max-h-96 overflow-y-auto px-2 pb-1">{filters}</div>
+                                        <div
+                                            className={cn(
+                                                'overflow-y-auto px-2 pb-1',
+                                                onApplyFilters ? 'max-h-80' : 'max-h-96',
+                                            )}
+                                        >
+                                            {filters}
+                                        </div>
+                                        {/* Fijo abajo: con muchos filtros, aplicar/limpiar no
+                                            debe quedar fuera de vista al bajar a desplazarse. */}
+                                        {onApplyFilters && (
+                                            <div className="flex items-center gap-2 border-t border-edge px-2 pb-1 pt-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        onApplyFilters();
+                                                        setFilterOpen(false);
+                                                    }}
+                                                    className="rounded-lg bg-primary-600 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-primary-700"
+                                                >
+                                                    Aplicar
+                                                </button>
+                                                {filterCount > 0 && onClearFilters && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            onClearFilters();
+                                                            setFilterOpen(false);
+                                                        }}
+                                                        className="rounded-lg px-3 py-1.5 text-sm font-medium text-warm-600 transition hover:bg-gray-100"
+                                                    >
+                                                        Limpiar
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )}
                                     </Dropdown>
                                 </div>
                             )}

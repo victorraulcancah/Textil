@@ -791,14 +791,6 @@ export default function Productos() {
                 options={tiposTela.map((t) => ({ value: String(t.id), label: t.nombre }))}
                 className="w-52"
             />
-            <Button variant="primary" size="sm" onClick={applyFilters}>
-                Aplicar
-            </Button>
-            {filterCount > 0 && (
-                <Button variant="ghost" size="sm" onClick={clearFilters}>
-                    Limpiar
-                </Button>
-            )}
         </div>
     );
 
@@ -825,6 +817,8 @@ export default function Productos() {
                 filterable
                 filters={productFilters}
                 filterCount={filterCount}
+                onApplyFilters={applyFilters}
+                onClearFilters={clearFilters}
             />
 
             <Modal

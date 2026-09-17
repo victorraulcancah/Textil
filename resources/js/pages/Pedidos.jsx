@@ -368,26 +368,61 @@ export default function Pedidos() {
             </div>
 
             <BottomSheet
-                open={sheet.abierto}
+                open={sheet.open && Boolean(detalle)}
                 onClose={sheet.cerrar}
                 title={detalle?.documento ?? 'Pedido'}
-                subtitle={detalle ? `${detalle.estado_label} · ${num(detalle.total_metros)} m` : null}
+                subtitle={detalle ? `${detalle.estado_label} · ${detalle.detalles?.length ?? 0} producto(s)` : null}
             >
-                <div className="space-y-3">
-                    {(detalle?.detalles ?? []).map((d) => (
-                        <DetalleCard
-                            key={d.id}
-                            titulo={d.producto}
-                            subtitulo={d.presentacion}
-                            campos={[
-                                { label: 'Cantidad', value: `${num(d.cantidad)} (${num(d.metros)} m)` },
-                                { label: 'Cubierto', value: `${num(d.metros_asignados)} m` },
-                                { label: 'Importe', value: money(d.subtotal) },
-                            ]}
-                            columnas={3}
-                        />
-                    ))}
-                </div>
+                {detalle && (
+                    <div className="space-y-3">
+                        {/* El mismo siguiente paso que en escritorio: cada estado
+                            ofrece solo su propia transición. */}
+                        <div className="flex flex-wrap items-center gap-2">
+                            {detalle.estado === 'borrador' && detalle.transiciones?.includes('solicitado') && (
+                                <Button size="sm" loading={procesando} onClick={() => accion(detalle, 'solicitar', 'Pedido solicitado al almacén.')}>
+                                    <PackageCheck className="h-4 w-4" />
+                                    Solicitar al almacén
+                                </Button>
+                            )}
+                            {detalle.estado === 'solicitado' && (
+                                <Button variant="secondary" size="sm" loading={procesando} onClick={() => accion(detalle, 'devolver', 'Los rollos volvieron a estar disponibles.')}>
+                                    <Undo2 className="h-4 w-4" />
+                                    Devolver a borrador
+                                </Button>
+                            )}
+                            {detalle.requerimiento_numero && (
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() => setPdf({ tipo: 'requerimiento-almacen', id: detalle.id, nombre: detalle.requerimiento_numero, titulo: 'Requerimiento de almacén' })}
+                                >
+                                    <FileText className="h-4 w-4" />
+                                    Requerimiento
+                                </Button>
+                            )}
+                            {detalle.estado === 'despachado' && detalle.transiciones?.includes('facturado') && (
+                                <Button size="sm" onClick={() => setFacturar(detalle)}>
+                                    <Receipt className="h-4 w-4" />
+                                    Emitir nota de venta
+                                </Button>
+                            )}
+                        </div>
+
+                        {(detalle.detalles ?? []).map((d) => (
+                            <DetalleCard
+                                key={d.id}
+                                titulo={d.producto}
+                                subtitulo={d.presentacion}
+                                campos={[
+                                    { label: 'Cant.', value: `${num(d.cantidad)} (${num(d.metros)} m)` },
+                                    { label: 'Cubierto', value: `${num(d.metros_asignados)} m` },
+                                    { label: 'P. unit.', value: money(d.precio_unitario) },
+                                    { label: 'Importe', value: money(d.subtotal), valueClassName: 'text-primary-600' },
+                                ]}
+                            />
+                        ))}
+                    </div>
+                )}
             </BottomSheet>
 
             <AnularModal
@@ -505,18 +540,18 @@ function DetallePedido({ pedido, procesando, onAccion, onFacturar, onPdf }) {
             <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                     <thead>
-                        <tr className="border-b border-edge text-left text-xs uppercase tracking-wide text-warm-500">
-                            <th className="px-4 py-2 font-medium">Producto</th>
-                            <th className="px-4 py-2 font-medium">Presentación</th>
-                            <th className="px-4 py-2 text-right font-medium">Cantidad</th>
-                            <th className="px-4 py-2 font-medium">Cubierto por</th>
-                            <th className="px-4 py-2 text-right font-medium">P. unit.</th>
-                            <th className="px-4 py-2 text-right font-medium">Importe</th>
+                        <tr className="bg-primary-600 text-left text-xs font-semibold uppercase tracking-wide text-white">
+                            <th className="px-4 py-2.5">Producto</th>
+                            <th className="px-4 py-2.5">Presentación</th>
+                            <th className="px-4 py-2.5 text-right">Cantidad</th>
+                            <th className="px-4 py-2.5">Cubierto por</th>
+                            <th className="px-4 py-2.5 text-right">P. unit.</th>
+                            <th className="px-4 py-2.5 text-right">Importe</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody className="divide-y divide-gray-100">
                         {(pedido.detalles ?? []).map((d) => (
-                            <tr key={d.id} className="border-b border-gray-100 last:border-0 align-top">
+                            <tr key={d.id} className="align-top transition hover:bg-gray-50">
                                 <td className="px-4 py-2 font-medium text-warm-900">
                                     {d.producto}
                                     {d.descripcion && (

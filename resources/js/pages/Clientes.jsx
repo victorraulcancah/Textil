@@ -326,7 +326,7 @@ export default function Clientes() {
                         error={formErrors.ejecutivo_id}
                     />
                     <p className="-mt-2 text-xs text-warm-400">
-                        Quien tenga a cargo este cliente. Sin "Ver todo" en Clientes, cada vendedor solo ve
+                        Quien tenga a cargo este cliente. Sin "Ver de todos" en Clientes, cada vendedor solo ve
                         los suyos.
                     </p>
                     <label className="flex items-center gap-2 text-sm text-gray-700">

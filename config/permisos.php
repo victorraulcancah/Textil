@@ -24,7 +24,7 @@ return [
         'ver' => 'Ver',
         // Solo la tienen los submódulos que declaran su propio dueño
         // (vendedor, ejecutivo): sin ella, "ver" muestra nada más lo propio.
-        'ver_todo' => 'Ver todo',
+        'ver_todo' => 'Ver de todos',
         'crear' => 'Crear',
         'editar' => 'Editar',
         'eliminar' => 'Eliminar',

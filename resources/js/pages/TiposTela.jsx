@@ -28,6 +28,23 @@ export default function TiposTela() {
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [deleting, setDeleting] = useState(false);
 
+    // Filtros: Estado se ofrece en las dos pestañas; Familia solo tiene
+    // sentido en Tipos (en Familias cada fila ya es una familia).
+    const [filterEstado, setFilterEstado] = useState('');
+    const [filterFamilia, setFilterFamilia] = useState('');
+    const [activeFilters, setActiveFilters] = useState({});
+    const applyFilters = () =>
+        setActiveFilters({
+            ...(filterEstado ? { estado: filterEstado } : {}),
+            ...(tab === 'tipos' && filterFamilia ? { familia: filterFamilia } : {}),
+        });
+    const clearFilters = () => {
+        setFilterEstado('');
+        setFilterFamilia('');
+        setActiveFilters({});
+    };
+    const filterCount = Object.keys(activeFilters).length;
+
     const load = useCallback(async () => {
         setLoading(true);
         setError(null);
@@ -117,6 +134,53 @@ export default function TiposTela() {
     };
 
     const familiaOptions = familias.map((f) => ({ value: String(f.id), label: `${f.codigo} — ${f.nombre}` }));
+
+    const filasFamilias = familias.filter((f) => {
+        if (activeFilters.estado === 'activos') return f.activo;
+        if (activeFilters.estado === 'inactivos') return !f.activo;
+        return true;
+    });
+    const filasTipos = tipos.filter((t) => {
+        if (activeFilters.estado === 'activos' && !t.activo) return false;
+        if (activeFilters.estado === 'inactivos' && t.activo) return false;
+        if (activeFilters.familia && String(t.familia_tela_id) !== String(activeFilters.familia)) return false;
+        return true;
+    });
+
+    const filtros = (
+        <div className="flex flex-wrap items-end gap-3">
+            {tab === 'tipos' && (
+                <SearchSelect
+                    label="Familia"
+                    value={filterFamilia}
+                    onChange={(v) => setFilterFamilia(v ?? '')}
+                    placeholder="Todas"
+                    emptyText="Sin coincidencias"
+                    options={familiaOptions}
+                    className="w-56"
+                />
+            )}
+            <Select
+                label="Estado"
+                value={filterEstado}
+                onChange={(e) => setFilterEstado(e.target.value)}
+                options={[
+                    { value: '', label: 'Todos' },
+                    { value: 'activos', label: 'Solo activos' },
+                    { value: 'inactivos', label: 'Solo inactivos' },
+                ]}
+                className="w-44"
+            />
+            <Button variant="primary" size="sm" onClick={applyFilters}>
+                Aplicar
+            </Button>
+            {filterCount > 0 && (
+                <Button variant="ghost" size="sm" onClick={clearFilters}>
+                    Limpiar
+                </Button>
+            )}
+        </div>
+    );
 
     const columnasFamilias = [
         { key: 'codigo', label: 'Código', render: (row) => <Badge variant="blue">{row.codigo}</Badge> },
@@ -212,15 +276,21 @@ export default function TiposTela() {
                         { key: 'tipos', label: 'Tipos de tela', icon: Shapes },
                     ]}
                     value={tab}
-                    onChange={setTab}
+                    onChange={(v) => {
+                        setTab(v);
+                        clearFilters();
+                    }}
                 />
             </div>
 
             <DataTable
                 columns={tab === 'familias' ? columnasFamilias : columnasTipos}
-                rows={tab === 'familias' ? familias : tipos}
+                rows={tab === 'familias' ? filasFamilias : filasTipos}
                 loading={loading}
                 searchPlaceholder={tab === 'familias' ? 'Buscar familias...' : 'Buscar tipos de tela...'}
+                filterable
+                filters={filtros}
+                filterCount={filterCount}
             />
 
             <Modal

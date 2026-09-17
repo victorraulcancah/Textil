@@ -1061,40 +1061,34 @@ export default function CrearVenta() {
                         </div>
                     </div>
 
-                    <div className="rounded-xl border border-edge bg-white p-5 shadow-sm">
-                        <div className="flex items-center justify-between gap-3">
-                            <div>
-                                <h2 className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-warm-500">
-                                    <Wallet className="h-4 w-4" /> Cobro
-                                </h2>
-                                {esContado ? (
-                                    <>
-                                        <p className="mt-1 text-sm text-warm-900">
-                                            {mixto
-                                                ? `${pagos.length} métodos · Cobrado ${money(pagado)}`
-                                                : `${pagos[0].tipo === "efectivo" ? "Efectivo" : pagos[0].tipo === "transferencia" ? "Transferencia" : "Billetera"} · ${money(total)}`}
-                                        </p>
-                                        {mixto && Math.abs(saldo) > 0.001 && (
-                                            <p
-                                                className={`mt-0.5 text-xs font-semibold ${saldo > 0 ? "text-amber-600" : "text-red-600"}`}
-                                            >
-                                                {saldo > 0 ? "Falta cobrar" : "Vuelto"}: {money(Math.abs(saldo))}
-                                            </p>
-                                        )}
-                                    </>
-                                ) : (
-                                    <p className="mt-1 text-sm text-warm-500">
-                                        Al crédito: queda como cuenta por cobrar.
+                    {/* Al crédito no hay cobro que editar: la venta genera una
+                        cuenta por cobrar y ahí se registran los pagos. */}
+                    {esContado && (
+                        <div className="rounded-xl border border-edge bg-white p-5 shadow-sm">
+                            <div className="flex items-center justify-between gap-3">
+                                <div>
+                                    <h2 className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-warm-500">
+                                        <Wallet className="h-4 w-4" /> Cobro
+                                    </h2>
+                                    <p className="mt-1 text-sm text-warm-900">
+                                        {mixto
+                                            ? `${pagos.length} métodos · Cobrado ${money(pagado)}`
+                                            : `${pagos[0].tipo === "efectivo" ? "Efectivo" : pagos[0].tipo === "transferencia" ? "Transferencia" : "Billetera"} · ${money(total)}`}
                                     </p>
-                                )}
-                            </div>
-                            {esContado && (
+                                    {mixto && Math.abs(saldo) > 0.001 && (
+                                        <p
+                                            className={`mt-0.5 text-xs font-semibold ${saldo > 0 ? "text-amber-600" : "text-red-600"}`}
+                                        >
+                                            {saldo > 0 ? "Falta cobrar" : "Vuelto"}: {money(Math.abs(saldo))}
+                                        </p>
+                                    )}
+                                </div>
                                 <Button type="button" variant="secondary" onClick={() => setModalCobro(true)}>
                                     <Pencil className="h-4 w-4" /> Editar cobro
                                 </Button>
-                            )}
+                            </div>
                         </div>
-                    </div>
+                    )}
 
                     <Modal
                         open={modalCobro}

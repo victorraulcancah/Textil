@@ -834,20 +834,7 @@ export default function CrearCompra() {
 
                     {/* Al crédito no se cobra al registrar: la compra genera una
                         cuenta por pagar y ahí se registran los pagos. */}
-                    {!esContado ? (
-                        <div className="rounded-xl border border-edge bg-white p-5 shadow-sm">
-                            <h2 className="mb-2 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-warm-500">
-                                <Wallet className="h-4 w-4" /> Pago
-                            </h2>
-                            <p className="text-sm text-warm-500">
-                                Compra al crédito: queda registrada en{' '}
-                                <strong className="text-warm-900">Cuentas por Pagar</strong> por{' '}
-                                <strong className="text-warm-900">{money(total, form.moneda_origen)}</strong>
-                                {form.dias_credito > 0 && ` a ${form.dias_credito} días`}. Los pagos al
-                                proveedor se registran desde ahí.
-                            </p>
-                        </div>
-                    ) : (
+                    {esContado && (
                     <div className="rounded-xl border border-edge bg-white p-5 shadow-sm">
                         <div className="flex items-center justify-between gap-3">
                             <div>
@@ -857,7 +844,7 @@ export default function CrearCompra() {
                                 <p className="mt-1 text-sm text-warm-900">
                                     {mixto
                                         ? `${pagos.length} métodos · Pagado ${money(pagado, form.moneda_origen)}`
-                                        : `${pagos[0].tipo === 'efectivo' ? 'Efectivo' : pagos[0].tipo === 'transferencia' ? 'Transferencia' : 'Billetera'} · ${money(esContado ? total : Number(pagos[0].monto) || 0, form.moneda_origen)}`}
+                                        : `${pagos[0].tipo === 'efectivo' ? 'Efectivo' : pagos[0].tipo === 'transferencia' ? 'Transferencia' : 'Billetera'} · ${money(total, form.moneda_origen)}`}
                                 </p>
                                 {mixto && Math.abs(saldo) > 0.001 && (
                                     <p className={`mt-0.5 text-xs font-semibold ${saldo > 0 ? 'text-amber-600' : 'text-red-600'}`}>

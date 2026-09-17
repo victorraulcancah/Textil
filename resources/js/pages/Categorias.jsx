@@ -4,7 +4,7 @@ import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import PageHeader, { CreateButton } from '../components/PageHeader';
-import { Alert, Badge, Button, DataTable, Input, Modal, Select, Tabs } from '../components/ui';
+import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select, Tabs } from '../components/ui';
 
 export default function Categorias() {
     const toast = useToast();
@@ -280,17 +280,18 @@ export default function Categorias() {
                         }}
                         error={errors.nombre}
                     />
-                    <Select
+                    <SearchSelect
                         label="Categoría padre (opcional)"
-                        name="categoria_padre_id"
                         value={form.categoria_padre_id}
-                        onChange={(e) =>
+                        onChange={(v) =>
                             setForm((prev) => ({
                                 ...prev,
-                                categoria_padre_id: e.target.value,
+                                categoria_padre_id: v ?? '',
                             }))
                         }
-                        options={[{ value: '', label: 'Ninguna' }, ...parentOptions]}
+                        placeholder="Ninguna"
+                        emptyText="Sin coincidencias"
+                        options={parentOptions}
                         error={errors.categoria_padre_id}
                     />
                     <label className="flex items-center gap-2 text-sm text-gray-700">

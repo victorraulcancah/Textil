@@ -208,11 +208,13 @@ export default function MiCaja() {
                 ]}
                 className="w-40"
             />
-            <Select
+            <SearchSelect
                 label="Motivo"
                 value={filtroMotivo}
-                onChange={(e) => setFiltroMotivo(e.target.value)}
-                options={[{ value: '', label: 'Todos' }, ...motivosPresentes]}
+                onChange={(v) => setFiltroMotivo(v ?? '')}
+                placeholder="Todos"
+                emptyText="Sin coincidencias"
+                options={motivosPresentes}
                 className="w-56"
             />
             <Select

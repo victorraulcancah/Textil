@@ -944,19 +944,17 @@ export default function Ajustes() {
                         />
                     ) : (
                         <>
-                            <Select
+                            <SearchSelect
                                 label="Almacén"
-                                name="almacen_id"
                                 value={form.almacen_id}
                                 // Cambiar de almacén invalida los productos ya elegidos.
-                                onChange={(e) => {
-                                    setForm((prev) => ({ ...prev, almacen_id: e.target.value }));
+                                onChange={(v) => {
+                                    setForm((prev) => ({ ...prev, almacen_id: v ?? '' }));
                                     setDetalles([{ ...emptyDetalle }]);
                                 }}
-                                options={[
-                                    { value: '', label: 'Seleccione un almacén' },
-                                    ...opcionesAlmacen(almacenes, form.almacen_id),
-                                ]}
+                                placeholder="Seleccione un almacén"
+                                emptyText="Sin coincidencias"
+                                options={opcionesAlmacen(almacenes, form.almacen_id)}
                                 error={formErrors.almacen_id}
                             />
                             <SearchSelect

@@ -12,7 +12,7 @@ import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import PageHeader, { CreateButton } from '../components/PageHeader';
-import { Alert, Badge, Button, DataTable, Input, Modal, Select, Tabs } from '../components/ui';
+import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select, Tabs } from '../components/ui';
 
 const TABS = [
     { key: 'bancos', label: 'Bancos', icon: Landmark },
@@ -309,11 +309,13 @@ export default function MetodosDePago() {
                     {tab === 'cuentas' && (
                         <>
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                                <Select
+                                <SearchSelect
                                     label="Banco"
                                     value={form.banco_id}
-                                    onChange={(e) => setField('banco_id', e.target.value)}
-                                    options={[{ value: '', label: 'Selecciona…' }, ...bancoOptions]}
+                                    onChange={(v) => setField('banco_id', v ?? '')}
+                                    placeholder="Selecciona…"
+                                    emptyText="Sin coincidencias"
+                                    options={bancoOptions}
                                     error={formErrors.banco_id}
                                 />
                                 <Input
@@ -367,11 +369,13 @@ export default function MetodosDePago() {
                     {tab === 'tarjetas' && (
                         <>
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                                <Select
+                                <SearchSelect
                                     label="Cuenta vinculada"
                                     value={form.cuenta_bancaria_id}
-                                    onChange={(e) => setField('cuenta_bancaria_id', e.target.value)}
-                                    options={[{ value: '', label: 'Selecciona…' }, ...cuentaOptions]}
+                                    onChange={(v) => setField('cuenta_bancaria_id', v ?? '')}
+                                    placeholder="Selecciona…"
+                                    emptyText="Sin coincidencias"
+                                    options={cuentaOptions}
                                     error={formErrors.cuenta_bancaria_id}
                                     className="sm:col-span-2"
                                 />
@@ -457,11 +461,13 @@ export default function MetodosDePago() {
                                     ]}
                                     error={formErrors.nombre}
                                 />
-                                <Select
+                                <SearchSelect
                                     label="Cuenta vinculada"
                                     value={form.cuenta_bancaria_id}
-                                    onChange={(e) => setField('cuenta_bancaria_id', e.target.value)}
-                                    options={[{ value: '', label: 'Ninguna' }, ...cuentaOptions]}
+                                    onChange={(v) => setField('cuenta_bancaria_id', v ?? '')}
+                                    placeholder="Ninguna"
+                                    emptyText="Sin coincidencias"
+                                    options={cuentaOptions}
                                 />
                                 <Input
                                     label="Teléfono"

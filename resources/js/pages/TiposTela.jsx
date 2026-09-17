@@ -4,7 +4,7 @@ import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import PageHeader, { CreateButton } from '../components/PageHeader';
-import { Alert, Badge, Button, DataTable, Input, Modal, Select, Tabs } from '../components/ui';
+import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select, Tabs } from '../components/ui';
 
 /**
  * Familias de tela (poliéster, algodón...) y sus tipos (Trenza, Polinan...).
@@ -250,11 +250,13 @@ export default function TiposTela() {
             >
                 <form id="tela-form" onSubmit={handleSubmit} className="space-y-4" noValidate>
                     {tab === 'tipos' && (
-                        <Select
+                        <SearchSelect
                             label="Familia"
                             value={form.familia_tela_id}
-                            onChange={(e) => setForm((prev) => ({ ...prev, familia_tela_id: e.target.value }))}
-                            options={[{ value: '', label: 'Elige una familia…' }, ...familiaOptions]}
+                            onChange={(v) => setForm((prev) => ({ ...prev, familia_tela_id: v ?? '' }))}
+                            placeholder="Elige una familia…"
+                            emptyText="Sin coincidencias"
+                            options={familiaOptions}
                             error={errors.familia_tela_id}
                         />
                     )}

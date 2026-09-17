@@ -5,7 +5,7 @@ import Layout from '../components/Layout';
 import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
 import PageHeader from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
-import { Alert, Badge, Button, DataTable, Select } from '../components/ui';
+import { Alert, Badge, Button, DataTable, SearchSelect, Select } from '../components/ui';
 
 const money = (n) =>
     new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(n) || 0);
@@ -102,11 +102,13 @@ export default function CierresCaja() {
 
     const filtros = (
         <div className="flex flex-wrap items-end gap-3">
-            <Select
+            <SearchSelect
                 label="Caja"
                 value={filtroCaja}
-                onChange={(e) => setFiltroCaja(e.target.value)}
-                options={[{ value: '', label: 'Todas' }, ...cajasPresentes]}
+                onChange={(v) => setFiltroCaja(v ?? '')}
+                placeholder="Todas"
+                emptyText="Sin coincidencias"
+                options={cajasPresentes}
                 className="w-52"
             />
             <Select

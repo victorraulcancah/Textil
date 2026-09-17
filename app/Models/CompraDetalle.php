@@ -11,7 +11,9 @@ class CompraDetalle extends Model
     protected $fillable = [
         'compra_id',
         'producto_presentacion_id',
+        'producto_color_id',
         'cantidad',
+        'rollos',
         'cantidad_finalizada',
         'costo_unitario',
         'subtotal',
@@ -21,6 +23,7 @@ class CompraDetalle extends Model
     {
         return [
             'cantidad' => 'decimal:2',
+            'rollos' => 'integer',
             'cantidad_finalizada' => 'decimal:2',
             'costo_unitario' => 'decimal:2',
             'subtotal' => 'decimal:2',
@@ -35,5 +38,11 @@ class CompraDetalle extends Model
     public function presentacion()
     {
         return $this->belongsTo(ProductoPresentacion::class, 'producto_presentacion_id');
+    }
+
+    /** En qué color viene esta línea, igual que en la orden de compra. */
+    public function color()
+    {
+        return $this->belongsTo(ProductoColor::class, 'producto_color_id');
     }
 }

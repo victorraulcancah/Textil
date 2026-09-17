@@ -13,8 +13,28 @@ const money = (n, moneda = 'PEN') =>
 
 const hoy = () => new Date().toISOString().slice(0, 10);
 
-const panelVacio = { producto_id: '', producto_presentacion_id: '', cantidad: '1', costo_unitario: '0' };
+const panelVacio = {
+    producto_id: '',
+    producto_presentacion_id: '',
+    producto_color_id: '',
+    rollos: '',
+    cantidad: '1',
+    costo_unitario: '0',
+};
 const emptyPago = () => ({ tipo: 'efectivo', cuentaId: '', billeteraId: '', monto: '' });
+
+/** Datos propios de una compra al exterior: iguales a los de la orden de compra. */
+const exteriorVacio = {
+    cargo_type: '',
+    medio_transporte: '',
+    incoterm: '',
+    pais_destino: '',
+    puerto_embarque: '',
+    puerto_destino: '',
+    fecha_embarque_estimada: '',
+    elaborado_por: '',
+    aprobado_por: '',
+};
 
 export default function CrearCompra() {
     const toast = useToast();
@@ -59,6 +79,7 @@ export default function CrearCompra() {
         fecha_llegada: '',
         moneda_origen: 'PEN',
         tipo_cambio: '',
+        ...exteriorVacio,
     });
 
     /** Panel superior de búsqueda/alta. */
@@ -121,11 +142,23 @@ export default function CrearCompra() {
                     fecha_llegada: (compra.fecha_llegada ?? '').slice(0, 10),
                     moneda_origen: compra.moneda_origen ?? 'PEN',
                     tipo_cambio: compra.tipo_cambio ? String(compra.tipo_cambio) : '',
+
+                    cargo_type: compra.cargo_type ?? '',
+                    medio_transporte: compra.medio_transporte ?? '',
+                    incoterm: compra.incoterm ?? '',
+                    pais_destino: compra.pais_destino ?? '',
+                    puerto_embarque: compra.puerto_embarque ?? '',
+                    puerto_destino: compra.puerto_destino ?? '',
+                    fecha_embarque_estimada: (compra.fecha_embarque_estimada ?? '').slice(0, 10),
+                    elaborado_por: compra.elaborado_por ?? '',
+                    aprobado_por: compra.aprobado_por ?? '',
                 });
                 setItems(
                     (compra.detalles ?? []).map((d) => ({
                         producto_id: String(d.presentacion?.producto_id ?? d.presentacion?.producto?.id ?? ''),
                         producto_presentacion_id: String(d.producto_presentacion_id),
+                        producto_color_id: d.producto_color_id ? String(d.producto_color_id) : '',
+                        rollos: d.rollos != null ? String(d.rollos) : '',
                         cantidad: String(d.cantidad),
                         costo_unitario: String(d.costo_unitario),
                     })),
@@ -147,17 +180,38 @@ export default function CrearCompra() {
 
             if (!ordenCompraId) return;
 
-            // Transformar orden → compra: se copian proveedor y líneas.
+            // Transformar orden → compra: se copian proveedor, embarque y líneas
+            // completas, para no perder lo que ya se llenó en la orden.
             const { data: orden } = await api.get(`/ordenes-compra/${ordenCompraId}`);
             setOrdenCodigo(orden.codigo ?? '');
+            const esExterior = orden.tipo === 'exterior';
             setForm((prev) => ({
                 ...prev,
                 proveedor_id: orden.proveedor_id ? String(orden.proveedor_id) : '',
+                fecha: (orden.fecha_emision ?? '').slice(0, 10) || prev.fecha,
+                observaciones: orden.observaciones ?? '',
+
+                es_importacion: esExterior,
+                pais_origen: orden.pais_origen ?? '',
+                contenedor: orden.numero_contenedor ?? '',
+                moneda_origen: orden.moneda ?? 'PEN',
+
+                cargo_type: orden.cargo_type ?? '',
+                medio_transporte: orden.medio_transporte ?? '',
+                incoterm: orden.incoterm ?? '',
+                pais_destino: orden.pais_destino ?? '',
+                puerto_embarque: orden.puerto_embarque ?? '',
+                puerto_destino: orden.puerto_destino ?? '',
+                fecha_embarque_estimada: (orden.fecha_embarque_estimada ?? '').slice(0, 10),
+                elaborado_por: orden.elaborado_por ?? '',
+                aprobado_por: orden.aprobado_por ?? '',
             }));
             setItems(
                 (orden.detalles ?? []).map((d) => ({
                     producto_id: String(d.presentacion?.producto_id ?? d.presentacion?.producto?.id ?? ''),
                     producto_presentacion_id: String(d.producto_presentacion_id),
+                    producto_color_id: d.producto_color_id ? String(d.producto_color_id) : '',
+                    rollos: d.rollos != null ? String(d.rollos) : '',
                     cantidad: String(d.cantidad),
                     costo_unitario: String(d.precio_unitario),
                 })),
@@ -228,6 +282,9 @@ export default function CrearCompra() {
         setPanel({
             producto_id: productoId,
             producto_presentacion_id: presentacionId,
+            // Otro producto, otro color: nunca se hereda del anterior.
+            producto_color_id: '',
+            rollos: '',
             cantidad: '1',
             costo_unitario: presentacionId
                 ? String(Number(presentacionDe(productoId, presentacionId)?.precio_compra) || 0)
@@ -257,8 +314,12 @@ export default function CrearCompra() {
             const next = [...prev];
 
             utiles.forEach(({ producto, presentacion, cantidad }) => {
+                // El buscador no elige color, así que solo se acumula sobre
+                // líneas que tampoco lo tengan.
                 const i = next.findIndex(
-                    (it) => String(it.producto_presentacion_id) === String(presentacion.id),
+                    (it) =>
+                        String(it.producto_presentacion_id) === String(presentacion.id) &&
+                        !it.producto_color_id,
                 );
                 if (i !== -1) {
                     next[i] = {
@@ -269,6 +330,8 @@ export default function CrearCompra() {
                     next.push({
                         producto_id: String(producto.id),
                         producto_presentacion_id: String(presentacion.id),
+                        producto_color_id: '',
+                        rollos: '',
                         cantidad: String(cantidad),
                         costo_unitario: String(Number(presentacion.precio_compra) || 0),
                     });
@@ -292,13 +355,18 @@ export default function CrearCompra() {
         const nuevo = {
             producto_id: panel.producto_id,
             producto_presentacion_id: panel.producto_presentacion_id,
+            producto_color_id: panel.producto_color_id || '',
+            rollos: panel.rollos || '',
             cantidad: panel.cantidad,
             costo_unitario: panel.costo_unitario || '0',
         };
 
-        // Si ya existe la misma presentación, se acumula en vez de duplicar la línea.
+        // Se acumula en la misma línea si coincide presentación y color; un
+        // color distinto de la misma tela es una línea aparte.
         const yaEsta = items.findIndex(
-            (it) => String(it.producto_presentacion_id) === String(nuevo.producto_presentacion_id),
+            (it) =>
+                String(it.producto_presentacion_id) === String(nuevo.producto_presentacion_id) &&
+                String(it.producto_color_id || '') === String(nuevo.producto_color_id || ''),
         );
         if (yaEsta !== -1) {
             setItems((prev) =>
@@ -307,6 +375,7 @@ export default function CrearCompra() {
                         ? {
                               ...it,
                               cantidad: String((Number(it.cantidad) || 0) + (Number(nuevo.cantidad) || 0)),
+                              rollos: String((Number(it.rollos) || 0) + (Number(nuevo.rollos) || 0)),
                               costo_unitario: nuevo.costo_unitario,
                           }
                         : it,
@@ -401,10 +470,21 @@ export default function CrearCompra() {
                       fecha_llegada: form.fecha_llegada || null,
                       moneda_origen: form.moneda_origen || 'PEN',
                       tipo_cambio: form.tipo_cambio ? Number(form.tipo_cambio) : null,
+                      cargo_type: form.cargo_type || null,
+                      medio_transporte: form.medio_transporte || null,
+                      incoterm: form.incoterm || null,
+                      pais_destino: form.pais_destino || null,
+                      puerto_embarque: form.puerto_embarque || null,
+                      puerto_destino: form.puerto_destino || null,
+                      fecha_embarque_estimada: form.fecha_embarque_estimada || null,
+                      elaborado_por: form.elaborado_por || null,
+                      aprobado_por: form.aprobado_por || null,
                   }
                 : {}),
             detalles: items.map((it) => ({
                 producto_presentacion_id: it.producto_presentacion_id,
+                producto_color_id: it.producto_color_id || null,
+                rollos: it.rollos !== '' ? Number(it.rollos) : null,
                 cantidad: it.cantidad,
                 costo_unitario: it.costo_unitario || 0,
             })),
@@ -546,6 +626,34 @@ export default function CrearCompra() {
                     />
                 </div>
 
+                {/* Solo si la tela tiene colores registrados: hay insumos
+                    (hilos, cierres) que no se piden por color. */}
+                {productoPanel?.colores?.length > 0 && (
+                    <div className="mt-4 grid grid-cols-2 gap-4">
+                        <Select
+                            label="Color"
+                            value={panel.producto_color_id}
+                            onChange={(e) => setPanelCampo({ producto_color_id: e.target.value })}
+                            options={[
+                                { value: '', label: 'Cualquier color' },
+                                ...productoPanel.colores.map((c) => ({
+                                    value: String(c.id),
+                                    label: c.codigo ? `${c.nombre} (${c.codigo})` : c.nombre,
+                                })),
+                            ]}
+                        />
+                        <Input
+                            label="Rollos"
+                            type="number"
+                            min="0"
+                            step="1"
+                            placeholder="Cuántos rollos de ese color"
+                            value={panel.rollos}
+                            onChange={(e) => setPanelCampo({ rollos: e.target.value })}
+                        />
+                    </div>
+                )}
+
                 <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-4">
                     <div>
                         <label className="mb-1 block text-sm font-medium text-gray-700">Stock</label>
@@ -602,13 +710,15 @@ export default function CrearCompra() {
                     </span>
                 </div>
                 <div className="overflow-x-auto">
-                    <table className="w-full min-w-[820px] text-sm">
+                    <table className="w-full min-w-[980px] text-sm">
                         <thead>
                             <tr className="bg-primary-600 text-left text-xs font-semibold uppercase tracking-wide text-white">
                                 <th className="px-3 py-2.5 text-center">#</th>
                                 <th className="px-3 py-2.5">Código</th>
                                 <th className="px-3 py-2.5">Producto</th>
+                                <th className="px-3 py-2.5">Color</th>
                                 <th className="px-3 py-2.5">Unidad</th>
+                                <th className="px-3 py-2.5 text-right">Rollos</th>
                                 <th className="px-3 py-2.5 text-right">Cant</th>
                                 <th className="px-3 py-2.5 text-right">Costo ({form.moneda_origen || 'PEN'})</th>
                                 <th className="px-3 py-2.5 text-right">Subtotal</th>
@@ -618,7 +728,7 @@ export default function CrearCompra() {
                         <tbody className="divide-y divide-gray-100">
                             {items.length === 0 && (
                                 <tr>
-                                    <td colSpan={8} className="px-3 py-10 text-center text-sm text-warm-500">
+                                    <td colSpan={10} className="px-3 py-10 text-center text-sm text-warm-500">
                                         Busca un producto arriba para agregarlo a la compra
                                     </td>
                                 </tr>
@@ -627,12 +737,16 @@ export default function CrearCompra() {
                             {items.map((it, i) => {
                                 const producto = productoDe(it.producto_id);
                                 const sub = (Number(it.cantidad) || 0) * (Number(it.costo_unitario) || 0);
+                                const colorItem = (producto?.colores ?? []).find(
+                                    (c) => String(c.id) === String(it.producto_color_id),
+                                );
 
                                 return (
                                     <tr key={i}>
                                         <td className="px-3 py-2 text-center text-warm-500">{i + 1}</td>
                                         <td className="px-3 py-2 font-medium text-warm-900">{producto?.codigo ?? '—'}</td>
                                         <td className="px-3 py-2 font-semibold text-warm-900">{producto?.nombre ?? '—'}</td>
+                                        <td className="px-3 py-2 text-warm-600">{colorItem?.nombre ?? '—'}</td>
                                         <td className="px-3 py-2">
                                             <Select
                                                 value={it.producto_presentacion_id}
@@ -640,6 +754,17 @@ export default function CrearCompra() {
                                                 options={unidadesDe(it.producto_id)}
                                                 aria-label="Unidad"
                                                 className="min-w-[120px]"
+                                            />
+                                        </td>
+                                        <td className="px-3 py-2">
+                                            <Input
+                                                type="number"
+                                                min="0"
+                                                step="1"
+                                                value={it.rollos}
+                                                onChange={(e) => setItem(i, { rollos: e.target.value })}
+                                                aria-label="Rollos"
+                                                className="text-right"
                                             />
                                         </td>
                                         <td className="px-3 py-2">
@@ -881,6 +1006,77 @@ export default function CrearCompra() {
                                     placeholder="3.7500"
                                     value={form.tipo_cambio}
                                     onChange={(e) => setField('tipo_cambio', e.target.value)}
+                                />
+
+                                {/* Datos de embarque: los mismos que ya pregunta la orden de
+                                    compra al exterior, para que ambas pantallas calcen. */}
+                                <Select
+                                    label="Tipo de carga"
+                                    value={form.cargo_type}
+                                    onChange={(e) => setField('cargo_type', e.target.value)}
+                                    options={[
+                                        { value: '', label: '—' },
+                                        { value: 'FCL', label: 'FCL (contenedor completo)' },
+                                        { value: 'LCL', label: 'LCL (carga consolidada)' },
+                                    ]}
+                                />
+                                <Select
+                                    label="Medio de embarque"
+                                    value={form.medio_transporte}
+                                    onChange={(e) => setField('medio_transporte', e.target.value)}
+                                    options={[
+                                        { value: '', label: '—' },
+                                        { value: 'SEAFREIGHT', label: 'Marítimo (seafreight)' },
+                                        { value: 'AIRFREIGHT', label: 'Aéreo (airfreight)' },
+                                    ]}
+                                />
+                                <Select
+                                    label="Incoterm"
+                                    value={form.incoterm}
+                                    onChange={(e) => setField('incoterm', e.target.value)}
+                                    options={[
+                                        { value: '', label: '—' },
+                                        { value: 'FOB', label: 'FOB' },
+                                        { value: 'CIF', label: 'CIF' },
+                                        { value: 'CFR', label: 'CFR' },
+                                        { value: 'EXW', label: 'EXW' },
+                                        { value: 'DDP', label: 'DDP' },
+                                    ]}
+                                />
+                                <Input
+                                    label="País de destino"
+                                    placeholder="PERÚ - PE"
+                                    value={form.pais_destino}
+                                    onChange={(e) => setField('pais_destino', e.target.value)}
+                                />
+                                <Input
+                                    label="Puerto de embarque"
+                                    placeholder="NINGBO"
+                                    value={form.puerto_embarque}
+                                    onChange={(e) => setField('puerto_embarque', e.target.value)}
+                                />
+                                <Input
+                                    label="Puerto de llegada"
+                                    placeholder="CHANCAY"
+                                    value={form.puerto_destino}
+                                    onChange={(e) => setField('puerto_destino', e.target.value)}
+                                />
+                                <Input
+                                    label="Fecha de embarque"
+                                    type="date"
+                                    value={form.fecha_embarque_estimada}
+                                    onChange={(e) => setField('fecha_embarque_estimada', e.target.value)}
+                                />
+                                <Input
+                                    label="Elaborado por"
+                                    value={form.elaborado_por}
+                                    onChange={(e) => setField('elaborado_por', e.target.value)}
+                                />
+                                <Input
+                                    label="Aprobado por"
+                                    placeholder="Se llena al aprobar"
+                                    value={form.aprobado_por}
+                                    onChange={(e) => setField('aprobado_por', e.target.value)}
                                 />
                             </div>
                         )}

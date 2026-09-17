@@ -19,6 +19,7 @@ class CompraController extends Controller
         'proveedor:id,nombre',
         'ordenCompra:id,codigo',
         'detalles.presentacion.producto',
+        'detalles.color',
         'pagos',
     ];
 
@@ -67,7 +68,16 @@ class CompraController extends Controller
                 'precinto' => $data['precinto'] ?? null,
                 'bl' => $data['bl'] ?? null,
                 'pais_origen' => $data['pais_origen'] ?? null,
+                'pais_destino' => $data['pais_destino'] ?? null,
+                'puerto_embarque' => $data['puerto_embarque'] ?? null,
+                'puerto_destino' => $data['puerto_destino'] ?? null,
+                'cargo_type' => $data['cargo_type'] ?? null,
+                'medio_transporte' => $data['medio_transporte'] ?? null,
+                'incoterm' => $data['incoterm'] ?? null,
                 'fecha_llegada' => $data['fecha_llegada'] ?? null,
+                'fecha_embarque_estimada' => $data['fecha_embarque_estimada'] ?? null,
+                'elaborado_por' => $data['elaborado_por'] ?? null,
+                'aprobado_por' => $data['aprobado_por'] ?? null,
                 'moneda_origen' => $data['moneda_origen'] ?? 'PEN',
                 'tipo_cambio' => $data['tipo_cambio'] ?? null,
 
@@ -299,6 +309,8 @@ class CompraController extends Controller
 
             $compra->detalles()->create([
                 'producto_presentacion_id' => $d['producto_presentacion_id'],
+                'producto_color_id' => $d['producto_color_id'] ?? null,
+                'rollos' => $d['rollos'] ?? null,
                 'cantidad' => $cantidad,
                 'costo_unitario' => $costo,
                 'subtotal' => round($cantidad * $costo, 2),

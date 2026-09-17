@@ -36,7 +36,18 @@ class StoreCompraRequest extends FormRequest
             'precinto' => 'nullable|string|max:40',
             'bl' => 'nullable|string|max:60',
             'pais_origen' => 'nullable|string|max:60',
+            // Mismos campos de embarque que ya pregunta la orden de compra al
+            // exterior: al convertir una en compra, se llenan solos.
+            'pais_destino' => 'nullable|string|max:100',
+            'puerto_embarque' => 'nullable|string|max:100',
+            'puerto_destino' => 'nullable|string|max:100',
+            'cargo_type' => 'nullable|string|max:30',
+            'medio_transporte' => 'nullable|string|max:30',
+            'incoterm' => 'nullable|string|max:10',
             'fecha_llegada' => 'nullable|date',
+            'fecha_embarque_estimada' => 'nullable|date',
+            'elaborado_por' => 'nullable|string|max:100',
+            'aprobado_por' => 'nullable|string|max:100',
             'moneda_origen' => 'nullable|in:PEN,USD,CNY,EUR',
             // Sin tipo de cambio, una compra que no sea en soles no se puede
             // llevar a soles y el costo del stock quedaría mal calculado.
@@ -45,6 +56,10 @@ class StoreCompraRequest extends FormRequest
 
             'detalles' => 'required|array|min:1',
             'detalles.*.producto_presentacion_id' => 'required|exists:producto_presentaciones,id',
+            // Igual que en la orden: color opcional (hay insumos sin color) y
+            // rollos, solo informativo hasta que se recepcione de verdad.
+            'detalles.*.producto_color_id' => 'nullable|exists:producto_colores,id',
+            'detalles.*.rollos' => 'nullable|integer|min:0',
             'detalles.*.cantidad' => 'required|numeric|min:0.01',
             'detalles.*.costo_unitario' => 'required|numeric|min:0',
 

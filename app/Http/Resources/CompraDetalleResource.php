@@ -15,6 +15,8 @@ class CompraDetalleResource extends JsonResource
             'id' => $this->id,
             'compra_id' => $this->compra_id,
             'producto_presentacion_id' => $this->producto_presentacion_id,
+            'producto_color_id' => $this->producto_color_id,
+            'rollos' => $this->rollos,
             'cantidad' => $this->cantidad,
             'costo_unitario' => $this->costo_unitario,
             'subtotal' => $this->subtotal,
@@ -28,6 +30,7 @@ class CompraDetalleResource extends JsonResource
             'pendiente' => $this->when(isset($this->pendiente), fn () => $this->pendiente),
 
             'presentacion' => $this->whenLoaded('presentacion'),
+            'color' => $this->whenLoaded('color'),
 
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,

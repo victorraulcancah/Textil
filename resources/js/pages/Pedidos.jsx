@@ -226,6 +226,9 @@ export default function Pedidos() {
     const almacenesPresentes = [
         ...new Map(pedidos.filter((p) => p.almacen_id).map((p) => [String(p.almacen_id), p.almacen])).entries(),
     ].map(([value, label]) => ({ value, label }));
+    const vendedoresPresentes = [
+        ...new Map(pedidos.filter((p) => p.vendedor_id).map((p) => [String(p.vendedor_id), p.vendedor])).entries(),
+    ].map(([value, label]) => ({ value, label }));
     const requerimientosPresentes = [...new Set(pedidos.map((p) => p.requerimiento_numero).filter(Boolean))]
         .sort((a, b) => a.localeCompare(b, 'es'))
         .map((num_) => ({ value: num_, label: num_ }));
@@ -234,6 +237,7 @@ export default function Pedidos() {
         (estado ? 1 : 0) +
         (fCliente ? 1 : 0) +
         (fAlmacen ? 1 : 0) +
+        (fVendedor ? 1 : 0) +
         (fDesde ? 1 : 0) +
         (fHasta ? 1 : 0) +
         (fRequerimiento ? 1 : 0);
@@ -242,6 +246,7 @@ export default function Pedidos() {
         setEstado('');
         setFCliente('');
         setFAlmacen('');
+        setFVendedor('');
         setFDesde('');
         setFHasta('');
         setFRequerimiento('');
@@ -275,6 +280,15 @@ export default function Pedidos() {
                 className="w-56"
             />
             <SearchSelect
+                label="Vendedor"
+                value={fVendedor}
+                onChange={(v) => setFVendedor(v ?? '')}
+                placeholder="Todos"
+                emptyText="Sin coincidencias"
+                options={vendedoresPresentes}
+                className="w-56"
+            />
+            <SearchSelect
                 label="Requerimiento"
                 value={fRequerimiento}
                 onChange={(v) => setFRequerimiento(v ?? '')}
@@ -304,6 +318,7 @@ export default function Pedidos() {
     const pedidosFiltrados = pedidos.filter((p) => {
         if (fCliente && p.cliente !== fCliente) return false;
         if (fAlmacen && String(p.almacen_id) !== String(fAlmacen)) return false;
+        if (fVendedor && String(p.vendedor_id) !== String(fVendedor)) return false;
         if (fRequerimiento && p.requerimiento_numero !== fRequerimiento) return false;
         if (fDesde && (!p.fecha_emision || p.fecha_emision < fDesde)) return false;
         if (fHasta && (!p.fecha_emision || p.fecha_emision > fHasta)) return false;

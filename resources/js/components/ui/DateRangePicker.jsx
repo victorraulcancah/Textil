@@ -36,6 +36,9 @@ const hoy = () => {
     return d;
 };
 
+/** Ancho real del popover: barra de rangos (w-40) + los dos meses (w-[36rem]). */
+const POPOVER_WIDTH = 160 + 576;
+
 /** Rangos rápidos que se ven en la barra lateral del calendario. */
 export const RANGOS_RAPIDOS = [
     { key: 'esta_semana', label: 'Esta semana', rango: () => [startOfWeek(hoy()), hoy()] },
@@ -180,8 +183,19 @@ export default function DateRangePicker({
         const r = el.getBoundingClientRect();
         const abajo = window.innerHeight - r.bottom;
         const haciaArriba = abajo < 420 && r.top > abajo;
+
+        // El campo suele vivir en un panel angosto (p.ej. el dropdown de
+        // filtros); el popover es mucho más ancho, así que por defecto se
+        // abre hacia la izquierda (el borde derecho calza con el del campo)
+        // y solo se alinea a la izquierda del campo si de verdad hay sitio.
+        const sobraADerecha = window.innerWidth - r.right;
+        const left =
+            sobraADerecha >= POPOVER_WIDTH + 8
+                ? r.left
+                : Math.max(8, r.right - POPOVER_WIDTH);
+
         setMenuStyle({
-            left: Math.max(8, Math.min(r.left, window.innerWidth - 640)),
+            left: Math.min(left, window.innerWidth - POPOVER_WIDTH - 8),
             ...(haciaArriba ? { bottom: window.innerHeight - r.top + 4 } : { top: r.bottom + 4 }),
         });
     }, []);

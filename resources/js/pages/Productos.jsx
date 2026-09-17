@@ -837,15 +837,14 @@ export default function Productos() {
                                 error={errors.codigo}
                             />
                             <div>
-                                <Select
+                                <SearchSelect
                                     label="Tipo de tela (opcional)"
                                     value={form.tipo_tela_id}
-                                    onChange={(e) => {
-                                        const tipoId = e.target.value;
+                                    onChange={(tipoId) => {
                                         const tipo = tiposTela.find((t) => String(t.id) === tipoId);
                                         setForm((p) => ({
                                             ...p,
-                                            tipo_tela_id: tipoId,
+                                            tipo_tela_id: tipoId ?? '',
                                             // Si no se escribió un código a mano,
                                             // se muestra el que va a salir: familia + tipo.
                                             codigo:
@@ -854,13 +853,12 @@ export default function Productos() {
                                                     : p.codigo,
                                         }));
                                     }}
-                                    options={[
-                                        { value: '', label: 'Sin asignar' },
-                                        ...tiposTela.map((t) => ({
-                                            value: String(t.id),
-                                            label: `01-${t.familia?.codigo ?? '00'}-${t.codigo} — ${t.nombre} (${t.familia?.nombre ?? ''})`,
-                                        })),
-                                    ]}
+                                    placeholder="Sin asignar"
+                                    emptyText="Sin coincidencias"
+                                    options={tiposTela.map((t) => ({
+                                        value: String(t.id),
+                                        label: `01-${t.familia?.codigo ?? '00'}-${t.codigo} — ${t.nombre} (${t.familia?.nombre ?? ''})`,
+                                    }))}
                                 />
                                 <p className="mt-1 text-xs text-warm-400">
                                     Si lo eliges, el código de tela sale de aquí. Se administra en Catálogo
@@ -899,23 +897,22 @@ export default function Productos() {
                         </h3>
                         <div className="grid gap-4 sm:grid-cols-2">
                             <FieldWithAdd onAdd={() => setQuick({ tipo: 'categoria' })}>
-                                <Select
+                                <SearchSelect
                                     label="Categoría"
                                     value={form.categoria_id}
-                                    onChange={(e) =>
+                                    onChange={(v) =>
                                         setForm((p) => ({
                                             ...p,
-                                            categoria_id: e.target.value,
+                                            categoria_id: v ?? '',
                                             sub_categoria_id: '',
                                         }))
                                     }
-                                    options={[
-                                        { value: '', label: 'Seleccionar categoría' },
-                                        ...categoriasRaiz.map((c) => ({
-                                            value: String(c.id),
-                                            label: c.nombre,
-                                        })),
-                                    ]}
+                                    placeholder="Seleccionar categoría"
+                                    emptyText="Sin coincidencias"
+                                    options={categoriasRaiz.map((c) => ({
+                                        value: String(c.id),
+                                        label: c.nombre,
+                                    }))}
                                 />
                             </FieldWithAdd>
                             <FieldWithAdd
@@ -925,34 +922,32 @@ export default function Productos() {
                                         : toast.error('Elige una categoría primero.')
                                 }
                             >
-                                <Select
+                                <SearchSelect
                                     label="Subcategoría"
                                     value={form.sub_categoria_id}
-                                    onChange={setField('sub_categoria_id')}
-                                    options={[
-                                        { value: '', label: 'Seleccionar subcategoría' },
-                                        ...subCategoriasDe(form.categoria_id).map((c) => ({
-                                            value: String(c.id),
-                                            label: c.nombre,
-                                        })),
-                                    ]}
+                                    onChange={(v) => setForm((p) => ({ ...p, sub_categoria_id: v ?? '' }))}
+                                    placeholder="Seleccionar subcategoría"
+                                    emptyText="Sin coincidencias"
+                                    options={subCategoriasDe(form.categoria_id).map((c) => ({
+                                        value: String(c.id),
+                                        label: c.nombre,
+                                    }))}
                                 />
                             </FieldWithAdd>
                             <FieldWithAdd onAdd={() => setQuick({ tipo: 'marca' })}>
-                                <Select
+                                <SearchSelect
                                     label="Marca"
                                     value={form.marca_id}
-                                    onChange={(e) =>
+                                    onChange={(v) =>
                                         setForm((p) => ({
                                             ...p,
-                                            marca_id: e.target.value,
+                                            marca_id: v ?? '',
                                             sub_marca_id: '',
                                         }))
                                     }
-                                    options={[
-                                        { value: '', label: 'Seleccionar marca' },
-                                        ...marcas.map((m) => ({ value: String(m.id), label: m.nombre })),
-                                    ]}
+                                    placeholder="Seleccionar marca"
+                                    emptyText="Sin coincidencias"
+                                    options={marcas.map((m) => ({ value: String(m.id), label: m.nombre }))}
                                 />
                             </FieldWithAdd>
                             <FieldWithAdd
@@ -962,17 +957,16 @@ export default function Productos() {
                                         : toast.error('Elige una marca primero.')
                                 }
                             >
-                                <Select
+                                <SearchSelect
                                     label="Submarca"
                                     value={form.sub_marca_id}
-                                    onChange={setField('sub_marca_id')}
-                                    options={[
-                                        { value: '', label: 'Seleccionar submarca' },
-                                        ...subMarcasDe(form.marca_id).map((s) => ({
-                                            value: String(s.id),
-                                            label: s.nombre,
-                                        })),
-                                    ]}
+                                    onChange={(v) => setForm((p) => ({ ...p, sub_marca_id: v ?? '' }))}
+                                    placeholder="Seleccionar submarca"
+                                    emptyText="Sin coincidencias"
+                                    options={subMarcasDe(form.marca_id).map((s) => ({
+                                        value: String(s.id),
+                                        label: s.nombre,
+                                    }))}
                                 />
                             </FieldWithAdd>
                         </div>
@@ -1005,27 +999,26 @@ export default function Productos() {
                             <div className="space-y-2">
                                 {provs.map((pv, i) => (
                                     <div key={i} className="flex flex-wrap items-end gap-2 rounded-lg border border-edge p-2">
-                                        <Select
+                                        <SearchSelect
                                             label="Proveedor"
                                             className="min-w-[12rem] flex-1"
                                             value={pv.proveedor_id}
-                                            onChange={(e) =>
+                                            onChange={(v) =>
                                                 setProvs((prev) =>
                                                     prev.map((x, j) =>
-                                                        j === i ? { ...x, proveedor_id: e.target.value } : x,
+                                                        j === i ? { ...x, proveedor_id: v ?? '' } : x,
                                                     ),
                                                 )
                                             }
-                                            options={[
-                                                { value: '', label: 'Elegir proveedor…' },
-                                                ...proveedores
-                                                    .filter(
-                                                        (op) =>
-                                                            String(op.id) === String(pv.proveedor_id) ||
-                                                            !provs.some((o) => String(o.proveedor_id) === String(op.id)),
-                                                    )
-                                                    .map((op) => ({ value: String(op.id), label: op.nombre })),
-                                            ]}
+                                            placeholder="Elegir proveedor…"
+                                            emptyText="Sin coincidencias"
+                                            options={proveedores
+                                                .filter(
+                                                    (op) =>
+                                                        String(op.id) === String(pv.proveedor_id) ||
+                                                        !provs.some((o) => String(o.proveedor_id) === String(op.id)),
+                                                )
+                                                .map((op) => ({ value: String(op.id), label: op.nombre }))}
                                         />
                                         <Input
                                             label="Su código"

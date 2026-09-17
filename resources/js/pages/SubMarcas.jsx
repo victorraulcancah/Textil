@@ -4,7 +4,7 @@ import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import PageHeader, { CreateButton } from '../components/PageHeader';
-import { Alert, Badge, Button, DataTable, Input, Modal, Select } from '../components/ui';
+import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect } from '../components/ui';
 
 export default function SubMarcas() {
     const toast = useToast();
@@ -186,14 +186,13 @@ export default function SubMarcas() {
 
     const filters = (
         <div className="flex flex-wrap items-end gap-3">
-            <Select
+            <SearchSelect
                 label="Marca"
                 value={filterMarca}
-                onChange={(e) => setFilterMarca(e.target.value)}
-                options={[
-                    { value: '', label: 'Todas' },
-                    ...marcas.map((m) => ({ value: String(m.id), label: m.nombre })),
-                ]}
+                onChange={(v) => setFilterMarca(v ?? '')}
+                placeholder="Todas"
+                emptyText="Sin coincidencias"
+                options={marcas.map((m) => ({ value: String(m.id), label: m.nombre }))}
                 className="w-48"
             />
             <Button variant="primary" size="sm" onClick={applyFilters}>
@@ -246,11 +245,11 @@ export default function SubMarcas() {
                 }
             >
                 <form id="submarca-form" onSubmit={handleSubmit} className="space-y-4" noValidate>
-                    <Select
+                    <SearchSelect
                         label="Marca"
-                        name="marca_id"
                         value={form.marca_id}
-                        onChange={(e) => setForm((prev) => ({ ...prev, marca_id: e.target.value }))}
+                        onChange={(v) => setForm((prev) => ({ ...prev, marca_id: v ?? '' }))}
+                        emptyText="Sin coincidencias"
                         options={marcas.map((m) => ({ value: String(m.id), label: m.nombre }))}
                         error={errors.marca_id}
                     />

@@ -1,4 +1,4 @@
-import { Select } from './ui';
+import { SearchSelect, Select } from './ui';
 
 const cuentaLabel = (c) => [c.banco?.nombre, c.alias, c.numero_cuenta].filter(Boolean).join(' · ');
 const billeteraLabel = (b) => [b.nombre, b.titular, b.numero_asociado].filter(Boolean).join(' · ');
@@ -37,19 +37,23 @@ export default function MetodoCajaPicker({
                 error={error}
             />
             {tipo === 'transferencia' && (
-                <Select
+                <SearchSelect
                     label={compact ? undefined : 'Cuenta bancaria'}
                     value={cuentaId}
-                    onChange={(e) => onChange({ tipo, cuentaId: e.target.value, billeteraId: '' })}
-                    options={[{ value: '', label: 'Selecciona la cuenta' }, ...cuentas.map((c) => ({ value: String(c.id), label: cuentaLabel(c) }))]}
+                    onChange={(v) => onChange({ tipo, cuentaId: v ?? '', billeteraId: '' })}
+                    placeholder="Selecciona la cuenta"
+                    emptyText="Sin coincidencias"
+                    options={cuentas.map((c) => ({ value: String(c.id), label: cuentaLabel(c) }))}
                 />
             )}
             {tipo === 'billetera' && (
-                <Select
+                <SearchSelect
                     label={compact ? undefined : 'Billetera'}
                     value={billeteraId}
-                    onChange={(e) => onChange({ tipo, cuentaId: '', billeteraId: e.target.value })}
-                    options={[{ value: '', label: 'Selecciona la billetera' }, ...billeteras.map((b) => ({ value: String(b.id), label: billeteraLabel(b) }))]}
+                    onChange={(v) => onChange({ tipo, cuentaId: '', billeteraId: v ?? '' })}
+                    placeholder="Selecciona la billetera"
+                    emptyText="Sin coincidencias"
+                    options={billeteras.map((b) => ({ value: String(b.id), label: billeteraLabel(b) }))}
                 />
             )}
         </div>

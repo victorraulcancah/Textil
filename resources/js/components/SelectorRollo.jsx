@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api, { asList } from '../lib/api';
-import { Select } from './ui';
+import { SearchSelect } from './ui';
 
 const metros = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
 
@@ -70,17 +70,16 @@ export default function SelectorRollo({ productoId, almacenId, value, onChange }
     }
 
     return (
-        <Select
+        <SearchSelect
             value={value ?? ''}
-            onChange={(e) => onChange(e.target.value)}
-            aria-label="Rollo"
-            options={[
-                { value: '', label: 'Elegir rollo…' },
-                ...rollos.map((r) => ({
-                    value: String(r.id),
-                    label: `${r.codigo} · ${r.color?.nombre ?? 'sin color'} · ${metros(r.metros_actual)} m`,
-                })),
-            ]}
+            onChange={(v) => onChange(v ?? '')}
+            placeholder="Elegir rollo…"
+            emptyText="Sin coincidencias"
+            options={rollos.map((r) => ({
+                value: String(r.id),
+                label: `${r.codigo} · ${r.color?.nombre ?? 'sin color'} · ${metros(r.metros_actual)} m`,
+                keywords: r.codigo,
+            }))}
         />
     );
 }

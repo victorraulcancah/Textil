@@ -4,7 +4,7 @@ import api, { asList } from '../lib/api';
 import { opcionesAlmacen } from '../lib/almacenes';
 import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
-import { Alert, Button, Input, Modal, Select, Spinner } from './ui';
+import { Alert, Button, Input, Modal, SearchSelect, Select, Spinner } from './ui';
 
 const hoy = () => new Date().toISOString().slice(0, 10);
 
@@ -436,17 +436,16 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
                                                     <tr className="bg-gray-50">
                                                         <td colSpan={7} className="px-3 py-3">
                                                             <div className="grid gap-3 sm:grid-cols-[14rem_10rem_1fr]">
-                                                                <Select
+                                                                <SearchSelect
                                                                     label="Color"
                                                                     value={cap?.color_id ?? ''}
-                                                                    onChange={(e) => setCap('color_id', e.target.value)}
-                                                                    options={[
-                                                                        { value: '', label: 'Elegir color…' },
-                                                                        ...l.colores.map((c) => ({
-                                                                            value: String(c.id),
-                                                                            label: c.codigo ? `${c.nombre} (${c.codigo})` : c.nombre,
-                                                                        })),
-                                                                    ]}
+                                                                    onChange={(v) => setCap('color_id', v ?? '')}
+                                                                    placeholder="Elegir color…"
+                                                                    emptyText="Sin coincidencias"
+                                                                    options={l.colores.map((c) => ({
+                                                                        value: String(c.id),
+                                                                        label: c.codigo ? `${c.nombre} (${c.codigo})` : c.nombre,
+                                                                    }))}
                                                                 />
                                                                 <div>
                                                                     <Input

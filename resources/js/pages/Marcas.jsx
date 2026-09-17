@@ -4,7 +4,7 @@ import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import PageHeader, { CreateButton } from '../components/PageHeader';
-import { Alert, Badge, Button, DataTable, Input, Modal, Select, Tabs } from '../components/ui';
+import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select, Tabs } from '../components/ui';
 
 const emptySubMarca = { marca_id: '', nombre: '', activo: true };
 
@@ -339,14 +339,13 @@ export default function Marcas() {
 
     const subFilters = (
         <div className="flex flex-wrap items-end gap-3">
-            <Select
+            <SearchSelect
                 label="Marca"
                 value={filterMarca}
-                onChange={(e) => setFilterMarca(e.target.value)}
-                options={[
-                    { value: '', label: 'Todas' },
-                    ...marcas.map((m) => ({ value: String(m.id), label: m.nombre })),
-                ]}
+                onChange={(v) => setFilterMarca(v ?? '')}
+                placeholder="Todas"
+                emptyText="Sin coincidencias"
+                options={marcas.map((m) => ({ value: String(m.id), label: m.nombre }))}
                 className="w-48"
             />
             <Button variant="primary" size="sm" onClick={applyFilters}>
@@ -509,11 +508,11 @@ export default function Marcas() {
                 }
             >
                 <form id="submarca-form" onSubmit={handleSubmitSub} className="space-y-4" noValidate>
-                    <Select
+                    <SearchSelect
                         label="Marca"
-                        name="marca_id"
                         value={subForm.marca_id}
-                        onChange={(e) => setSubForm((prev) => ({ ...prev, marca_id: e.target.value }))}
+                        onChange={(v) => setSubForm((prev) => ({ ...prev, marca_id: v ?? '' }))}
+                        emptyText="Sin coincidencias"
                         options={marcas.map((m) => ({ value: String(m.id), label: m.nombre }))}
                         error={subErrors.marca_id}
                     />

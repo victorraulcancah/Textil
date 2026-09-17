@@ -45,6 +45,7 @@ export default function Almacenes() {
     const [deleting, setDeleting] = useState(false);
 
     const [filterEstado, setFilterEstado] = useState('');
+    const [filterTipo, setFilterTipo] = useState('');
     const [activeFilters, setActiveFilters] = useState({});
 
     const load = useCallback(async () => {
@@ -221,19 +222,23 @@ export default function Almacenes() {
     const applyFilters = () => {
         const next = {};
         if (filterEstado) next.estado = filterEstado;
+        if (filterTipo) next.tipo = filterTipo;
         setActiveFilters(next);
     };
 
     const clearFilters = () => {
         setFilterEstado('');
+        setFilterTipo('');
         setActiveFilters({});
     };
 
-    const filtered = almacenes.filter((a) => {
-        if (activeFilters.estado === 'activos') return a.activo !== false;
-        if (activeFilters.estado === 'inactivos') return a.activo === false;
-        return true;
-    });
+    const filtered = almacenes
+        .filter((a) => {
+            if (activeFilters.estado === 'activos') return a.activo !== false;
+            if (activeFilters.estado === 'inactivos') return a.activo === false;
+            return true;
+        })
+        .filter((a) => !activeFilters.tipo || a.tipo === activeFilters.tipo);
 
     const filterCount = Object.keys(activeFilters).length;
 
@@ -247,6 +252,18 @@ export default function Almacenes() {
                     { value: '', label: 'Todos' },
                     { value: 'activos', label: 'Solo activos' },
                     { value: 'inactivos', label: 'Solo inactivos' },
+                ]}
+                className="w-44"
+            />
+            <Select
+                label="Tipo"
+                value={filterTipo}
+                onChange={(e) => setFilterTipo(e.target.value)}
+                options={[
+                    { value: '', label: 'Todos' },
+                    { value: 'principal', label: 'Principal' },
+                    { value: 'secundario', label: 'Secundario' },
+                    { value: 'tienda', label: 'Tienda' },
                 ]}
                 className="w-44"
             />

@@ -5,7 +5,7 @@ import Layout from '../components/Layout';
 import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
 import DetalleCard from '../components/ui/DetalleCard';
 import PageHeader from '../components/PageHeader';
-import { Alert, Badge, Button, DataTable, Select, Tabs } from '../components/ui';
+import { Alert, Badge, Button, DataTable, SearchSelect, Select, Tabs } from '../components/ui';
 
 const money = (n) =>
     new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(n) || 0);
@@ -21,6 +21,8 @@ export default function Existencias() {
     const [error, setError] = useState(null);
 
     const [filterStock, setFilterStock] = useState('');
+    const [filterMarca, setFilterMarca] = useState('');
+    const [filterCategoria, setFilterCategoria] = useState('');
     const [activeFilters, setActiveFilters] = useState({});
 
     /** Fila cuyo desglose por unidad derivada se muestra abajo. */
@@ -57,11 +59,15 @@ export default function Existencias() {
     const applyFilters = () => {
         const next = {};
         if (filterStock) next.stock = filterStock;
+        if (filterMarca) next.marca = filterMarca;
+        if (filterCategoria) next.categoria = filterCategoria;
         setActiveFilters(next);
     };
 
     const clearFilters = () => {
         setFilterStock('');
+        setFilterMarca('');
+        setFilterCategoria('');
         setActiveFilters({});
     };
 
@@ -98,11 +104,24 @@ export default function Existencias() {
             if (activeFilters.stock === 'bajo') return stock > 0 && minimo > 0 && stock <= minimo;
             if (activeFilters.stock === 'sobre') return maximo > 0 && stock > maximo;
             if (activeFilters.stock === 'normal') return stock > 0 && (minimo <= 0 || stock > minimo);
+            if (activeFilters.marca && String(row.producto?.marca?.id) !== String(activeFilters.marca)) return false;
+            if (activeFilters.categoria && String(row.producto?.categoria?.id) !== String(activeFilters.categoria)) return false;
             return true;
         });
     };
 
     const filterCount = Object.keys(activeFilters).length;
+
+    const marcasPresentes = [
+        ...new Map(
+            existencias.filter((e) => e.producto?.marca).map((e) => [String(e.producto.marca.id), e.producto.marca.nombre]),
+        ).entries(),
+    ].map(([value, label]) => ({ value, label }));
+    const categoriasPresentes = [
+        ...new Map(
+            existencias.filter((e) => e.producto?.categoria).map((e) => [String(e.producto.categoria.id), e.producto.categoria.nombre]),
+        ).entries(),
+    ].map(([value, label]) => ({ value, label }));
 
     const filters = (
         <div className="flex flex-wrap items-end gap-3">
@@ -117,6 +136,24 @@ export default function Existencias() {
                     { value: 'sobre', label: 'Sobre el máximo' },
                     { value: 'normal', label: 'Stock normal' },
                 ]}
+                className="w-52"
+            />
+            <SearchSelect
+                label="Marca"
+                value={filterMarca}
+                onChange={(v) => setFilterMarca(v ?? '')}
+                placeholder="Todas"
+                emptyText="Sin coincidencias"
+                options={marcasPresentes}
+                className="w-52"
+            />
+            <SearchSelect
+                label="Categoría"
+                value={filterCategoria}
+                onChange={(v) => setFilterCategoria(v ?? '')}
+                placeholder="Todas"
+                emptyText="Sin coincidencias"
+                options={categoriasPresentes}
                 className="w-52"
             />
             <Button variant="primary" size="sm" onClick={applyFilters}>
@@ -534,6 +571,7 @@ export default function Existencias() {
                 emptyMessage="Sin existencias en este almacén"
                 onRowClick={(row) => { setSeleccionada(row); sheet.abrir(); }}
                 rowClassName={(row) => (row.id === seleccionada?.id ? 'bg-primary-50' : undefined)}
+                height="34vh"
             />
 
             {/* Móvil: el desglose sube desde abajo al tocar una card (en escritorio no pinta nada). */}
@@ -582,6 +620,7 @@ export default function Existencias() {
                             ? 'Este producto no tiene unidades derivadas activas.'
                             : 'Selecciona un producto arriba para ver su desglose.'
                     }
+                    height="34vh"
                 />
             </div>
         </Layout>

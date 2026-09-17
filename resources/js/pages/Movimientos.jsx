@@ -3,7 +3,7 @@ import { ArrowDownLeft, ArrowRightLeft, ArrowUpRight, Package } from 'lucide-rea
 import api, { asList } from '../lib/api';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
-import { Alert, Badge, Button, DataTable, SearchSelect, Select } from '../components/ui';
+import { Alert, Badge, Button, DataTable, DateRangePicker, SearchSelect, Select } from '../components/ui';
 
 /** Fecha y hora en dos líneas: cabe en una columna estrecha sin desbordarse. */
 const fmtFecha = (value) => {
@@ -60,6 +60,11 @@ export default function Movimientos() {
 
     const [filterTipo, setFilterTipo] = useState('');
     const [filterAlmacen, setFilterAlmacen] = useState('');
+    const [filterProducto, setFilterProducto] = useState('');
+    const [filterProveedor, setFilterProveedor] = useState('');
+    const [filterOrigen, setFilterOrigen] = useState('');
+    const [filterDesde, setFilterDesde] = useState('');
+    const [filterHasta, setFilterHasta] = useState('');
     const [activeFilters, setActiveFilters] = useState({});
 
     const load = useCallback(async () => {
@@ -87,12 +92,22 @@ export default function Movimientos() {
         const next = {};
         if (filterTipo) next.tipo = filterTipo;
         if (filterAlmacen) next.almacen = filterAlmacen;
+        if (filterProducto) next.producto = filterProducto;
+        if (filterProveedor) next.proveedor = filterProveedor;
+        if (filterOrigen) next.origen = filterOrigen;
+        if (filterDesde) next.desde = filterDesde;
+        if (filterHasta) next.hasta = filterHasta;
         setActiveFilters(next);
     };
 
     const clearFilters = () => {
         setFilterTipo('');
         setFilterAlmacen('');
+        setFilterProducto('');
+        setFilterProveedor('');
+        setFilterOrigen('');
+        setFilterDesde('');
+        setFilterHasta('');
         setActiveFilters({});
     };
 
@@ -102,6 +117,11 @@ export default function Movimientos() {
             const id = m.almacen_id ?? m.almacen?.id;
             if (String(id) !== activeFilters.almacen) return false;
         }
+        if (activeFilters.producto && String(m.producto_id) !== String(activeFilters.producto)) return false;
+        if (activeFilters.proveedor && m.proveedor_nombre !== activeFilters.proveedor) return false;
+        if (activeFilters.origen && m.origen !== activeFilters.origen) return false;
+        if (activeFilters.desde && (!m.fecha || m.fecha.slice(0, 10) < activeFilters.desde)) return false;
+        if (activeFilters.hasta && (!m.fecha || m.fecha.slice(0, 10) > activeFilters.hasta)) return false;
         return true;
     });
 
@@ -128,6 +148,52 @@ export default function Movimientos() {
                 emptyText="Sin coincidencias"
                 options={almacenes.map((a) => ({ value: String(a.id), label: a.nombre }))}
                 className="w-48"
+            />
+            <SearchSelect
+                label="Producto"
+                value={filterProducto}
+                onChange={(v) => setFilterProducto(v ?? '')}
+                placeholder="Todos"
+                emptyText="Sin coincidencias"
+                options={[
+                    ...new Map(
+                        movimientos.filter((m) => m.producto_id).map((m) => [String(m.producto_id), m.producto?.nombre]),
+                    ).entries(),
+                ].map(([value, label]) => ({ value, label }))}
+                className="w-56"
+            />
+            <SearchSelect
+                label="Proveedor"
+                value={filterProveedor}
+                onChange={(v) => setFilterProveedor(v ?? '')}
+                placeholder="Todos"
+                emptyText="Sin coincidencias"
+                options={[...new Set(movimientos.map((m) => m.proveedor_nombre).filter(Boolean))]
+                    .sort((a, b) => a.localeCompare(b, 'es'))
+                    .map((nombre) => ({ value: nombre, label: nombre }))}
+                className="w-52"
+            />
+            <Select
+                label="Movimiento"
+                value={filterOrigen}
+                onChange={(e) => setFilterOrigen(e.target.value)}
+                options={[
+                    { value: '', label: 'Todos' },
+                    ...[...new Set(movimientos.map((m) => m.origen).filter(Boolean))].map((origen) => ({
+                        value: origen,
+                        label: ORIGEN_LABEL[origen] ?? origen,
+                    })),
+                ]}
+                className="w-48"
+            />
+            <DateRangePicker
+                label="Rango de fecha"
+                desde={filterDesde}
+                hasta={filterHasta}
+                onChange={(d, h) => {
+                    setFilterDesde(d);
+                    setFilterHasta(h);
+                }}
             />
             <Button variant="primary" size="sm" onClick={applyFilters}>
                 Aplicar

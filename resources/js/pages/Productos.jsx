@@ -1478,14 +1478,13 @@ export default function Productos() {
                             su etiqueta encima y todos alineados. */}
                         <div className="grid gap-4 sm:grid-cols-2">
                             <FieldWithAdd onAdd={() => setQuick({ tipo: 'unidad' })}>
-                                <Select
+                                <SearchSelect
                                     label="Compro por"
                                     value={compra.unidad_compra_id}
-                                    onChange={setCompraField('unidad_compra_id')}
-                                    options={[
-                                        { value: '', label: unidadOptions.length ? 'Seleccionar unidad…' : '' },
-                                        ...unidadOptions,
-                                    ]}
+                                    onChange={(v) => setCompraField('unidad_compra_id')({ target: { value: v ?? '' } })}
+                                    placeholder="Seleccionar unidad…"
+                                    emptyText="Sin coincidencias"
+                                    options={unidadOptions}
                                     error={errors.compra_unidad}
                                 />
                             </FieldWithAdd>
@@ -1508,15 +1507,13 @@ export default function Productos() {
                                 onChange={setCompraField('cantidad')}
                                 error={errors.compra_cantidad}
                             />
-                            <Select
+                            <SearchSelect
                                 label="¿En qué unidad?"
                                 value={compra.unidad_contenido_id}
-                                onChange={setCompraField('unidad_contenido_id')}
-                                options={[
-                                    // Sin unidades registradas no se lista nada (ni un ejemplo).
-                                    { value: '', label: unidadOptions.length ? 'Seleccionar unidad…' : '' },
-                                    ...unidadOptions,
-                                ]}
+                                onChange={(v) => setCompraField('unidad_contenido_id')({ target: { value: v ?? '' } })}
+                                placeholder="Seleccionar unidad…"
+                                emptyText="Sin coincidencias"
+                                options={unidadOptions}
                                 error={errors.compra_contenido}
                             />
                         </div>
@@ -1587,20 +1584,13 @@ export default function Productos() {
                                         return (
                                             <tr key={i} className="border-t border-edge">
                                                 <td className="px-2 py-1.5">
-                                                    <select
-                                                        className="h-8 w-full rounded-md border border-gray-300 bg-white px-2 text-sm"
+                                                    <SearchSelect
                                                         value={v.unidad_id}
-                                                        onChange={(e) =>
-                                                            setVentaField(i, 'unidad_id', e.target.value)
-                                                        }
-                                                    >
-                                                        <option value="">Elegir formato…</option>
-                                                        {unidadOptions.map((o) => (
-                                                            <option key={o.value} value={o.value}>
-                                                                {o.label}
-                                                            </option>
-                                                        ))}
-                                                    </select>
+                                                        onChange={(val) => setVentaField(i, 'unidad_id', val ?? '')}
+                                                        placeholder="Elegir formato…"
+                                                        emptyText="Sin coincidencias"
+                                                        options={unidadOptions}
+                                                    />
                                                 </td>
                                                 <td className="px-2 py-1.5 text-warm-600">
                                                     {fila ? money(fila.precio_compra, form.moneda_compra) : '—'}

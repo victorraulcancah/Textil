@@ -432,11 +432,13 @@ export default function Transferencias() {
                 ]}
                 className="w-40"
             />
-            <Select
+            <SearchSelect
                 label="Almacén"
                 value={filterAlmacen}
-                onChange={(e) => setFilterAlmacen(e.target.value)}
-                options={[{ value: '', label: 'Todos' }, ...almacenes.map((a) => ({ value: String(a.id), label: a.nombre }))]}
+                onChange={(v) => setFilterAlmacen(v ?? '')}
+                placeholder="Todos"
+                emptyText="Sin coincidencias"
+                options={almacenes.map((a) => ({ value: String(a.id), label: a.nombre }))}
                 className="w-48"
             />
             <Button variant="primary" size="sm" onClick={applyFilters}>Aplicar</Button>
@@ -764,22 +766,25 @@ export default function Transferencias() {
                     <section>
                         <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-warm-500">Traslado</h3>
                         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                            <Select label="Almacén origen" value={form.almacen_origen_id} disabled={Boolean(editing)}
-                                onChange={(e) => { setField('almacen_origen_id', e.target.value); setItems([]); setPanel({ ...panelVacio }); }}
-                                options={[{ value: '', label: 'Selecciona…' }, ...opcionesAlmacen(almacenes, form.almacen_origen_id)]}
+                            <SearchSelect label="Almacén origen" value={form.almacen_origen_id} disabled={Boolean(editing)}
+                                onChange={(v) => { setField('almacen_origen_id', v ?? ''); setItems([]); setPanel({ ...panelVacio }); }}
+                                placeholder="Selecciona…" emptyText="Sin coincidencias"
+                                options={opcionesAlmacen(almacenes, form.almacen_origen_id)}
                                 error={formErrors.almacen_origen_id} />
-                            <Select label="Almacén destino" value={form.almacen_destino_id} disabled={Boolean(editing)}
-                                onChange={(e) => setField('almacen_destino_id', e.target.value)}
-                                options={[{ value: '', label: 'Selecciona…' }, ...opcionesAlmacen(almacenes, form.almacen_destino_id).filter((o) => o.value !== String(form.almacen_origen_id))]}
+                            <SearchSelect label="Almacén destino" value={form.almacen_destino_id} disabled={Boolean(editing)}
+                                onChange={(v) => setField('almacen_destino_id', v ?? '')}
+                                placeholder="Selecciona…" emptyText="Sin coincidencias"
+                                options={opcionesAlmacen(almacenes, form.almacen_destino_id).filter((o) => o.value !== String(form.almacen_origen_id))}
                                 error={formErrors.almacen_destino_id} />
                             <Input label="Fecha de inicio" type="date" value={form.fecha_inicio_traslado}
                                 onChange={(e) => setField('fecha_inicio_traslado', e.target.value)}
                                 disabled={editing && editing.estado !== 'pendiente'} error={formErrors.fecha_inicio_traslado} />
                             <div className="flex items-end gap-2">
                                 <div className="flex-1">
-                                    <Select label="Motivo de traslado" value={form.motivo_traslado}
-                                        onChange={(e) => setField('motivo_traslado', e.target.value)}
-                                        options={[{ value: '', label: 'Selecciona…' }, ...motivosOptions]}
+                                    <SearchSelect label="Motivo de traslado" value={form.motivo_traslado}
+                                        onChange={(v) => setField('motivo_traslado', v ?? '')}
+                                        placeholder="Selecciona…" emptyText="Sin coincidencias"
+                                        options={motivosOptions}
                                         disabled={editing && editing.estado !== 'pendiente'} error={formErrors.motivo_traslado} />
                                 </div>
                                 {(!editing || editing.estado === 'pendiente') && (

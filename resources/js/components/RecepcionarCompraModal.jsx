@@ -269,14 +269,13 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
             ) : (
                 <>
                     <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                        <Select
+                        <SearchSelect
                             label="Almacén receptor"
                             value={form.almacen_id}
-                            onChange={(e) => setForm((p) => ({ ...p, almacen_id: e.target.value }))}
-                            options={[
-                                { value: '', label: 'Selecciona…' },
-                                ...opcionesAlmacen(almacenes, form.almacen_id),
-                            ]}
+                            onChange={(v) => setForm((p) => ({ ...p, almacen_id: v ?? '' }))}
+                            placeholder="Selecciona…"
+                            emptyText="Sin coincidencias"
+                            options={opcionesAlmacen(almacenes, form.almacen_id)}
                         />
                         <Input
                             label="Fecha de recepción"
@@ -632,15 +631,13 @@ function CascadaUbicacion({ arbol, cap, setCap }) {
                 if (n.opciones.length === 0) return null;
                 const tipo = n.opciones[0]?.tipo;
                 return (
-                    <Select
+                    <SearchSelect
                         key={i}
-                        aria-label={ETIQUETA_NIVEL[tipo] ?? 'Ubicación'}
                         value={seleccion[i] ?? ''}
-                        onChange={(e) => elegir(i, e.target.value)}
-                        options={[
-                            { value: '', label: `${ETIQUETA_NIVEL[tipo] ?? 'Ubicación'}…` },
-                            ...n.opciones.map((op) => ({ value: op.id, label: op.nombre })),
-                        ]}
+                        onChange={(v) => elegir(i, v)}
+                        placeholder={`${ETIQUETA_NIVEL[tipo] ?? 'Ubicación'}…`}
+                        emptyText="Sin coincidencias"
+                        options={n.opciones.map((op) => ({ value: String(op.id), label: op.nombre }))}
                     />
                 );
             })}

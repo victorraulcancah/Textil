@@ -4,7 +4,7 @@ import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import PageHeader, { CreateButton } from '../components/PageHeader';
-import { Alert, Badge, Button, DataTable, Input, Modal, Select } from '../components/ui';
+import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select } from '../components/ui';
 
 const emptyForm = {
     nombre: '',
@@ -254,16 +254,15 @@ export default function Cajas() {
                         }}
                         error={formErrors.nombre}
                     />
-                    <Select
+                    <SearchSelect
                         label="Usuario asignado"
                         value={form.usuario_id}
-                        onChange={(e) => setForm((prev) => ({ ...prev, usuario_id: e.target.value }))}
-                        options={[
-                            { value: '', label: 'Sin usuario' },
-                            ...usuarios
-                                .filter((u) => !u.caja_id || String(u.id) === String(form.usuario_id))
-                                .map((u) => ({ value: String(u.id), label: `${u.name} (${u.email})` })),
-                        ]}
+                        onChange={(v) => setForm((prev) => ({ ...prev, usuario_id: v ?? '' }))}
+                        placeholder="Sin usuario"
+                        emptyText="Sin coincidencias"
+                        options={usuarios
+                            .filter((u) => !u.caja_id || String(u.id) === String(form.usuario_id))
+                            .map((u) => ({ value: String(u.id), label: `${u.name} (${u.email})` }))}
                         error={formErrors.usuario_id}
                     />
 

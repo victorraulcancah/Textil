@@ -6,7 +6,7 @@ import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
 import MetodoCajaPicker from '../components/MetodoCajaPicker';
-import { Alert, Badge, Button, DataTable, Input, Modal, Select } from '../components/ui';
+import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select } from '../components/ui';
 
 const money = (n) =>
     new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(n) || 0);
@@ -241,19 +241,23 @@ export default function MovimientosCaja() {
             >
                 <form id="movimiento-form" onSubmit={handleSubmit} className="space-y-4" noValidate>
                     <div className="grid grid-cols-2 gap-3">
-                        <Select
+                        <SearchSelect
                             label="Motivo"
                             value={form.motivo_movimiento_id}
-                            onChange={(e) => setForm((prev) => ({ ...prev, motivo_movimiento_id: e.target.value }))}
-                            options={[{ value: '', label: 'Selecciona un motivo' }, ...motivosTipo.map((m) => ({ value: String(m.id), label: m.nombre }))]}
+                            onChange={(v) => setForm((prev) => ({ ...prev, motivo_movimiento_id: v ?? '' }))}
+                            placeholder="Selecciona un motivo"
+                            emptyText="Sin coincidencias"
+                            options={motivosTipo.map((m) => ({ value: String(m.id), label: m.nombre }))}
                             error={formErrors.motivo_movimiento_id}
                         />
                         {esSuperAdmin ? (
-                            <Select
+                            <SearchSelect
                                 label="Caja"
                                 value={form.caja_id}
-                                onChange={(e) => setForm((prev) => ({ ...prev, caja_id: e.target.value, metodoTipo: '', cuentaId: '', billeteraId: '' }))}
-                                options={[{ value: '', label: 'Selecciona una caja' }, ...cajas.map((c) => ({ value: String(c.id), label: c.nombre }))]}
+                                onChange={(v) => setForm((prev) => ({ ...prev, caja_id: v ?? '', metodoTipo: '', cuentaId: '', billeteraId: '' }))}
+                                placeholder="Selecciona una caja"
+                                emptyText="Sin coincidencias"
+                                options={cajas.map((c) => ({ value: String(c.id), label: c.nombre }))}
                                 error={formErrors.caja_id}
                             />
                         ) : (

@@ -15,7 +15,7 @@ import PageHeader from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
 import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
 import DetalleCard from '../components/ui/DetalleCard';
-import { Alert, Badge, Button, DataTable, Input, Select, Spinner } from '../components/ui';
+import { Alert, Badge, Button, DataTable, Input, SearchSelect, Select, Spinner } from '../components/ui';
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
 const money = (n) =>
@@ -353,14 +353,13 @@ export default function StockPorRollo() {
             </div>
 
             <div className="mb-3 flex flex-wrap items-end gap-3">
-                <Select
+                <SearchSelect
                     label="Almacén"
                     value={almacenId}
-                    onChange={(e) => setAlmacenId(e.target.value)}
-                    options={[
-                        { value: '', label: 'Todos los almacenes' },
-                        ...almacenes.map((a) => ({ value: String(a.id), label: a.nombre })),
-                    ]}
+                    onChange={(v) => setAlmacenId(v ?? '')}
+                    placeholder="Todos los almacenes"
+                    emptyText="Sin coincidencias"
+                    options={almacenes.map((a) => ({ value: String(a.id), label: a.nombre }))}
                     className="w-56"
                 />
             </div>

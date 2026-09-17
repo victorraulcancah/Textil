@@ -5,7 +5,7 @@ import { opcionesAlmacen } from '../lib/almacenes';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import PageHeader, { CreateButton } from '../components/PageHeader';
-import { Alert, Badge, Button, DataTable, Input, Modal, Select } from '../components/ui';
+import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select } from '../components/ui';
 
 const emptyForm = { almacen_id: '', estado: 'en_proceso', observaciones: '' };
 
@@ -159,14 +159,13 @@ export default function TomasInventario() {
                 ]}
                 className="w-40"
             />
-            <Select
+            <SearchSelect
                 label="Almacén"
                 value={filterAlmacen}
-                onChange={(e) => setFilterAlmacen(e.target.value)}
-                options={[
-                    { value: '', label: 'Todos' },
-                    ...almacenes.map((a) => ({ value: String(a.id), label: a.nombre })),
-                ]}
+                onChange={(v) => setFilterAlmacen(v ?? '')}
+                placeholder="Todos"
+                emptyText="Sin coincidencias"
+                options={almacenes.map((a) => ({ value: String(a.id), label: a.nombre }))}
                 className="w-48"
             />
             <Button variant="primary" size="sm" onClick={applyFilters}>
@@ -303,17 +302,15 @@ export default function TomasInventario() {
                             error={formErrors.estado}
                         />
                     ) : (
-                        <Select
+                        <SearchSelect
                             label="Almacén"
-                            name="almacen_id"
                             value={form.almacen_id}
-                            onChange={(e) =>
-                                setForm((prev) => ({ ...prev, almacen_id: e.target.value }))
+                            onChange={(v) =>
+                                setForm((prev) => ({ ...prev, almacen_id: v ?? '' }))
                             }
-                            options={[
-                                { value: '', label: 'Seleccione un almacén' },
-                                ...opcionesAlmacen(almacenes, form.almacen_id),
-                            ]}
+                            placeholder="Seleccione un almacén"
+                            emptyText="Sin coincidencias"
+                            options={opcionesAlmacen(almacenes, form.almacen_id)}
                             error={formErrors.almacen_id}
                         />
                     )}

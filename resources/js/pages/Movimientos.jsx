@@ -3,7 +3,7 @@ import { ArrowDownLeft, ArrowRightLeft, ArrowUpRight, Package } from 'lucide-rea
 import api, { asList } from '../lib/api';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
-import { Alert, Badge, Button, DataTable, Select } from '../components/ui';
+import { Alert, Badge, Button, DataTable, SearchSelect, Select } from '../components/ui';
 
 /** Fecha y hora en dos líneas: cabe en una columna estrecha sin desbordarse. */
 const fmtFecha = (value) => {
@@ -120,14 +120,13 @@ export default function Movimientos() {
                 ]}
                 className="w-40"
             />
-            <Select
+            <SearchSelect
                 label="Almacén"
                 value={filterAlmacen}
-                onChange={(e) => setFilterAlmacen(e.target.value)}
-                options={[
-                    { value: '', label: 'Todos' },
-                    ...almacenes.map((a) => ({ value: String(a.id), label: a.nombre })),
-                ]}
+                onChange={(v) => setFilterAlmacen(v ?? '')}
+                placeholder="Todos"
+                emptyText="Sin coincidencias"
+                options={almacenes.map((a) => ({ value: String(a.id), label: a.nombre }))}
                 className="w-48"
             />
             <Button variant="primary" size="sm" onClick={applyFilters}>

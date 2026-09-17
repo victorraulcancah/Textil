@@ -360,8 +360,9 @@ export default function Prestamos() {
             <Select label="Estado" value={filterEstado} onChange={(e) => setFilterEstado(e.target.value)}
                 options={[{ value: '', label: 'Todos' }, ...Object.entries(estadoInfo).map(([value, info]) => ({ value, label: info.label })), { value: 'vencido', label: 'Vencidos' }]}
                 className="w-40" />
-            <Select label="Almacén" value={filterAlmacen} onChange={(e) => setFilterAlmacen(e.target.value)}
-                options={[{ value: '', label: 'Todos' }, ...almacenes.map((a) => ({ value: String(a.id), label: a.nombre }))]}
+            <SearchSelect label="Almacén" value={filterAlmacen} onChange={(v) => setFilterAlmacen(v ?? '')}
+                placeholder="Todos" emptyText="Sin coincidencias"
+                options={almacenes.map((a) => ({ value: String(a.id), label: a.nombre }))}
                 className="w-48" />
             <Button variant="primary" size="sm" onClick={applyFilters}>Aplicar</Button>
             {filterCount > 0 && <Button variant="ghost" size="sm" onClick={clearFilters}>Limpiar</Button>}
@@ -612,9 +613,10 @@ export default function Prestamos() {
                             <Select label="Dirección" value={form.tipo} disabled={Boolean(editing)}
                                 onChange={(e) => { setField('tipo', e.target.value); setItems([]); setPanel({ ...panelVacio }); }}
                                 options={[{ value: 'prestado', label: 'Presté (la tienda presta)' }, { value: 'recibido', label: 'Me prestaron (la tienda recibe)' }]} />
-                            <Select label="Almacén" value={form.almacen_id} disabled={Boolean(editing)}
-                                onChange={(e) => { setField('almacen_id', e.target.value); setItems([]); setPanel({ ...panelVacio }); }}
-                                options={[{ value: '', label: 'Selecciona…' }, ...opcionesAlmacen(almacenes, form.almacen_id)]}
+                            <SearchSelect label="Almacén" value={form.almacen_id} disabled={Boolean(editing)}
+                                onChange={(v) => { setField('almacen_id', v ?? ''); setItems([]); setPanel({ ...panelVacio }); }}
+                                placeholder="Selecciona…" emptyText="Sin coincidencias"
+                                options={opcionesAlmacen(almacenes, form.almacen_id)}
                                 error={formErrors.almacen_id} />
                             <Input label="Fecha del préstamo" type="date" value={form.fecha_prestamo} disabled={Boolean(editing)}
                                 onChange={(e) => setField('fecha_prestamo', e.target.value)} error={formErrors.fecha_prestamo} />

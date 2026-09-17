@@ -5,7 +5,7 @@ import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import MetodoCajaPicker from '../components/MetodoCajaPicker';
-import { Alert, Badge, Button, Card, DataTable, Input, Modal, Select, Spinner } from '../components/ui';
+import { Alert, Badge, Button, Card, DataTable, Input, Modal, SearchSelect, Select, Spinner } from '../components/ui';
 
 const money = (n) =>
     new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(n) || 0);
@@ -361,8 +361,9 @@ export default function MiCaja() {
                 title={regTipo === 'ingreso' ? 'Nuevo ingreso' : 'Nuevo gasto'}
                 footer={<><Button variant="secondary" onClick={() => setRegTipo(null)}>Cancelar</Button><Button loading={saving} onClick={registrar}>{regTipo === 'ingreso' ? 'Registrar ingreso' : 'Registrar gasto'}</Button></>}>
                 <div className="space-y-4">
-                    <Select label="Motivo" value={mov.motivo_movimiento_id} onChange={(e) => setMov((p) => ({ ...p, motivo_movimiento_id: e.target.value }))}
-                        options={[{ value: '', label: 'Selecciona un motivo' }, ...motivosTipo.map((m) => ({ value: String(m.id), label: m.nombre }))]} />
+                    <SearchSelect label="Motivo" value={mov.motivo_movimiento_id} onChange={(v) => setMov((p) => ({ ...p, motivo_movimiento_id: v ?? '' }))}
+                        placeholder="Selecciona un motivo" emptyText="Sin coincidencias"
+                        options={motivosTipo.map((m) => ({ value: String(m.id), label: m.nombre }))} />
                     <MetodoCajaPicker
                         cuentas={caja?.cuentas_bancarias ?? []}
                         billeteras={caja?.billeteras ?? []}

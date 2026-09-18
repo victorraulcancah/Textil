@@ -59,7 +59,7 @@ class EtiquetaRolloPdf implements DocumentoPdf
             // La orden es todo el código del rollo menos su correlativo final:
             // así queda siempre igual a lo que dice el propio código impreso,
             // sin depender de que la recepción tenga la relación bien cargada.
-            'orden' => preg_replace('/-\d{4}$/', '', $rollo->codigo),
+            'orden' => preg_replace('/-\d{4,6}$/', '', $rollo->codigo),
             'posicion' => $this->posicion($rollo),
             'ubicacion' => $rollo->ubicacionLegible(),
         ] + $this->etiquetas->codigos($rollo->codigo);

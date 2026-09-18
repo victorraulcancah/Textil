@@ -455,7 +455,7 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
                                                                     />
                                                                     <p className="mt-1 text-xs text-warm-400">
                                                                         Si el proveedor tiene código corto, el rollo
-                                                                        se numera solo (ej. KET-004-26-0001).
+                                                                        se numera solo con el código de la orden (ej. KET-003-26-000001).
                                                                     </p>
                                                                 </div>
                                                                 {cap?.rollosExcel?.length ? (

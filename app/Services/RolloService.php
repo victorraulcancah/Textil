@@ -62,10 +62,14 @@ class RolloService
         );
 
         return DB::transaction(function () use ($producto, $color, $almacen, $lineas, $costoUnitario, $recepcion, $codigoProveedor, $usuarioId, $actualizarStock, $importacion, $ubicacion) {
-            // Se continúa la numeración del color, no se reinicia: el rollo 19
-            // de un segundo contenedor no puede chocar con el 19 del primero.
-            $siguiente = $this->siguienteNumero($producto, $color);
+            // Con código de orden, la numeración es de la orden entera: sigue
+            // corriendo al cambiar de tela, color o envío, y nunca se repite.
+            // Sin él, se continúa la numeración del color, sin reiniciar: el
+            // rollo 19 de un segundo contenedor no choca con el 19 del primero.
             $prefijo = $this->prefijo($producto, $color, $codigoProveedor);
+            $siguiente = $codigoProveedor
+                ? $this->siguienteNumeroDeOrden($prefijo)
+                : $this->siguienteNumero($producto, $color);
 
             $creados = collect();
 
@@ -85,7 +89,10 @@ class RolloService
                 if ($codigo !== '' && Rollo::where('codigo', $codigo)->exists()) {
                     throw new \RuntimeException("Ya existe un rollo con el código \"{$codigo}\".");
                 }
-                $codigo = $codigo !== '' ? $codigo : sprintf('%s-%04d', $prefijo, $siguiente);
+                // Con código de orden/proveedor el correlativo lleva seis
+                // dígitos (KET-003-26-000001), como lo numera la fábrica; el
+                // esquema por producto y color conserva sus cuatro.
+                $codigo = $codigo !== '' ? $codigo : sprintf($codigoProveedor ? '%s-%06d' : '%s-%04d', $prefijo, $siguiente);
 
                 $rollo = Rollo::create([
                     'producto_id' => $producto->id,
@@ -358,6 +365,21 @@ class RolloService
         return (int) Rollo::where('producto_id', $producto->id)
             ->where('producto_color_id', $color?->id)
             ->max('numero') + 1;
+    }
+
+    /**
+     * Siguiente correlativo entre todos los rollos de una orden (KET-003-26),
+     * cuenten los que se numeraron aquí o los que trajo ya numerados el
+     * packing list del proveedor.
+     */
+    private function siguienteNumeroDeOrden(string $prefijo): int
+    {
+        $ultimo = Rollo::where('codigo', 'like', $prefijo.'-%')
+            ->pluck('codigo')
+            ->map(fn ($codigo) => preg_match('/-(\d+)$/', $codigo, $m) ? (int) $m[1] : 0)
+            ->max();
+
+        return (int) $ultimo + 1;
     }
 
     /**

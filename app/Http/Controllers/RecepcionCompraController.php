@@ -572,15 +572,20 @@ class RecepcionCompraController extends Controller
     }
 
     /**
-     * El prefijo del código de rollo cuando nadie escribió uno a mano:
-     * "KET-004-26" (código corto del proveedor + correlativo de la compra +
-     * año), igual a como el cliente arma su propia numeración de orden.
+     * El prefijo del código de rollo cuando nadie escribió uno a mano.
      *
-     * Si el proveedor no tiene código corto cargado, se devuelve null y
-     * RolloService cae al esquema de siempre (producto + color).
+     * Es el código de la orden de compra (KET-003-26): los rollos continúan
+     * la numeración de la orden con la que se pidieron, así la etiqueta dice
+     * de qué orden vino cada uno. Una compra sin orden usa el código corto del
+     * proveedor con su propio correlativo; sin código corto, se devuelve null
+     * y RolloService cae al esquema de siempre (producto + color).
      */
     private function codigoBaseCompra(Compra $compra): ?string
     {
+        if ($compra->ordenCompra?->codigo) {
+            return $compra->ordenCompra->codigo;
+        }
+
         $corto = $compra->proveedor?->codigo_corto;
         if (! $corto) {
             return null;

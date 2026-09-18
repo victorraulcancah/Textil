@@ -360,6 +360,85 @@ class RolloService
     }
 
     /**
+     * Parte un rollo en dos: separa $metros en un rollo nuevo, en el almacén
+     * que se indique, y deja el resto en el original con su mismo código.
+     *
+     * Pasa al enviar una guía de traslado cuando lo que se manda no coincide
+     * con rollos completos: una parte del rollo viaja, la otra se queda.
+     */
+    public function dividir(Rollo $rollo, float $metros, int $almacenDestinoId, ?int $usuarioId = null): Rollo
+    {
+        return DB::transaction(function () use ($rollo, $metros, $almacenDestinoId, $usuarioId) {
+            $rollo = Rollo::lockForUpdate()->findOrFail($rollo->id);
+
+            $metros = round($metros, 2);
+            $antes = (float) $rollo->metros_actual;
+
+            if ($metros <= 0 || $metros >= $antes) {
+                throw new \DomainException(
+                    "El rollo {$rollo->codigo} tiene {$antes} m: no se puede partir en {$metros} m."
+                );
+            }
+
+            $codigo = $this->codigoDeParte($rollo->codigo);
+            // "numero" es único por tela y color: la parte nueva es, a todo
+            // efecto, un rollo más en esa numeración, aunque su código deje
+            // claro de cuál viene.
+            $numero = $this->siguienteNumero(
+                Producto::find($rollo->producto_id),
+                $rollo->producto_color_id ? ProductoColor::find($rollo->producto_color_id) : null,
+            );
+
+            $nuevo = Rollo::create([
+                'producto_id' => $rollo->producto_id,
+                'producto_color_id' => $rollo->producto_color_id,
+                'almacen_id' => $almacenDestinoId,
+                'codigo' => $codigo,
+                'codigo_proveedor' => $rollo->codigo_proveedor,
+                'numero' => $numero,
+                'metros_inicial' => $metros,
+                'metros_actual' => $metros,
+                'peso_kg' => null,
+                'costo_unitario' => $rollo->costo_unitario,
+                'estado' => Rollo::DISPONIBLE,
+                'recepcion_compra_id' => $rollo->recepcion_compra_id,
+                'importacion_id' => $rollo->importacion_id,
+            ]);
+
+            $this->registrar(
+                $nuevo, RolloMovimiento::TRASLADO, $metros, 0, $metros,
+                null, Rollo::DISPONIBLE, null, null, $usuarioId,
+                "Parte de {$rollo->codigo}",
+            );
+
+            $despues = round($antes - $metros, 2);
+            $estadoAntes = $rollo->estado;
+            $rollo->update(['metros_actual' => $despues]);
+
+            $this->registrar(
+                $rollo, RolloMovimiento::TRASLADO, -$metros, $antes, $despues,
+                $estadoAntes, $rollo->estado, null, null, $usuarioId,
+                "Se separó {$codigo} con {$metros} m",
+            );
+
+            return $nuevo;
+        });
+    }
+
+    /** "KET-003-26-000001-B", o "-C", "-D"… si ya existe una parte anterior. */
+    private function codigoDeParte(string $codigoOriginal): string
+    {
+        foreach (range('B', 'Z') as $letra) {
+            $codigo = "{$codigoOriginal}-{$letra}";
+            if (! Rollo::where('codigo', $codigo)->exists()) {
+                return $codigo;
+            }
+        }
+
+        throw new \DomainException("El rollo {$codigoOriginal} ya tiene demasiadas partes separadas.");
+    }
+
+    /**
      * Siguiente correlativo del rollo dentro de su tela y color.
      */
     public function siguienteNumero(Producto $producto, ?ProductoColor $color): int

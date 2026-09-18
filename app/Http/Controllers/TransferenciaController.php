@@ -4,8 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\Almacen;
 use App\Models\ProductoPresentacion;
+use App\Models\Rollo;
 use App\Models\SerieDocumento;
 use App\Models\Transferencia;
+use App\Services\RolloService;
 use App\Services\StockService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,7 +18,7 @@ class TransferenciaController extends Controller
     {
         return response()->json(
             Transferencia::with('almacenOrigen', 'almacenDestino')
-                ->with(['usuarioEnvio:id,name', 'usuarioRecepcion:id,name', 'detalles.presentacion.producto.marca'])
+                ->with(['usuarioEnvio:id,name', 'usuarioRecepcion:id,name', 'detalles.presentacion.producto.marca', 'detalles.color'])
                 ->withCount('detalles')
                 ->latest('id')
                 ->get()
@@ -43,6 +45,8 @@ class TransferenciaController extends Controller
             'observaciones' => 'nullable|string',
             'detalles' => 'required|array|min:1',
             'detalles.*.producto_presentacion_id' => 'required|exists:producto_presentaciones,id',
+            // Cuál color viaja; solo aplica a lo que se lleva por rollos.
+            'detalles.*.producto_color_id' => 'nullable|exists:producto_colores,id',
             'detalles.*.cantidad_enviada' => 'required|numeric|min:0.01',
         ]);
 
@@ -71,6 +75,7 @@ class TransferenciaController extends Controller
             foreach ($data['detalles'] as $detalle) {
                 $transferencia->detalles()->create([
                     'producto_presentacion_id' => $detalle['producto_presentacion_id'],
+                    'producto_color_id' => $detalle['producto_color_id'] ?? null,
                     'cantidad_enviada' => $detalle['cantidad_enviada'],
                 ]);
             }
@@ -78,13 +83,13 @@ class TransferenciaController extends Controller
             return $transferencia;
         });
 
-        return response()->json($transferencia->load(['almacenOrigen', 'almacenDestino', 'usuarioEnvio:id,name', 'detalles.presentacion.producto.marca']), 201);
+        return response()->json($transferencia->load(['almacenOrigen', 'almacenDestino', 'usuarioEnvio:id,name', 'detalles.presentacion.producto.marca', 'detalles.color']), 201);
     }
 
     public function show(Transferencia $transferencia)
     {
         return response()->json(
-            $transferencia->load(['almacenOrigen', 'almacenDestino', 'usuarioEnvio:id,name', 'usuarioRecepcion:id,name', 'detalles.presentacion.producto.marca'])
+            $transferencia->load(['almacenOrigen', 'almacenDestino', 'usuarioEnvio:id,name', 'usuarioRecepcion:id,name', 'detalles.presentacion.producto.marca', 'detalles.color'])
         );
     }
 
@@ -135,7 +140,14 @@ class TransferenciaController extends Controller
         return response()->json(['message' => 'Eliminado']);
     }
 
-    /** Enviar: descuenta el stock del almacén de origen y pasa a "en tránsito". */
+    /**
+     * Enviar: descuenta el stock del almacén de origen y pasa a "en tránsito".
+     *
+     * Lo que se lleva por rollos no es solo un número: los rollos mismos
+     * cambian de almacén (o se parten, si lo pedido no coincide con rollos
+     * completos), para que no queden contados en un lado y físicamente en
+     * el otro.
+     */
     public function enviar(Transferencia $transferencia)
     {
         if ($transferencia->estado !== 'pendiente') {
@@ -144,14 +156,16 @@ class TransferenciaController extends Controller
 
         try {
             DB::transaction(function () use ($transferencia) {
-                $transferencia->loadMissing('detalles.presentacion');
+                $transferencia->loadMissing('detalles.presentacion.producto');
                 $origen = Almacen::findOrFail($transferencia->almacen_origen_id);
                 $stock = app(StockService::class);
+                $rollos = app(RolloService::class);
 
                 foreach ($transferencia->detalles as $detalle) {
                     if (! $detalle->presentacion) {
                         continue;
                     }
+
                     $stock->salida(
                         $detalle->presentacion,
                         $origen,
@@ -161,7 +175,10 @@ class TransferenciaController extends Controller
                         'transferencia',
                         $transferencia->id,
                         auth()->id(),
+                        colorId: $detalle->producto_color_id,
                     );
+
+                    $this->moverRollos($rollos, $detalle, $origen->id, $transferencia->almacen_destino_id);
                 }
 
                 $transferencia->update([
@@ -175,6 +192,59 @@ class TransferenciaController extends Controller
         }
 
         return response()->json($transferencia->fresh());
+    }
+
+    /**
+     * Mueve al almacén destino los rollos que cubren la cantidad enviada.
+     *
+     * Los toma del más antiguo al más nuevo. Si sobran metros del último
+     * rollo, se parte: el trozo enviado viaja, el resto se queda donde
+     * estaba. Un producto que no se maneja por rollos (no tiene ninguno en
+     * este almacén) no tiene nada que mover aquí: ya lo cubrió el stock.
+     */
+    private function moverRollos(RolloService $rollos, $detalle, int $almacenOrigenId, int $almacenDestinoId): void
+    {
+        $factor = (float) ($detalle->presentacion->factor_conversion ?: 1);
+        $basePorMetro = max((float) ($detalle->presentacion->producto?->factorBasePorMetro() ?? 1), 0.0001);
+        $metrosPorMover = round((float) $detalle->cantidad_enviada * $factor / $basePorMetro, 2);
+
+        // Si esta tela no maneja rollos en absoluto (mercería, insumos), no
+        // hay nada que mover aquí: ya lo cubrió el stock de arriba.
+        $usaRollos = Rollo::where('producto_id', $detalle->presentacion->producto_id)->exists();
+        if (! $usaRollos) {
+            return;
+        }
+
+        $candidatos = Rollo::disponibles()
+            ->where('producto_id', $detalle->presentacion->producto_id)
+            ->where('almacen_id', $almacenOrigenId)
+            ->where('producto_color_id', $detalle->producto_color_id)
+            ->orderBy('numero')
+            ->get();
+
+        foreach ($candidatos as $rollo) {
+            if ($metrosPorMover <= 0.001) {
+                break;
+            }
+
+            $metrosRollo = (float) $rollo->metros_actual;
+
+            if ($metrosRollo <= $metrosPorMover + 0.001) {
+                $rollos->trasladar($rollo, ['almacen_id' => $almacenDestinoId], auth()->id());
+                $metrosPorMover = round($metrosPorMover - $metrosRollo, 2);
+            } else {
+                $rollos->dividir($rollo, $metrosPorMover, $almacenDestinoId, auth()->id());
+                $metrosPorMover = 0;
+            }
+        }
+
+        if ($metrosPorMover > 0.001) {
+            $color = $detalle->producto_color_id ? ' de ese color' : '';
+            throw new \RuntimeException(
+                "No hay rollos{$color} suficientes de \"{$detalle->presentacion->producto?->nombre}\" en el almacén de origen "
+                ."para cubrir {$detalle->cantidad_enviada} {$detalle->presentacion->nombre}."
+            );
+        }
     }
 
     /** Recibir: ingresa el stock al almacén de destino y pasa a "recibida". */
@@ -204,6 +274,7 @@ class TransferenciaController extends Controller
                     'transferencia',
                     $transferencia->id,
                     auth()->id(),
+                    colorId: $detalle->producto_color_id,
                 );
             }
 

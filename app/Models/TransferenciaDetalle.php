@@ -10,6 +10,9 @@ class TransferenciaDetalle extends Model
     protected $fillable = [
         'transferencia_id',
         'producto_presentacion_id',
+        // El color que viaja; opcional porque hay productos que no se
+        // manejan por color (mercería, insumos).
+        'producto_color_id',
         'cantidad_enviada',
         'cantidad_recibida',
     ];
@@ -24,4 +27,5 @@ class TransferenciaDetalle extends Model
 
     public function transferencia() { return $this->belongsTo(Transferencia::class); }
     public function presentacion() { return $this->belongsTo(ProductoPresentacion::class, 'producto_presentacion_id'); }
+    public function color() { return $this->belongsTo(ProductoColor::class, 'producto_color_id'); }
 }

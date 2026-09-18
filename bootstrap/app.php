@@ -19,6 +19,10 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->api(append: [
             \App\Http\Middleware\VerificarPermiso::class,
         ]);
+
+        // Sin sesión y sin pedir JSON (p. ej. abrir una ruta de la API en la
+        // barra de direcciones) se va al login del SPA, no a un error 500.
+        $middleware->redirectGuestsTo('/login');
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

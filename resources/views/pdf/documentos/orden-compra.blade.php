@@ -43,6 +43,10 @@
                 'Solicita' => $orden->usuarioCrea?->name ?: '—',
                 'Estado' => $estado,
             ]" />
+        @if ($datosExterior)
+            <div class="strong upper" style="margin: 8px 0 2px;">Datos de embarque</div>
+            <x-pdf.meta :items="$datosExterior" />
+        @endif
         <x-pdf.items
             :columnas="[
                 ['label' => 'Ítem', 'key' => 'n', 'width' => '32px'],

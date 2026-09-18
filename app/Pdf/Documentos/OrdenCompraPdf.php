@@ -50,6 +50,21 @@ class OrdenCompraPdf implements DocumentoPdf
             'total' => $total,
             'moneda' => $moneda,
             'enLetras' => MontoEnLetras::convertir($total, $orden->moneda === 'USD' ? 'DÓLARES' : 'SOLES'),
+            // Solo tienen sentido en una compra al exterior; el blade los
+            // omite del todo cuando la orden es nacional.
+            'datosExterior' => $orden->tipo === 'exterior' ? [
+                'Incoterm' => $orden->incoterm ?: '—',
+                'Tipo de carga' => $orden->cargo_type ?: '—',
+                'Medio de embarque' => $orden->medio_transporte ?: '—',
+                'Contenedor' => $orden->numero_contenedor ?: '—',
+                'País origen' => $orden->pais_origen ?: '—',
+                'País destino' => $orden->pais_destino ?: '—',
+                'Puerto embarque' => $orden->puerto_embarque ?: '—',
+                'Puerto destino' => $orden->puerto_destino ?: '—',
+                'F. embarque est.' => optional($orden->fecha_embarque_estimada)->format('d/m/Y') ?: '—',
+                'Elaborado por' => $orden->elaborado_por ?: '—',
+                'Aprobado por' => $orden->aprobado_por ?: '—',
+            ] : null,
         ];
     }
 

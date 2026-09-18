@@ -31,7 +31,7 @@ const emptyForm = {
     observaciones: '',
 };
 
-const panelVacio = { producto_id: '', producto_presentacion_id: '', cantidad: '1' };
+const panelVacio = { producto_id: '', producto_presentacion_id: '', producto_color_id: '', cantidad: '1' };
 
 const estadoInfo = {
     pendiente: { label: 'Pendiente', variant: 'amber' },
@@ -217,6 +217,24 @@ export default function Transferencias() {
     const disponibleDe = (productoId, presId) =>
         unidadesDe(productoId).find((u) => String(u.value) === String(presId))?.disponible ?? 0;
 
+    /**
+     * Colores de este producto en el almacén de origen, con sus metros —para
+     * saber cuál se puede trasladar y cuánto hay de cada uno, no solo del
+     * total. Un producto que no se maneja por color no tiene ninguno aquí.
+     */
+    const coloresOrigenDe = useCallback(
+        (productoId) => {
+            if (!productoId || !form.almacen_origen_id) return [];
+            const fila = existencias.find(
+                (e) =>
+                    String(e.producto_id ?? e.producto?.id) === String(productoId) &&
+                    String(e.almacen_id) === String(form.almacen_origen_id),
+            );
+            return fila?.colores ?? [];
+        },
+        [existencias, form.almacen_origen_id],
+    );
+
     const setField = (name, value) => {
         setForm((prev) => ({ ...prev, [name]: value }));
         if (formErrors[name]) setFormErrors((prev) => ({ ...prev, [name]: undefined }));
@@ -228,6 +246,8 @@ export default function Transferencias() {
         setPanel({
             producto_id: productoId,
             producto_presentacion_id: us.length === 1 ? us[0].value : '',
+            // Otro producto, otro color: nunca se hereda del anterior.
+            producto_color_id: '',
             cantidad: '1',
         });
     };
@@ -236,15 +256,28 @@ export default function Transferencias() {
         if (!form.almacen_origen_id) return toast.error('Elige primero el almacén de origen.');
         if (!panel.producto_id) return toast.error('Busca y elige un producto.');
         if (!panel.producto_presentacion_id) return toast.error('Elige la unidad.');
+        const colores = coloresOrigenDe(panel.producto_id);
+        if (colores.length > 0 && !panel.producto_color_id) return toast.error('Elige el color.');
         const cant = Number(panel.cantidad) || 0;
         if (cant <= 0) return toast.error('La cantidad debe ser mayor a 0.');
 
-        const disp = disponibleDe(panel.producto_id, panel.producto_presentacion_id);
-        if (cant > disp) return toast.error(`Solo hay ${num(disp)} disponibles en el origen.`);
+        // Con color, el límite es lo que hay de ese color, no el total del
+        // producto: los rollos son los que de verdad viajan.
+        const colorElegido = colores.find((c) => String(c.id) === String(panel.producto_color_id));
+        const factor = Number(
+            productoDe(panel.producto_id)?.presentaciones?.find((p) => String(p.id) === String(panel.producto_presentacion_id))
+                ?.factor_conversion,
+        ) || 1;
+        const disp = colorElegido
+            ? Math.floor((Number(colorElegido.metros) / factor) * 100) / 100
+            : disponibleDe(panel.producto_id, panel.producto_presentacion_id);
+        if (cant > disp) return toast.error(`Solo hay ${num(disp)} disponibles en el origen${colorElegido ? ` de ${colorElegido.nombre}` : ''}.`);
 
         setItems((prev) => {
             const i = prev.findIndex(
-                (it) => String(it.producto_presentacion_id) === String(panel.producto_presentacion_id),
+                (it) =>
+                    String(it.producto_presentacion_id) === String(panel.producto_presentacion_id) &&
+                    String(it.producto_color_id || '') === String(panel.producto_color_id || ''),
             );
             if (i !== -1) {
                 return prev.map((it, idx) =>
@@ -256,6 +289,7 @@ export default function Transferencias() {
                 {
                     producto_id: panel.producto_id,
                     producto_presentacion_id: panel.producto_presentacion_id,
+                    producto_color_id: panel.producto_color_id || '',
                     cantidad: String(cant),
                 },
             ];
@@ -364,6 +398,7 @@ export default function Transferencias() {
                     ...transporte,
                     detalles: items.map((it) => ({
                         producto_presentacion_id: it.producto_presentacion_id,
+                        producto_color_id: it.producto_color_id || null,
                         cantidad_enviada: it.cantidad,
                     })),
                 });
@@ -667,7 +702,7 @@ export default function Transferencias() {
                             return (
                                 <DetalleCard
                                     key={d.id}
-                                    titulo={producto?.nombre ?? '—'}
+                                    titulo={[producto?.nombre, d.color?.nombre].filter(Boolean).join(' · ')}
                                     subtitulo={[producto?.codigo, d.presentacion?.nombre, producto?.marca?.nombre].filter(Boolean).join(' · ')}
                                     columnas={2}
                                     campos={[
@@ -705,6 +740,7 @@ export default function Transferencias() {
                                 <th className="w-12 px-3 py-2.5 text-center">#</th>
                                 <th className="w-28 px-3 py-2.5">Código</th>
                                 <th className="px-3 py-2.5">Producto</th>
+                                <th className="w-28 px-3 py-2.5">Color</th>
                                 <th className="w-32 px-3 py-2.5">Marca</th>
                                 <th className="w-32 px-3 py-2.5">Unidad</th>
                                 <th className="w-28 px-3 py-2.5 text-right">Enviado</th>
@@ -714,7 +750,7 @@ export default function Transferencias() {
                         <tbody className="divide-y divide-gray-100">
                             {detalles.length === 0 && (
                                 <tr>
-                                    <td colSpan={7} className="px-3 py-10 text-center text-sm text-warm-500">
+                                    <td colSpan={8} className="px-3 py-10 text-center text-sm text-warm-500">
                                         {seleccionada ? 'Esta guía no tiene productos.' : 'Selecciona una guía arriba para ver su detalle.'}
                                     </td>
                                 </tr>
@@ -726,6 +762,7 @@ export default function Transferencias() {
                                         <td className="px-3 py-2 text-center text-warm-500">{i + 1}</td>
                                         <td className="px-3 py-2 text-warm-500">{producto?.codigo ?? '—'}</td>
                                         <td className="px-3 py-2 font-semibold text-warm-900">{producto?.nombre ?? '—'}</td>
+                                        <td className="px-3 py-2 text-warm-500">{d.color?.nombre ?? '—'}</td>
                                         <td className="px-3 py-2 text-warm-500">{producto?.marca?.nombre ?? '—'}</td>
                                         <td className="px-3 py-2 text-warm-500">{d.presentacion?.nombre ?? '—'}</td>
                                         <td className="px-3 py-2 text-right font-semibold text-primary-600">{num(d.cantidad_enviada)}</td>
@@ -858,6 +895,20 @@ export default function Transferencias() {
                                             searchTitle="Buscador avanzado con filtros"
                                             onSearch={(q) => setPicker({ open: true, query: q })}
                                         />
+                                        {coloresOrigenDe(panel.producto_id).length > 0 && (
+                                            <Select
+                                                label="Color"
+                                                value={panel.producto_color_id}
+                                                onChange={(e) => setPanel((p) => ({ ...p, producto_color_id: e.target.value }))}
+                                                options={[
+                                                    { value: '', label: 'Elige…' },
+                                                    ...coloresOrigenDe(panel.producto_id).map((c) => ({
+                                                        value: String(c.id),
+                                                        label: c.codigo ? `${c.nombre} (${c.codigo}) · ${num(c.metros)} m` : `${c.nombre} · ${num(c.metros)} m`,
+                                                    })),
+                                                ]}
+                                            />
+                                        )}
                                         <Select
                                             label="Unidad"
                                             value={panel.producto_presentacion_id}
@@ -894,9 +945,13 @@ export default function Transferencias() {
                                                     const p = productoDe(it.producto_id);
                                                     const u = unidadesDe(it.producto_id).find((x) => String(x.value) === String(it.producto_presentacion_id));
                                                     const excede = u && Number(it.cantidad) > u.disponible;
+                                                    const color = coloresOrigenDe(it.producto_id).find((c) => String(c.id) === String(it.producto_color_id));
                                                     return (
                                                         <tr key={i}>
-                                                            <td className="px-3 py-2 font-medium text-warm-900">{p?.nombre ?? '—'}</td>
+                                                            <td className="px-3 py-2 font-medium text-warm-900">
+                                                                {p?.nombre ?? '—'}
+                                                                {color && <span className="ml-1 text-xs text-warm-500">· {color.nombre}</span>}
+                                                            </td>
                                                             <td className="px-3 py-2 text-warm-500">{u?.label ?? '—'}</td>
                                                             <td className="px-3 py-2 text-right text-warm-500">{u ? num(u.disponible) : '—'}</td>
                                                             <td className="px-3 py-2">

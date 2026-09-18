@@ -10,7 +10,11 @@ import PageHeader, { CreateButton } from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
 import { Alert, Badge, Button, DataTable, DateRangePicker, Modal, SearchSelect, Select } from '../components/ui';
 
-const money = (n) => new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(n) || 0);
+const money = (n, moneda = 'PEN') =>
+    new Intl.NumberFormat(moneda === 'USD' ? 'en-US' : 'es-PE', {
+        style: 'currency',
+        currency: moneda === 'USD' ? 'USD' : 'PEN',
+    }).format(Number(n) || 0);
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
 const fecha = (f) => (f ? new Date(String(f).length === 10 ? `${f}T00:00:00` : f).toLocaleDateString('es-PE') : '—');
 
@@ -255,16 +259,17 @@ export default function OrdenesCompra() {
                     <div className="space-y-3">
                         {seleccionada.detalles.map((d) => {
                             const producto = d.presentacion?.producto;
+                            const codigo = [producto?.codigo, d.color?.codigo].filter(Boolean).join('-');
                             const subtotal = (Number(d.cantidad) || 0) * (Number(d.precio_unitario) || 0);
                             return (
                                 <DetalleCard
                                     key={d.id}
-                                    titulo={producto?.nombre ?? '—'}
-                                    subtitulo={[producto?.codigo, d.presentacion?.nombre, producto?.marca?.nombre].filter(Boolean).join(' · ')}
+                                    titulo={[producto?.nombre, d.color?.nombre].filter(Boolean).join(' · ')}
+                                    subtitulo={[codigo, d.presentacion?.nombre, producto?.marca?.nombre].filter(Boolean).join(' · ')}
                                     campos={[
                                         { label: 'Cant.', value: num(d.cantidad) },
-                                        { label: 'P. Unit.', value: money(d.precio_unitario) },
-                                        { label: 'Subtotal', value: money(subtotal), valueClassName: 'text-primary-600' },
+                                        { label: 'P. Unit.', value: money(d.precio_unitario, seleccionada.moneda) },
+                                        { label: 'Subtotal', value: money(subtotal, seleccionada.moneda), valueClassName: 'text-primary-600' },
                                     ]}
                                 />
                             );
@@ -272,7 +277,7 @@ export default function OrdenesCompra() {
                         <div className="flex items-center justify-between px-1 pt-1 text-sm">
                             <span className="font-medium text-warm-500">Total</span>
                             <span className="text-base font-bold text-warm-900">
-                                {money(seleccionada.detalles.reduce((s, d) => s + (Number(d.cantidad) || 0) * (Number(d.precio_unitario) || 0), 0))}
+                                {money(seleccionada.detalles.reduce((s, d) => s + (Number(d.cantidad) || 0) * (Number(d.precio_unitario) || 0), 0), seleccionada.moneda)}
                             </span>
                         </div>
                     </div>
@@ -298,12 +303,13 @@ export default function OrdenesCompra() {
                     )}
                 </div>
                 <div className="overflow-auto" style={{ height: '30vh' }}>
-                    <table className="w-full min-w-[820px] text-sm">
+                    <table className="w-full min-w-[900px] text-sm">
                         <thead className="sticky top-0 z-10">
                             <tr className="bg-primary-600 text-left text-xs font-semibold uppercase tracking-wide text-white">
                                 <th className="w-12 px-3 py-1.5 text-center">#</th>
                                 <th className="w-28 px-3 py-1.5">Código</th>
                                 <th className="px-3 py-1.5">Producto</th>
+                                <th className="w-28 px-3 py-1.5">Color</th>
                                 <th className="w-32 px-3 py-1.5">Marca</th>
                                 <th className="w-32 px-3 py-1.5">Unidad</th>
                                 <th className="w-24 px-3 py-1.5 text-right">Cant.</th>
@@ -314,24 +320,26 @@ export default function OrdenesCompra() {
                         <tbody className="divide-y divide-gray-100">
                             {(seleccionada?.detalles ?? []).length === 0 && (
                                 <tr>
-                                    <td colSpan={8} className="px-3 py-10 text-center text-sm text-warm-500">
+                                    <td colSpan={9} className="px-3 py-10 text-center text-sm text-warm-500">
                                         {seleccionada ? 'Esta orden no tiene productos.' : 'Selecciona una orden arriba para ver su detalle.'}
                                     </td>
                                 </tr>
                             )}
                             {(seleccionada?.detalles ?? []).map((d, i) => {
                                 const producto = d.presentacion?.producto;
+                                const codigo = [producto?.codigo, d.color?.codigo].filter(Boolean).join('-');
                                 const subtotal = (Number(d.cantidad) || 0) * (Number(d.precio_unitario) || 0);
                                 return (
                                     <tr key={d.id}>
                                         <td className="px-3 py-2 text-center text-warm-500">{i + 1}</td>
-                                        <td className="px-3 py-2 text-warm-500">{producto?.codigo ?? '—'}</td>
+                                        <td className="px-3 py-2 text-warm-500">{codigo || '—'}</td>
                                         <td className="px-3 py-2 font-semibold text-warm-900">{producto?.nombre ?? '—'}</td>
+                                        <td className="px-3 py-2 text-warm-500">{d.color?.nombre ?? '—'}</td>
                                         <td className="px-3 py-2 text-warm-500">{producto?.marca?.nombre ?? '—'}</td>
                                         <td className="px-3 py-2 text-warm-500">{d.presentacion?.nombre ?? '—'}</td>
                                         <td className="px-3 py-2 text-right text-warm-900">{num(d.cantidad)}</td>
-                                        <td className="px-3 py-2 text-right text-warm-900">{money(d.precio_unitario)}</td>
-                                        <td className="px-3 py-2 text-right font-semibold text-primary-600">{money(subtotal)}</td>
+                                        <td className="px-3 py-2 text-right text-warm-900">{money(d.precio_unitario, seleccionada.moneda)}</td>
+                                        <td className="px-3 py-2 text-right font-semibold text-primary-600">{money(subtotal, seleccionada.moneda)}</td>
                                     </tr>
                                 );
                             })}
@@ -339,9 +347,9 @@ export default function OrdenesCompra() {
                         {(seleccionada?.detalles ?? []).length > 0 && (
                             <tfoot>
                                 <tr className="border-t border-edge bg-gray-50">
-                                    <td colSpan={7} className="px-3 py-1.5 text-right text-xs font-bold uppercase tracking-wide text-primary-700">Total</td>
+                                    <td colSpan={8} className="px-3 py-1.5 text-right text-xs font-bold uppercase tracking-wide text-primary-700">Total</td>
                                     <td className="px-3 py-1.5 text-right text-base font-extrabold text-warm-900">
-                                        {money(seleccionada.detalles.reduce((s, d) => s + (Number(d.cantidad) || 0) * (Number(d.precio_unitario) || 0), 0))}
+                                        {money(seleccionada.detalles.reduce((s, d) => s + (Number(d.cantidad) || 0) * (Number(d.precio_unitario) || 0), 0), seleccionada.moneda)}
                                     </td>
                                 </tr>
                             </tfoot>

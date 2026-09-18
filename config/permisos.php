@@ -118,10 +118,11 @@ return [
                     'label' => 'Órdenes de compra',
                     'apis' => ['ordenes-compra'],
                     'pdf' => ['orden-compra'],
-                    // Aprobar/enviar es parte de editar la orden, no una acción propia.
+                    // Aprobar/enviar/anular es parte de editar la orden, no una acción propia.
                     'patrones' => [
                         'ordenes-compra/*/aprobar' => 'editar',
                         'ordenes-compra/*/enviar' => 'editar',
+                        'ordenes-compra/*/anular' => 'editar',
                     ],
                 ],
                 'compras' => ['label' => 'Compras', 'apis' => ['compras'], 'pdf' => ['compra']],

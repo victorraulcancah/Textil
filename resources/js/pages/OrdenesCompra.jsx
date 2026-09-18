@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CheckCircle2, FileDown, Pencil, Printer, Send, ShoppingCart, Trash2 } from 'lucide-react';
+import { Ban, CheckCircle2, FileDown, Pencil, Printer, Send, ShoppingCart, Trash2 } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
@@ -89,6 +89,19 @@ export default function OrdenesCompra() {
             await load();
         } catch (err) {
             toast.error(err.response?.data?.message ?? 'No se pudo marcar la orden como enviada.');
+        } finally {
+            setActionId(null);
+        }
+    };
+
+    const anular = async (row) => {
+        setActionId(row.id);
+        try {
+            await api.post(`/ordenes-compra/${row.id}/anular`);
+            toast.success('Orden anulada.');
+            await load();
+        } catch (err) {
+            toast.error(err.response?.data?.message ?? 'No se pudo anular la orden.');
         } finally {
             setActionId(null);
         }
@@ -227,6 +240,14 @@ export default function OrdenesCompra() {
                                 onClick: () => enviar(row),
                             },
                             { label: 'Imprimir / PDF', icon: Printer, color: 'text-warm-600', onClick: () => setPdfTarget(row) },
+                            {
+                                label: 'Anular',
+                                icon: Ban,
+                                color: 'text-gray-500',
+                                hidden: bloqueada || row.estado === 'anulada',
+                                disabled: actionId === row.id,
+                                onClick: () => anular(row),
+                            },
                             {
                                 label: 'Transformar a compra',
                                 icon: FileDown,

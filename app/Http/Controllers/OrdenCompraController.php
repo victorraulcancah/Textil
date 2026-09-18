@@ -211,6 +211,30 @@ class OrdenCompraController extends Controller
     }
 
     /**
+     * Anula la orden en cualquier punto del flujo (pendiente, aprobada o
+     * enviada). No se toca lo ya guardado de quién aprobó/envió: queda como
+     * registro de que sí se llegó a aprobar antes de cancelarse.
+     */
+    public function anular(OrdenCompra $ordenesCompra)
+    {
+        if ($ordenesCompra->compras()->exists()) {
+            return response()->json([
+                'message' => 'La orden ya se transformó en compra y no se puede anular.',
+            ], 422);
+        }
+
+        if ($ordenesCompra->estado === 'anulada') {
+            return response()->json(['message' => 'La orden ya está anulada.'], 422);
+        }
+
+        $ordenesCompra->update(['estado' => 'anulada']);
+
+        return response()->json(
+            $ordenesCompra->fresh()->load(['proveedor', 'usuarioAprueba:id,name', 'usuarioEnvia:id,name'])
+        );
+    }
+
+    /**
      * Edición de la orden. Bloqueada si ya se transformó en compra (dejaría la
      * compra existente sin respaldo) o si ya salió de "pendiente": aprobarla es
      * un compromiso formal, cambiarla después invalidaría esa aprobación.

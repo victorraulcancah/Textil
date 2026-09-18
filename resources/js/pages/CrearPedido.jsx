@@ -95,13 +95,14 @@ export default function CrearPedido() {
                 setClientes(asList(clientesRes));
                 setProductos(asList(productosRes));
 
-                // El stock se suma de todos los almacenes: el vendedor no elige
-                // desde cuál sale, así que lo que le importa es si hay o no.
+                // Se suma el DISPONIBLE de todos los almacenes (físico menos lo
+                // que otros pedidos ya reservaron): el vendedor no elige desde
+                // cuál sale, así que lo que le importa es cuánto puede prometer.
                 const porProducto = {};
                 for (const fila of asList(existenciasRes)) {
                     const pid = fila.producto?.id ?? fila.producto_id;
                     if (!pid) continue;
-                    porProducto[pid] = (porProducto[pid] ?? 0) + Number(fila.stock_actual || 0);
+                    porProducto[pid] = (porProducto[pid] ?? 0) + Number(fila.stock_disponible ?? fila.stock_actual ?? 0);
                 }
                 setStockPorProducto(porProducto);
                 // Las filas completas, para que el buscador muestre el stock de
@@ -433,7 +434,7 @@ export default function CrearPedido() {
 
                         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                             <Input
-                                label="Stock"
+                                label="Disponible"
                                 value={
                                     producto
                                         ? `${num(stockEnUnidad)} ${presentacion?.nombre ?? ''}`.trim()

@@ -25,7 +25,9 @@ import { Alert, Badge, Button, DataTable, DateRangePicker, Input, Modal, SearchS
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
 const money = (n) =>
     new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(n) || 0);
-const fecha = (v) => (v ? new Date(v).toLocaleDateString('es-PE') : '—');
+// Una fecha sin hora ("2026-09-18") se interpreta como UTC y en Perú se
+// mostraría el día anterior: se le fija la medianoche local.
+const fecha = (v) => (v ? new Date(String(v).length === 10 ? `${v}T00:00:00` : v).toLocaleDateString('es-PE') : '—');
 
 const COLOR_ESTADO = {
     borrador: 'gray',
@@ -329,7 +331,7 @@ export default function Pedidos() {
         <Layout>
             <PageHeader
                 title="Pedidos"
-                description="Reservan la tela para el cliente; el stock se descuenta con la nota de venta"
+                description="Reservan la tela para el cliente al solicitarse; el stock se descuenta al despachar"
                 actions={<CreateButton onClick={() => navigate('/pedidos/nuevo')}>Nuevo pedido</CreateButton>}
             />
 
@@ -648,8 +650,8 @@ function AnularModal({ pedido, onClose, onAnulado }) {
 }
 
 /**
- * Emitir la nota de venta del pedido despachado. Aquí sí se descuenta el
- * stock, así que se pide cómo paga el cliente, igual que en mostrador.
+ * Emitir la nota de venta del pedido despachado. La tela ya salió al
+ * despachar; aquí se registra la venta y cómo paga el cliente.
  */
 const emptyPago = () => ({ tipo: 'efectivo', cuentaId: '', billeteraId: '', monto: '' });
 
@@ -740,15 +742,14 @@ function FacturarModal({ pedido, onClose, onFacturado }) {
             footer={
                 <>
                     <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-                    <Button loading={guardando} onClick={emitir}>Emitir y descontar stock</Button>
+                    <Button loading={guardando} onClick={emitir}>Emitir nota de venta</Button>
                 </>
             }
         >
             <div className="space-y-4">
                 <Alert variant="warning">
-                    Este es el paso que descuenta el inventario y registra el cobro. Los rollos
-                    que salen enteros quedan como vendidos; de los que se cortan, el saldo vuelve
-                    al stock con su mismo código.
+                    La tela ya salió del almacén al despachar. Este paso registra la venta y el
+                    cobro; los rollos que salieron enteros quedan como vendidos a nombre del cliente.
                 </Alert>
 
                 <div className="flex items-center justify-between gap-3">

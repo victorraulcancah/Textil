@@ -32,8 +32,12 @@ const ORIGEN_LABEL = {
     // Histórico: antes las recepciones se registraban con origen "compra".
     compra: 'Recepción',
     venta: 'Venta',
+    nota_venta: 'Venta',
+    edicion_nota_venta: 'Venta corregida',
+    anulacion_nota_venta: 'Venta anulada',
     despacho_pedido: 'Despacho de pedido',
     anulacion_despacho: 'Despacho anulado',
+    ingreso_rollos: 'Ingreso de rollos',
     devolucion: 'Devolución',
     merma: 'Merma',
     transferencia: 'Traslado',

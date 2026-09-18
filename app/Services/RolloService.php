@@ -62,14 +62,15 @@ class RolloService
         );
 
         return DB::transaction(function () use ($producto, $color, $almacen, $lineas, $costoUnitario, $recepcion, $codigoProveedor, $usuarioId, $actualizarStock, $importacion, $ubicacion) {
-            // Con código de orden, la numeración es de la orden entera: sigue
-            // corriendo al cambiar de tela, color o envío, y nunca se repite.
-            // Sin él, se continúa la numeración del color, sin reiniciar: el
-            // rollo 19 de un segundo contenedor no choca con el 19 del primero.
+            // `numero` es el correlativo del rollo dentro de su tela y color
+            // (único por color, y no se reinicia: el 19 de un segundo
+            // contenedor no choca con el 19 del primero).
+            $numero = $this->siguienteNumero($producto, $color);
             $prefijo = $this->prefijo($producto, $color, $codigoProveedor);
-            $siguiente = $codigoProveedor
-                ? $this->siguienteNumeroDeOrden($prefijo)
-                : $this->siguienteNumero($producto, $color);
+            // El correlativo del CÓDIGO, en cambio, con código de orden es de
+            // la orden entera: sigue corriendo al cambiar de tela, color o
+            // envío, y nunca se repite.
+            $correlativo = $codigoProveedor ? $this->siguienteNumeroDeOrden($prefijo) : $numero;
 
             $creados = collect();
 
@@ -92,7 +93,7 @@ class RolloService
                 // Con código de orden/proveedor el correlativo lleva seis
                 // dígitos (KET-003-26-000001), como lo numera la fábrica; el
                 // esquema por producto y color conserva sus cuatro.
-                $codigo = $codigo !== '' ? $codigo : sprintf($codigoProveedor ? '%s-%06d' : '%s-%04d', $prefijo, $siguiente);
+                $codigo = $codigo !== '' ? $codigo : sprintf($codigoProveedor ? '%s-%06d' : '%s-%04d', $prefijo, $correlativo);
 
                 $rollo = Rollo::create([
                     'producto_id' => $producto->id,
@@ -100,7 +101,7 @@ class RolloService
                     'almacen_id' => $almacen->id,
                     'codigo' => $codigo,
                     'codigo_proveedor' => $codigoProveedor,
-                    'numero' => $siguiente,
+                    'numero' => $numero,
                     'metros_inicial' => $metros,
                     'metros_actual' => $metros,
                     'peso_kg' => $linea['peso_kg'] ?? null,
@@ -124,7 +125,8 @@ class RolloService
                 );
 
                 $creados->push($rollo);
-                $siguiente++;
+                $numero++;
+                $correlativo++;
             }
 
             // La recepción de compra ya registró la entrada de stock por su

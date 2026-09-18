@@ -84,6 +84,8 @@ class OrdenCompraController extends Controller
             OrdenCompra::with([
                 'proveedor:id,nombre,codigo_corto',
                 'compras:id,orden_compra_id,correlativo,fecha',
+                'usuarioAprueba:id,name',
+                'usuarioEnvia:id,name',
                 // Detalle para la segunda tabla de la lista.
                 'detalles.presentacion.producto.marca',
                 'detalles.color:id,nombre,codigo,hex',
@@ -160,20 +162,70 @@ class OrdenCompraController extends Controller
     public function show(OrdenCompra $ordenesCompra)
     {
         return response()->json(
-            $ordenesCompra->load(['proveedor', 'detalles.presentacion.producto', 'detalles.color'])
+            $ordenesCompra->load(['proveedor', 'usuarioCrea:id,name', 'usuarioAprueba:id,name', 'usuarioEnvia:id,name', 'detalles.presentacion.producto', 'detalles.color'])
                 ->loadCount('compras')
         );
     }
 
     /**
-     * Edición de la orden. Si ya se transformó en compra queda bloqueada: cambiarla
-     * dejaría la compra existente sin respaldo con lo que dice la orden.
+     * Aprueba la orden: de pendiente pasa a aprobada, dejando quién y cuándo.
+     * Es un paso formal antes de enviarla al proveedor.
+     */
+    public function aprobar(OrdenCompra $ordenesCompra)
+    {
+        if ($ordenesCompra->estado !== 'pendiente') {
+            return response()->json([
+                'message' => 'Solo se puede aprobar una orden que está pendiente.',
+            ], 422);
+        }
+
+        $ordenesCompra->update([
+            'estado' => 'aprobada',
+            'usuario_aprueba_id' => auth()->id(),
+            'fecha_aprobacion' => now(),
+        ]);
+
+        return response()->json(
+            $ordenesCompra->fresh()->load(['proveedor', 'usuarioAprueba:id,name', 'usuarioEnvia:id,name'])
+        );
+    }
+
+    /** Marca la orden ya aprobada como enviada al proveedor. */
+    public function enviar(OrdenCompra $ordenesCompra)
+    {
+        if ($ordenesCompra->estado !== 'aprobada') {
+            return response()->json([
+                'message' => 'Solo se puede enviar una orden que ya está aprobada.',
+            ], 422);
+        }
+
+        $ordenesCompra->update([
+            'estado' => 'enviada',
+            'usuario_envia_id' => auth()->id(),
+            'fecha_envio' => now(),
+        ]);
+
+        return response()->json(
+            $ordenesCompra->fresh()->load(['proveedor', 'usuarioAprueba:id,name', 'usuarioEnvia:id,name'])
+        );
+    }
+
+    /**
+     * Edición de la orden. Bloqueada si ya se transformó en compra (dejaría la
+     * compra existente sin respaldo) o si ya salió de "pendiente": aprobarla es
+     * un compromiso formal, cambiarla después invalidaría esa aprobación.
      */
     public function update(Request $request, OrdenCompra $ordenesCompra)
     {
         if ($ordenesCompra->compras()->exists()) {
             return response()->json([
                 'message' => 'La orden ya se transformó en compra y no se puede editar.',
+            ], 422);
+        }
+
+        if ($ordenesCompra->estado !== 'pendiente') {
+            return response()->json([
+                'message' => 'La orden ya fue aprobada y no se puede editar.',
             ], 422);
         }
 
@@ -226,6 +278,12 @@ class OrdenCompraController extends Controller
         if ($ordenesCompra->compras()->exists()) {
             return response()->json([
                 'message' => 'La orden ya se transformó en compra y no se puede eliminar.',
+            ], 422);
+        }
+
+        if ($ordenesCompra->estado !== 'pendiente') {
+            return response()->json([
+                'message' => 'La orden ya fue aprobada y no se puede eliminar.',
             ], 422);
         }
 

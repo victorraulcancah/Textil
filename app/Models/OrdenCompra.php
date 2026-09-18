@@ -22,6 +22,10 @@ class OrdenCompra extends Model
         'fecha_entrega_estimada',
         'estado',
         'usuario_crea_id',
+        'usuario_aprueba_id',
+        'fecha_aprobacion',
+        'usuario_envia_id',
+        'fecha_envio',
         'observaciones',
         'condicion_pago',
         'moneda',
@@ -46,6 +50,8 @@ class OrdenCompra extends Model
             'fecha_emision' => 'datetime',
             'fecha_entrega_estimada' => 'datetime',
             'fecha_embarque_estimada' => 'date',
+            'fecha_aprobacion' => 'datetime',
+            'fecha_envio' => 'datetime',
             'tipo_cambio' => 'decimal:4',
         ];
     }
@@ -69,6 +75,16 @@ class OrdenCompra extends Model
     public function usuarioCrea()
     {
         return $this->belongsTo(User::class, 'usuario_crea_id');
+    }
+
+    public function usuarioAprueba()
+    {
+        return $this->belongsTo(User::class, 'usuario_aprueba_id');
+    }
+
+    public function usuarioEnvia()
+    {
+        return $this->belongsTo(User::class, 'usuario_envia_id');
     }
 
     public function detalles()

@@ -114,7 +114,16 @@ return [
             'label' => 'Compras',
             'submodulos' => [
                 'proveedores' => ['label' => 'Proveedores', 'apis' => ['proveedores']],
-                'ordenes-compra' => ['label' => 'Órdenes de compra', 'apis' => ['ordenes-compra'], 'pdf' => ['orden-compra']],
+                'ordenes-compra' => [
+                    'label' => 'Órdenes de compra',
+                    'apis' => ['ordenes-compra'],
+                    'pdf' => ['orden-compra'],
+                    // Aprobar/enviar es parte de editar la orden, no una acción propia.
+                    'patrones' => [
+                        'ordenes-compra/*/aprobar' => 'editar',
+                        'ordenes-compra/*/enviar' => 'editar',
+                    ],
+                ],
                 'compras' => ['label' => 'Compras', 'apis' => ['compras'], 'pdf' => ['compra']],
                 'recepciones-compra' => [
                     'label' => 'Recepciones de compra',

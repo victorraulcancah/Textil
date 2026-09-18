@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileDown, Pencil, Printer, ShoppingCart, Trash2 } from 'lucide-react';
+import { CheckCircle2, FileDown, Pencil, Printer, Send, ShoppingCart, Trash2 } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
+import ActionsMenu from '../components/ActionsMenu';
 import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
 import DetalleCard from '../components/ui/DetalleCard';
 import PageHeader, { CreateButton } from '../components/PageHeader';
@@ -36,6 +37,7 @@ export default function OrdenesCompra() {
 
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [deleting, setDeleting] = useState(false);
+    const [actionId, setActionId] = useState(null);
     const [pdfTarget, setPdfTarget] = useState(null);
     /** Orden cuyo detalle se muestra en la segunda tabla. */
     const [seleccionada, setSeleccionada] = useState(null);
@@ -65,6 +67,32 @@ export default function OrdenesCompra() {
     useEffect(() => {
         load();
     }, [load]);
+
+    const aprobar = async (row) => {
+        setActionId(row.id);
+        try {
+            await api.post(`/ordenes-compra/${row.id}/aprobar`);
+            toast.success('Orden aprobada.');
+            await load();
+        } catch (err) {
+            toast.error(err.response?.data?.message ?? 'No se pudo aprobar la orden.');
+        } finally {
+            setActionId(null);
+        }
+    };
+
+    const enviar = async (row) => {
+        setActionId(row.id);
+        try {
+            await api.post(`/ordenes-compra/${row.id}/enviar`);
+            toast.success('Orden marcada como enviada.');
+            await load();
+        } catch (err) {
+            toast.error(err.response?.data?.message ?? 'No se pudo marcar la orden como enviada.');
+        } finally {
+            setActionId(null);
+        }
+    };
 
     const handleDelete = async () => {
         setDeleting(true);
@@ -171,50 +199,60 @@ export default function OrdenesCompra() {
         {
             type: 'actions',
             key: 'actions',
-            label: 'Acciones',
-            width: '140px',
+            label: 'Acc.',
+            width: '70px',
             actions: (row) => {
                 // Una orden ya transformada en compra queda congelada.
                 const bloqueada = row.compras_count > 0;
+                // Aprobar es un compromiso formal: de ahí en más ya no se edita ni elimina.
+                const editable = row.estado === 'pendiente' && !bloqueada;
 
                 return (
-                    <>
-                        <button
-                            aria-label="Imprimir"
-                            title="Imprimir / PDF"
-                            onClick={() => setPdfTarget(row)}
-                            className="rounded-md p-1.5 text-warm-600 transition hover:bg-gray-100 hover:text-warm-900"
-                        >
-                            <Printer className="h-4 w-4" />
-                        </button>
-                        <button
-                            aria-label="Transformar a compra"
-                            title={bloqueada ? 'Ya se transformó en compra' : 'Transformar a compra'}
-                            disabled={bloqueada}
-                            onClick={(e) => { e.stopPropagation(); navigate(`/compras/nueva?orden=${row.id}`); }}
-                            className="rounded-md p-1.5 text-green-600 transition hover:bg-green-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-                        >
-                            <FileDown className="h-4 w-4" />
-                        </button>
-                        <button
-                            aria-label="Editar"
-                            title={bloqueada ? 'No se puede editar: ya tiene compra' : 'Editar'}
-                            disabled={bloqueada}
-                            onClick={(e) => { e.stopPropagation(); navigate(`/ordenes-compra/${row.id}/editar`); }}
-                            className="rounded-md p-1.5 text-primary-600 transition hover:bg-primary-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-                        >
-                            <Pencil className="h-4 w-4" />
-                        </button>
-                        <button
-                            aria-label="Eliminar"
-                            title={bloqueada ? 'No se puede eliminar: ya tiene compra' : 'Eliminar'}
-                            disabled={bloqueada}
-                            onClick={(e) => { e.stopPropagation(); setDeleteTarget(row); }}
-                            className="rounded-md p-1.5 text-red-600 transition hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-                        >
-                            <Trash2 className="h-4 w-4" />
-                        </button>
-                    </>
+                    <ActionsMenu
+                        items={[
+                            {
+                                label: 'Aprobar',
+                                icon: CheckCircle2,
+                                color: 'text-green-600',
+                                hidden: row.estado !== 'pendiente',
+                                disabled: actionId === row.id,
+                                onClick: () => aprobar(row),
+                            },
+                            {
+                                label: 'Marcar como enviada',
+                                icon: Send,
+                                color: 'text-blue-600',
+                                hidden: row.estado !== 'aprobada',
+                                disabled: actionId === row.id,
+                                onClick: () => enviar(row),
+                            },
+                            { label: 'Imprimir / PDF', icon: Printer, color: 'text-warm-600', onClick: () => setPdfTarget(row) },
+                            {
+                                label: 'Transformar a compra',
+                                icon: FileDown,
+                                color: 'text-green-600',
+                                disabled: bloqueada,
+                                title: bloqueada ? 'Ya se transformó en compra' : undefined,
+                                onClick: () => navigate(`/compras/nueva?orden=${row.id}`),
+                            },
+                            {
+                                label: 'Editar',
+                                icon: Pencil,
+                                color: 'text-primary-600',
+                                disabled: !editable,
+                                title: !editable ? 'No se puede editar: la orden ya fue aprobada o tiene compra' : undefined,
+                                onClick: () => navigate(`/ordenes-compra/${row.id}/editar`),
+                            },
+                            {
+                                label: 'Eliminar',
+                                icon: Trash2,
+                                danger: true,
+                                disabled: !editable,
+                                title: !editable ? 'No se puede eliminar: la orden ya fue aprobada o tiene compra' : undefined,
+                                onClick: () => setDeleteTarget(row),
+                            },
+                        ]}
+                    />
                 );
             },
         },
@@ -297,6 +335,12 @@ export default function OrdenesCompra() {
                             <span>Entrega est.: <strong className="text-warm-900">{fecha(seleccionada.fecha_entrega_estimada)}</strong></span>
                             {seleccionada.compras?.length > 0 && (
                                 <span>Compra: <strong className="text-warm-900">{seleccionada.compras.map((c) => c.correlativo ?? `#${c.id}`).join(', ')}</strong></span>
+                            )}
+                            {seleccionada.usuario_aprueba && (
+                                <span>Aprobó: <strong className="text-warm-900">{seleccionada.usuario_aprueba.name}</strong> ({fecha(seleccionada.fecha_aprobacion)})</span>
+                            )}
+                            {seleccionada.usuario_envia && (
+                                <span>Envió: <strong className="text-warm-900">{seleccionada.usuario_envia.name}</strong> ({fecha(seleccionada.fecha_envio)})</span>
                             )}
                             {seleccionada.observaciones && <span>Obs.: <strong className="text-warm-900">{seleccionada.observaciones}</strong></span>}
                         </span>

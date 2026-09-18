@@ -462,6 +462,11 @@ export default function CrearCompra() {
             flete,
             observaciones: form.observaciones,
 
+            // La moneda se pacta con el proveedor, sea la compra nacional o
+            // al exterior: no depende de ese interruptor, por eso va siempre.
+            moneda_origen: form.moneda_origen || 'PEN',
+            tipo_cambio: form.moneda_origen !== 'PEN' && form.tipo_cambio ? Number(form.tipo_cambio) : null,
+
             es_importacion: form.es_importacion,
             ...(form.es_importacion
                 ? {
@@ -471,8 +476,6 @@ export default function CrearCompra() {
                       bl: form.bl || null,
                       pais_origen: form.pais_origen || null,
                       fecha_llegada: form.fecha_llegada || null,
-                      moneda_origen: form.moneda_origen || 'PEN',
-                      tipo_cambio: form.tipo_cambio ? Number(form.tipo_cambio) : null,
                       cargo_type: form.cargo_type || null,
                       medio_transporte: form.medio_transporte || null,
                       incoterm: form.incoterm || null,
@@ -963,7 +966,10 @@ export default function CrearCompra() {
                     </Modal>
 
                     {/* Nacional o al exterior: igual que en la orden de compra, para
-                        que ambas pantallas se vean y se sientan lo mismo. */}
+                        que ambas pantallas se vean y se sientan lo mismo. La moneda es
+                        aparte: una compra nacional también puede pactarse en dólares
+                        (el proveedor factura en USD aunque la mercadería no venga de
+                        afuera), así que no depende de este interruptor. */}
                     <div className="rounded-xl border border-edge bg-white p-5 shadow-sm">
                         <div className="flex items-center justify-between gap-3">
                             <div className="inline-flex rounded-lg border border-edge bg-gray-50 p-0.5">
@@ -999,6 +1005,31 @@ export default function CrearCompra() {
                                     .join(' · ') || 'Sin datos de embarque aún.'}
                             </p>
                         )}
+
+                        <div className="mt-4 grid grid-cols-2 gap-3">
+                            <Select
+                                label="Moneda de origen"
+                                value={form.moneda_origen}
+                                onChange={(e) => setField('moneda_origen', e.target.value)}
+                                options={[
+                                    { value: 'PEN', label: 'Soles (PEN)' },
+                                    { value: 'USD', label: 'Dólares (USD)' },
+                                    { value: 'CNY', label: 'Yuan (CNY)' },
+                                    { value: 'EUR', label: 'Euros (EUR)' },
+                                ]}
+                            />
+                            {form.moneda_origen !== 'PEN' && (
+                                <Input
+                                    label="Tipo de cambio"
+                                    type="number"
+                                    step="0.0001"
+                                    placeholder="3.7500"
+                                    value={form.tipo_cambio}
+                                    onChange={(e) => setField('tipo_cambio', e.target.value)}
+                                    error={formErrors.tipo_cambio}
+                                />
+                            )}
+                        </div>
                     </div>
 
                     <Modal
@@ -1050,26 +1081,6 @@ export default function CrearCompra() {
                                 value={form.fecha_llegada}
                                 onChange={(e) => setField('fecha_llegada', e.target.value)}
                             />
-                            <Select
-                                label="Moneda de origen"
-                                value={form.moneda_origen}
-                                onChange={(e) => setField('moneda_origen', e.target.value)}
-                                options={[
-                                    { value: 'PEN', label: 'Soles (PEN)' },
-                                    { value: 'USD', label: 'Dólares (USD)' },
-                                    { value: 'CNY', label: 'Yuan (CNY)' },
-                                    { value: 'EUR', label: 'Euros (EUR)' },
-                                ]}
-                            />
-                            <Input
-                                label="Tipo de cambio"
-                                type="number"
-                                step="0.0001"
-                                placeholder="3.7500"
-                                value={form.tipo_cambio}
-                                onChange={(e) => setField('tipo_cambio', e.target.value)}
-                            />
-
                             {/* Datos de embarque: los mismos que ya pregunta la orden de
                                 compra al exterior, para que ambas pantallas calcen. */}
                             <Select

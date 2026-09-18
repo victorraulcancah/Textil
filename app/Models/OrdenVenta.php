@@ -6,11 +6,11 @@ use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * El pedido del cliente: reserva rollos pero no mueve stock.
+ * El pedido del cliente.
  *
- * Camina por estados hasta el despacho; recién la nota de venta descuenta
- * del almacén. Anularlo devuelve los rollos a disponible sin dejar rastro
- * en el inventario, porque nunca salieron.
+ * Al solicitarlo aparta el stock (sigue físico, pero ya no disponible para
+ * otros); al despacharlo la tela sale de verdad: se cortan los rollos y se
+ * descuenta el almacén una sola vez. La nota de venta solo cobra.
  */
 class OrdenVenta extends Model
 {

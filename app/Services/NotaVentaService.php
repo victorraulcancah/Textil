@@ -7,6 +7,7 @@ use App\Models\MotivoMovimiento;
 use App\Models\MovimientoCaja;
 use App\Models\NotaVenta;
 use App\Models\NotaVentaDetalle;
+use App\Models\OrdenVenta;
 use App\Models\Rollo;
 use App\Models\RolloMovimiento;
 use App\Models\SerieDocumento;
@@ -22,8 +23,9 @@ use Illuminate\Support\Facades\DB;
  * dentro de una transacción: si algo falla, no queda a medias.
  *
  * La tela, además, sale de un rollo concreto. En la venta de mostrador eso se
- * resuelve aquí: se corta el rollo elegido. En la que viene de un pedido ya lo
- * hizo el pedido al facturar, y aquí no se vuelve a cortar.
+ * resuelve aquí: se corta el rollo elegido y se descuenta el stock. En la que
+ * viene de un pedido ya lo hizo el pedido al despachar, así que aquí solo se
+ * registra la venta y el cobro; anularla devuelve la tela por el pedido.
  */
 class NotaVentaService
 {
@@ -66,6 +68,14 @@ class NotaVentaService
     {
         if ($notaVenta->estado !== 'emitida') {
             throw new \InvalidArgumentException('Solo se pueden editar notas de venta emitidas.');
+        }
+
+        // La nota de un pedido es el reflejo de lo que se despachó: cambiarla
+        // aparte dejaría la venta y la salida de tela sin cuadrar.
+        if ($notaVenta->orden_venta_id) {
+            throw new \InvalidArgumentException(
+                'Esta venta viene de un pedido y no se edita por separado. Anúlala y vuelve a facturar el pedido.'
+            );
         }
 
         // Con cobros ya aplicados contra la cuenta por cobrar, revertir dejaría
@@ -139,18 +149,21 @@ class NotaVentaService
 
         $nota->load(['detalles.presentacion.producto', 'detalles.rollo', 'almacen']);
 
-        // La venta que viene de un pedido ya cortó sus rollos al facturar.
+        // La venta que viene de un pedido ya cortó sus rollos y descontó el
+        // stock al despachar: aquí no se vuelve a mover nada.
         $deMostrador = ! $nota->orden_venta_id;
 
         foreach ($nota->detalles as $detalle) {
+            if (! $deMostrador) {
+                continue;
+            }
+
             $rollo = $detalle->rollo;
 
-            if ($deMostrador) {
-                $this->exigirRollo($detalle, $nota);
+            $this->exigirRollo($detalle, $nota);
 
-                if ($rollo) {
-                    $this->cortarRollo($rollo, $detalle, $nota);
-                }
+            if ($rollo) {
+                $this->cortarRollo($rollo, $detalle, $nota);
             }
 
             $this->stockService->salida(
@@ -219,11 +232,19 @@ class NotaVentaService
 
         $deMostrador = ! $nota->orden_venta_id;
 
+        if (! $deMostrador) {
+            $this->revertirDespachoDelPedido($nota, $origen);
+        }
+
         foreach ($nota->detalles as $detalle) {
+            if (! $deMostrador) {
+                continue;
+            }
+
             $rollo = $detalle->rollo;
 
             // La tela vuelve al rollo del que se cortó, con su mismo código.
-            if ($deMostrador && $rollo) {
+            if ($rollo) {
                 $this->rollos->devolver(
                     $rollo,
                     $detalle->presentacion->aMetros((float) $detalle->cantidad),
@@ -253,6 +274,48 @@ class NotaVentaService
             ->delete();
 
         CuentaPorCobrar::where('nota_venta_id', $nota->id)->delete();
+    }
+
+    /**
+     * La venta de un pedido descontó al despachar: al anularla, la tela
+     * vuelve a los rollos que se cortaron y el stock al almacén del pedido.
+     */
+    private function revertirDespachoDelPedido(NotaVenta $nota, string $origen): void
+    {
+        $pedido = OrdenVenta::with(['detalles.rollos.rollo', 'detalles.presentacion', 'almacen'])
+            ->find($nota->orden_venta_id);
+
+        if (! $pedido || ! $pedido->almacen) {
+            return;
+        }
+
+        foreach ($pedido->detalles as $linea) {
+            foreach ($linea->rollos as $asignado) {
+                if ($asignado->rollo) {
+                    $this->rollos->devolver(
+                        $asignado->rollo,
+                        (float) $asignado->metros,
+                        RolloMovimiento::CANCELACION,
+                        'nota_venta',
+                        $nota->id,
+                        auth()->id(),
+                    );
+                }
+            }
+
+            $this->stockService->entrada(
+                $linea->presentacion,
+                $pedido->almacen,
+                (float) $linea->cantidad,
+                0,
+                $origen,
+                'nota_venta',
+                $nota->id,
+                auth()->id(),
+                now()->toDateTimeString(),
+                colorId: $linea->producto_color_id,
+            );
+        }
     }
 
     /**

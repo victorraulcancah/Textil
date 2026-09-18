@@ -379,7 +379,7 @@ export default function Pedidos() {
                             ofrece solo su propia transición. */}
                         <div className="flex flex-wrap items-center gap-2">
                             {detalle.estado === 'borrador' && detalle.transiciones?.includes('solicitado') && (
-                                <Button size="sm" loading={procesando} onClick={() => accion(detalle, 'solicitar', 'Pedido solicitado al almacén.')}>
+                                <Button size="sm" loading={procesando} onClick={() => accion(detalle, 'solicitar', 'Pedido solicitado al almacén: el stock quedó reservado.')}>
                                     <PackageCheck className="h-4 w-4" />
                                     Solicitar al almacén
                                 </Button>
@@ -487,7 +487,7 @@ function DetallePedido({ pedido, procesando, onAccion, onFacturar, onPdf }) {
                     {/* El vendedor solo solicita. Preparar, separar y despachar
                         es trabajo del almacenero, desde su propia bandeja. */}
                     {pedido.estado === 'borrador' && puede('solicitado') && (
-                        <Button size="sm" loading={procesando} onClick={() => onAccion(pedido, 'solicitar', 'Pedido solicitado al almacén.')}>
+                        <Button size="sm" loading={procesando} onClick={() => onAccion(pedido, 'solicitar', 'Pedido solicitado al almacén: el stock quedó reservado.')}>
                             <PackageCheck className="h-4 w-4" />
                             Solicitar al almacén
                         </Button>

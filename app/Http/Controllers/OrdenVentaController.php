@@ -30,6 +30,7 @@ class OrdenVentaController extends Controller
         'usuarioDespacha:id,name',
         'detalles.presentacion.producto:id,codigo,nombre',
         'detalles.color:id,nombre,codigo,hex',
+        'detalles.almacenReserva:id,nombre',
         'detalles.rollos.rollo.color',
         // Quién escaneó cada rollo: varios almaceneros pueden preparar el
         // mismo pedido y se necesita saber quién trajo cuál.

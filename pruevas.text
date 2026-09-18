@@ -1,0 +1,15 @@
+Ahora leo el archivo de texto extraído.
+
+Ya leí `GUIA.docx`. Es un flujo de ejemplo completo (compra de 100m de Trenza Camello en 2 rollos) que describe, en este orden, lo que el sistema debe soportar:
+
+1. **Crear el color una sola vez** — catálogo compartido de colores (código de 4 dígitos + nombre), reutilizable en cualquier tela. Ej: Camello = 0074.
+2. **Crear la tela y asignarle el color** — el producto se crea una vez con su código de tela; al elegir el color, el sistema forma el "producto con color" (ej: `01-01-030-0074`).
+3. **Pedir la mercadería al proveedor** (Compras / Órdenes de compra) — se elige proveedor, tela y color; el sistema genera el código de orden (ej: `KET-001-26`). La orden pasa por borrador → aprobación → enviada.
+4. **La fábrica detalla los rollos que enviará** (Packing list) — Excel con una fila por rollo: orden, código único de rollo, producto, color, metros, peso neto, envío, y "N° de M rollos" de esa tela/color.
+5. **Cargar el packing list** (Compras / Recepciones) — se importa el Excel, quedan los rollos pendientes de recibir (sin afectar stock todavía); valida que tela/color existan en catálogo.
+6. **Escanear y confirmar lo que llegó** — almacén escanea cada rollo (QR), puede haber varios almaceneros, se registra quién escaneó cada uno, se confirma la recepción y se genera la etiqueta.
+7. **El vendedor registra y reserva** (Ventas / Pedidos) — el pedido reserva metros (stock físico vs. disponible).
+8. **Almacén prepara el pedido** (Inventario / Preparación y despacho) — se escanea el rollo de origen y se corta la pieza pedida.
+9. **Confirmar el despacho** — descuenta el stock físico una sola vez y libera la reserva.
+
+Listo para que me guíes paso a paso con las pruebas.

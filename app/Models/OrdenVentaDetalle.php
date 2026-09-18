@@ -28,6 +28,10 @@ class OrdenVentaDetalle extends Model
         'cantidad',
         'descripcion',
         'metros',
+        // Dónde y cuánto se apartó al solicitar el pedido (en unidades de la
+        // presentación, igual que `cantidad`). Se limpia al liberar.
+        'reserva_almacen_id',
+        'cantidad_reservada',
         'precio_unitario',
         'descuento',
         'subtotal',
@@ -38,6 +42,7 @@ class OrdenVentaDetalle extends Model
         return [
             'cantidad' => 'decimal:2',
             'metros' => 'decimal:2',
+            'cantidad_reservada' => 'decimal:2',
             'precio_unitario' => 'decimal:2',
             'descuento' => 'decimal:2',
             'subtotal' => 'decimal:2',
@@ -47,6 +52,12 @@ class OrdenVentaDetalle extends Model
     public function ordenVenta()
     {
         return $this->belongsTo(OrdenVenta::class);
+    }
+
+    /** El almacén en el que quedó apartado el stock de esta línea. */
+    public function almacenReserva()
+    {
+        return $this->belongsTo(Almacen::class, 'reserva_almacen_id');
     }
 
     public function presentacion()

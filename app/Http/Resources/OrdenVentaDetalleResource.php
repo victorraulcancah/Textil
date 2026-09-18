@@ -35,6 +35,9 @@ class OrdenVentaDetalleResource extends JsonResource
             'cantidad' => (float) $this->cantidad,
             'descripcion' => $this->descripcion,
             'metros' => (float) $this->metros,
+
+            'cantidad_reservada' => $this->cantidad_reservada !== null ? (float) $this->cantidad_reservada : null,
+            'almacen_reserva' => $this->whenLoaded('almacenReserva', fn () => $this->almacenReserva?->nombre),
             'precio_unitario' => (float) $this->precio_unitario,
             'descuento' => (float) $this->descuento,
             'subtotal' => (float) $this->subtotal,

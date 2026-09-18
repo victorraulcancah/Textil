@@ -32,6 +32,8 @@ const ORIGEN_LABEL = {
     // Histórico: antes las recepciones se registraban con origen "compra".
     compra: 'Recepción',
     venta: 'Venta',
+    despacho_pedido: 'Despacho de pedido',
+    anulacion_despacho: 'Despacho anulado',
     devolucion: 'Devolución',
     merma: 'Merma',
     transferencia: 'Traslado',
@@ -47,6 +49,7 @@ const DOC_LABEL = {
     prestamo: 'Préstamo',
     toma_inventario: 'Toma',
     nota_venta: 'Venta',
+    orden_venta: 'Pedido',
 };
 
 export default function Movimientos() {

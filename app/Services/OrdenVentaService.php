@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\NotaVenta;
 use App\Models\OrdenVenta;
 use App\Models\OrdenVentaDetalle;
+use App\Models\ProductoAlmacenStock;
 use App\Models\ProductoPresentacion;
 use App\Models\Rollo;
 use App\Models\RolloMovimiento;
@@ -14,11 +15,17 @@ use Illuminate\Support\Facades\DB;
 /**
  * El recorrido del pedido, desde que se toma hasta que se factura.
  *
- * La regla que manda sobre todo lo demás: el pedido NO mueve stock. El
- * descuento ocurre una sola vez, cuando se emite la nota de venta.
- *
  *   borrador → solicitado → preparando → separado → despachado → facturado
  *                                                             ↘ anulado
+ *
+ * El stock se toca en dos momentos, y solo en dos:
+ *
+ *   - Al solicitar, lo pedido queda RESERVADO: sigue siendo stock físico,
+ *     pero deja de estar disponible para otros clientes (100 m físicos,
+ *     80 m disponibles).
+ *   - Al despachar, la tela SALE: se cortan los rollos, se descuenta el
+ *     almacén una sola vez y se libera la reserva. La nota de venta solo
+ *     registra la venta y el cobro.
  *
  * El corte entre quién hace qué está en "solicitado": hasta ahí es del
  * vendedor, de ahí en adelante es del almacén.
@@ -33,6 +40,7 @@ class OrdenVentaService
     public function __construct(
         protected RolloService $rollos,
         protected NotaVentaService $notasVenta,
+        protected StockService $stock,
     ) {}
 
     /**
@@ -78,8 +86,8 @@ class OrdenVentaService
      * El vendedor solicita el pedido al almacén.
      *
      * Se numera el requerimiento —el papel con el que el almacenero baja al
-     * rack— y el pedido aparece en su bandeja. Todavía no se toca ningún
-     * rollo: cuáles se usan lo decide el almacén al prepararlo.
+     * rack—, el pedido aparece en su bandeja y lo pedido queda reservado.
+     * Qué rollos concretos se usan lo decide el almacén al prepararlo.
      */
     public function solicitar(OrdenVenta $orden): OrdenVenta
     {
@@ -89,6 +97,8 @@ class OrdenVentaService
             if ($orden->detalles()->doesntExist()) {
                 throw new \DomainException('El pedido no tiene productos: agrega al menos uno antes de solicitarlo.');
             }
+
+            $this->reservarStock($orden);
 
             $orden->update([
                 'estado' => OrdenVenta::SOLICITADO,
@@ -111,6 +121,7 @@ class OrdenVentaService
         $this->exigirTransicion($orden, OrdenVenta::BORRADOR);
 
         return DB::transaction(function () use ($orden) {
+            $this->liberarReservas($orden);
             $this->liberarRollos($orden, RolloMovimiento::CANCELACION);
 
             $orden->update([
@@ -317,24 +328,68 @@ class OrdenVentaService
     }
 
     /**
-     * Los rollos salen físicamente del almacén.
+     * La tela sale físicamente del almacén.
      *
-     * Ya vienen verificados de "separado": aquí no se vuelve a comprobar nada,
-     * solo se deja constancia de quién y cuándo los entregó.
+     * Ya viene verificada de "separado". Aquí se cortan los metros de cada
+     * rollo asignado, se descuenta el stock una sola vez y se libera la
+     * reserva que dejó el vendedor al solicitar.
      */
     public function despachar(OrdenVenta $orden): OrdenVenta
     {
         $this->exigirTransicion($orden, OrdenVenta::DESPACHADO);
 
         return DB::transaction(function () use ($orden) {
-            foreach ($this->rollosDe($orden) as $rollo) {
-                $this->rollos->cambiarEstado(
-                    $rollo,
-                    Rollo::DESPACHADO,
-                    RolloMovimiento::DESPACHO,
-                    'orden_venta',
-                    $orden->id,
-                );
+            $this->liberarReservas($orden);
+
+            $orden->load('detalles.rollos.rollo', 'detalles.presentacion', 'almacen');
+
+            if (! $orden->almacen) {
+                throw new \DomainException('El pedido no tiene almacén de salida: prepáralo escaneando sus rollos.');
+            }
+
+            foreach ($orden->detalles as $linea) {
+                foreach ($linea->rollos as $asignado) {
+                    if (! $asignado->rollo) {
+                        continue;
+                    }
+
+                    $this->rollos->cortar(
+                        $asignado->rollo,
+                        (float) $asignado->metros,
+                        RolloMovimiento::DESPACHO,
+                        'orden_venta',
+                        $orden->id,
+                    );
+
+                    $rollo = $asignado->rollo->fresh();
+
+                    // Lo que sobra del rollo sigue en el almacén con su mismo
+                    // código; si salió entero, se va con el pedido.
+                    $this->rollos->cambiarEstado(
+                        $rollo,
+                        (float) $rollo->metros_actual > 0 ? Rollo::DISPONIBLE : Rollo::DESPACHADO,
+                        RolloMovimiento::DESPACHO,
+                        'orden_venta',
+                        $orden->id,
+                    );
+                }
+
+                try {
+                    $this->stock->salida(
+                        $linea->presentacion,
+                        $orden->almacen,
+                        (float) $linea->cantidad,
+                        0,
+                        'despacho_pedido',
+                        'orden_venta',
+                        $orden->id,
+                        auth()->id(),
+                        null,
+                        $linea->producto_color_id,
+                    );
+                } catch (\RuntimeException $e) {
+                    throw new \DomainException($e->getMessage());
+                }
             }
 
             $orden->update([
@@ -348,12 +403,10 @@ class OrdenVentaService
     }
 
     /**
-     * Cierra el pedido: emite la nota de venta y, ahí sí, descuenta.
+     * Cierra el pedido: emite la nota de venta y registra el cobro.
      *
-     * Es el único punto de todo el recorrido que toca el inventario y la
-     * plata. Corta los metros de cada rollo asignado, deja constancia de a qué
-     * cliente se fue, y delega la nota en el servicio de siempre para que la
-     * venta se registre igual que una de mostrador.
+     * La tela ya salió al despachar, así que aquí no se descuenta nada más:
+     * solo los rollos que se fueron enteros quedan como vendidos y con dueño.
      *
      * @param  array{tipo_pago?: string, pagos?: list<array>, fecha_emision?: string, serie?: string}  $datos
      */
@@ -381,36 +434,23 @@ class OrdenVentaService
                 'pagos' => $datos['pagos'] ?? [],
             ]);
 
-            // La tela sale físicamente: se cortan los metros de cada rollo.
             foreach ($orden->detalles as $linea) {
                 foreach ($linea->rollos as $asignado) {
-                    if (! $asignado->rollo) {
+                    $rollo = $asignado->rollo;
+
+                    if (! $rollo || $rollo->estado !== Rollo::DESPACHADO) {
                         continue;
                     }
 
-                    $this->rollos->cortar(
-                        $asignado->rollo,
-                        (float) $asignado->metros,
-                        RolloMovimiento::VENTA,
-                        'nota_venta',
-                        $nota->id,
-                    );
-
-                    $rollo = $asignado->rollo->fresh();
-
-                    // Si quedó tela, el rollo vuelve al stock con su mismo
-                    // código; si salió entero, queda vendido y con dueño.
                     $this->rollos->cambiarEstado(
                         $rollo,
-                        (float) $rollo->metros_actual > 0 ? Rollo::DISPONIBLE : Rollo::VENDIDO,
+                        Rollo::VENDIDO,
                         RolloMovimiento::VENTA,
                         'nota_venta',
                         $nota->id,
                     );
 
-                    if ((float) $rollo->metros_actual <= 0) {
-                        $rollo->update(['cliente_id' => $orden->cliente_id]);
-                    }
+                    $rollo->update(['cliente_id' => $orden->cliente_id]);
                 }
             }
 
@@ -443,13 +483,19 @@ class OrdenVentaService
     }
 
     /**
-     * Anula el pedido y devuelve al stock los rollos que se hubieran asignado.
+     * Anula el pedido: suelta la reserva y los rollos asignados. Si ya se
+     * había despachado, la tela vuelve a sus rollos y al stock del almacén.
      */
     public function anular(OrdenVenta $orden, string $motivo): OrdenVenta
     {
         $this->exigirTransicion($orden, OrdenVenta::ANULADO);
 
         return DB::transaction(function () use ($orden, $motivo) {
+            if ($orden->estado === OrdenVenta::DESPACHADO) {
+                $this->revertirDespacho($orden);
+            }
+
+            $this->liberarReservas($orden);
             $this->liberarRollos($orden, RolloMovimiento::CANCELACION, $motivo);
 
             $orden->update([
@@ -464,6 +510,100 @@ class OrdenVentaService
     }
 
     /* ------------------------------------------------------------------ */
+
+    /**
+     * Aparta lo pedido en el almacén que más disponible tenga de cada
+     * producto. Desde este momento esos metros siguen siendo stock físico,
+     * pero nadie más puede venderlos.
+     */
+    private function reservarStock(OrdenVenta $orden): void
+    {
+        $orden->load('detalles.presentacion.producto');
+
+        foreach ($orden->detalles as $linea) {
+            // Un pedido que vuelve de preparación ya trae su reserva.
+            if ($linea->cantidad_reservada !== null) {
+                continue;
+            }
+
+            $presentacion = $linea->presentacion;
+            $factor = (float) ($presentacion->factor_conversion ?: 1);
+            $necesario = round((float) $linea->cantidad * $factor, 2);
+
+            $stock = ProductoAlmacenStock::with('almacen')
+                ->where('producto_id', $presentacion->producto_id)
+                ->orderByDesc('stock_disponible')
+                ->first();
+
+            if (! $stock || ! $stock->almacen || (float) $stock->stock_disponible + 0.001 < $necesario) {
+                $producto = $presentacion->producto?->nombre ?? 'el producto';
+                $disponible = $stock ? round((float) $stock->stock_disponible / $factor, 2) : 0;
+
+                throw new \DomainException(
+                    "No hay stock disponible para reservar {$linea->cantidad} x {$presentacion->nombre} de {$producto}: "
+                    ."queda {$disponible} disponible."
+                );
+            }
+
+            $this->stock->reservar($presentacion, $stock->almacen, (float) $linea->cantidad);
+
+            $linea->update([
+                'reserva_almacen_id' => $stock->almacen_id,
+                'cantidad_reservada' => $linea->cantidad,
+            ]);
+        }
+    }
+
+    /** Devuelve a disponible lo que el pedido tenía apartado. */
+    private function liberarReservas(OrdenVenta $orden): void
+    {
+        $orden->load('detalles.presentacion', 'detalles.almacenReserva');
+
+        foreach ($orden->detalles as $linea) {
+            if ($linea->cantidad_reservada === null || ! $linea->almacenReserva) {
+                continue;
+            }
+
+            $this->stock->liberarReserva($linea->presentacion, $linea->almacenReserva, (float) $linea->cantidad_reservada);
+
+            $linea->update(['reserva_almacen_id' => null, 'cantidad_reservada' => null]);
+        }
+    }
+
+    /** La tela que ya había salido vuelve: los metros a cada rollo y el stock al almacén. */
+    private function revertirDespacho(OrdenVenta $orden): void
+    {
+        $orden->load('detalles.rollos.rollo', 'detalles.presentacion', 'almacen');
+
+        foreach ($orden->detalles as $linea) {
+            foreach ($linea->rollos as $asignado) {
+                if ($asignado->rollo) {
+                    $this->rollos->devolver(
+                        $asignado->rollo,
+                        (float) $asignado->metros,
+                        RolloMovimiento::CANCELACION,
+                        'orden_venta',
+                        $orden->id,
+                    );
+                }
+            }
+
+            if ($orden->almacen) {
+                $this->stock->entrada(
+                    $linea->presentacion,
+                    $orden->almacen,
+                    (float) $linea->cantidad,
+                    0,
+                    'anulacion_despacho',
+                    'orden_venta',
+                    $orden->id,
+                    auth()->id(),
+                    null,
+                    $linea->producto_color_id,
+                );
+            }
+        }
+    }
 
     /** Los rollos que el almacén asignó a este pedido. */
     private function rollosDe(OrdenVenta $orden)
@@ -618,6 +758,7 @@ class OrdenVentaService
         return $orden->load([
             'cliente', 'almacen', 'vendedor',
             'detalles.presentacion.producto',
+            'detalles.almacenReserva',
             'detalles.rollos.rollo.color',
         ]);
     }

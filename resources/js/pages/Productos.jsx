@@ -1396,6 +1396,9 @@ export default function Productos() {
                                                     value: String(col.id),
                                                     label: `${col.codigo} — ${col.nombre}`,
                                                     keywords: col.codigo,
+                                                    nombre: col.nombre,
+                                                    codigo: col.codigo,
+                                                    hex: col.hex,
                                                 }))}
                                             />
                                             {!c.color_id && c.nombre && (

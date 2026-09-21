@@ -33,6 +33,12 @@ return Application::configure(basePath: dirname(__DIR__))
         // servicios ("ese rollo ya no está disponible"). No son errores del
         // sistema: son avisos para el usuario, y viajan como un 422 igual que
         // los de validación, que es lo que el frontend ya sabe mostrar.
+        //
+        // Por lo mismo no se registran en el log: un rollo rechazado al
+        // escanear es lo normal, no algo que revisar. Y así un log sin permisos
+        // de escritura no convierte cada aviso en un error 500.
+        $exceptions->dontReport(\DomainException::class);
+
         $exceptions->render(function (\DomainException $e, Request $request) {
             if ($request->is('api/*')) {
                 return response()->json(['message' => $e->getMessage()], 422);

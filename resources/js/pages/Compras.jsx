@@ -19,8 +19,13 @@ const estadoCompra = {
     anulada: { label: 'Anulada', variant: 'red' },
 };
 
-const money = (n) =>
-    new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(n) || 0);
+// Cada compra se pacta en su moneda (las del exterior, en dólares): el monto
+// se muestra en ella, no siempre en soles.
+const money = (n, moneda = 'PEN') =>
+    new Intl.NumberFormat(moneda === 'USD' ? 'en-US' : 'es-PE', {
+        style: 'currency',
+        currency: moneda === 'USD' ? 'USD' : 'PEN',
+    }).format(Number(n) || 0);
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
 
@@ -152,7 +157,7 @@ export default function Compras() {
             ),
         },
         { key: 'detalles_count', label: 'Ítems', render: (row) => <Badge variant="gray">{row.detalles_count ?? 0}</Badge> },
-        { key: 'total', label: 'Total', align: 'right', render: (row) => <span className="font-semibold text-warm-900">{money(row.total)}</span> },
+        { key: 'total', label: 'Total', align: 'right', render: (row) => <span className="font-semibold text-warm-900">{money(row.total, row.moneda_origen)}</span> },
         {
             key: 'estado',
             label: 'Estado',
@@ -328,8 +333,8 @@ export default function Compras() {
                                     subtitulo={[producto?.codigo, d.presentacion?.nombre, producto?.marca?.nombre].filter(Boolean).join(' · ')}
                                     campos={[
                                         { label: 'Cant.', value: num(d.cantidad) },
-                                        { label: 'Costo', value: money(d.costo_unitario) },
-                                        { label: 'Subtotal', value: money(d.subtotal), valueClassName: 'text-primary-600' },
+                                        { label: 'Costo', value: money(d.costo_unitario, seleccionada?.moneda_origen) },
+                                        { label: 'Subtotal', value: money(d.subtotal, seleccionada?.moneda_origen), valueClassName: 'text-primary-600' },
                                         { label: 'Recibido', value: num(d.recibido), valueClassName: 'text-success-600' },
                                         { label: 'Pendiente', value: num(d.pendiente), valueClassName: Number(d.pendiente) > 0 ? 'text-warning-600' : undefined },
                                     ]}
@@ -388,8 +393,8 @@ export default function Compras() {
                                         <td className="px-3 py-2 text-warm-500">{producto?.marca?.nombre ?? '—'}</td>
                                         <td className="px-3 py-2 text-warm-500">{d.presentacion?.nombre ?? '—'}</td>
                                         <td className="px-3 py-2 text-right text-warm-900">{num(d.cantidad)}</td>
-                                        <td className="px-3 py-2 text-right text-warm-900">{money(d.costo_unitario)}</td>
-                                        <td className="px-3 py-2 text-right font-semibold text-primary-600">{money(d.subtotal)}</td>
+                                        <td className="px-3 py-2 text-right text-warm-900">{money(d.costo_unitario, seleccionada?.moneda_origen)}</td>
+                                        <td className="px-3 py-2 text-right font-semibold text-primary-600">{money(d.subtotal, seleccionada?.moneda_origen)}</td>
                                         <td className="px-3 py-2 text-right text-green-600">{num(d.recibido)}</td>
                                         <td
                                             className={`px-3 py-1.5 text-right font-medium ${

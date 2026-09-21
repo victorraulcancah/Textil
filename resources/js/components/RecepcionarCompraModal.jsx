@@ -1,10 +1,11 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
-import { PackageCheck } from 'lucide-react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Camera, PackageCheck, ScanLine, X } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { opcionesAlmacen } from '../lib/almacenes';
 import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
-import { Alert, Button, Input, Modal, SearchSelect, Select, Spinner } from './ui';
+import EscanerCamara from './EscanerCamara';
+import { Alert, Badge, Button, Input, Modal, SearchSelect, Select, Spinner, cn } from './ui';
 
 const hoy = () => new Date().toISOString().slice(0, 10);
 
@@ -37,14 +38,20 @@ function leerMetrajes(texto) {
         .filter((r) => r.metros > 0);
 }
 
-/**
- * Los rollos de una línea: si vinieron de un Excel de packing list ya
- * cargado, esos manda (traen su propio código de fábrica); si no, se leen
- * del texto pegado a mano, como siempre.
- */
+/** Los rollos de una línea que se escribieron a mano (sin packing list). */
 function rollosDe(cap) {
-    return cap?.rollosExcel?.length ? cap.rollosExcel : leerMetrajes(cap?.metrajes);
+    return leerMetrajes(cap?.metrajes);
 }
+
+/** "14:08" de una fecha ISO, en la hora local. */
+const hora = (iso) =>
+    iso ? new Date(iso).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : '';
+
+const ESTADO_ROLLO = {
+    pendiente: { label: 'Por recibir', variant: 'amber' },
+    recibido: { label: 'Recibido', variant: 'green' },
+    registrado: { label: 'En el almacén', variant: 'blue' },
+};
 
 export default function RecepcionarCompraModal({ open, onClose, compraId, onDone }) {
     const toast = useToast();
@@ -70,6 +77,18 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
      */
     const [arbolUbicaciones, setArbolUbicaciones] = useState([]);
     const [subiendoPackingList, setSubiendoPackingList] = useState(false);
+    /**
+     * El packing list cargado de esta compra, rollo por rollo, con lo que el
+     * almacén ya escaneó. Vive en el servidor: varios almaceneros lo van
+     * completando a la vez, cada uno con su usuario.
+     */
+    const [packingList, setPackingList] = useState({ filas: [], resumen: null });
+    /** Lo que no se pudo cargar del último Excel, para corregirlo y volver a subirlo. */
+    const [avisosCarga, setAvisosCarga] = useState([]);
+    const [codigoEscaneo, setCodigoEscaneo] = useState('');
+    const [ultimoEscaneo, setUltimoEscaneo] = useState(null);
+    const [camara, setCamara] = useState(false);
+    const escanerRef = useRef(null);
     const [form, setForm] = useState({
         almacen_id: '',
         fecha_recepcion: hoy(),
@@ -115,49 +134,109 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
         }
     }, [compraId, toast]);
 
+    /** Trae del servidor el packing list de la compra y lo que ya se escaneó. */
+    const refrescarPackingList = useCallback(async () => {
+        if (!compraId) return;
+        try {
+            const { data } = await api.get(`/compras/${compraId}/packing-list`);
+            setPackingList(data);
+        } catch {
+            /* un fallo de red no debe tumbar el modal: se reintenta en la siguiente vuelta */
+        }
+    }, [compraId]);
+
     useEffect(() => {
-        if (open && compraId) cargar();
-    }, [open, compraId, cargar]);
+        if (open && compraId) {
+            cargar();
+            setAvisosCarga([]);
+            setUltimoEscaneo(null);
+            setCodigoEscaneo('');
+            refrescarPackingList();
+        }
+    }, [open, compraId, cargar, refrescarPackingList]);
+
+    // Otro almacenero puede estar escaneando la misma compra: se refresca solo,
+    // para ver sus rollos sin recargar y no volver a contarlos.
+    useEffect(() => {
+        if (!open || !compraId) return undefined;
+        const id = setInterval(refrescarPackingList, 4000);
+        return () => clearInterval(id);
+    }, [open, compraId, refrescarPackingList]);
 
     /**
-     * Lee el Excel del packing list y precarga cada línea con sus rollos:
-     * color, código de fábrica, metros y peso. No registra nada todavía —el
-     * almacenero sigue revisando y recién confirma con "Registrar recepción"—.
+     * Lee el Excel del packing list y deja cada rollo "por recibir". Todavía no
+     * es stock: los rollos se van confirmando al escanearlos en el almacén.
+     * Lo que no se pudo cargar (producto o color desconocido, código repetido)
+     * se señala fila por fila para corregir el Excel y volver a subirlo.
      */
     const cargarPackingListExcel = async (file) => {
         if (!file) return;
         setSubiendoPackingList(true);
         try {
-            const form = new FormData();
-            form.append('compra_id', compraId);
-            form.append('archivo', file);
-            const { data } = await api.post('/recepciones-compra/leer-packing-list', form, {
+            const body = new FormData();
+            body.append('compra_id', compraId);
+            body.append('archivo', file);
+            const { data } = await api.post('/recepciones-compra/leer-packing-list', body, {
                 headers: { 'Content-Type': 'multipart/form-data' },
             });
 
-            setRollosPorLinea((prev) => {
-                const next = { ...prev };
-                for (const d of data.detalles ?? []) {
-                    const clave = String(d.compra_detalle_id);
-                    next[clave] = {
-                        ...(next[clave] ?? {}),
-                        abierto: true,
-                        color_id: d.producto_color_id ? String(d.producto_color_id) : (next[clave]?.color_id ?? ''),
-                        rollosExcel: d.rollos,
-                    };
-                }
-                return next;
-            });
+            setPackingList(data.packing_list ?? { filas: [], resumen: null });
+            setAvisosCarga(data.advertencias ?? []);
 
             const leidos = (data.detalles ?? []).reduce((a, d) => a + d.rollos.length, 0);
-            if (leidos > 0) toast.success(`Se leyeron ${leidos} rollos del packing list.`);
+            if (leidos > 0) toast.success(`Se cargaron ${leidos} rollos: quedan por recibir hasta que se escaneen.`);
             if (data.advertencias?.length) {
-                toast.error(`${data.advertencias.length} fila(s) no se pudieron leer: ${data.advertencias[0]}`);
+                toast.error(`${data.advertencias.length} fila(s) del Excel no se cargaron: revísalas abajo.`);
             }
         } catch (err) {
             toast.error(err.response?.data?.message ?? 'No se pudo leer el packing list.');
         } finally {
             setSubiendoPackingList(false);
+        }
+    };
+
+    /**
+     * Un rollo escaneado: la pistola escribe el código y termina con Enter, o
+     * llega de la cámara. El servidor lo marca recibido con quién y cuándo, y
+     * avisa si otro almacenero ya lo había escaneado.
+     */
+    const verificarRollo = useCallback(
+        async (valor) => {
+            const codigo = String(valor ?? '').trim();
+            if (!codigo) return { ok: false, texto: 'Escribe o escanea un código.' };
+
+            try {
+                const { data } = await api.post('/recepciones-compra/escanear', { compra_id: compraId, codigo });
+                setPackingList(data.packing_list);
+                const r = data.packing_list?.resumen;
+                const texto = `Rollo correcto · ${num(data.rollo.metros)} m · ${r?.recibidos ?? 0}/${r?.total ?? 0}`;
+                setUltimoEscaneo({ ok: true, codigo, texto: 'Rollo correcto', metros: data.rollo.metros });
+                return { ok: true, texto };
+            } catch (err) {
+                const texto = err.response?.data?.message ?? 'No se pudo verificar el rollo.';
+                setUltimoEscaneo({ ok: false, codigo, texto });
+                return { ok: false, texto };
+            }
+        },
+        [compraId],
+    );
+
+    const escanear = async (e) => {
+        e?.preventDefault();
+        const valor = codigoEscaneo.trim();
+        if (!valor) return;
+        setCodigoEscaneo('');
+        await verificarRollo(valor);
+        escanerRef.current?.focus();
+    };
+
+    /** Deshace un escaneo equivocado: el rollo vuelve a "por recibir". */
+    const quitarEscaneo = async (codigo) => {
+        try {
+            const { data } = await api.post('/recepciones-compra/quitar-escaneo', { compra_id: compraId, codigo });
+            setPackingList(data.packing_list);
+        } catch (err) {
+            toast.error(err.response?.data?.message ?? 'No se pudo quitar el escaneo.');
         }
     };
 
@@ -179,42 +258,91 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
     const lineas = datos?.lineas ?? [];
     const conPendiente = useMemo(() => lineas.filter((l) => l.pendiente > 0), [lineas]);
 
+    const filasPL = packingList.filas ?? [];
+    const resumenPL = packingList.resumen;
+    /** Los rollos de una línea que siguen en el packing list (aún no ingresaron). */
+    const filasDeLinea = (l) =>
+        filasPL.filter((f) => f.compra_detalle_id === l.compra_detalle_id && f.estado !== 'registrado');
+    const escaneadosDe = (l) => filasDeLinea(l).filter((f) => f.estado === 'recibido');
+    const nombreLinea = (id) => lineas.find((l) => l.compra_detalle_id === id)?.producto ?? '—';
+
+    // Con packing list, lo que se recibe es lo escaneado; sin él, lo escrito a mano.
     const totalARecibir = useMemo(
-        () => conPendiente.reduce((acc, l) => acc + (Number(cantidades[String(l.compra_detalle_id)]) || 0), 0),
-        [conPendiente, cantidades],
+        () =>
+            conPendiente.reduce((acc, l) => {
+                const enLista = filasPL.filter(
+                    (f) => f.compra_detalle_id === l.compra_detalle_id && f.estado !== 'registrado',
+                );
+                if (enLista.length > 0) {
+                    return acc + enLista.filter((f) => f.estado === 'recibido').reduce((a, f) => a + f.metros, 0);
+                }
+                return acc + (Number(cantidades[String(l.compra_detalle_id)]) || 0);
+            }, 0),
+        [conPendiente, cantidades, filasPL],
     );
 
     const registrar = async () => {
         if (!form.almacen_id) return toast.error('Elige el almacén receptor.');
 
         const detalles = conPendiente
-            .map((l) => ({
-                compra_detalle_id: l.compra_detalle_id,
-                cantidad_recibida: Number(cantidades[String(l.compra_detalle_id)]) || 0,
-                ...(() => {
-                    const cap = rollosPorLinea[String(l.compra_detalle_id)];
-                    const rollos = rollosDe(cap);
-                    return rollos.length
-                        ? {
-                              rollos,
-                              producto_color_id: cap.color_id || null,
-                              codigo_proveedor: cap.codigo || null,
-                              // Dónde se guardan estos rollos dentro del almacén.
-                              almacen_ubicacion_id: cap.almacen_ubicacion_id || null,
-                              pasillo: cap.pasillo || null,
-                              rack: cap.rack || null,
-                              nivel: cap.nivel || null,
-                              posicion: cap.posicion || null,
-                          }
-                        : {};
-                })(),
-            }))
+            .flatMap((l) => {
+                const clave = String(l.compra_detalle_id);
+                const cap = rollosPorLinea[clave];
+                const ubicacion = {
+                    // Dónde se guardan estos rollos dentro del almacén.
+                    almacen_ubicacion_id: cap?.almacen_ubicacion_id || null,
+                    pasillo: cap?.pasillo || null,
+                    rack: cap?.rack || null,
+                    nivel: cap?.nivel || null,
+                    posicion: cap?.posicion || null,
+                };
+
+                // Con packing list cargado, entra solo lo que el almacén escaneó
+                // (un detalle por color); lo que no llegó sigue pendiente.
+                if (filasDeLinea(l).length > 0) {
+                    const porColor = {};
+                    for (const f of escaneadosDe(l)) (porColor[f.producto_color_id ?? 0] ??= []).push(f);
+
+                    return Object.entries(porColor).map(([colorId, grupo]) => ({
+                        compra_detalle_id: l.compra_detalle_id,
+                        cantidad_recibida: grupo.reduce((a, f) => a + f.metros, 0),
+                        producto_color_id: Number(colorId) || null,
+                        codigo_proveedor: cap?.codigo || null,
+                        rollos: grupo.map((f) => ({ codigo: f.codigo, metros: f.metros, peso_kg: f.peso_kg })),
+                        ...ubicacion,
+                    }));
+                }
+
+                const rollos = rollosDe(cap);
+                return [
+                    {
+                        compra_detalle_id: l.compra_detalle_id,
+                        cantidad_recibida: Number(cantidades[clave]) || 0,
+                        ...(rollos.length
+                            ? {
+                                  rollos,
+                                  producto_color_id: cap.color_id || null,
+                                  codigo_proveedor: cap.codigo || null,
+                                  ...ubicacion,
+                              }
+                            : {}),
+                    },
+                ];
+            })
             .filter((d) => d.cantidad_recibida > 0);
 
-        if (detalles.length === 0) return toast.error('Indica al menos una cantidad recibida.');
+        if (detalles.length === 0) {
+            return toast.error(
+                filasPL.length > 0
+                    ? 'Escanea al menos un rollo del packing list para registrar la recepción.'
+                    : 'Indica al menos una cantidad recibida.',
+            );
+        }
 
         const excedida = conPendiente.find(
-            (l) => (Number(cantidades[String(l.compra_detalle_id)]) || 0) > l.pendiente,
+            (l) =>
+                filasDeLinea(l).length === 0 &&
+                (Number(cantidades[String(l.compra_detalle_id)]) || 0) > l.pendiente,
         );
         if (excedida) {
             return toast.error(`"${excedida.producto}" supera lo pendiente (${num(excedida.pendiente)}).`);
@@ -247,13 +375,15 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
         <Modal
             open={open}
             onClose={onClose}
-            title={`Recepcionar compra ${datos?.compra?.numero_compra ?? ''}`}
+            title={`Recepcionar compra ${datos?.compra?.numero_compra ?? ''}${datos?.compra?.orden ? ` · Orden ${datos.compra.orden}` : ''}`}
             description="Registra lo que realmente llegó. Puedes recibir por partes."
             size="3xl"
             footer={
                 <>
                     <span className="mr-auto text-xs text-warm-500">
-                        {num(totalARecibir)} unidades a recibir
+                        {resumenPL?.total > 0
+                            ? `${resumenPL.recibidos} de ${resumenPL.pendientes + resumenPL.recibidos} rollos escaneados · ${num(totalARecibir)} m a recibir`
+                            : `${num(totalARecibir)} unidades a recibir`}
                     </span>
                     <Button variant="secondary" onClick={onClose}>Cancelar</Button>
                     <Button onClick={registrar} loading={guardando} disabled={cargando || conPendiente.length === 0}>
@@ -328,32 +458,193 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
                         />
                     </div>
 
-                    {/* El packing list en Excel precarga los rollos de todas
-                        las líneas de un golpe: una fila por rollo, con su
-                        propio código de fábrica. Sin archivo, se sigue
+                    {/* El packing list en Excel deja cada rollo "por recibir":
+                        una fila por rollo, con su propio código de fábrica.
+                        Todavía no es stock; el almacén los va escaneando al
+                        llegar y el encargado confirma. Sin archivo, se sigue
                         capturando a mano por línea, como siempre. */}
-                    {puede('compras.recepciones-compra.importar') && (
-                        <div className="mb-4">
-                            <label className="mb-1 block text-sm font-medium text-warm-800">
-                                Packing list (opcional)
-                            </label>
-                            <div className="flex items-center gap-2">
-                                <input
-                                    type="file"
-                                    accept=".xlsx,.xls"
-                                    disabled={subiendoPackingList}
-                                    onChange={(e) => {
-                                        cargarPackingListExcel(e.target.files?.[0]);
-                                        e.target.value = '';
-                                    }}
-                                    className="block flex-1 text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-primary-50 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary-700 hover:file:bg-primary-100"
-                                />
-                                {subiendoPackingList && <Spinner className="h-4 w-4 text-primary-600" />}
+                    {(puede('compras.recepciones-compra.importar') || filasPL.length > 0) && (
+                        <div className="mb-4 rounded-lg border border-edge p-3">
+                            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                                <h3 className="text-sm font-semibold text-warm-900">Packing list</h3>
+                                {resumenPL?.total > 0 && (
+                                    <span className="text-sm font-medium text-warm-700">
+                                        Llegaron {resumenPL.recibidos + resumenPL.registrados} de {resumenPL.total} rollos ·{' '}
+                                        {num(resumenPL.metros_recibidos)} de {num(resumenPL.metros_total - 0)} m
+                                    </span>
+                                )}
                             </div>
-                            <p className="mt-1 text-xs text-warm-400">
-                                Un Excel con una fila por rollo: código único, producto, color, metros y
-                                peso neto. Se reparte solo en la línea de cada producto.
-                            </p>
+
+                            {puede('compras.recepciones-compra.importar') && (
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            type="file"
+                                            accept=".xlsx,.xls"
+                                            disabled={subiendoPackingList}
+                                            onChange={(e) => {
+                                                cargarPackingListExcel(e.target.files?.[0]);
+                                                e.target.value = '';
+                                            }}
+                                            aria-label="Cargar packing list"
+                                            className="block flex-1 text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-primary-50 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary-700 hover:file:bg-primary-100"
+                                        />
+                                        {subiendoPackingList && <Spinner className="h-4 w-4 text-primary-600" />}
+                                    </div>
+                                    <p className="mt-1 text-xs text-warm-400">
+                                        Cargar packing list: un Excel con una fila por rollo (orden, código único,
+                                        producto, color, metros, peso neto). Los rollos quedan por recibir hasta que
+                                        se escaneen; aún no suman al stock.
+                                    </p>
+                                </div>
+                            )}
+
+                            {avisosCarga.length > 0 && (
+                                <Alert variant="warning" className="mt-2">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <p className="font-medium">
+                                            {avisosCarga.length} fila(s) del Excel no se cargaron. Corrígelas y vuelve a
+                                            cargar el archivo:
+                                        </p>
+                                        <button
+                                            type="button"
+                                            onClick={() => setAvisosCarga([])}
+                                            className="shrink-0 text-xs font-semibold underline"
+                                        >
+                                            Ocultar
+                                        </button>
+                                    </div>
+                                    <ul className="mt-1 max-h-32 list-disc space-y-0.5 overflow-y-auto pl-5 text-xs">
+                                        {avisosCarga.map((a, i) => (
+                                            <li key={i}>{a}</li>
+                                        ))}
+                                    </ul>
+                                </Alert>
+                            )}
+
+                            {filasPL.length > 0 && (
+                                <>
+                                    {puede('compras.recepciones-compra.editar') && (
+                                        <form onSubmit={escanear} className="mt-3">
+                                            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-warm-500">
+                                                Escanea cada rollo al recibirlo
+                                            </label>
+                                            <div className="flex items-center gap-2">
+                                                <span className="relative flex-1">
+                                                    <ScanLine className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-primary-600" />
+                                                    <input
+                                                        ref={escanerRef}
+                                                        value={codigoEscaneo}
+                                                        onChange={(e) => setCodigoEscaneo(e.target.value)}
+                                                        // La pistola termina cada lectura con Enter.
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter') {
+                                                                e.preventDefault();
+                                                                escanear(e);
+                                                            }
+                                                        }}
+                                                        placeholder="Dispara la pistola sobre la etiqueta…"
+                                                        autoComplete="off"
+                                                        aria-label="Código del rollo"
+                                                        className="w-full rounded-lg border border-edge py-2.5 pl-10 pr-3 font-mono text-sm shadow-sm outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-100"
+                                                    />
+                                                </span>
+                                                <Button type="submit" size="sm" disabled={!codigoEscaneo.trim()}>
+                                                    Verificar
+                                                </Button>
+                                                <Button
+                                                    type="button"
+                                                    variant="secondary"
+                                                    size="sm"
+                                                    onClick={() => setCamara(true)}
+                                                    title="Escanear con la cámara"
+                                                >
+                                                    <Camera className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                            {ultimoEscaneo && (
+                                                <div
+                                                    role="status"
+                                                    className={cn(
+                                                        'mt-2 rounded-md px-3 py-2 text-sm',
+                                                        ultimoEscaneo.ok ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800',
+                                                    )}
+                                                >
+                                                    <span className="font-mono font-medium">{ultimoEscaneo.codigo}</span> ·{' '}
+                                                    {ultimoEscaneo.texto}
+                                                </div>
+                                            )}
+                                        </form>
+                                    )}
+
+                                    <div className="mt-3 max-h-56 overflow-y-auto rounded-md border border-edge">
+                                        <table className="w-full text-xs">
+                                            <thead className="sticky top-0 bg-gray-50 text-left text-warm-500">
+                                                <tr>
+                                                    <th className="px-2 py-1.5">Rollo</th>
+                                                    <th className="px-2 py-1.5">Tela · color</th>
+                                                    <th className="px-2 py-1.5 text-right">Metros</th>
+                                                    <th className="px-2 py-1.5 text-right">Peso</th>
+                                                    <th className="px-2 py-1.5">Estado</th>
+                                                    <th className="w-8 px-2 py-1.5" />
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-100">
+                                                {filasPL.map((f) => {
+                                                    const est = ESTADO_ROLLO[f.estado] ?? ESTADO_ROLLO.pendiente;
+                                                    return (
+                                                        <tr key={f.id} className={f.estado === 'pendiente' ? 'bg-amber-50/40' : ''}>
+                                                            <td className="px-2 py-1.5 font-mono font-medium text-warm-900">{f.codigo}</td>
+                                                            <td className="px-2 py-1.5 text-warm-600">
+                                                                {nombreLinea(f.compra_detalle_id)}
+                                                                {f.color ? ` · ${f.color}` : ''}
+                                                            </td>
+                                                            <td className="px-2 py-1.5 text-right">{num(f.metros)}</td>
+                                                            <td className="px-2 py-1.5 text-right text-warm-500">
+                                                                {f.peso_kg ? `${num(f.peso_kg)} kg` : '—'}
+                                                            </td>
+                                                            <td className="px-2 py-1.5">
+                                                                <Badge variant={est.variant}>{est.label}</Badge>
+                                                                {f.escaneado_por && (
+                                                                    <span className="ml-1.5 text-warm-500">
+                                                                        {f.escaneado_por} · {hora(f.escaneado_at)}
+                                                                    </span>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-2 py-1.5 text-center">
+                                                                {f.estado === 'recibido' && puede('compras.recepciones-compra.editar') && (
+                                                                    <button
+                                                                        type="button"
+                                                                        aria-label={`Quitar el escaneo de ${f.codigo}`}
+                                                                        title="Deshacer este escaneo"
+                                                                        onClick={() => quitarEscaneo(f.codigo)}
+                                                                        className="rounded p-0.5 text-red-600 transition hover:bg-red-50"
+                                                                    >
+                                                                        <X className="h-3.5 w-3.5" />
+                                                                    </button>
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    {/* Diferencias: lo que el proveedor dijo que traía y todavía no se escaneó. */}
+                                    {resumenPL?.pendientes > 0 && (
+                                        <p className="mt-2 text-xs text-amber-700">
+                                            Faltan por llegar {resumenPL.pendientes} rollo(s) · {num(resumenPL.metros_pendientes)} m.
+                                            Al registrar solo entran los escaneados; el resto queda pendiente en la compra.
+                                        </p>
+                                    )}
+                                    {resumenPL?.pendientes === 0 && resumenPL?.recibidos > 0 && (
+                                        <p className="mt-2 text-xs text-green-700">
+                                            Llegó todo lo del packing list. Revisa y confirma con "Registrar recepción".
+                                        </p>
+                                    )}
+                                </>
+                            )}
                         </div>
                     )}
 
@@ -383,6 +674,9 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
                                         // maneja rollo por rollo.
                                         const porRollos = (l.colores?.length ?? 0) > 0;
                                         const leidos = rollosDe(cap);
+                                        // Con packing list, lo que se recibe es lo escaneado.
+                                        const enLista = filasDeLinea(l);
+                                        const escaneados = escaneadosDe(l);
                                         const setCap = (campo, valor) =>
                                             setRollosPorLinea((prev) => ({
                                                 ...prev,
@@ -410,78 +704,72 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
                                                     <td className="px-3 py-2 text-right text-warm-500">{num(l.cantidad_recibida)}</td>
                                                     <td className="px-3 py-2 text-right font-semibold text-amber-600">{num(l.pendiente)}</td>
                                                     <td className="px-3 py-2">
-                                                        <Input
-                                                            type="number"
-                                                            min="0"
-                                                            max={l.pendiente}
-                                                            step="any"
-                                                            value={cantidades[clave] ?? ''}
-                                                            onChange={(e) =>
-                                                                setCantidades((prev) => ({
-                                                                    ...prev,
-                                                                    [clave]: e.target.value,
-                                                                }))
-                                                            }
-                                                            // Con rollos capturados la manda el detalle:
-                                                            // la cantidad sale de la suma de sus metros.
-                                                            disabled={leidos.length > 0}
-                                                            aria-label={`Cantidad recibida de ${l.producto}`}
-                                                            className="text-right"
-                                                        />
+                                                        {enLista.length > 0 ? (
+                                                            <div className="text-right text-xs">
+                                                                <span className="block text-sm font-semibold text-warm-900">
+                                                                    {num(escaneados.reduce((a, f) => a + f.metros, 0))} m
+                                                                </span>
+                                                                <span className="text-warm-500">
+                                                                    {escaneados.length} de {enLista.length} rollos escaneados
+                                                                </span>
+                                                            </div>
+                                                        ) : (
+                                                            <Input
+                                                                type="number"
+                                                                min="0"
+                                                                max={l.pendiente}
+                                                                step="any"
+                                                                value={cantidades[clave] ?? ''}
+                                                                onChange={(e) =>
+                                                                    setCantidades((prev) => ({
+                                                                        ...prev,
+                                                                        [clave]: e.target.value,
+                                                                    }))
+                                                                }
+                                                                // Con rollos capturados la manda el detalle:
+                                                                // la cantidad sale de la suma de sus metros.
+                                                                disabled={leidos.length > 0}
+                                                                aria-label={`Cantidad recibida de ${l.producto}`}
+                                                                className="text-right"
+                                                            />
+                                                        )}
                                                     </td>
                                                 </tr>
 
                                                 {porRollos && cap?.abierto && (
                                                     <tr className="bg-gray-50">
                                                         <td colSpan={7} className="px-3 py-3">
-                                                            <div className="grid gap-3 sm:grid-cols-[14rem_10rem_1fr]">
-                                                                <SearchSelect
-                                                                    label="Color"
-                                                                    value={cap?.color_id ?? ''}
-                                                                    onChange={(v) => setCap('color_id', v ?? '')}
-                                                                    placeholder="Elegir color…"
-                                                                    emptyText="Sin coincidencias"
-                                                                    options={l.colores.map((c) => ({
-                                                                        value: String(c.id),
-                                                                        label: c.codigo ? `${c.nombre} (${c.codigo})` : c.nombre,
-                                                                    }))}
-                                                                />
-                                                                <div>
-                                                                    <Input
-                                                                        label="Código de rollo (opcional)"
-                                                                        placeholder="Se arma solo si lo dejas vacío"
-                                                                        value={cap?.codigo ?? ''}
-                                                                        onChange={(e) => setCap('codigo', e.target.value)}
+                                                            {enLista.length > 0 ? (
+                                                                <p className="text-sm text-warm-600">
+                                                                    Los rollos de esta línea vienen del packing list: su color,
+                                                                    código, metros y peso ya están cargados. Aquí solo indicas
+                                                                    dónde se guardan.
+                                                                </p>
+                                                            ) : (
+                                                                <div className="grid gap-3 sm:grid-cols-[14rem_10rem_1fr]">
+                                                                    <SearchSelect
+                                                                        label="Color"
+                                                                        value={cap?.color_id ?? ''}
+                                                                        onChange={(v) => setCap('color_id', v ?? '')}
+                                                                        placeholder="Elegir color…"
+                                                                        emptyText="Sin coincidencias"
+                                                                        options={l.colores.map((c) => ({
+                                                                            value: String(c.id),
+                                                                            label: c.codigo ? `${c.nombre} (${c.codigo})` : c.nombre,
+                                                                        }))}
                                                                     />
-                                                                    <p className="mt-1 text-xs text-warm-400">
-                                                                        Si el proveedor tiene código corto, el rollo
-                                                                        se numera solo con el código de la orden (ej. KET-003-26-000001).
-                                                                    </p>
-                                                                </div>
-                                                                {cap?.rollosExcel?.length ? (
                                                                     <div>
-                                                                        <div className="mb-1 flex items-center justify-between">
-                                                                            <label className="block text-sm font-medium text-warm-800">
-                                                                                Rollos del Excel ({cap.rollosExcel.length})
-                                                                            </label>
-                                                                            <button
-                                                                                type="button"
-                                                                                onClick={() => setCap('rollosExcel', undefined)}
-                                                                                className="text-xs font-medium text-primary-600 hover:underline"
-                                                                            >
-                                                                                Quitar y escribir a mano
-                                                                            </button>
-                                                                        </div>
-                                                                        <div className="max-h-28 overflow-y-auto rounded-md border border-edge bg-white px-3 py-2 font-mono text-xs">
-                                                                            {cap.rollosExcel.map((r, i) => (
-                                                                                <div key={i}>
-                                                                                    {r.codigo ?? `#${i + 1}`} — {r.metros} m
-                                                                                    {r.peso_kg ? ` · ${r.peso_kg} kg` : ''}
-                                                                                </div>
-                                                                            ))}
-                                                                        </div>
+                                                                        <Input
+                                                                            label="Código de rollo (opcional)"
+                                                                            placeholder="Se arma solo si lo dejas vacío"
+                                                                            value={cap?.codigo ?? ''}
+                                                                            onChange={(e) => setCap('codigo', e.target.value)}
+                                                                        />
+                                                                        <p className="mt-1 text-xs text-warm-400">
+                                                                            Si el proveedor tiene código corto, el rollo
+                                                                            se numera solo con el código de la orden (ej. KET-003-26-000001).
+                                                                        </p>
                                                                     </div>
-                                                                ) : (
                                                                     <div>
                                                                         <label className="mb-1 block text-sm font-medium text-warm-800">
                                                                             Metrajes del packing list
@@ -498,8 +786,8 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
                                                                             segundo es el peso en kilos.
                                                                         </p>
                                                                     </div>
-                                                                )}
-                                                            </div>
+                                                                </div>
+                                                            )}
 
                                                             {/* Dónde se guardan. Se aplica a todos los
                                                                 rollos de esta línea; después cada uno se
@@ -591,6 +879,15 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
                     )}
                 </>
             )}
+
+            {/* La misma verificación, leyendo el QR de la etiqueta con la
+                cámara del celular. */}
+            <EscanerCamara
+                abierto={camara}
+                onCerrar={() => setCamara(false)}
+                onLeer={verificarRollo}
+                titulo="Escanear rollos recibidos"
+            />
         </Modal>
     );
 }

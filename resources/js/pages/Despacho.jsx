@@ -484,10 +484,22 @@ export default function Despacho() {
                                                             <span>{r.color ?? '—'}</span>
                                                             <span>{num(r.metros)} m</span>
                                                             {r.es_parcial && <Badge variant="amber">Cortar</Badge>}
-                                                            {/* Quién lo escaneó: puede haber varios almaceneros
-                                                                preparando el mismo pedido a la vez. */}
+                                                            {/* El corte: cuánto sale para este pedido y cuánto
+                                                                queda en el rollo. El rollo baja recién al despachar. */}
+                                                            {r.es_parcial && r.metros_rollo > r.metros && (
+                                                                <span className="text-warm-500">
+                                                                    · quedan {num(r.metros_rollo - r.metros)} m en el rollo
+                                                                </span>
+                                                            )}
+                                                            {/* Quién lo escaneó y cuándo: puede haber varios
+                                                                almaceneros preparando el mismo pedido a la vez. */}
                                                             {r.escaneado_por && (
-                                                                <span className="text-warm-400">· {r.escaneado_por}</span>
+                                                                <span className="text-warm-400">
+                                                                    · {r.escaneado_por}
+                                                                    {r.escaneado_at
+                                                                        ? ` ${new Date(r.escaneado_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}`
+                                                                        : ''}
+                                                                </span>
                                                             )}
                                                             {escaneando && (
                                                                 <button

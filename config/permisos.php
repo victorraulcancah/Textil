@@ -131,8 +131,14 @@ return [
                     'apis' => ['recepciones-compra'],
                     'pdf' => ['recepcion-compra'],
                     'acciones' => ['ver', 'crear', 'editar', 'eliminar', 'importar'],
-                    // Leer el packing list es distinto de registrar la recepción.
-                    'patrones' => ['recepciones-compra/leer-packing-list' => 'importar'],
+                    // Leer el packing list es distinto de registrar la recepción, y
+                    // escanear los rollos al llegar lo hace el almacenero sin
+                    // poder confirmarla: eso lo hace el encargado ("crear").
+                    'patrones' => [
+                        'recepciones-compra/leer-packing-list' => 'importar',
+                        'recepciones-compra/escanear' => 'editar',
+                        'recepciones-compra/quitar-escaneo' => 'editar',
+                    ],
                 ],
             ],
         ],

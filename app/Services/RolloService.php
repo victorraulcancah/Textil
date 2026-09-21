@@ -108,6 +108,8 @@ class RolloService
                     'costo_unitario' => $costoUnitario,
                     'estado' => Rollo::DISPONIBLE,
                     'recepcion_compra_id' => $recepcion?->id,
+                    // Quién lo escaneó al llegar (si la recepción fue con escaneo).
+                    'usuario_recibe_id' => $linea['usuario_recibe_id'] ?? null,
                     'importacion_id' => $importacion?->id,
                 ] + $ubicacion);
 

@@ -102,11 +102,16 @@ Route::middleware('auth:api')->group(function () {
     Route::post('compras/{compra}/anular', [CompraController::class, 'anular']);
     Route::post('compras/{compra}/finalizar', [CompraController::class, 'finalizar']);
     Route::get('compras/{compra}/pendientes-recepcion', [RecepcionCompraController::class, 'pendientesDeCompra']);
+    // El packing list cargado de la compra, con lo que el almacén ya escaneó.
+    Route::get('compras/{compra}/packing-list', [RecepcionCompraController::class, 'packingList']);
     Route::apiResource('recepciones-compra', RecepcionCompraController::class);
     Route::post('recepciones-compra/{recepcionesCompra}/deshacer', [RecepcionCompraController::class, 'deshacer']);
     // Lee el Excel del packing list y devuelve una vista previa; no crea nada
     // todavía —recién se guarda cuando el almacenero confirma la recepción—.
     Route::post('recepciones-compra/leer-packing-list', [RecepcionCompraController::class, 'leerPackingList']);
+    // El almacén escanea cada rollo al recibirlo (y puede deshacer un error).
+    Route::post('recepciones-compra/escanear', [RecepcionCompraController::class, 'escanearRollo']);
+    Route::post('recepciones-compra/quitar-escaneo', [RecepcionCompraController::class, 'quitarEscaneo']);
 
     // Inventario
     Route::get('existencias', [AlmacenController::class, 'existencias']);

@@ -6,6 +6,7 @@ use App\Models\Almacen;
 use App\Models\Compra;
 use App\Models\Importacion;
 use App\Models\ProductoColor;
+use App\Models\PackingListRollo;
 use App\Models\ProductoPresentacion;
 use App\Models\RecepcionCompra;
 use App\Models\SerieDocumento;
@@ -39,7 +40,7 @@ class RecepcionCompraController extends Controller
      */
     public function pendientesDeCompra(Compra $compra)
     {
-        $compra->load(['detalles.presentacion.producto.marca', 'detalles.presentacion.producto.colores', 'proveedor:id,nombre']);
+        $compra->load(['detalles.presentacion.producto.marca', 'detalles.presentacion.producto.colores', 'proveedor:id,nombre', 'ordenCompra:id,codigo']);
 
         $pendientes = $compra->pendientePorLinea();
         $recibidos = $compra->recibidoPorLinea();
@@ -68,6 +69,9 @@ class RecepcionCompraController extends Controller
             'compra' => [
                 'id' => $compra->id,
                 'numero_compra' => $compra->numero_compra,
+                // La orden con la que se pidió (KET-001-26): así el almacén
+                // reconoce de qué envío se trata.
+                'orden' => $compra->ordenCompra?->codigo,
                 'proveedor_id' => $compra->proveedor_id,
                 'proveedor' => $compra->proveedor?->nombre,
                 'tipo_documento' => $compra->tipo_documento,
@@ -249,6 +253,29 @@ class RecepcionCompraController extends Controller
                     // stock ya lo movió la entrada de arriba, por eso no se
                     // vuelve a tocar.
                     if (! empty($detalle['rollos'])) {
+                        // Los rollos que vienen del packing list cargado solo
+                        // entran si ya se escanearon: es lo que confirma que
+                        // llegaron. Cada uno conserva quién lo escaneó.
+                        $delPackingList = PackingListRollo::where('compra_id', $compra->id)
+                            ->whereIn('codigo', collect($detalle['rollos'])->pluck('codigo')->filter()->all())
+                            ->lockForUpdate()
+                            ->get()
+                            ->keyBy('codigo');
+
+                        foreach ($detalle['rollos'] as $i => $r) {
+                            $fila = $delPackingList->get($r['codigo'] ?? '');
+                            if (! $fila) {
+                                continue;
+                            }
+                            if ($fila->estado === PackingListRollo::PENDIENTE) {
+                                throw new \RuntimeException("El rollo {$fila->codigo} todavía no se escaneó: escanéalo antes de registrar la recepción.");
+                            }
+                            if ($fila->estado === PackingListRollo::REGISTRADO) {
+                                throw new \RuntimeException("El rollo {$fila->codigo} ya ingresó al almacén.");
+                            }
+                            $detalle['rollos'][$i]['usuario_recibe_id'] = $fila->usuario_escanea_id;
+                        }
+
                         app(RolloService::class)->ingresar(
                             $presentacion->producto,
                             isset($detalle['producto_color_id'])
@@ -270,6 +297,13 @@ class RecepcionCompraController extends Controller
                                 'posicion' => $detalle['posicion'] ?? null,
                             ],
                         );
+
+                        // Ya son rollos del almacén: dejan de estar "por recibir".
+                        if ($delPackingList->isNotEmpty()) {
+                            PackingListRollo::where('compra_id', $compra->id)
+                                ->whereIn('codigo', $delPackingList->keys()->all())
+                                ->update(['estado' => PackingListRollo::REGISTRADO, 'recepcion_id' => $recepcion->id]);
+                        }
                     }
                 }
 
@@ -318,6 +352,15 @@ class RecepcionCompraController extends Controller
                     $rollo->movimientos()->delete();
                     $rollo->delete();
                 }
+
+                // Los rollos del packing list vuelven a estar por recibir: se
+                // pueden escanear de nuevo y registrar otra recepción.
+                PackingListRollo::where('recepcion_id', $recepcionesCompra->id)->update([
+                    'estado' => PackingListRollo::PENDIENTE,
+                    'recepcion_id' => null,
+                    'usuario_escanea_id' => null,
+                    'escaneado_at' => null,
+                ]);
 
                 foreach ($recepcionesCompra->detalles as $detalle) {
                     $presentacion = ProductoPresentacion::findOrFail($detalle->producto_presentacion_id);
@@ -379,16 +422,22 @@ class RecepcionCompraController extends Controller
     }
 
     /**
-     * Lee el Excel del packing list del proveedor y arma una vista previa:
-     * qué línea de la compra y qué color corresponde a cada grupo de rollos,
-     * con su código, metraje y peso ya leídos. No crea nada —el almacenero
-     * revisa y recién al pulsar "Registrar recepción" se guarda de verdad—.
+     * Lee el Excel del packing list del proveedor y deja cada rollo
+     * "pendiente de recibir" en la compra. Todavía no es stock: el almacén los
+     * va escaneando al llegar y recién al confirmar la recepción se vuelven
+     * rollos de verdad.
      *
      * Columnas esperadas (por nombre de cabecera, sin importar mayúsculas ni
      * el orden de las columnas): Orden, Código único, Producto, Color,
-     * Metros, Peso neto. "Producto" y "Color" van por su código (el de
-     * `productos.codigo` y el de `producto_colores.codigo` o el del
-     * catálogo compartido de colores).
+     * Metros, Peso neto; "Envío" es opcional. "Producto" y "Color" van por su
+     * código (el de `productos.codigo` y el del catálogo compartido de
+     * colores); también se acepta el producto con su color en una sola
+     * columna (01-01-030-0074).
+     *
+     * Lo que no se puede cargar se señala fila por fila —producto o color
+     * desconocido, código repetido o ya existente— para corregir el Excel y
+     * volver a cargarlo. Volver a cargarlo actualiza lo que sigue pendiente y
+     * respeta lo que ya se escaneó.
      */
     public function leerPackingList(Request $request)
     {
@@ -397,7 +446,12 @@ class RecepcionCompraController extends Controller
             'archivo' => 'required|file|mimes:xlsx,xls|max:5120',
         ]);
 
-        $compra = Compra::with(['detalles.presentacion.producto.colores'])->findOrFail($data['compra_id']);
+        $compra = Compra::with(['detalles.presentacion.producto.colores', 'ordenCompra:id,codigo'])
+            ->findOrFail($data['compra_id']);
+
+        if ($compra->estado === 'anulada' || $compra->finalizado) {
+            return response()->json(['message' => 'La compra está anulada o finalizada: ya no admite packing list.'], 422);
+        }
 
         try {
             $hoja = \PhpOffice\PhpSpreadsheet\IOFactory::load($data['archivo']->getRealPath())->getActiveSheet();
@@ -421,8 +475,13 @@ class RecepcionCompraController extends Controller
             }
         }
 
-        $grupos = [];
+        $ordenCompra = mb_strtoupper(trim((string) $compra->ordenCompra?->codigo));
+        $yaCargados = PackingListRollo::where('compra_id', $compra->id)->get()->keyBy('codigo');
+
+        $validos = [];
         $advertencias = [];
+        $vistos = [];
+        $avisoOrden = false;
 
         foreach (array_slice($filas, 1) as $i => $fila) {
             $numeroFila = $i + 2;
@@ -431,6 +490,7 @@ class RecepcionCompraController extends Controller
             $codigoColor = trim((string) ($fila[$col['color']] ?? ''));
             $metros = (float) ($fila[$col['metros']] ?? 0);
             $peso = isset($col['peso']) ? (float) ($fila[$col['peso']] ?? 0) : null;
+            $envio = isset($col['envio']) ? trim((string) ($fila[$col['envio']] ?? '')) : '';
 
             if ($codigo === '' && $codigoProducto === '' && $metros <= 0) {
                 continue; // fila vacía, tolerada al final del archivo
@@ -441,9 +501,34 @@ class RecepcionCompraController extends Controller
                 continue;
             }
 
+            if ($codigo === '') {
+                $advertencias[] = "Fila {$numeroFila}: no trae código único: sin él no se puede escanear el rollo, se omite.";
+                continue;
+            }
+
+            // La orden del Excel debe ser la de esta compra: evita cargar el
+            // packing list de otro envío por error.
+            if (! $avisoOrden && isset($col['orden']) && $ordenCompra !== '') {
+                $ordenExcel = mb_strtoupper(trim((string) ($fila[$col['orden']] ?? '')));
+                if ($ordenExcel !== '' && $ordenExcel !== $ordenCompra) {
+                    $advertencias[] = "Fila {$numeroFila}: la orden del Excel ({$ordenExcel}) no es la de esta compra ({$ordenCompra}). Revisa que sea el archivo correcto.";
+                    $avisoOrden = true; // una sola vez: si está mal, está mal en todo el archivo
+                }
+            }
+
+            // El producto puede venir con su color pegado: 01-01-030-0074.
             $linea = $compra->detalles->first(
                 fn ($d) => $d->presentacion?->producto?->codigo === $codigoProducto
             );
+            if (! $linea && $codigoColor === '' && preg_match('/^(.+)-(\d{4})$/', $codigoProducto, $m)) {
+                $linea = $compra->detalles->first(
+                    fn ($d) => $d->presentacion?->producto?->codigo === $m[1]
+                );
+                if ($linea) {
+                    $codigoProducto = $m[1];
+                    $codigoColor = $m[2];
+                }
+            }
             if (! $linea) {
                 $advertencias[] = "Fila {$numeroFila}: el producto \"{$codigoProducto}\" no está en esta compra.";
                 continue;
@@ -456,26 +541,231 @@ class RecepcionCompraController extends Controller
                 continue;
             }
 
-            $clave = $linea->id.'-'.($productoColor?->id ?? '0');
-            $grupos[$clave] ??= [
+            // Un código repetido no se puede escanear con certeza: se señala
+            // para corregirlo en el Excel antes de confirmar.
+            if (isset($vistos[$codigo])) {
+                $advertencias[] = "Fila {$numeroFila}: el código \"{$codigo}\" está repetido en el archivo (ya estaba en la fila {$vistos[$codigo]}).";
+                continue;
+            }
+            $vistos[$codigo] = $numeroFila;
+
+            $previo = $yaCargados->get($codigo);
+            if ($previo?->estado === PackingListRollo::REGISTRADO) {
+                $advertencias[] = "Fila {$numeroFila}: el rollo \"{$codigo}\" ya ingresó al almacén, no se vuelve a cargar.";
+                continue;
+            }
+
+            if (! $previo && \App\Models\Rollo::where('codigo', $codigo)->exists()) {
+                $advertencias[] = "Fila {$numeroFila}: ya existe un rollo con el código \"{$codigo}\" en el almacén.";
+                continue;
+            }
+
+            if (! $previo && PackingListRollo::where('codigo', $codigo)->where('compra_id', '!=', $compra->id)->exists()) {
+                $advertencias[] = "Fila {$numeroFila}: el código \"{$codigo}\" ya está en el packing list de otra compra.";
+                continue;
+            }
+
+            $validos[$codigo] = [
                 'compra_detalle_id' => $linea->id,
-                'producto' => $linea->presentacion->producto->nombre,
                 'producto_color_id' => $productoColor?->id,
-                'color' => $productoColor?->nombre,
-                'color_codigo' => $productoColor?->codigo,
+                'codigo' => $codigo,
+                'metros' => round($metros, 2),
+                'peso_kg' => $peso > 0 ? round($peso, 3) : null,
+                'envio' => $envio !== '' ? $envio : null,
+            ];
+        }
+
+        DB::transaction(function () use ($compra, $validos, $yaCargados) {
+            foreach ($validos as $codigo => $fila) {
+                $previo = $yaCargados->get($codigo);
+
+                if (! $previo) {
+                    PackingListRollo::create($fila + [
+                        'compra_id' => $compra->id,
+                        'estado' => PackingListRollo::PENDIENTE,
+                        'usuario_carga_id' => auth()->id(),
+                    ]);
+                } elseif ($previo->estado === PackingListRollo::PENDIENTE) {
+                    // Lo corregido en el Excel reemplaza lo pendiente; lo ya
+                    // escaneado no se toca.
+                    $previo->update($fila);
+                }
+            }
+
+            // Lo pendiente que el Excel corregido ya no trae, sale de la lista.
+            if ($validos !== []) {
+                PackingListRollo::where('compra_id', $compra->id)
+                    ->where('estado', PackingListRollo::PENDIENTE)
+                    ->whereNotIn('codigo', array_keys($validos))
+                    ->delete();
+            }
+        });
+
+        // Solo lo que se cargó ahora, agrupado por línea y color, para el aviso.
+        $grupos = [];
+        foreach ($validos as $fila) {
+            $linea = $compra->detalles->firstWhere('id', $fila['compra_detalle_id']);
+            $clave = $fila['compra_detalle_id'].'-'.($fila['producto_color_id'] ?? '0');
+            $grupos[$clave] ??= [
+                'compra_detalle_id' => $fila['compra_detalle_id'],
+                'producto' => $linea->presentacion->producto->nombre,
+                'producto_color_id' => $fila['producto_color_id'],
                 'rollos' => [],
             ];
             $grupos[$clave]['rollos'][] = [
-                'codigo' => $codigo !== '' ? $codigo : null,
-                'metros' => round($metros, 2),
-                'peso_kg' => $peso > 0 ? round($peso, 3) : null,
+                'codigo' => $fila['codigo'],
+                'metros' => $fila['metros'],
+                'peso_kg' => $fila['peso_kg'],
             ];
         }
 
         return response()->json([
             'detalles' => array_values($grupos),
             'advertencias' => $advertencias,
+            'packing_list' => $this->resumenPackingList($compra),
         ]);
+    }
+
+    /** El packing list cargado de una compra, con lo que ya se escaneó. */
+    public function packingList(Compra $compra)
+    {
+        return response()->json($this->resumenPackingList($compra));
+    }
+
+    /**
+     * El almacén escanea un rollo al recibirlo: queda "recibido", con quién y
+     * cuándo. Si otro almacenero ya lo escaneó, se avisa en vez de contarlo
+     * dos veces.
+     */
+    public function escanearRollo(Request $request)
+    {
+        $data = $request->validate([
+            'compra_id' => 'required|exists:compras,id',
+            'codigo' => 'required|string|max:100',
+        ]);
+
+        $codigo = trim($data['codigo']);
+        $compra = Compra::findOrFail($data['compra_id']);
+
+        if ($compra->estado === 'anulada' || $compra->finalizado) {
+            return response()->json(['message' => 'La compra está anulada o finalizada: no admite recepciones.'], 422);
+        }
+
+        try {
+            $fila = DB::transaction(function () use ($compra, $codigo) {
+                $fila = PackingListRollo::where('compra_id', $compra->id)
+                    ->where('codigo', $codigo)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $fila) {
+                    $deOtra = PackingListRollo::with('compra:id,correlativo')->where('codigo', $codigo)->first();
+                    if ($deOtra) {
+                        throw new \RuntimeException("El rollo {$codigo} es del packing list de otra compra ({$deOtra->compra?->numero_compra}).");
+                    }
+                    if (\App\Models\Rollo::where('codigo', $codigo)->exists()) {
+                        throw new \RuntimeException("El rollo {$codigo} ya está en el almacén.");
+                    }
+                    throw new \RuntimeException("El rollo {$codigo} no está en el packing list de esta compra.");
+                }
+
+                if ($fila->estado === PackingListRollo::REGISTRADO) {
+                    throw new \RuntimeException("El rollo {$codigo} ya ingresó al almacén.");
+                }
+
+                if ($fila->estado === PackingListRollo::RECIBIDO) {
+                    $quien = $fila->usuarioEscanea?->name ?? 'otro usuario';
+                    $hora = $fila->escaneado_at?->timezone(config('app.timezone'))->format('H:i');
+                    throw new \RuntimeException("El rollo {$codigo} ya fue escaneado por {$quien}".($hora ? " a las {$hora}" : '').'.');
+                }
+
+                $fila->update([
+                    'estado' => PackingListRollo::RECIBIDO,
+                    'usuario_escanea_id' => auth()->id(),
+                    'escaneado_at' => now(),
+                ]);
+
+                return $fila;
+            });
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'rollo' => $this->filaPackingList($fila->load(['usuarioEscanea:id,name', 'color:id,nombre,codigo'])),
+            'packing_list' => $this->resumenPackingList($compra),
+        ]);
+    }
+
+    /** Deshace un escaneo equivocado: el rollo vuelve a "pendiente". */
+    public function quitarEscaneo(Request $request)
+    {
+        $data = $request->validate([
+            'compra_id' => 'required|exists:compras,id',
+            'codigo' => 'required|string|max:100',
+        ]);
+
+        $fila = PackingListRollo::where('compra_id', $data['compra_id'])
+            ->where('codigo', trim($data['codigo']))
+            ->first();
+
+        if (! $fila || $fila->estado !== PackingListRollo::RECIBIDO) {
+            return response()->json(['message' => 'Ese rollo no está marcado como recibido.'], 422);
+        }
+
+        $fila->update([
+            'estado' => PackingListRollo::PENDIENTE,
+            'usuario_escanea_id' => null,
+            'escaneado_at' => null,
+        ]);
+
+        return response()->json([
+            'packing_list' => $this->resumenPackingList(Compra::findOrFail($data['compra_id'])),
+        ]);
+    }
+
+    /** Una fila del packing list tal como la consume la pantalla. */
+    private function filaPackingList(PackingListRollo $f): array
+    {
+        return [
+            'id' => $f->id,
+            'compra_detalle_id' => $f->compra_detalle_id,
+            'producto_color_id' => $f->producto_color_id,
+            'color' => $f->color?->nombre,
+            'color_codigo' => $f->color?->codigo,
+            'codigo' => $f->codigo,
+            'metros' => (float) $f->metros,
+            'peso_kg' => $f->peso_kg !== null ? (float) $f->peso_kg : null,
+            'envio' => $f->envio,
+            'estado' => $f->estado,
+            'escaneado_por' => $f->usuarioEscanea?->name,
+            'escaneado_at' => $f->escaneado_at?->toIso8601String(),
+            'recepcion_id' => $f->recepcion_id,
+        ];
+    }
+
+    /** Las filas del packing list de la compra y el avance de la recepción. */
+    private function resumenPackingList(Compra $compra): array
+    {
+        $filas = PackingListRollo::with(['usuarioEscanea:id,name', 'color:id,nombre,codigo'])
+            ->where('compra_id', $compra->id)
+            ->orderBy('id')
+            ->get();
+
+        $porEstado = fn (string $estado) => $filas->where('estado', $estado);
+
+        return [
+            'filas' => $filas->map(fn ($f) => $this->filaPackingList($f))->values(),
+            'resumen' => [
+                'total' => $filas->count(),
+                'pendientes' => $porEstado(PackingListRollo::PENDIENTE)->count(),
+                'recibidos' => $porEstado(PackingListRollo::RECIBIDO)->count(),
+                'registrados' => $porEstado(PackingListRollo::REGISTRADO)->count(),
+                'metros_total' => round((float) $filas->sum('metros'), 2),
+                'metros_pendientes' => round((float) $porEstado(PackingListRollo::PENDIENTE)->sum('metros'), 2),
+                'metros_recibidos' => round((float) $porEstado(PackingListRollo::RECIBIDO)->sum('metros'), 2),
+            ],
+        ];
     }
 
     /** Ubica cada columna esperada por el texto de su cabecera. */
@@ -488,6 +778,7 @@ class RecepcionCompraController extends Controller
             'metros' => ['metros', 'metraje', 'metraje de fabrica'],
             'peso' => ['peso neto', 'peso', 'peso kg', 'peso (kg)'],
             'orden' => ['orden', 'orden de compra'],
+            'envio' => ['envio', 'envío', 'n° de envio', 'numero de envio', 'embarque'],
         ];
 
         $normalizar = fn ($t) => strtolower(trim((string) preg_replace('/\s+/', ' ', str_replace(

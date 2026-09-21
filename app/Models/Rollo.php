@@ -60,6 +60,8 @@ class Rollo extends Model
         // posición), cuando el almacén ya tiene su árbol configurado.
         'almacen_ubicacion_id',
         'recepcion_compra_id',
+        // Quién lo escaneó al recibirlo en el almacén.
+        'usuario_recibe_id',
         'importacion_id',
         'cliente_id',
         'observaciones',
@@ -94,6 +96,12 @@ class Rollo extends Model
     public function recepcion()
     {
         return $this->belongsTo(RecepcionCompra::class, 'recepcion_compra_id');
+    }
+
+    /** El almacenero que lo escaneó al recibirlo. */
+    public function usuarioRecibe()
+    {
+        return $this->belongsTo(User::class, 'usuario_recibe_id');
     }
 
     public function cliente()

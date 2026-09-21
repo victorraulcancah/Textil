@@ -70,18 +70,17 @@
         <table>
             <tr>
                 <td style="vertical-align: top;">
-                    <div class="producto">{{ $e['producto'] }}</div>
+                    <div class="producto">{{ $e['producto'] }} · {{ $e['color'] }}</div>
                     <div class="linea">
-                        <span class="et">Tela:</span> <strong>{{ $e['codigo_producto'] }}</strong>
-                        &nbsp;·&nbsp;
-                        <span class="et">Color:</span>
-                        <strong>{{ $e['color'] }}</strong>@if ($e['codigo_color']) ({{ $e['codigo_color'] }})@endif
+                        {{-- El producto es la tela más su color: 01-01-030-0074. --}}
+                        <span class="et">Producto:</span>
+                        <strong>{{ $e['codigo_producto'] }}@if ($e['codigo_color'])-{{ $e['codigo_color'] }}@endif</strong>
                     </div>
                     <div class="codigo">{{ $e['codigo'] }}</div>
                     <div class="metraje">
                         {{ $e['metros'] }} m
                         @if ($e['peso_kg'])
-                            <span class="peso">· {{ $e['peso_kg'] }} kg</span>
+                            <span class="peso">· peso neto {{ $e['peso_kg'] }} kg</span>
                         @endif
                     </div>
                     @if ($e['orden'] || $e['posicion'])
@@ -93,7 +92,7 @@
                                 &nbsp;·&nbsp;
                             @endif
                             @if ($e['posicion'])
-                                <span class="et">Rollo</span> {{ $e['posicion'] }}
+                                <span class="et">Rollo</span> {{ $e['posicion'] }} <span class="et">de esta tela y color</span>
                             @endif
                         </div>
                     @endif

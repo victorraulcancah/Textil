@@ -586,6 +586,17 @@ function DetallePedido({ pedido, procesando, onAccion, onFacturar, onPdf }) {
                                                 </span>
                                             )}
                                         </span>
+                                    ) : d.metros_asignados > 0 ? (
+                                        // Sin acceso a los rollos (solo ventas): se ve cuánto
+                                        // lleva cubierto el almacén, no con qué rollos.
+                                        <span className="block text-xs">
+                                            <span className="text-warm-900">{num(d.metros_asignados)} m cubiertos</span>
+                                            {!d.cubierta && (
+                                                <span className="block text-amber-600">
+                                                    Faltan {num(d.metros_pendientes)} m
+                                                </span>
+                                            )}
+                                        </span>
                                     ) : (
                                         <span className="text-xs text-warm-400">Sin asignar</span>
                                     )}

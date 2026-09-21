@@ -70,8 +70,11 @@ class AlmacenController extends Controller
 
         // El stock no distingue colores; los rollos sí. Se suman los metros de
         // cada color por producto y almacén para mostrarlos en la fila.
+        // "metros" es lo que hay físicamente; "metros_disponibles" deja fuera los
+        // rollos que un pedido ya separó o está preparando: es lo que un
+        // vendedor puede prometer sin pisar a otro cliente.
         $porColor = \App\Models\Rollo::query()
-            ->selectRaw('producto_id, almacen_id, producto_color_id, count(*) as rollos, sum(metros_actual) as metros')
+            ->selectRaw('producto_id, almacen_id, producto_color_id, count(*) as rollos, sum(metros_actual) as metros, sum(case when estado = ? then metros_actual else 0 end) as metros_disponibles', [\App\Models\Rollo::DISPONIBLE])
             ->where('metros_actual', '>', 0)
             ->whereIn('producto_id', $filas->pluck('producto_id')->unique())
             ->groupBy('producto_id', 'almacen_id', 'producto_color_id')
@@ -79,7 +82,17 @@ class AlmacenController extends Controller
             ->get()
             ->groupBy(fn ($r) => $r->producto_id.'-'.$r->almacen_id);
 
-        $filas->each(function ($fila) use ($porColor) {
+        // Lo que los pedidos ya reservaron de un color y aún no tiene rollo
+        // asignado: sigue en su estante, "disponible", pero ya tiene dueño.
+        $pendientes = \App\Models\OrdenVentaDetalle::query()
+            ->whereNotNull('cantidad_reservada')
+            ->whereNotNull('producto_color_id')
+            ->with(['presentacion:id,producto_id', 'rollos'])
+            ->get()
+            ->groupBy(fn ($d) => $d->presentacion?->producto_id.'-'.$d->reserva_almacen_id.'-'.$d->producto_color_id)
+            ->map(fn ($grupo) => $grupo->sum(fn ($d) => $d->metrosPendientes()));
+
+        $filas->each(function ($fila) use ($porColor, $pendientes) {
             $grupo = $porColor->get($fila->producto_id.'-'.$fila->almacen_id, collect());
 
             $fila->colores = $grupo
@@ -90,6 +103,11 @@ class AlmacenController extends Controller
                     'hex' => $r->color?->hex,
                     'rollos' => (int) $r->rollos,
                     'metros' => round((float) $r->metros, 2),
+                    'metros_disponibles' => round(max(
+                        0,
+                        (float) $r->metros_disponibles
+                            - (float) ($pendientes[$fila->producto_id.'-'.$fila->almacen_id.'-'.$r->producto_color_id] ?? 0)
+                    ), 2),
                 ])
                 ->sortByDesc('metros')
                 ->values();

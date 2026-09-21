@@ -206,7 +206,9 @@ export default function ProductoPickerModal({
             (mapa[pid] ??= []).push({
                 almacenId: String(fila.almacen_id ?? fila.almacen?.id ?? ''),
                 almacen: fila.almacen?.nombre ?? '—',
-                base: Number(fila.stock_actual) || 0,
+                // Lo disponible (físico menos lo ya reservado por otros
+                // pedidos), no lo físico: es lo que se puede prometer.
+                base: Number(fila.stock_disponible ?? fila.stock_actual) || 0,
                 colores: fila.colores ?? [],
             });
         });
@@ -374,7 +376,7 @@ export default function ProductoPickerModal({
                 if (filtros.color) {
                     cantidad = f.colores
                         .filter((c) => normalize(c.nombre) === filtros.color)
-                        .reduce((s, c) => s + (Number(c.metros) || 0), 0);
+                        .reduce((s, c) => s + (Number(c.metros_disponibles ?? c.metros) || 0), 0);
                 }
                 return { ...f, cantidad, abrev: filtros.color ? 'm' : abrev };
             })
@@ -394,7 +396,7 @@ export default function ProductoPickerModal({
             f.colores.forEach((c) => {
                 const clave = normalize(c.nombre);
                 const previo = mapa.get(clave) ?? { nombre: c.nombre, hex: c.hex, metros: 0 };
-                previo.metros += Number(c.metros) || 0;
+                previo.metros += Number(c.metros_disponibles ?? c.metros) || 0;
                 mapa.set(clave, previo);
             }),
         );
@@ -409,7 +411,7 @@ export default function ProductoPickerModal({
             open={open}
             onClose={onClose}
             title={title}
-            description="Filtra por tipo de tela, color, categoría o marca; mira cuánto hay en cada almacén y ajusta unidad y cantidad."
+            description="Filtra por tipo de tela, color, categoría o marca; mira cuánto hay disponible en cada almacén y ajusta unidad y cantidad."
             size="3xl"
             footer={
                 <>

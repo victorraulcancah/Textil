@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Edit, Eye, Package, Plus, PlusCircle, Save, Trash2 } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { calcularPresentaciones, describirContenido } from '../lib/unidades';
@@ -138,6 +138,8 @@ export default function Productos() {
     const [tab, setTab] = useState('general');
     const [editing, setEditing] = useState(null);
     const [form, setForm] = useState(emptyProducto);
+    /** Último peso por metro que salió del ancho y el gramaje (no lo escrito a mano). */
+    const pesoAutoRef = useRef('');
     const [compra, setCompra] = useState(compraVacia);
     const [ventas, setVentas] = useState([ventaVacia()]);
     const [colores, setColores] = useState([]);
@@ -193,6 +195,24 @@ export default function Productos() {
         load();
     }, [load]);
 
+    // Peso por metro = ancho (m) × gramaje ÷ 1000. Se rellena solo al cargar
+    // ancho y gramaje, pero únicamente si el campo está vacío o trae lo que
+    // este mismo cálculo puso antes: lo que alguien escribió a mano (el dato
+    // de la ficha del fabricante) se respeta.
+    useEffect(() => {
+        const ancho = Number(form.ancho_cm);
+        const gramaje = Number(form.gramaje);
+        if (!modalOpen || !(ancho > 0 && gramaje > 0)) return;
+
+        const calculado = ((ancho / 100) * (gramaje / 1000)).toFixed(4);
+        setForm((p) => {
+            const actual = String(p.peso_por_metro ?? '');
+            if (actual !== '' && actual !== pesoAutoRef.current) return p;
+            pesoAutoRef.current = calculado;
+            return actual === calculado ? p : { ...p, peso_por_metro: calculado };
+        });
+    }, [form.ancho_cm, form.gramaje, modalOpen]);
+
     // ---- Catálogos derivados ----
     const categoriasRaiz = categorias.filter((c) => !c.categoria_padre_id);
     const subCategoriasDe = (padreId) =>
@@ -209,6 +229,7 @@ export default function Productos() {
     // ---- Abrir / editar ----
     const openCreate = () => {
         setEditing(null);
+        pesoAutoRef.current = '';
         setForm(emptyProducto);
         setCompra(compraVacia());
         setVentas([ventaVacia()]);
@@ -224,6 +245,13 @@ export default function Productos() {
         const relId = (direct, rel) =>
             prod[direct] ? String(prod[direct]) : prod[rel]?.id ? String(prod[rel].id) : '';
         setEditing(prod);
+        // Si el peso guardado es justo lo que da el ancho y el gramaje, sigue
+        // siendo "automático": cambiar el ancho lo vuelve a calcular.
+        const pesoDeFicha =
+            Number(prod.ancho_cm) > 0 && Number(prod.gramaje) > 0
+                ? ((Number(prod.ancho_cm) / 100) * (Number(prod.gramaje) / 1000)).toFixed(4)
+                : '';
+        pesoAutoRef.current = pesoDeFicha !== '' && String(prod.peso_por_metro ?? '') === pesoDeFicha ? pesoDeFicha : '';
         setForm({
             codigo: prod.codigo ?? '',
             codigo_barras: prod.codigo_barras ?? '',
@@ -1217,12 +1245,13 @@ export default function Productos() {
                                 </div>
                                 {form.ancho_cm > 0 && form.gramaje > 0 && (
                                     <p className="mt-1 text-xs text-warm-400">
-                                        A partir del ancho y el gramaje:{' '}
+                                        Se calcula solo con el ancho y el gramaje (
                                         {(
                                             (Number(form.ancho_cm) / 100) *
                                             (Number(form.gramaje) / 1000)
                                         ).toFixed(4)}{' '}
-                                        kg/m
+                                        kg/m). Si escribes otro valor —el de la ficha del
+                                        fabricante—, se respeta; "Calcular" vuelve al automático.
                                     </p>
                                 )}
                             </div>

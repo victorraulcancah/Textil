@@ -215,10 +215,8 @@ class OrdenVentaService
             throw new \DomainException("El rollo {$codigo} está {$estado}: no se puede usar.");
         }
 
-        // El primer escaneo fija el almacén y pone el pedido en preparación.
-        if ($orden->estado === OrdenVenta::SOLICITADO) {
-            $orden = $this->empezarPreparacion($orden, $rollo->almacen_id);
-        } elseif ($orden->almacen_id && $orden->almacen_id !== $rollo->almacen_id) {
+        // Con el pedido ya en preparación, todos los rollos salen del mismo almacén.
+        if ($orden->estado === OrdenVenta::PREPARANDO && $orden->almacen_id && $orden->almacen_id !== $rollo->almacen_id) {
             throw new \DomainException(
                 "El rollo {$codigo} está en otro almacén: este pedido se está preparando desde {$orden->almacen?->nombre}."
             );
@@ -261,6 +259,14 @@ class OrdenVentaService
         }
 
         return DB::transaction(function () use ($orden, $linea, $rollo, $codigo) {
+            // El primer escaneo fija el almacén y pone el pedido en preparación.
+            // Recién aquí, con el rollo ya validado: un escaneo rechazado (otra
+            // tela, otro color, repetido) no debe dejar el pedido tocado ni con
+            // el almacén del rollo equivocado.
+            if ($orden->estado === OrdenVenta::SOLICITADO) {
+                $orden = $this->empezarPreparacion($orden, $rollo->almacen_id);
+            }
+
             // Se toma lo que falte, sin pasarse de lo que da el rollo.
             $metros = min($linea->metrosPendientes(), (float) $rollo->metros_actual);
 

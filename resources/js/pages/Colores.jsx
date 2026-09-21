@@ -33,6 +33,8 @@ export default function Colores() {
 
     const [importando, setImportando] = useState(false);
     const [exportando, setExportando] = useState(false);
+    /** Lo que dejó la última carga: cuántos entraron y qué filas se omitieron y por qué. */
+    const [resultadoCarga, setResultadoCarga] = useState(null);
     const archivoRef = useRef(null);
 
     const [filterEstado, setFilterEstado] = useState('');
@@ -77,12 +79,12 @@ export default function Colores() {
                 headers: { 'Content-Type': 'multipart/form-data' },
             });
             if (data.creados > 0) toast.success(`Se crearon ${data.creados} color(es).`);
-            if (data.advertencias?.length) {
-                toast.error(`${data.advertencias.length} fila(s) no se cargaron: ${data.advertencias[0]}`);
-            }
             if (!data.creados && !data.advertencias?.length) {
                 toast.error('El archivo no tenía colores nuevos que cargar.');
             }
+            // Con 130 colores no alcanza un aviso pasajero: la lista completa
+            // de filas omitidas queda a la vista hasta que se cierre.
+            setResultadoCarga(data.advertencias?.length ? data : null);
             await load();
         } catch (err) {
             toast.error(err.response?.data?.message ?? 'No se pudo leer el Excel.');
@@ -255,6 +257,29 @@ export default function Colores() {
             </p>
 
             {error && <Alert variant="error" className="mb-4">{error}</Alert>}
+
+            {resultadoCarga && (
+                <Alert variant="warning" className="mb-4">
+                    <div className="flex items-start justify-between gap-3">
+                        <p className="font-medium">
+                            Carga terminada: {resultadoCarga.creados} color(es) creado(s),{' '}
+                            {resultadoCarga.advertencias.length} fila(s) omitida(s).
+                        </p>
+                        <button
+                            type="button"
+                            onClick={() => setResultadoCarga(null)}
+                            className="shrink-0 text-xs font-semibold underline"
+                        >
+                            Cerrar
+                        </button>
+                    </div>
+                    <ul className="mt-1 max-h-40 list-disc space-y-0.5 overflow-y-auto pl-5 text-xs">
+                        {resultadoCarga.advertencias.map((a, i) => (
+                            <li key={i}>{a}</li>
+                        ))}
+                    </ul>
+                </Alert>
+            )}
 
             <DataTable
                 columns={columns}

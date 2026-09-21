@@ -164,13 +164,37 @@ export default function CrearPedido() {
         [presentaciones, nueva.producto_presentacion_id],
     );
 
-    /** El stock del producto, expresado en la unidad elegida. */
+    /**
+     * El stock del producto, expresado en la unidad elegida. Con un color
+     * elegido cuenta solo los metros libres de ese color (los rollos son los
+     * que saben de colores) sumando todos los almacenes.
+     */
     const stockEnUnidad = useMemo(() => {
         if (!producto) return null;
+
+        if (nueva.producto_color_id) {
+            let metros = 0;
+            for (const fila of existencias) {
+                if (String(fila.producto?.id ?? fila.producto_id) !== String(producto.id)) continue;
+                for (const c of fila.colores ?? []) {
+                    if (String(c.id) === String(nueva.producto_color_id)) {
+                        metros += Number(c.metros_disponibles ?? c.metros) || 0;
+                    }
+                }
+            }
+            // Cuántos metros trae una unidad de la presentación elegida.
+            const porMetro = (producto.presentaciones ?? []).find(
+                (p) => (p.unidad_base?.abreviatura ?? '').toLowerCase() === 'm',
+            );
+            const metrosPorUnidad =
+                (Number(presentacion?.factor_conversion) || 1) / (Number(porMetro?.factor_conversion) || 1);
+            return metros / metrosPorUnidad;
+        }
+
         const base = stockPorProducto[producto.id] ?? 0;
         const factor = Number(presentacion?.factor_conversion) || 1;
         return base / factor;
-    }, [producto, presentacion, stockPorProducto]);
+    }, [producto, presentacion, stockPorProducto, existencias, nueva.producto_color_id]);
 
     /**
      * Al elegir producto se propone un formato.

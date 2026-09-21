@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Color;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 /**
  * El catálogo compartido de colores: se crea una vez y todas las telas lo
@@ -116,28 +117,48 @@ class ColorController extends Controller
         $creados = 0;
         $advertencias = [];
 
-        foreach (array_slice($filas, 1) as $i => $fila) {
-            $numeroFila = $i + 2;
-            $nombre = trim((string) ($fila[$col['nombre']] ?? ''));
-            $codigo = isset($col['codigo']) ? trim((string) ($fila[$col['codigo']] ?? '')) : '';
+        // Todo o nada ante un error inesperado: una carga a medias obliga a
+        // adivinar qué filas ya entraron antes de volver a subir el archivo.
+        DB::transaction(function () use ($filas, $col, &$creados, &$advertencias) {
+            foreach (array_slice($filas, 1) as $i => $fila) {
+                $numeroFila = $i + 2;
+                $nombre = trim((string) ($fila[$col['nombre']] ?? ''));
+                $codigo = isset($col['codigo']) ? trim((string) ($fila[$col['codigo']] ?? '')) : '';
 
-            if ($nombre === '') {
-                continue; // fila vacía, tolerada (así vienen las filas "por completar" del cliente)
-            }
-
-            if ($codigo !== '') {
-                $codigo = str_pad($codigo, 4, '0', STR_PAD_LEFT);
-                if (Color::where('codigo', $codigo)->exists()) {
-                    $advertencias[] = "Fila {$numeroFila}: el código \"{$codigo}\" ya existe, se omite \"{$nombre}\".";
-                    continue;
+                if ($nombre === '') {
+                    continue; // fila vacía, tolerada (así vienen las filas "por completar" del cliente)
                 }
-            } else {
-                $codigo = Color::generarCodigo();
-            }
 
-            Color::create(['codigo' => $codigo, 'nombre' => $nombre, 'activo' => true]);
-            $creados++;
-        }
+                if ($codigo !== '') {
+                    // Excel se come los ceros a la izquierda: 74 vuelve a ser 0074.
+                    if (ctype_digit($codigo) && strlen($codigo) <= 4) {
+                        $codigo = str_pad($codigo, 4, '0', STR_PAD_LEFT);
+                    }
+
+                    if (strlen($codigo) !== 4) {
+                        $advertencias[] = "Fila {$numeroFila}: el código \"{$codigo}\" no es válido (son 4 caracteres, ej. 0074), se omite \"{$nombre}\".";
+                        continue;
+                    }
+
+                    if (Color::where('codigo', $codigo)->exists()) {
+                        $advertencias[] = "Fila {$numeroFila}: el código \"{$codigo}\" ya existe, se omite \"{$nombre}\".";
+                        continue;
+                    }
+                } else {
+                    // Sin código, el nombre es lo único que lo identifica: volver a
+                    // subir el mismo archivo no debe duplicar los colores.
+                    if (Color::whereRaw('LOWER(nombre) = ?', [mb_strtolower($nombre)])->exists()) {
+                        $advertencias[] = "Fila {$numeroFila}: ya existe un color llamado \"{$nombre}\", se omite.";
+                        continue;
+                    }
+
+                    $codigo = Color::generarCodigo();
+                }
+
+                Color::create(['codigo' => $codigo, 'nombre' => $nombre, 'activo' => true]);
+                $creados++;
+            }
+        });
 
         return response()->json(['creados' => $creados, 'advertencias' => $advertencias]);
     }

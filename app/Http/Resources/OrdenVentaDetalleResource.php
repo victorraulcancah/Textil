@@ -47,19 +47,33 @@ class OrdenVentaDetalleResource extends JsonResource
             'metros_pendientes' => $this->whenLoaded('rollos', fn () => $this->metrosPendientes()),
             'cubierta' => $this->whenLoaded('rollos', fn () => $this->estaCubierta()),
 
-            'rollos' => $this->whenLoaded('rollos', fn () => $this->rollos->map(fn ($r) => [
-                'id' => $r->id,
-                'rollo_id' => $r->rollo_id,
-                'codigo' => $r->rollo?->codigo,
-                'color' => $r->rollo?->color?->nombre,
-                'metros' => (float) $r->metros,
-                'metros_rollo' => (float) ($r->rollo?->metros_actual ?? 0),
-                'es_parcial' => $r->esParcial(),
-                'escaneado_at' => $r->escaneado_at,
-                // Quién lo escaneó: varios almaceneros pueden preparar el
-                // mismo pedido y hace falta saber quién trajo cuál rollo.
-                'escaneado_por' => $r->usuario?->name,
-            ])->values()),
+            // Los rollos concretos son cosa del almacén: quien solo vende ve
+            // cuántos metros lleva cubiertos (arriba), no qué rollos son.
+            'rollos' => $this->when(
+                $this->relationLoaded('rollos') && $this->veRollos($request),
+                fn () => $this->rollos->map(fn ($r) => [
+                    'id' => $r->id,
+                    'rollo_id' => $r->rollo_id,
+                    'codigo' => $r->rollo?->codigo,
+                    'color' => $r->rollo?->color?->nombre,
+                    'metros' => (float) $r->metros,
+                    'metros_rollo' => (float) ($r->rollo?->metros_actual ?? 0),
+                    'es_parcial' => $r->esParcial(),
+                    'escaneado_at' => $r->escaneado_at,
+                    // Quién lo escaneó: varios almaceneros pueden preparar el
+                    // mismo pedido y hace falta saber quién trajo cuál rollo.
+                    'escaneado_por' => $r->usuario?->name,
+                ])->values()
+            ),
         ];
+    }
+
+    /** ¿Trabaja en el almacén (o administra)? Solo así ve los códigos de rollo. */
+    private function veRollos(Request $request): bool
+    {
+        $user = $request->user('api') ?? $request->user();
+
+        return $user !== null
+            && ($user->hasRole(config('permisos.super_admin')) || $user->can('inventario.despacho.ver'));
     }
 }

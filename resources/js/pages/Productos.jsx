@@ -919,14 +919,15 @@ export default function Productos() {
                                 error={errors.nombre}
                                 className="sm:col-span-2"
                             />
-                            {/* El código del fabricante (A103) es la columna
-                                vertebral del negocio: de él salen el código de
-                                cada rollo (A103-21-0001) y el cruce con el
-                                packing list del proveedor. Se deja escribir; si
-                                se deja vacío, el servidor genera uno. */}
+                            {/* El código de tela dice qué tela es (01-01-001); al
+                                sumarle el código del color (-0074) queda el
+                                producto que se compra y se vende. Es la clave
+                                del cruce con el packing list del proveedor. Se
+                                deja escribir; si se deja vacío, el servidor
+                                genera uno. */}
                             <Input
                                 label="Código de tela"
-                                placeholder="A103"
+                                placeholder="01-01-001"
                                 value={form.codigo}
                                 onChange={setField('codigo')}
                                 error={errors.codigo}
@@ -1403,8 +1404,10 @@ export default function Productos() {
                             </Button>
                         </div>
                         <p className="mb-3 text-xs text-warm-400">
-                            En qué colores existe esta tela. El código de cada color forma parte
-                            del código de sus rollos: tela A103 + color 01 → rollo A103-01-0001.
+                            En qué colores existe esta tela. El código del color se suma al de la
+                            tela y forma el producto con color: tela 01-01-001 + color 0074 →
+                            01-01-001-0074. Cada rollo lleva su propio código único, el de la
+                            orden de compra (KET-001-26-000001).
                         </p>
 
                         {colores.length === 0 ? (

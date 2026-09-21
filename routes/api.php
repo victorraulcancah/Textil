@@ -154,6 +154,8 @@ Route::middleware('auth:api')->group(function () {
 
     // Pedidos: el recorrido hasta el despacho (no mueve stock)
     Route::get('ordenes-venta', [OrdenVentaController::class, 'index']);
+    // Antes de {ordenesVenta}: si no, "almaceneros" se tomaría por un id.
+    Route::get('ordenes-venta/almaceneros', [OrdenVentaController::class, 'almaceneros']);
     Route::post('ordenes-venta', [OrdenVentaController::class, 'store']);
     Route::get('ordenes-venta/{ordenesVenta}', [OrdenVentaController::class, 'show']);
     Route::put('ordenes-venta/{ordenesVenta}', [OrdenVentaController::class, 'update']);
@@ -161,6 +163,7 @@ Route::middleware('auth:api')->group(function () {
     Route::post('ordenes-venta/{ordenesVenta}/devolver', [OrdenVentaController::class, 'devolver']);
     Route::post('ordenes-venta/{ordenesVenta}/quitar-rollo', [OrdenVentaController::class, 'quitarRollo']);
     Route::post('ordenes-venta/{ordenesVenta}/separar', [OrdenVentaController::class, 'separar']);
+    Route::post('ordenes-venta/{ordenesVenta}/asignar', [OrdenVentaController::class, 'asignar']);
     Route::post('ordenes-venta/{ordenesVenta}/escanear', [OrdenVentaController::class, 'escanear']);
     Route::post('ordenes-venta/{ordenesVenta}/despachar', [OrdenVentaController::class, 'despachar']);
     Route::post('ordenes-venta/{ordenesVenta}/facturar', [OrdenVentaController::class, 'facturar']);

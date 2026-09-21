@@ -139,6 +139,14 @@ class OrdenVenta extends Model
         return $this->belongsTo(User::class, 'usuario_despacha_id');
     }
 
+    /** Los almaceneros a quienes el encargado repartió este pedido. */
+    public function asignados()
+    {
+        return $this->belongsToMany(User::class, 'orden_venta_asignaciones', 'orden_venta_id', 'user_id')
+            ->withPivot('asignado_por_id')
+            ->withTimestamps();
+    }
+
     /** Lo que pidió el cliente: producto y cantidad, sin fijar rollos. */
     public function detalles()
     {

@@ -28,6 +28,7 @@ class OrdenVentaController extends Controller
         'vendedor:id,name',
         'usuarioPrepara:id,name',
         'usuarioDespacha:id,name',
+        'asignados:id,name',
         'detalles.presentacion.producto:id,codigo,nombre',
         'detalles.color:id,nombre,codigo,hex',
         'detalles.almacenReserva:id,nombre',
@@ -45,6 +46,7 @@ class OrdenVentaController extends Controller
             'cliente:id,nombre',
             'almacen:id,nombre',
             'vendedor:id,name',
+            'asignados:id,name',
             'detalles.rollos',
         ])
             ->withCount('detalles')
@@ -140,6 +142,28 @@ class OrdenVentaController extends Controller
     {
         return response()->json(
             $this->pedidos->escanear($ordenesVenta, $request->validated()['codigo'])
+        );
+    }
+
+    /** A quién se le puede repartir un pedido: el personal con permiso de despacho. */
+    public function almaceneros()
+    {
+        return response()->json($this->pedidos->almaceneros());
+    }
+
+    /**
+     * El encargado reparte el pedido entre uno o varios almaceneros. Una lista
+     * vacía lo deja sin asignar.
+     */
+    public function asignar(Request $request, OrdenVenta $ordenesVenta)
+    {
+        $datos = $request->validate([
+            'usuarios' => 'present|array',
+            'usuarios.*' => 'integer|exists:users,id',
+        ]);
+
+        return new OrdenVentaResource(
+            $this->pedidos->asignar($ordenesVenta, $datos['usuarios'])->load(self::RELACIONES)
         );
     }
 

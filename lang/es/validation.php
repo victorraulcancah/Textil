@@ -232,6 +232,8 @@ return [
         'detalles.*.producto_presentacion_id' => 'la unidad',
         'detalles.*.producto_color_id' => 'el color',
         'detalles.*.cantidad' => 'la cantidad',
+        'usuarios' => 'los almaceneros',
+        'usuarios.*' => 'el almacenero',
         'detalles.*.cantidad_recibida' => 'la cantidad recibida',
         'detalles.*.precio_unitario' => 'el precio',
         'detalles.*.costo_unitario' => 'el costo',

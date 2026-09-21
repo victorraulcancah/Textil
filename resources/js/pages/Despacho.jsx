@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Camera, Check, ClipboardList, FileText, PackageCheck, ScanLine, TriangleAlert, X } from 'lucide-react';
+import { Camera, Check, ClipboardList, FileText, PackageCheck, ScanLine, TriangleAlert, UserPlus, Users, X } from 'lucide-react';
 import api, { asList } from '../lib/api';
+import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
 import EscanerCamara from '../components/EscanerCamara';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
-import { Alert, Badge, Button, Spinner, cn } from '../components/ui';
+import { Alert, Badge, Button, Modal, Spinner, cn } from '../components/ui';
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
 
@@ -20,8 +21,17 @@ const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).
  */
 export default function Despacho() {
     const toast = useToast();
+    const { user, puede } = useAuth();
+    // Repartir los pedidos entre los almaceneros lo hace el encargado.
+    const puedeAsignar = puede('inventario.despacho.asignar');
 
     const [pedidos, setPedidos] = useState([]);
+    /** "todas" o "mias": el almacenero puede quedarse solo con lo que le repartieron. */
+    const [filtro, setFiltro] = useState('todas');
+    const [almaceneros, setAlmaceneros] = useState(null);
+    const [asignando, setAsignando] = useState(false);
+    const [elegidos, setElegidos] = useState([]);
+    const [guardandoAsignacion, setGuardandoAsignacion] = useState(false);
     const [cargando, setCargando] = useState(true);
     const [seleccionado, setSeleccionado] = useState(null);
     const [detalle, setDetalle] = useState(null);
@@ -206,6 +216,43 @@ export default function Despacho() {
         }
     };
 
+    /** El encargado abre el reparto: a quién le toca preparar este pedido. */
+    const abrirAsignacion = async () => {
+        setElegidos((detalle?.asignados ?? []).map((a) => a.id));
+        setAsignando(true);
+        if (almaceneros) return;
+        try {
+            const { data } = await api.get('/ordenes-venta/almaceneros');
+            setAlmaceneros(asList({ data }));
+        } catch (err) {
+            setAsignando(false);
+            toast.error(err.response?.data?.message ?? 'No se pudo cargar al personal de almacén.');
+        }
+    };
+
+    const alternarElegido = (id) =>
+        setElegidos((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
+    const guardarAsignacion = async () => {
+        setGuardandoAsignacion(true);
+        try {
+            const { data } = await api.post(`/ordenes-venta/${detalle.id}/asignar`, { usuarios: elegidos });
+            setDetalle(data?.data ?? data);
+            setAsignando(false);
+            toast.success(elegidos.length ? 'Pedido asignado.' : 'Pedido sin asignar.');
+            await cargar(true);
+        } catch (err) {
+            toast.error(err.response?.data?.message ?? 'No se pudo asignar el pedido.');
+        } finally {
+            setGuardandoAsignacion(false);
+        }
+    };
+
+    // "Mis tareas" solo tiene sentido si alguien ya repartió algo.
+    const hayReparto = pedidos.some((p) => p.asignados?.length);
+    const visibles =
+        filtro === 'mias' ? pedidos.filter((p) => p.asignados?.some((a) => a.id === user?.id)) : pedidos;
+
     /** Todavía se pueden escanear rollos: solicitado o en plena preparación. */
     const escaneando = ['solicitado', 'preparando'].includes(detalle?.estado);
     const separado = detalle?.estado === 'separado';
@@ -235,11 +282,40 @@ export default function Despacho() {
                 <div className="grid gap-4 lg:grid-cols-[19rem_1fr]">
                     {/* Bandeja de pedidos que llegaron al almacén */}
                     <aside className="overflow-hidden rounded-lg border border-edge bg-white shadow-sm lg:sticky lg:top-4 lg:self-start">
-                        <p className="border-b border-edge px-3 py-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
-                            Por atender ({pedidos.length})
-                        </p>
+                        <div className="flex items-center justify-between gap-2 border-b border-edge px-3 py-2">
+                            <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+                                Por atender ({visibles.length})
+                            </p>
+                            {hayReparto && (
+                                <div className="flex overflow-hidden rounded-md border border-edge text-xs">
+                                    {[
+                                        ['todas', 'Todas'],
+                                        ['mias', 'Mis tareas'],
+                                    ].map(([clave, texto]) => (
+                                        <button
+                                            key={clave}
+                                            type="button"
+                                            onClick={() => setFiltro(clave)}
+                                            className={cn(
+                                                'px-2 py-1 transition',
+                                                filtro === clave
+                                                    ? 'bg-primary-600 font-medium text-white'
+                                                    : 'bg-white text-warm-600 hover:bg-gray-50',
+                                            )}
+                                        >
+                                            {texto}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                         <ul className="max-h-[70vh] overflow-y-auto p-1">
-                            {pedidos.map((p) => {
+                            {visibles.length === 0 && (
+                                <li className="px-3 py-6 text-center text-xs text-warm-400">
+                                    No tienes pedidos asignados.
+                                </li>
+                            )}
+                            {visibles.map((p) => {
                                 const activo = p.id === seleccionado?.id;
                                 return (
                                     <li key={p.id}>
@@ -273,6 +349,13 @@ export default function Despacho() {
                                             <span className="mt-0.5 block truncate text-xs text-warm-500">
                                                 {p.cliente ?? 'Cliente varios'} · {num(p.total_metros)} m
                                             </span>
+                                            {/* A quién le tocó, si el encargado ya lo repartió. */}
+                                            {p.asignados?.length > 0 && (
+                                                <span className="mt-0.5 flex items-center gap-1 truncate text-xs text-primary-700">
+                                                    <Users className="h-3 w-3 shrink-0" />
+                                                    {p.asignados.map((a) => a.name).join(', ')}
+                                                </span>
+                                            )}
                                         </button>
                                     </li>
                                 );
@@ -297,8 +380,21 @@ export default function Despacho() {
                                             {detalle.cliente ?? 'Cliente varios'} · {lineas.length} producto(s) ·{' '}
                                             {num(total)} m
                                         </p>
+                                        {/* Quién tiene la tarea: lo reparte el encargado. */}
+                                        {detalle.asignados?.length > 0 && (
+                                            <p className="mt-0.5 flex items-center gap-1 text-xs text-primary-700">
+                                                <Users className="h-3 w-3 shrink-0" />
+                                                Asignado a {detalle.asignados.map((a) => a.name).join(', ')}
+                                            </p>
+                                        )}
                                     </div>
                                     <div className="flex flex-wrap items-center gap-2">
+                                        {puedeAsignar && (
+                                            <Button variant="secondary" size="sm" onClick={abrirAsignacion}>
+                                                <UserPlus className="h-4 w-4" />
+                                                Asignar
+                                            </Button>
+                                        )}
                                         <Button
                                             variant="secondary"
                                             size="sm"
@@ -540,6 +636,51 @@ export default function Despacho() {
                 nombre={pdf?.nombre}
                 titulo="Requerimiento de almacén"
             />
+
+            {/* El encargado reparte el pedido: uno o varios almaceneros. */}
+            <Modal
+                open={asignando}
+                onClose={() => setAsignando(false)}
+                title="Asignar pedido"
+                description={`${detalle?.requerimiento_numero ?? detalle?.documento ?? ''}: elige quién lo prepara. Puedes marcar a más de uno.`}
+                size="sm"
+                footer={
+                    <>
+                        <Button variant="secondary" onClick={() => setAsignando(false)}>
+                            Cancelar
+                        </Button>
+                        <Button loading={guardandoAsignacion} onClick={guardarAsignacion}>
+                            Guardar
+                        </Button>
+                    </>
+                }
+            >
+                {!almaceneros ? (
+                    <div className="flex justify-center py-6">
+                        <Spinner className="text-primary-600" />
+                    </div>
+                ) : almaceneros.length === 0 ? (
+                    <p className="py-4 text-center text-sm text-warm-500">
+                        No hay personal con permiso de despacho.
+                    </p>
+                ) : (
+                    <ul className="space-y-1">
+                        {almaceneros.map((a) => (
+                            <li key={a.id}>
+                                <label className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm text-warm-800 hover:bg-gray-50">
+                                    <input
+                                        type="checkbox"
+                                        className="h-4 w-4 rounded border-gray-300"
+                                        checked={elegidos.includes(a.id)}
+                                        onChange={() => alternarElegido(a.id)}
+                                    />
+                                    {a.name}
+                                </label>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </Modal>
         </Layout>
     );
 }

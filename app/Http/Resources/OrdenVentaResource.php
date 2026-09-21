@@ -57,6 +57,11 @@ class OrdenVentaResource extends JsonResource
             'usuario_prepara' => $this->whenLoaded('usuarioPrepara', fn () => $this->usuarioPrepara?->name),
             'usuario_despacha' => $this->whenLoaded('usuarioDespacha', fn () => $this->usuarioDespacha?->name),
 
+            // A quiénes repartió el encargado la preparación de este pedido.
+            'asignados' => $this->whenLoaded('asignados', fn () => $this->asignados
+                ->map(fn ($u) => ['id' => $u->id, 'name' => $u->name])
+                ->values()),
+
             'motivo_anulacion' => $this->motivo_anulacion,
             'fecha_anulacion' => $this->fecha_anulacion,
             'observaciones' => $this->observaciones,

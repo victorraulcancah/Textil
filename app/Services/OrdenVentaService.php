@@ -10,6 +10,7 @@ use App\Models\ProductoPresentacion;
 use App\Models\Rollo;
 use App\Models\RolloMovimiento;
 use App\Models\SerieDocumento;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -156,6 +157,52 @@ class OrdenVentaService
 
             return $orden->fresh();
         });
+    }
+
+    /**
+     * Quienes pueden trabajar pedidos en el almacén: los que tienen permiso de
+     * despacho y el rol de administración. Son los que el encargado puede
+     * elegir al repartir una tarea.
+     *
+     * @return \Illuminate\Support\Collection<int, array{id: int, name: string}>
+     */
+    public function almaceneros()
+    {
+        return User::orderBy('name')->get(['id', 'name'])
+            ->filter(fn (User $u) => $u->hasRole(config('permisos.super_admin'))
+                || $u->can('inventario.despacho.editar'))
+            ->map(fn (User $u) => ['id' => $u->id, 'name' => $u->name])
+            ->values();
+    }
+
+    /**
+     * El encargado reparte el pedido entre uno o varios almaceneros.
+     *
+     * Reemplaza el reparto anterior: quien queda fuera deja de verlo entre sus
+     * tareas. Es coordinación, no un candado: cualquier almacenero con permiso
+     * puede seguir escaneando, así una ausencia no deja el pedido parado.
+     *
+     * @param  list<int|string>  $usuarioIds  vacío = dejarlo sin asignar
+     */
+    public function asignar(OrdenVenta $orden, array $usuarioIds): OrdenVenta
+    {
+        if (! in_array($orden->estado, [OrdenVenta::SOLICITADO, OrdenVenta::PREPARANDO, OrdenVenta::SEPARADO], true)) {
+            throw new \DomainException('Solo se pueden repartir los pedidos que están en el almacén.');
+        }
+
+        $ids = collect($usuarioIds)->map(fn ($id) => (int) $id)->unique()->values();
+
+        if ($ids->diff($this->almaceneros()->pluck('id'))->isNotEmpty()) {
+            throw new \DomainException('Solo se puede asignar a personal de almacén con permiso de despacho.');
+        }
+
+        DB::transaction(function () use ($orden, $ids) {
+            $orden->asignados()->sync(
+                $ids->mapWithKeys(fn ($id) => [$id => ['asignado_por_id' => auth()->id()]])->all()
+            );
+        });
+
+        return $this->conRelaciones($orden->fresh());
     }
 
     /**

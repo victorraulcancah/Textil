@@ -33,6 +33,8 @@ return [
         // necesitar exportar el catálogo sin poder importarlo (o al revés).
         'importar' => 'Importar',
         'exportar' => 'Exportar',
+        // Repartir los pedidos entre los almaceneros: lo hace el encargado.
+        'asignar' => 'Asignar tareas',
     ],
 
     // Las que tiene cualquier submódulo. "Imprimir" no está aquí: solo la
@@ -166,12 +168,15 @@ return [
                     // El almacenero mueve el pedido por el almacén, pero no lo
                     // crea ni lo cotiza: eso es de Ventas.
                     'patrones' => [
+                        // Ver quién puede recibir una tarea es parte de ver la bandeja.
+                        'ordenes-venta/almaceneros' => 'ver',
+                        'ordenes-venta/*/asignar' => 'asignar',
                         'ordenes-venta/*/escanear' => 'editar',
                         'ordenes-venta/*/quitar-rollo' => 'editar',
                         'ordenes-venta/*/separar' => 'editar',
                         'ordenes-venta/*/despachar' => 'editar',
                     ],
-                    'acciones' => ['ver', 'editar'],
+                    'acciones' => ['ver', 'editar', 'asignar'],
                 ],
                 'kardex' => ['label' => 'Kardex', 'apis' => ['movimientos'], 'acciones' => ['ver']],
                 'transferencias' => ['label' => 'Traslados', 'apis' => ['transferencias', 'motivos-traslado'], 'pdf' => ['guia-traslado']],

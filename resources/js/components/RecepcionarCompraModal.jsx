@@ -1,6 +1,6 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Camera, Eye, PackageCheck, ScanLine, X } from 'lucide-react';
+import { Camera, ClipboardList, PackageCheck, ScanLine, X } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { opcionesAlmacen } from '../lib/almacenes';
 import { useAuth } from '../lib/auth';
@@ -79,6 +79,8 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
      */
     const [arbolUbicaciones, setArbolUbicaciones] = useState([]);
     const [subiendoPackingList, setSubiendoPackingList] = useState(false);
+    /** La línea (compra_detalle_id) cuyos rollos y ubicación se están viendo en su modal. */
+    const [lineaRollosId, setLineaRollosId] = useState(null);
     /**
      * El packing list cargado de esta compra, rollo por rollo, con lo que el
      * almacén ya escaneó. Vive en el servidor: varios almaceneros lo van
@@ -153,6 +155,7 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
             setAvisosCarga([]);
             setUltimoEscaneo(null);
             setCodigoEscaneo('');
+            setLineaRollosId(null);
             refrescarPackingList();
         }
     }, [open, compraId, cargar, refrescarPackingList]);
@@ -276,6 +279,10 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
         filasPL.filter((f) => f.compra_detalle_id === l.compra_detalle_id && f.estado !== 'registrado');
     const escaneadosDe = (l) => filasDeLinea(l).filter((f) => f.estado === 'recibido');
     const nombreLinea = (id) => lineas.find((l) => l.compra_detalle_id === id)?.producto ?? '—';
+    /** Escribe un campo de los rollos de una línea (color, metrajes, ubicación…). */
+    const setCapDe = (clave) => (campo, valor) =>
+        setRollosPorLinea((prev) => ({ ...prev, [clave]: { ...(prev[clave] ?? {}), [campo]: valor } }));
+    const lineaAbierta = lineas.find((l) => String(l.compra_detalle_id) === lineaRollosId) ?? null;
 
     // Con packing list, lo que se recibe es lo escaneado; sin él, lo escrito a mano.
     const totalARecibir = useMemo(
@@ -379,7 +386,10 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
     return (
         <Modal
             open={open}
-            onClose={onClose}
+            // Con el modal de rollos de una línea abierto, Escape cierra solo ese.
+            onClose={() => {
+                if (!lineaRollosId) onClose();
+            }}
             title={`Recepcionar compra ${datos?.compra?.numero_compra ?? ''}${datos?.compra?.orden ? ` · Orden ${datos.compra.orden}` : ''}`}
             description="Registra lo que realmente llegó. Puedes recibir por partes."
             size="3xl"
@@ -669,6 +679,7 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
                                         <th className="px-3 py-2.5 text-right">Recibida</th>
                                         <th className="px-3 py-2.5 text-right">Pendiente</th>
                                         <th className="px-3 py-2.5 text-right">Recibe ahora</th>
+                                        <th className="w-14 px-3 py-2.5 text-center">Acc.</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100">
@@ -682,228 +693,76 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
                                         // Con packing list, lo que se recibe es lo escaneado.
                                         const enLista = filasDeLinea(l);
                                         const escaneados = escaneadosDe(l);
-                                        const setCap = (campo, valor) =>
-                                            setRollosPorLinea((prev) => ({
-                                                ...prev,
-                                                [clave]: { ...(prev[clave] ?? {}), [campo]: valor },
-                                            }));
+                                        // ¿Ya tiene algo cargado en su detalle de rollos?
+                                        const conDatos = leidos.length > 0 || Boolean(cap?.almacen_ubicacion_id);
 
                                         return (
-                                            <Fragment key={clave}>
-                                                <tr>
-                                                    <td className="px-3 py-2 text-warm-500">{l.codigo ?? '—'}</td>
-                                                    <td className="px-3 py-2 font-semibold text-warm-900">
-                                                        {l.producto}
-                                                        {l.color && (
-                                                            <span className="ml-1 text-xs font-normal text-warm-500">
-                                                                · {l.color.nombre}
+                                            <tr key={clave}>
+                                                <td className="px-3 py-2 text-warm-500">{l.codigo ?? '—'}</td>
+                                                <td className="px-3 py-2 font-semibold text-warm-900">
+                                                    {l.producto}
+                                                    {l.color && (
+                                                        <span className="ml-1 text-xs font-normal text-warm-500">
+                                                            · {l.color.nombre}
+                                                        </span>
+                                                    )}
+                                                </td>
+                                                <td className="px-3 py-2 text-warm-500">{l.unidad ?? '—'}</td>
+                                                <td className="px-3 py-2 text-right text-warm-900">{num(l.cantidad_pedida)}</td>
+                                                <td className="px-3 py-2 text-right text-warm-500">{num(l.cantidad_recibida)}</td>
+                                                <td className="px-3 py-2 text-right font-semibold text-amber-600">{num(l.pendiente)}</td>
+                                                <td className="px-3 py-2">
+                                                    {enLista.length > 0 ? (
+                                                        <div className="text-right text-xs">
+                                                            <span className="block text-sm font-semibold text-warm-900">
+                                                                {num(escaneados.reduce((a, f) => a + f.metros, 0))} m
                                                             </span>
-                                                        )}
-                                                        {/* Lo que dice la compra de esta línea. */}
+                                                            <span className="text-warm-500">
+                                                                {escaneados.length} de {enLista.length} rollos escaneados
+                                                            </span>
+                                                        </div>
+                                                    ) : (
+                                                        <Input
+                                                            type="number"
+                                                            min="0"
+                                                            max={l.pendiente}
+                                                            step="any"
+                                                            value={cantidades[clave] ?? ''}
+                                                            onChange={(e) =>
+                                                                setCantidades((prev) => ({
+                                                                    ...prev,
+                                                                    [clave]: e.target.value,
+                                                                }))
+                                                            }
+                                                            // Con rollos capturados la manda el detalle:
+                                                            // la cantidad sale de la suma de sus metros.
+                                                            disabled={leidos.length > 0}
+                                                            aria-label={`Cantidad recibida de ${l.producto}`}
+                                                            className="text-right"
+                                                        />
+                                                    )}
+                                                </td>
+                                                {/* Los rollos de la línea y dónde se guardan, en su propio
+                                                    modal: el punto verde avisa que ya tiene datos. */}
+                                                <td className="px-3 py-2 text-center">
+                                                    {porRollos ? (
                                                         <button
                                                             type="button"
-                                                            onClick={() => setCap('detalle', !cap?.detalle)}
-                                                            aria-label={`Ver detalle de ${l.producto}`}
-                                                            aria-expanded={Boolean(cap?.detalle)}
-                                                            title="Ver detalle de la compra"
-                                                            className={cn(
-                                                                'ml-2 inline-flex rounded-md p-1 align-middle text-warm-500 transition hover:bg-primary-50 hover:text-primary-600',
-                                                                cap?.detalle && 'bg-primary-50 text-primary-600',
-                                                            )}
+                                                            onClick={() => setLineaRollosId(clave)}
+                                                            aria-label={`Rollos y ubicación de ${l.producto}`}
+                                                            title={enLista.length > 0 ? 'Ver rollos e indicar ubicación' : 'Capturar rollos y ubicación'}
+                                                            className="relative rounded-md p-1.5 text-primary-600 transition hover:bg-primary-50 hover:text-primary-700"
                                                         >
-                                                            <Eye className="h-4 w-4" />
+                                                            <ClipboardList className="h-4 w-4" />
+                                                            {conDatos && (
+                                                                <span className="absolute right-0.5 top-0.5 h-2 w-2 rounded-full bg-green-500 ring-2 ring-white" />
+                                                            )}
                                                         </button>
-                                                        {porRollos && (
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => setCap('abierto', !cap?.abierto)}
-                                                                className="ml-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-primary-600 transition hover:bg-primary-50"
-                                                            >
-                                                                {enLista.length > 0
-                                                                    ? cap?.abierto
-                                                                        ? 'Ocultar ubicación'
-                                                                        : 'Indicar ubicación'
-                                                                    : cap?.abierto
-                                                                      ? 'Ocultar rollos'
-                                                                      : 'Capturar rollos'}
-                                                            </button>
-                                                        )}
-                                                    </td>
-                                                    <td className="px-3 py-2 text-warm-500">{l.unidad ?? '—'}</td>
-                                                    <td className="px-3 py-2 text-right text-warm-900">{num(l.cantidad_pedida)}</td>
-                                                    <td className="px-3 py-2 text-right text-warm-500">{num(l.cantidad_recibida)}</td>
-                                                    <td className="px-3 py-2 text-right font-semibold text-amber-600">{num(l.pendiente)}</td>
-                                                    <td className="px-3 py-2">
-                                                        {enLista.length > 0 ? (
-                                                            <div className="text-right text-xs">
-                                                                <span className="block text-sm font-semibold text-warm-900">
-                                                                    {num(escaneados.reduce((a, f) => a + f.metros, 0))} m
-                                                                </span>
-                                                                <span className="text-warm-500">
-                                                                    {escaneados.length} de {enLista.length} rollos escaneados
-                                                                </span>
-                                                            </div>
-                                                        ) : (
-                                                            <Input
-                                                                type="number"
-                                                                min="0"
-                                                                max={l.pendiente}
-                                                                step="any"
-                                                                value={cantidades[clave] ?? ''}
-                                                                onChange={(e) =>
-                                                                    setCantidades((prev) => ({
-                                                                        ...prev,
-                                                                        [clave]: e.target.value,
-                                                                    }))
-                                                                }
-                                                                // Con rollos capturados la manda el detalle:
-                                                                // la cantidad sale de la suma de sus metros.
-                                                                disabled={leidos.length > 0}
-                                                                aria-label={`Cantidad recibida de ${l.producto}`}
-                                                                className="text-right"
-                                                            />
-                                                        )}
-                                                    </td>
-                                                </tr>
-
-                                                {cap?.detalle && (
-                                                    <tr className="bg-gray-50">
-                                                        <td colSpan={7} className="px-3 py-3">
-                                                            <DetalleLineaCompra
-                                                                linea={l}
-                                                                compra={datos?.compra}
-                                                                enLista={enLista}
-                                                                escaneados={escaneados}
-                                                            />
-                                                        </td>
-                                                    </tr>
-                                                )}
-
-                                                {porRollos && cap?.abierto && (
-                                                    <tr className="bg-gray-50">
-                                                        <td colSpan={7} className="px-3 py-3">
-                                                            {enLista.length > 0 ? (
-                                                                <p className="text-sm text-warm-600">
-                                                                    Los rollos de esta línea vienen del packing list: su color,
-                                                                    código, metros y peso ya están cargados. Aquí solo indicas
-                                                                    dónde se guardan.
-                                                                </p>
-                                                            ) : (
-                                                                <div className="grid gap-3 sm:grid-cols-[14rem_10rem_1fr]">
-                                                                    {l.color ? (
-                                                                        <div>
-                                                                            <p className="mb-1 text-sm font-medium text-warm-800">Color</p>
-                                                                            <div className="flex h-10 items-center rounded-md border border-edge bg-gray-50 px-3 text-sm text-warm-900">
-                                                                                {l.color.nombre}
-                                                                                {l.color.codigo ? ` (${l.color.codigo})` : ''}
-                                                                            </div>
-                                                                            <p className="mt-1 text-xs text-warm-400">
-                                                                                Es el color con el que se compró.
-                                                                            </p>
-                                                                        </div>
-                                                                    ) : (
-                                                                        <ColorSelect
-                                                                            colores={l.colores}
-                                                                            value={cap?.color_id ?? ''}
-                                                                            onChange={(id) => setCap('color_id', id)}
-                                                                            placeholder="Elegir color…"
-                                                                        />
-                                                                    )}
-                                                                    <div>
-                                                                        <Input
-                                                                            label="Código de rollo (opcional)"
-                                                                            placeholder="Se arma solo si lo dejas vacío"
-                                                                            value={cap?.codigo ?? ''}
-                                                                            onChange={(e) => setCap('codigo', e.target.value)}
-                                                                        />
-                                                                        <p className="mt-1 text-xs text-warm-400">
-                                                                            Si el proveedor tiene código corto, el rollo
-                                                                            se numera solo con el código de la orden (ej. KET-003-26-000001).
-                                                                        </p>
-                                                                    </div>
-                                                                    <div>
-                                                                        <label className="mb-1 block text-sm font-medium text-warm-800">
-                                                                            Metrajes del packing list
-                                                                        </label>
-                                                                        <textarea
-                                                                            rows={4}
-                                                                            value={cap?.metrajes ?? ''}
-                                                                            onChange={(e) => setCap('metrajes', e.target.value)}
-                                                                            placeholder={'Pega aquí el packing list, un rollo por línea:\n58   26.5\n58   26.6\n64   28.3'}
-                                                                            className="w-full rounded-md border border-edge px-3 py-2 font-mono text-sm shadow-sm outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-100"
-                                                                        />
-                                                                        <p className="mt-1 text-xs text-warm-500">
-                                                                            Un rollo por línea. Si pones dos números, el
-                                                                            segundo es el peso en kilos.
-                                                                        </p>
-                                                                    </div>
-                                                                </div>
-                                                            )}
-
-                                                            {/* Dónde se guardan. Se aplica a todos los
-                                                                rollos de esta línea; después cada uno se
-                                                                puede mover por su cuenta. Se elige siempre
-                                                                del árbol del almacén (piso → pasillo → rack
-                                                                → nivel → posición), no se escribe. */}
-                                                            <div className="mt-3">
-                                                                <p className="mb-1 text-sm font-medium text-warm-800">
-                                                                    Ubicación en el almacén{' '}
-                                                                    <span className="font-normal text-warm-500">
-                                                                        (opcional)
-                                                                    </span>
-                                                                </p>
-                                                                {!form.almacen_id ? (
-                                                                    <p className="text-sm text-warm-500">
-                                                                        Elige primero el almacén receptor para ver sus ubicaciones.
-                                                                    </p>
-                                                                ) : arbolUbicaciones.length > 0 ? (
-                                                                    <CascadaUbicacion
-                                                                        arbol={arbolUbicaciones}
-                                                                        cap={cap}
-                                                                        setCap={setCap}
-                                                                    />
-                                                                ) : (
-                                                                    <p className="text-sm text-warm-500">
-                                                                        Este almacén todavía no tiene ubicaciones armadas, así que los
-                                                                        rollos entran sin ubicación. Se arman en{' '}
-                                                                        <Link
-                                                                            to="/almacenes"
-                                                                            className="font-medium text-primary-600 hover:underline"
-                                                                        >
-                                                                            Inventario → Almacenes
-                                                                        </Link>{' '}
-                                                                        (editar el almacén y agregar sus ubicaciones).
-                                                                    </p>
-                                                                )}
-                                                            </div>
-
-                                                            {leidos.length > 0 && (
-                                                                <p className="mt-2 text-sm text-primary-700">
-                                                                    Se crearán <strong>{leidos.length} rollos</strong> con{' '}
-                                                                    <strong>
-                                                                        {num(leidos.reduce((a, r) => a + r.metros, 0))} m
-                                                                    </strong>
-                                                                    {leidos.some((r) => r.peso_kg) && (
-                                                                        <>
-                                                                            {' y '}
-                                                                            <strong>
-                                                                                {num(
-                                                                                    leidos.reduce(
-                                                                                        (a, r) => a + (r.peso_kg || 0),
-                                                                                        0,
-                                                                                    ),
-                                                                                )}{' '}
-                                                                                kg
-                                                                            </strong>
-                                                                        </>
-                                                                    )}
-                                                                    .
-                                                                </p>
-                                                            )}
-                                                        </td>
-                                                    </tr>
-                                                )}
-                                            </Fragment>
+                                                    ) : (
+                                                        <span className="text-warm-300">—</span>
+                                                    )}
+                                                </td>
+                                            </tr>
                                         );
                                     })}
                                 </tbody>
@@ -920,6 +779,19 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
                 </>
             )}
 
+            {/* Los rollos de una línea y dónde se guardan. */}
+            {lineaAbierta && (
+                <RollosDeLineaModal
+                    linea={lineaAbierta}
+                    cap={rollosPorLinea[String(lineaAbierta.compra_detalle_id)]}
+                    setCap={setCapDe(String(lineaAbierta.compra_detalle_id))}
+                    enLista={filasDeLinea(lineaAbierta)}
+                    almacenId={form.almacen_id}
+                    arbolUbicaciones={arbolUbicaciones}
+                    onClose={() => setLineaRollosId(null)}
+                />
+            )}
+
             {/* La misma verificación, leyendo el QR de la etiqueta con la
                 cámara del celular. */}
             <EscanerCamara
@@ -932,55 +804,160 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
     );
 }
 
-const ETIQUETA_NIVEL = { piso: 'Piso', pasillo: 'Pasillo', rack: 'Rack', nivel: 'Nivel', posicion: 'Posición' };
-
 /**
- * Lo que la compra (y la orden) ya dicen de una línea, a la vista de quien
- * recibe: qué se pidió, en qué color, cuántos rollos y a qué costo. Así no se
- * vuelve a preguntar en la recepción lo que ya se sabe desde la orden.
+ * Los rollos de una línea de la compra y dónde se guardan. Se abre con el ícono
+ * de la columna de acciones, en vez de desplegarse dentro de la tabla. Con
+ * packing list sus rollos ya vienen cargados y aquí solo se indica la
+ * ubicación; sin él, se capturan a mano (color, código y metrajes).
  */
-function DetalleLineaCompra({ linea, compra, enLista, escaneados }) {
-    const moneda = compra?.moneda === 'USD' ? 'USD' : 'PEN';
-    const dinero = (n) =>
-        new Intl.NumberFormat(moneda === 'USD' ? 'en-US' : 'es-PE', { style: 'currency', currency: moneda }).format(
-            Number(n) || 0,
-        );
-
-    const datos = [
-        ['Orden de compra', compra?.orden],
-        ['Compra', compra?.numero_compra],
-        ['Producto', `${linea.producto}${linea.codigo ? ` (${linea.codigo})` : ''}`],
-        [
-            'Color',
-            linea.color
-                ? `${linea.color.nombre}${linea.color.codigo ? ` (${linea.color.codigo})` : ''}`
-                : 'Sin color en la compra',
-        ],
-        [
-            'Pedido',
-            `${num(linea.cantidad_pedida)} ${linea.unidad ?? ''}${
-                linea.rollos ? ` en ${linea.rollos} rollo${linea.rollos === 1 ? '' : 's'}` : ''
-            }`.trim(),
-        ],
-        ['Costo', `${dinero(linea.costo_unitario)} por ${linea.unidad ?? 'unidad'}`],
-        ['Ya recibido', num(linea.cantidad_recibida)],
-        ['Pendiente', num(linea.pendiente)],
-        ...(enLista.length > 0
-            ? [['Packing list', `${enLista.length} rollos cargados · ${escaneados.length} escaneados`]]
-            : []),
-    ].filter(([, valor]) => valor != null && valor !== '');
+function RollosDeLineaModal({ linea, cap, setCap, enLista, almacenId, arbolUbicaciones, onClose }) {
+    const leidos = rollosDe(cap);
 
     return (
-        <dl className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4">
-            {datos.map(([etiqueta, valor]) => (
-                <div key={etiqueta}>
-                    <dt className="text-xs uppercase tracking-wide text-warm-400">{etiqueta}</dt>
-                    <dd className="text-sm font-medium text-warm-900">{valor}</dd>
+        <Modal
+            open
+            onClose={onClose}
+            size="xl"
+            title={`Rollos de ${linea.producto}${linea.color ? ` · ${linea.color.nombre}` : ''}`}
+            description="Los rollos de esta línea y dónde se guardan."
+            footer={<Button onClick={onClose}>Listo</Button>}
+        >
+            <div className="space-y-4">
+                {enLista.length > 0 ? (
+                    <>
+                        <p className="text-sm text-warm-600">
+                            Los rollos de esta línea vienen del packing list: su color, código, metros y peso ya están
+                            cargados. Aquí solo indicas dónde se guardan.
+                        </p>
+                        <div className="overflow-x-auto rounded-lg border border-edge">
+                            <table className="w-full min-w-[460px] text-sm">
+                                <thead>
+                                    <tr className="bg-primary-600 text-left text-xs font-semibold uppercase tracking-wide text-white">
+                                        <th className="px-3 py-2">Rollo</th>
+                                        <th className="px-3 py-2 text-right">Metros</th>
+                                        <th className="px-3 py-2 text-right">Peso</th>
+                                        <th className="px-3 py-2">Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {enLista.map((f) => {
+                                        const estado = ESTADO_ROLLO[f.estado] ?? { label: f.estado, variant: 'gray' };
+                                        return (
+                                            <tr key={f.id}>
+                                                <td className="px-3 py-2 font-mono text-xs font-semibold text-warm-900">
+                                                    {f.codigo}
+                                                </td>
+                                                <td className="px-3 py-2 text-right">{num(f.metros)} m</td>
+                                                <td className="px-3 py-2 text-right text-warm-600">
+                                                    {f.peso_kg != null ? `${num(f.peso_kg)} kg` : '—'}
+                                                </td>
+                                                <td className="px-3 py-2">
+                                                    <Badge variant={estado.variant}>{estado.label}</Badge>
+                                                    {f.escaneado_por && (
+                                                        <span className="ml-2 text-xs text-warm-500">
+                                                            {f.escaneado_por} {hora(f.escaneado_at)}
+                                                        </span>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </>
+                ) : (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                        {linea.color ? (
+                            <div>
+                                <p className="mb-1 text-sm font-medium text-warm-800">Color</p>
+                                <div className="flex h-10 items-center rounded-md border border-edge bg-gray-50 px-3 text-sm text-warm-900">
+                                    {linea.color.nombre}
+                                    {linea.color.codigo ? ` (${linea.color.codigo})` : ''}
+                                </div>
+                                <p className="mt-1 text-xs text-warm-400">Es el color con el que se compró.</p>
+                            </div>
+                        ) : (
+                            <ColorSelect
+                                colores={linea.colores}
+                                value={cap?.color_id ?? ''}
+                                onChange={(id) => setCap('color_id', id)}
+                                placeholder="Elegir color…"
+                            />
+                        )}
+                        <div>
+                            <Input
+                                label="Código de rollo (opcional)"
+                                placeholder="Se arma solo si lo dejas vacío"
+                                value={cap?.codigo ?? ''}
+                                onChange={(e) => setCap('codigo', e.target.value)}
+                            />
+                            <p className="mt-1 text-xs text-warm-400">
+                                Si el proveedor tiene código corto, el rollo se numera solo con el código de la orden
+                                (ej. KET-003-26-000001).
+                            </p>
+                        </div>
+                        <div className="sm:col-span-2">
+                            <label className="mb-1 block text-sm font-medium text-warm-800">
+                                Metrajes del packing list
+                            </label>
+                            <textarea
+                                rows={5}
+                                value={cap?.metrajes ?? ''}
+                                onChange={(e) => setCap('metrajes', e.target.value)}
+                                placeholder={'Pega aquí el packing list, un rollo por línea:\n58   26.5\n58   26.6\n64   28.3'}
+                                className="w-full rounded-md border border-edge px-3 py-2 font-mono text-sm shadow-sm outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-100"
+                            />
+                            <p className="mt-1 text-xs text-warm-500">
+                                Un rollo por línea. Si pones dos números, el segundo es el peso en kilos.
+                            </p>
+                        </div>
+                    </div>
+                )}
+
+                {/* Dónde se guardan. Se aplica a todos los rollos de esta línea;
+                    después cada uno se puede mover por su cuenta. Se elige siempre
+                    del árbol del almacén (piso → pasillo → rack → nivel →
+                    posición), no se escribe. */}
+                <div>
+                    <p className="mb-1 text-sm font-medium text-warm-800">
+                        Ubicación en el almacén <span className="font-normal text-warm-500">(opcional)</span>
+                    </p>
+                    {!almacenId ? (
+                        <p className="text-sm text-warm-500">Elige primero el almacén receptor para ver sus ubicaciones.</p>
+                    ) : arbolUbicaciones.length > 0 ? (
+                        <CascadaUbicacion arbol={arbolUbicaciones} cap={cap} setCap={setCap} />
+                    ) : (
+                        <p className="text-sm text-warm-500">
+                            Este almacén todavía no tiene ubicaciones armadas, así que los rollos entran sin ubicación. Se
+                            arman en{' '}
+                            <Link to="/almacenes" className="font-medium text-primary-600 hover:underline">
+                                Inventario → Almacenes
+                            </Link>{' '}
+                            (editar el almacén y agregar sus ubicaciones).
+                        </p>
+                    )}
                 </div>
-            ))}
-        </dl>
+
+                {leidos.length > 0 && (
+                    <p className="text-sm text-primary-700">
+                        Se crearán <strong>{leidos.length} rollos</strong> con{' '}
+                        <strong>{num(leidos.reduce((a, r) => a + r.metros, 0))} m</strong>
+                        {leidos.some((r) => r.peso_kg) && (
+                            <>
+                                {' y '}
+                                <strong>{num(leidos.reduce((a, r) => a + (r.peso_kg || 0), 0))} kg</strong>
+                            </>
+                        )}
+                        .
+                    </p>
+                )}
+            </div>
+        </Modal>
     );
 }
+
+const ETIQUETA_NIVEL = { piso: 'Piso', pasillo: 'Pasillo', rack: 'Rack', nivel: 'Nivel', posicion: 'Posición' };
 
 /**
  * Selects en cascada: piso → pasillo → rack → nivel → posición, hasta donde

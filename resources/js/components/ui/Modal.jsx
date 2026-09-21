@@ -11,6 +11,11 @@ const sizes = {
     '3xl': 'max-w-6xl',
 };
 
+// Cuántos modales hay abiertos: el fondo solo se libera al cerrar el último. Con
+// un modal dentro de otro (los rollos de una línea de la recepción), cerrar el de
+// arriba no debe destrabar el scroll del de abajo.
+let modalesAbiertos = 0;
+
 export default function Modal({
     open,
     onClose,
@@ -27,11 +32,13 @@ export default function Modal({
             if (e.key === 'Escape') onClose();
         };
         document.addEventListener('keydown', handler);
+        modalesAbiertos += 1;
         document.body.style.overflow = 'hidden';
 
         return () => {
             document.removeEventListener('keydown', handler);
-            document.body.style.overflow = '';
+            modalesAbiertos = Math.max(0, modalesAbiertos - 1);
+            if (modalesAbiertos === 0) document.body.style.overflow = '';
         };
     }, [open, onClose]);
 

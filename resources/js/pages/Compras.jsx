@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Ban, CheckCircle2, PackageCheck, Pencil, Printer, ShoppingBag, Trash2 } from 'lucide-react';
+import { Ban, CheckCircle2, PackageCheck, PackageSearch, Pencil, Printer, ShoppingBag, Trash2 } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
@@ -9,6 +9,7 @@ import DetalleCard from '../components/ui/DetalleCard';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
 import ActionsMenu from '../components/ActionsMenu';
+import DetalleRecepcionCompra from '../components/DetalleRecepcionCompra';
 import RecepcionarCompraModal from '../components/RecepcionarCompraModal';
 import { Alert, Badge, Button, DataTable, DateRangePicker, Input, Modal, SearchSelect, Select } from '../components/ui';
 
@@ -43,6 +44,8 @@ export default function Compras() {
     const [deleting, setDeleting] = useState(false);
     const [actionId, setActionId] = useState(null);
     const [recepcionarId, setRecepcionarId] = useState(null);
+    /** La compra de la que se está viendo todo lo recibido. */
+    const [detalleRecepcionId, setDetalleRecepcionId] = useState(null);
     const [finalizarTarget, setFinalizarTarget] = useState(null);
     const [motivo, setMotivo] = useState('');
     /** Compra cuyo detalle se muestra en la segunda tabla. */
@@ -180,6 +183,9 @@ export default function Compras() {
                 <ActionsMenu
                     items={[
                         { label: 'Imprimir / PDF', icon: Printer, color: 'text-warm-600', onClick: () => setPdfTarget(row) },
+                        // Todo lo recibido de la compra: sirve también cuando ya está
+                        // recepcionada y "Recepcionar" no se puede abrir.
+                        { label: 'Ver recepción', icon: PackageSearch, color: 'text-primary-600', onClick: () => setDetalleRecepcionId(row.id) },
                         {
                             label: 'Recepcionar',
                             icon: PackageCheck,
@@ -457,6 +463,12 @@ export default function Compras() {
                 compraId={recepcionarId}
                 onClose={() => setRecepcionarId(null)}
                 onDone={load}
+            />
+
+            <DetalleRecepcionCompra
+                open={Boolean(detalleRecepcionId)}
+                compraId={detalleRecepcionId}
+                onClose={() => setDetalleRecepcionId(null)}
             />
                     <PdfViewerModal
                 open={Boolean(pdfTarget)}

@@ -9,6 +9,7 @@ use App\Models\ProductoColor;
 use App\Models\PackingListRollo;
 use App\Models\ProductoPresentacion;
 use App\Models\RecepcionCompra;
+use App\Models\Rollo;
 use App\Models\SerieDocumento;
 use App\Services\RolloService;
 use App\Services\StockService;
@@ -95,6 +96,131 @@ class RecepcionCompraController extends Controller
                 'numero' => $compra->numero,
             ],
             'lineas' => $lineas,
+        ]);
+    }
+
+    /**
+     * Todo lo que se recibió de una compra, para verlo aunque ya esté
+     * completamente recepcionada (cuando "Recepcionar" ya no se puede abrir):
+     * lo pedido y lo recibido por línea, cada recepción con sus líneas y sus
+     * rollos —quién los recibió, cuándo y dónde quedaron— y lo que sigue por
+     * recibir del packing list.
+     */
+    public function detalleDeCompra(Compra $compra)
+    {
+        $compra->load([
+            'detalles.presentacion.producto:id,codigo,nombre',
+            'detalles.color:id,nombre,codigo',
+            'proveedor:id,nombre',
+            'ordenCompra:id,codigo',
+        ]);
+
+        $pendientes = $compra->pendientePorLinea();
+        $recibidos = $compra->recibidoPorLinea();
+
+        $lineas = $compra->detalles->map(fn ($d) => [
+            'compra_detalle_id' => $d->id,
+            'codigo' => $d->presentacion?->producto?->codigo,
+            'producto' => $d->presentacion?->producto?->nombre,
+            'color' => $d->color ? ['nombre' => $d->color->nombre, 'codigo' => $d->color->codigo] : null,
+            'unidad' => $d->presentacion?->nombre,
+            'rollos' => $d->rollos ? (int) $d->rollos : null,
+            'pedida' => (float) $d->cantidad,
+            'recibida' => (float) ($recibidos[$d->id] ?? 0),
+            'finalizada' => (float) $d->cantidad_finalizada,
+            'pendiente' => (float) ($pendientes[$d->id] ?? 0),
+        ])->values();
+
+        // Quién escaneó cada rollo y a qué hora, cuando vino de un packing list.
+        $escaneos = PackingListRollo::with('usuarioEscanea:id,name')
+            ->where('compra_id', $compra->id)
+            ->get();
+        $escaneoPorCodigo = $escaneos->keyBy('codigo');
+
+        $recepciones = RecepcionCompra::with([
+            'almacen:id,nombre',
+            'usuarioRecibe:id,name',
+            'detalles.presentacion.producto:id,codigo,nombre',
+            'detalles.compraDetalle.color:id,nombre,codigo',
+            'rollos' => fn ($q) => $q->orderBy('producto_id')->orderBy('producto_color_id')->orderBy('numero'),
+            'rollos.producto:id,codigo,nombre',
+            'rollos.color:id,nombre,codigo',
+            'rollos.almacen:id,nombre',
+            'rollos.usuarioRecibe:id,name',
+            'rollos.ubicacion.padre.padre.padre.padre',
+        ])
+            ->where('compra_id', $compra->id)
+            ->orderBy('id')
+            ->get()
+            ->map(fn (RecepcionCompra $r) => [
+                'id' => $r->id,
+                'documento' => $r->documento,
+                'fecha' => $r->fecha_recepcion?->toIso8601String(),
+                'estado' => $r->estado,
+                // Una recepción deshecha devolvió su mercadería: se ve, pero no cuenta.
+                'vigente' => (bool) $r->activo,
+                'almacen' => $r->almacen?->nombre,
+                'recibe' => $r->usuarioRecibe?->name,
+                'observaciones' => $r->observaciones,
+                'detalles' => $r->detalles->map(fn ($d) => [
+                    'producto' => $d->presentacion?->producto?->nombre,
+                    'codigo' => $d->presentacion?->producto?->codigo,
+                    'color' => $d->compraDetalle?->color?->nombre,
+                    'unidad' => $d->presentacion?->nombre,
+                    'pedida' => (float) $d->cantidad_ordenada,
+                    'recibida' => (float) $d->cantidad_recibida,
+                    'conforme' => (float) $d->cantidad_conforme,
+                    'rechazada' => (float) $d->cantidad_rechazada,
+                ])->values(),
+                'rollos' => $r->rollos->map(function (Rollo $rollo) use ($escaneoPorCodigo, $r) {
+                    $fila = $escaneoPorCodigo->get($rollo->codigo);
+
+                    return [
+                        'codigo' => $rollo->codigo,
+                        'producto' => $rollo->producto?->nombre,
+                        'color' => $rollo->color
+                            ? ['nombre' => $rollo->color->nombre, 'codigo' => $rollo->color->codigo]
+                            : null,
+                        // Lo que midió al llegar; el saldo baja con cada corte.
+                        'metros' => (float) $rollo->metros_inicial,
+                        'metros_actual' => (float) $rollo->metros_actual,
+                        'peso_kg' => $rollo->peso_kg !== null ? (float) $rollo->peso_kg : null,
+                        'estado' => Rollo::ESTADOS[$rollo->estado] ?? $rollo->estado,
+                        'ubicacion' => $rollo->ubicacionLegible(),
+                        'recibio' => $rollo->usuarioRecibe?->name
+                            ?? $fila?->usuarioEscanea?->name
+                            ?? $r->usuarioRecibe?->name,
+                        'hora' => ($fila?->escaneado_at ?? $r->fecha_recepcion)?->toIso8601String(),
+                    ];
+                })->values(),
+            ])
+            ->values();
+
+        $vigentes = $recepciones->where('vigente', true);
+        $rollosRecibidos = $vigentes->flatMap(fn ($r) => $r['rollos']);
+
+        return response()->json([
+            'compra' => [
+                'id' => $compra->id,
+                'numero_compra' => $compra->numero_compra,
+                'estado' => $compra->estado,
+                'finalizado' => (bool) $compra->finalizado,
+                'motivo_finalizacion' => $compra->motivo_finalizacion,
+                'orden' => $compra->ordenCompra?->codigo,
+                'proveedor' => $compra->proveedor?->nombre,
+            ],
+            'lineas' => $lineas,
+            'recepciones' => $recepciones,
+            // Lo que el proveedor dijo que mandaba y todavía no ingresó al almacén.
+            'por_recibir' => $escaneos
+                ->where('estado', '!=', PackingListRollo::REGISTRADO)
+                ->map(fn ($f) => $this->filaPackingList($f->loadMissing('color:id,nombre,codigo')))
+                ->values(),
+            'resumen' => [
+                'recepciones' => $vigentes->count(),
+                'rollos' => $rollosRecibidos->count(),
+                'metros' => round((float) $rollosRecibidos->sum('metros'), 2),
+            ],
         ]);
     }
 

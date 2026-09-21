@@ -111,6 +111,7 @@ Route::middleware('auth:api')->group(function () {
     Route::post('recepciones-compra/leer-packing-list', [RecepcionCompraController::class, 'leerPackingList']);
     // El almacén escanea cada rollo al recibirlo (y puede deshacer un error).
     Route::post('recepciones-compra/escanear', [RecepcionCompraController::class, 'escanearRollo']);
+    Route::get('compras/{compra}/recepciones', [RecepcionCompraController::class, 'detalleDeCompra']);
     Route::post('recepciones-compra/quitar-escaneo', [RecepcionCompraController::class, 'quitarEscaneo']);
 
     // Inventario

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Package, PackageSearch, Plus, RotateCcw, Search, Warehouse, X } from 'lucide-react';
 import api, { asList } from '../lib/api';
+import { tipoUnidad } from '../lib/unidades';
 import { Button, Modal, SearchSelect, Select, Spinner } from './ui';
 
 /** Minúsculas y sin tildes, para que "nunez" encuentre "Nuñez". */
@@ -99,6 +100,11 @@ export default function ProductoPickerModal({
     existencias = null,
     /** Almacén de la venta, para resaltarlo entre los demás. */
     almacenId = null,
+    /**
+     * "rollo" | "metro" | null: la unidad con la que se viene pidiendo. Cada
+     * fila la propone por defecto, sin obligar: se puede cambiar por producto.
+     */
+    unidadPreferida = null,
     title = 'Buscar producto',
 }) {
     const [filtros, setFiltros] = useState(filtrosVacios);
@@ -220,14 +226,30 @@ export default function ProductoPickerModal({
         [],
     );
 
-    /** Unidad activa de una fila (la elegida o la primera disponible). */
+    /**
+     * Unidad activa de una fila: la que se eligió a mano; si no, la que se
+     * viene usando en el pedido (si esta tela la tiene); y si no, la primera.
+     */
     const unidadDe = useCallback(
         (producto) => {
             const presentaciones = presentacionesDe(producto);
-            const id = unidades[String(producto.id)] ?? String(presentaciones[0]?.id ?? '');
+            const elegida = unidades[String(producto.id)];
+            const propuesta = unidadPreferida
+                ? presentaciones.find((pres) => tipoUnidad(pres) === unidadPreferida)
+                : null;
+            const id = elegida ?? String(propuesta?.id ?? presentaciones[0]?.id ?? '');
             return presentaciones.find((pres) => String(pres.id) === String(id)) ?? null;
         },
-        [presentacionesDe, unidades],
+        [presentacionesDe, unidades, unidadPreferida],
+    );
+
+    /** El color filtrado, tal como lo tiene este producto (para llevarlo al pedido). */
+    const colorFiltradoDe = useCallback(
+        (producto) =>
+            filtros.color
+                ? ((producto.colores ?? []).find((c) => normalize(c.nombre) === filtros.color) ?? null)
+                : null,
+        [filtros.color],
     );
 
     const resultados = useMemo(() => {
@@ -297,8 +319,9 @@ export default function ProductoPickerModal({
                     producto,
                     presentacion: unidadDe(producto),
                     cantidad: Number(cantidades[String(producto.id)] ?? 1) || 1,
+                    color: colorFiltradoDe(producto),
                 })),
-        [marcados, productos, unidadDe, cantidades],
+        [marcados, productos, unidadDe, cantidades, colorFiltradoDe],
     );
 
     const alternar = (producto) => {
@@ -330,7 +353,12 @@ export default function ProductoPickerModal({
     };
 
     const elegirUno = (producto) => {
-        onSelect?.(producto, unidadDe(producto), Number(cantidades[String(producto.id)] ?? 1) || 1);
+        onSelect?.(
+            producto,
+            unidadDe(producto),
+            Number(cantidades[String(producto.id)] ?? 1) || 1,
+            colorFiltradoDe(producto),
+        );
         onClose?.();
     };
 

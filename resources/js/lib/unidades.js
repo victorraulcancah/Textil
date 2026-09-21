@@ -14,6 +14,18 @@ export const buscarUnidad = (unidades, id) =>
     unidades.find((u) => String(u.id) === String(id)) ?? null;
 
 /**
+ * "rollo", "metro" o null. Sirve para recordar qué unidad se viene usando en un
+ * pedido y proponerla en el siguiente producto que se agregue, sin forzar
+ * nada: cada línea la puede cambiar por su cuenta.
+ */
+export const tipoUnidad = (presentacion) => {
+    if (!presentacion) return null;
+    if ((presentacion.unidad_base?.abreviatura ?? '').toLowerCase() === 'm') return 'metro';
+    if (/rollo/i.test(presentacion.nombre ?? '')) return 'rollo';
+    return null;
+};
+
+/**
  * Cuánto vale un formato de venta, en unidades canónicas de su familia.
  * El envase de compra es un caso aparte: vale lo que el usuario dijo que trae
  * (un saco no son "1 gramos", son los 50 kg que le cargamos).

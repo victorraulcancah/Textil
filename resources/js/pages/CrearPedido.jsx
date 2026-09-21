@@ -6,6 +6,7 @@ import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import ProductoPickerModal from '../components/ProductoPickerModal';
+import { tipoUnidad } from '../lib/unidades';
 import { Alert, Button, Input, SearchSelect, Select, Spinner } from '../components/ui';
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
@@ -13,18 +14,6 @@ const money = (n) =>
     new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(n) || 0);
 
 const hoy = () => new Date().toISOString().slice(0, 10);
-
-/**
- * "Rollo", "Metro" o null. Sirve para recordar qué unidad se viene usando y
- * proponerla en el siguiente producto que se agregue, sin forzar nada: cada
- * línea la puede cambiar por su cuenta.
- */
-const tipoUnidad = (presentacion) => {
-    if (!presentacion) return null;
-    if ((presentacion.unidad_base?.abreviatura ?? '').toLowerCase() === 'm') return 'metro';
-    if (/rollo/i.test(presentacion.nombre ?? '')) return 'rollo';
-    return null;
-};
 
 /**
  * Alta y edición del pedido: lo que pide el cliente.
@@ -289,9 +278,13 @@ export default function CrearPedido() {
         setLineas((prev) => {
             const next = [...prev];
 
-            utiles.forEach(({ producto, presentacion, cantidad }) => {
+            utiles.forEach(({ producto, presentacion, cantidad, color }) => {
+                // Un mismo formato en otro color es otra línea: el almacén
+                // verifica que el rollo escaneado sea del color pedido.
                 const i = next.findIndex(
-                    (l) => String(l.producto_presentacion_id) === String(presentacion.id),
+                    (l) =>
+                        String(l.producto_presentacion_id) === String(presentacion.id) &&
+                        String(l.producto_color_id || '') === String(color?.id ?? ''),
                 );
 
                 if (i !== -1) {
@@ -304,7 +297,10 @@ export default function CrearPedido() {
 
                 next.push({
                     producto_presentacion_id: String(presentacion.id),
+                    // El color que se filtró en el buscador viaja con la línea.
+                    producto_color_id: color ? String(color.id) : '',
                     producto: producto.nombre,
+                    color: color?.nombre ?? '',
                     presentacion: presentacion.nombre,
                     descripcion: '',
                     cantidad: String(cantidad),
@@ -314,6 +310,10 @@ export default function CrearPedido() {
 
             return next;
         });
+
+        // La unidad con la que se viene pidiendo queda propuesta para lo siguiente.
+        const tipo = tipoUnidad(utiles[utiles.length - 1].presentacion);
+        if (tipo) setUnidadPreferida(tipo);
 
         setPicker((prev) => ({ ...prev, open: false }));
         toast.success(
@@ -723,6 +723,7 @@ export default function CrearPedido() {
                 multiple
                 productos={productos}
                 stockPorProducto={stockPorProducto}
+                unidadPreferida={unidadPreferida}
                 bloquearSinStock={false}
                 // Stock de cada almacén y por color, sin códigos de rollo.
                 existencias={existencias}

@@ -38,8 +38,14 @@ export const tamanoVenta = (unidades, unidadId, compra) => {
  *
  * Devuelve la unidad base (el formato más pequeño que se vende), cuántas
  * unidades base trae una compra, el costo unitario y las filas ya valorizadas.
+ *
+ * `tasa` convierte la moneda en que se compra a la moneda en que se vende
+ * (1 si es la misma; el tipo de cambio si se compra en dólares y se vende en
+ * soles; null si son distintas y todavía no hay tipo de cambio). El precio de
+ * compra se guarda en la moneda de compra, tal cual; el % de ganancia se aplica
+ * sobre el costo ya convertido, para no sumar dólares con soles.
  */
-export const calcularPresentaciones = ({ unidades, compra, ventas }) => {
+export const calcularPresentaciones = ({ unidades, compra, ventas, tasa = 1 }) => {
     const conTamano = ventas
         .filter((v) => v.unidad_id)
         .map((v) => ({ ...v, tamano: tamanoVenta(unidades, v.unidad_id, compra) }))
@@ -62,13 +68,17 @@ export const calcularPresentaciones = ({ unidades, compra, ventas }) => {
     const filas = conTamano.map((v) => {
         const factor = v.tamano / menor.tamano;
         const compraFila = costoBase * factor;
+        // Lo mismo, pero en la moneda en que se vende; null si falta el tipo de cambio.
+        const costoEnVenta = tasa == null ? null : compraFila * tasa;
         const margen = v.margen === '' || v.margen == null ? null : Number(v.margen);
-        const ventaCalculada = margen == null ? null : compraFila * (1 + margen / 100);
+        const ventaCalculada =
+            margen == null || costoEnVenta == null ? null : costoEnVenta * (1 + margen / 100);
 
         return {
             unidad_id: v.unidad_id,
             factor,
             precio_compra: compraFila,
+            costo_en_venta: costoEnVenta,
             precio_venta: v.precio_venta !== '' && v.precio_venta != null
                 ? Number(v.precio_venta)
                 : (ventaCalculada ?? 0),

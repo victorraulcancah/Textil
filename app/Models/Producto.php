@@ -55,6 +55,9 @@ class Producto extends Model
         // PEN, aunque sea la misma tela.
         'moneda_compra',
         'moneda_venta',
+        // Tipo de cambio con el que se calcularon los precios cuando esas dos
+        // monedas son distintas.
+        'tipo_cambio',
         'stock_minimo',
         'stock_maximo',
         'activo',

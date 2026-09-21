@@ -71,6 +71,7 @@ class ProductoResource extends JsonResource
             'precio_base' => $this->precio_base,
             'moneda_compra' => $this->moneda_compra ?? 'PEN',
             'moneda_venta' => $this->moneda_venta ?? 'PEN',
+            'tipo_cambio' => $this->tipo_cambio !== null ? (float) $this->tipo_cambio : null,
             'stock_minimo' => $this->stock_minimo,
             'stock_maximo' => $this->stock_maximo,
             'activo' => $this->activo,

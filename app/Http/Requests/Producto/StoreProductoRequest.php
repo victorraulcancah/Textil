@@ -78,6 +78,7 @@ class StoreProductoRequest extends FormRequest
             'precio_base' => 'nullable|numeric|min:0',
             'moneda_compra' => 'nullable|in:PEN,USD',
             'moneda_venta' => 'nullable|in:PEN,USD',
+            'tipo_cambio' => 'nullable|numeric|min:0.0001',
             'stock_minimo' => 'nullable|numeric|min:0',
             'stock_maximo' => 'nullable|numeric|min:0',
             'activo' => 'boolean',

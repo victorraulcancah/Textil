@@ -51,6 +51,9 @@ const emptyProducto = {
     // diferir: las compras al exterior son en dólares, las ventas en soles.
     moneda_compra: 'PEN',
     moneda_venta: 'PEN',
+    // Solo cuando esas dos monedas difieren: cuántos soles vale un dólar al
+    // calcular el precio de venta y la ganancia.
+    tipo_cambio: '',
 };
 
 /** Pestañas del modal: el formulario es largo y se parte por temas. */
@@ -80,7 +83,7 @@ const PESTANA_DEL_CAMPO = {
         'unidad_medida_id', 'unidad_base_id', 'unidad_compra_id',
         'factor_compra_base', 'presentaciones', 'stock_minimo', 'stock_maximo',
         // Nombres que usa la validación del propio formulario.
-        'compra_unidad', 'compra_cantidad', 'compra_contenido', 'ventas',
+        'compra_unidad', 'compra_cantidad', 'compra_contenido', 'ventas', 'tipo_cambio',
     ],
 };
 
@@ -281,6 +284,7 @@ export default function Productos() {
             propiedades: prod.propiedades ?? '',
             moneda_compra: prod.moneda_compra || 'PEN',
             moneda_venta: prod.moneda_venta || 'PEN',
+            tipo_cambio: prod.tipo_cambio != null ? String(prod.tipo_cambio) : '',
         });
         setTab('general');
         // Se reconstruye "compro / vendo" desde lo guardado.
@@ -399,14 +403,28 @@ export default function Productos() {
         ? `1 ${unidadNombre(compra.unidad_compra_id).toLowerCase()}`
         : 'cada uno';
 
+    // Compra y venta en monedas distintas (dólares → soles): el costo hay que
+    // convertirlo antes de aplicarle el % de ganancia, o se suman dólares con soles.
+    const monedasDistintas = form.moneda_compra !== form.moneda_venta;
+    const tipoCambio = Number(form.tipo_cambio) > 0 ? Number(form.tipo_cambio) : null;
+    // Cuánto vale 1 de la moneda de compra en la moneda de venta; null = falta el dato.
+    const tasa = !monedasDistintas
+        ? 1
+        : tipoCambio == null
+          ? null
+          : form.moneda_compra === 'USD'
+            ? tipoCambio
+            : 1 / tipoCambio;
+
     const calculo = useMemo(
-        () => calcularPresentaciones({ unidades, compra, ventas }),
-        [unidades, compra, ventas],
+        () => calcularPresentaciones({ unidades, compra, ventas, tasa }),
+        [unidades, compra, ventas, tasa],
     );
 
     const filaDe = (unidadId) =>
         calculo.filas.find((f) => String(f.unidad_id) === String(unidadId)) ?? null;
-    const costoDe = (unidadId) => filaDe(unidadId)?.precio_compra ?? 0;
+    // Lo que cuesta, en la moneda en que se vende: sobre eso se calcula el margen.
+    const costoDe = (unidadId) => filaDe(unidadId)?.costo_en_venta ?? 0;
     /** Number -> texto sin ceros de relleno: 3.5 y 0.0035, no 3.5000. */
     const conDecimales = (n) => String(+Number(n).toFixed(4));
 
@@ -424,6 +442,17 @@ export default function Productos() {
         const repetidas = ventas.map((v) => String(v.unidad_id)).filter(Boolean);
         if (new Set(repetidas).size !== repetidas.length) {
             next.ventas = 'Hay formatos de venta repetidos';
+        }
+        // Sin tipo de cambio no hay cómo sugerir el precio: o se escribe la tasa
+        // o cada formato lleva su precio a mano. Guardar un 0 en silencio dejaría
+        // la tela a la venta gratis.
+        if (monedasDistintas && tipoCambio == null) {
+            const sinPrecio = ventas
+                .filter((v) => v.unidad_id)
+                .some((v) => !(Number(v.precio_venta) > 0));
+            if (sinPrecio) {
+                next.tipo_cambio = `Compras en ${form.moneda_compra} y ventas en ${form.moneda_venta}: escribe el tipo de cambio o el precio de venta de cada formato`;
+            }
         }
         setErrors(next);
 
@@ -490,6 +519,8 @@ export default function Productos() {
             propiedades: str(form.propiedades),
             moneda_compra: form.moneda_compra || 'PEN',
             moneda_venta: form.moneda_venta || 'PEN',
+            // Solo tiene sentido con monedas distintas; si no, se limpia.
+            tipo_cambio: monedasDistintas ? (tipoCambio ?? null) : null,
             presentaciones: buildPresentaciones(),
             colores: colores
                 .filter((c) => c.nombre.trim())
@@ -713,7 +744,7 @@ export default function Productos() {
                 const precios = (row.presentaciones ?? [])
                     .map((p) => Number(p.precio_venta) || 0)
                     .filter((n) => n > 0);
-                return precios.length ? money(Math.min(...precios)) : <span className="text-gray-400">—</span>;
+                return precios.length ? money(Math.min(...precios), row.moneda_venta) : <span className="text-gray-400">—</span>;
             },
         },
         {
@@ -1625,13 +1656,29 @@ export default function Productos() {
                                 {errors.ventas}
                             </Alert>
                         )}
-                        {form.moneda_compra !== form.moneda_venta && (
-                            <Alert variant="info" className="mb-2">
-                                Compras en {form.moneda_compra} y vendes en {form.moneda_venta}: la columna "Ganas"
-                                de esta tabla resta las dos cifras tal cual, sin convertir. Es solo de referencia —
-                                la ganancia real de cada compra se calcula con el tipo de cambio del día al
-                                recepcionarla.
-                            </Alert>
+                        {monedasDistintas && (
+                            <div className="mb-2 rounded-md bg-blue-50 p-3 ring-1 ring-inset ring-blue-200">
+                                <div className="flex flex-wrap items-end gap-3">
+                                    <div className="w-44">
+                                        <Input
+                                            label="Tipo de cambio (1 USD = S/)"
+                                            type="number"
+                                            step="0.0001"
+                                            min="0"
+                                            placeholder="3.7500"
+                                            value={form.tipo_cambio}
+                                            onChange={setField('tipo_cambio')}
+                                            error={errors.tipo_cambio}
+                                        />
+                                    </div>
+                                    <p className="min-w-[16rem] flex-1 text-xs text-blue-800">
+                                        Compras en {form.moneda_compra} y vendes en {form.moneda_venta}: el costo se
+                                        convierte con este tipo de cambio antes de calcular el precio de venta y lo
+                                        que ganas. Si el tipo de cambio cambia, ajusta el precio a mano. La ganancia
+                                        real de cada compra usa el tipo de cambio de ese día al recepcionarla.
+                                    </p>
+                                </div>
+                            </div>
                         )}
                         <div className="overflow-x-auto rounded-lg border border-edge">
                             <table className="w-full min-w-[640px] text-sm">
@@ -1648,7 +1695,12 @@ export default function Productos() {
                                 <tbody>
                                     {ventas.map((v, i) => {
                                         const fila = filaDe(v.unidad_id);
-                                        const ganancia = fila ? fila.precio_venta - fila.precio_compra : 0;
+                                        // La ganancia se mide contra el costo en la moneda de venta;
+                                        // sin tipo de cambio no se puede calcular.
+                                        const ganancia =
+                                            fila && fila.costo_en_venta != null
+                                                ? fila.precio_venta - fila.costo_en_venta
+                                                : null;
                                         return (
                                             <tr key={i} className="border-t border-edge">
                                                 <td className="px-2 py-1.5">
@@ -1662,6 +1714,12 @@ export default function Productos() {
                                                 </td>
                                                 <td className="px-2 py-1.5 text-warm-600">
                                                     {fila ? money(fila.precio_compra, form.moneda_compra) : '—'}
+                                                    {/* En la moneda de venta, para comparar con el precio. */}
+                                                    {fila && monedasDistintas && fila.costo_en_venta != null && (
+                                                        <span className="block text-xs text-warm-400">
+                                                            ≈ {money(fila.costo_en_venta, form.moneda_venta)}
+                                                        </span>
+                                                    )}
                                                 </td>
                                                 <td className="px-2 py-1.5">
                                                     <input
@@ -1693,7 +1751,7 @@ export default function Productos() {
                                                     />
                                                 </td>
                                                 <td className="px-2 py-1.5 text-warm-600">
-                                                    {fila && fila.precio_compra > 0 ? (
+                                                    {fila && fila.precio_compra > 0 && ganancia != null ? (
                                                         <span
                                                             className={
                                                                 ganancia < 0 ? 'text-red-600' : 'text-green-700'
@@ -1834,8 +1892,9 @@ export default function Productos() {
                                             <tr key={pres.id}>
                                                 <td className="px-3 py-2 font-medium text-warm-900">{pres.nombre}</td>
                                                 <td className="px-3 py-2 text-right text-warm-500">{Number(pres.factor_conversion)}</td>
-                                                <td className="px-3 py-2 text-right">S/ {Number(pres.precio_compra ?? 0).toFixed(2)}</td>
-                                                <td className="px-3 py-2 text-right font-semibold text-primary-600">S/ {Number(pres.precio_venta ?? 0).toFixed(2)}</td>
+                                                {/* Cada precio en su moneda: se compra en dólares y se vende en soles. */}
+                                                <td className="px-3 py-2 text-right">{money(pres.precio_compra, detalle.moneda_compra)}</td>
+                                                <td className="px-3 py-2 text-right font-semibold text-primary-600">{money(pres.precio_venta, detalle.moneda_venta)}</td>
                                             </tr>
                                         ))}
                                     </tbody>

@@ -278,6 +278,9 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
     const filasDeLinea = (l) =>
         filasPL.filter((f) => f.compra_detalle_id === l.compra_detalle_id && f.estado !== 'registrado');
     const escaneadosDe = (l) => filasDeLinea(l).filter((f) => f.estado === 'recibido');
+    /** Los rollos de una línea que ya ingresaron al almacén en una recepción anterior. */
+    const registradosDe = (l) =>
+        filasPL.filter((f) => f.compra_detalle_id === l.compra_detalle_id && f.estado === 'registrado');
     const nombreLinea = (id) => lineas.find((l) => l.compra_detalle_id === id)?.producto ?? '—';
     /** Escribe un campo de los rollos de una línea (color, metrajes, ubicación…). */
     const setCapDe = (clave) => (campo, valor) =>
@@ -742,15 +745,15 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
                                                         />
                                                     )}
                                                 </td>
-                                                {/* Los rollos de la línea y dónde se guardan, en su propio
-                                                    modal: el punto verde avisa que ya tiene datos. */}
+                                                {/* Ver recepción: los rollos de la línea y dónde se guardan,
+                                                    en su propio modal. El punto verde avisa que ya tiene datos. */}
                                                 <td className="px-3 py-2 text-center">
                                                     {porRollos ? (
                                                         <button
                                                             type="button"
                                                             onClick={() => setLineaRollosId(clave)}
-                                                            aria-label={`Rollos y ubicación de ${l.producto}`}
-                                                            title={enLista.length > 0 ? 'Ver rollos e indicar ubicación' : 'Capturar rollos y ubicación'}
+                                                            aria-label={`Ver recepción de ${l.producto}`}
+                                                            title="Ver recepción"
                                                             className="relative rounded-md p-1.5 text-primary-600 transition hover:bg-primary-50 hover:text-primary-700"
                                                         >
                                                             <ClipboardList className="h-4 w-4" />
@@ -786,6 +789,7 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
                     cap={rollosPorLinea[String(lineaAbierta.compra_detalle_id)]}
                     setCap={setCapDe(String(lineaAbierta.compra_detalle_id))}
                     enLista={filasDeLinea(lineaAbierta)}
+                    registrados={registradosDe(lineaAbierta)}
                     almacenId={form.almacen_id}
                     arbolUbicaciones={arbolUbicaciones}
                     onClose={() => setLineaRollosId(null)}
@@ -810,7 +814,7 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
  * packing list sus rollos ya vienen cargados y aquí solo se indica la
  * ubicación; sin él, se capturan a mano (color, código y metrajes).
  */
-function RollosDeLineaModal({ linea, cap, setCap, enLista, almacenId, arbolUbicaciones, onClose }) {
+function RollosDeLineaModal({ linea, cap, setCap, enLista, registrados = [], almacenId, arbolUbicaciones, onClose }) {
     const leidos = rollosDe(cap);
 
     return (
@@ -818,7 +822,7 @@ function RollosDeLineaModal({ linea, cap, setCap, enLista, almacenId, arbolUbica
             open
             onClose={onClose}
             size="xl"
-            title={`Rollos de ${linea.producto}${linea.color ? ` · ${linea.color.nombre}` : ''}`}
+            title={`Ver recepción · ${linea.producto}${linea.color ? ` · ${linea.color.nombre}` : ''}`}
             description="Los rollos de esta línea y dónde se guardan."
             footer={<Button onClick={onClose}>Listo</Button>}
         >
@@ -912,6 +916,39 @@ function RollosDeLineaModal({ linea, cap, setCap, enLista, almacenId, arbolUbica
                                 Un rollo por línea. Si pones dos números, el segundo es el peso en kilos.
                             </p>
                         </div>
+                    </div>
+                )}
+
+                {/* Lo que de esta línea ya ingresó al almacén en recepciones anteriores. */}
+                {registrados.length > 0 && (
+                    <div>
+                        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-warm-500">
+                            Ya ingresaron al almacén · {registrados.length} ·{' '}
+                            {num(registrados.reduce((a, f) => a + f.metros, 0))} m
+                        </p>
+                        <div className="overflow-x-auto rounded-lg border border-edge">
+                            <table className="w-full min-w-[460px] text-sm">
+                                <tbody className="divide-y divide-gray-100">
+                                    {registrados.map((f) => (
+                                        <tr key={f.id}>
+                                            <td className="px-3 py-2 font-mono text-xs font-semibold text-warm-900">{f.codigo}</td>
+                                            <td className="px-3 py-2 text-right">{num(f.metros)} m</td>
+                                            <td className="px-3 py-2 text-right text-warm-600">
+                                                {f.peso_kg != null ? `${num(f.peso_kg)} kg` : '—'}
+                                            </td>
+                                            <td className="px-3 py-2">
+                                                <Badge variant={ESTADO_ROLLO.registrado.variant}>
+                                                    {ESTADO_ROLLO.registrado.label}
+                                                </Badge>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        <p className="mt-1 text-xs text-warm-400">
+                            Dónde quedó cada uno se ve en Compras → Ver recepción.
+                        </p>
                     </div>
                 )}
 

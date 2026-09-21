@@ -186,7 +186,8 @@ class RecepcionCompraController extends Controller
                         'metros_actual' => (float) $rollo->metros_actual,
                         'peso_kg' => $rollo->peso_kg !== null ? (float) $rollo->peso_kg : null,
                         'estado' => Rollo::ESTADOS[$rollo->estado] ?? $rollo->estado,
-                        'ubicacion' => $rollo->ubicacionLegible(),
+                        // Separada en piso, pasillo, rack, nivel y posición.
+                        'ubicacion' => $rollo->ubicacionDetallada(),
                         'recibio' => $rollo->usuarioRecibe?->name
                             ?? $fila?->usuarioEscanea?->name
                             ?? $r->usuarioRecibe?->name,

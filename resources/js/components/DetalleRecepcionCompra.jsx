@@ -32,6 +32,15 @@ const ESTADO_PACKING = {
     recibido: { label: 'Escaneado', variant: 'green' },
 };
 
+/** Los niveles de la ubicación en el almacén, de arriba abajo. */
+const NIVELES_UBICACION = [
+    ['piso', 'Piso'],
+    ['pasillo', 'Pasillo'],
+    ['rack', 'Rack'],
+    ['nivel', 'Nivel'],
+    ['posicion', 'Posición'],
+];
+
 const colorTexto = (c) => (c ? (c.codigo ? `${c.nombre} (${c.codigo})` : c.nombre) : '—');
 
 /** Encabezado de las tablas de este detalle. */
@@ -255,14 +264,16 @@ export default function DetalleRecepcionCompra({ open, onClose, compraId }) {
                                                     {num(r.rollos.reduce((a, x) => a + x.metros, 0))} m
                                                 </p>
                                                 <div className="overflow-x-auto rounded-lg border border-edge">
-                                                    <table className="w-full min-w-[820px] text-sm">
+                                                    <table className="w-full min-w-[1120px] text-sm">
                                                         <thead>
                                                             <tr className={TablaCabecera}>
                                                                 <Th>Rollo</Th>
-                                                                <Th>Color</Th>
+                                                                <Th>Producto</Th>
                                                                 <Th derecha>Metros</Th>
                                                                 <Th derecha>Peso neto</Th>
-                                                                <Th>Ubicación</Th>
+                                                                {NIVELES_UBICACION.map(([nivel, etiqueta]) => (
+                                                                    <Th key={nivel}>{etiqueta}</Th>
+                                                                ))}
                                                                 <Th>Recibió</Th>
                                                                 <Th>Hora</Th>
                                                                 <Th>Estado</Th>
@@ -275,7 +286,10 @@ export default function DetalleRecepcionCompra({ open, onClose, compraId }) {
                                                                         {x.codigo}
                                                                     </td>
                                                                     <td className="px-3 py-2 text-warm-600">
-                                                                        {colorTexto(x.color)}
+                                                                        <span className="block font-medium text-warm-900">
+                                                                            {x.producto ?? '—'}
+                                                                        </span>
+                                                                        <span className="text-xs">{colorTexto(x.color)}</span>
                                                                     </td>
                                                                     <td className="px-3 py-2 text-right text-warm-900">
                                                                         {num(x.metros)} m
@@ -288,9 +302,11 @@ export default function DetalleRecepcionCompra({ open, onClose, compraId }) {
                                                                     <td className="px-3 py-2 text-right text-warm-600">
                                                                         {x.peso_kg != null ? `${num(x.peso_kg)} kg` : '—'}
                                                                     </td>
-                                                                    <td className="px-3 py-2 text-warm-600">
-                                                                        {x.ubicacion || '—'}
-                                                                    </td>
+                                                                    {NIVELES_UBICACION.map(([nivel]) => (
+                                                                        <td key={nivel} className="px-3 py-2 text-warm-600">
+                                                                            {x.ubicacion?.[nivel] ?? '—'}
+                                                                        </td>
+                                                                    ))}
                                                                     <td className="px-3 py-2 text-warm-600">{x.recibio ?? '—'}</td>
                                                                     <td className="px-3 py-2 text-warm-500">
                                                                         {fechaHora(x.hora)}

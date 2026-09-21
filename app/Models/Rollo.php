@@ -190,4 +190,44 @@ class Rollo extends Model
 
         return $partes ? implode(' / ', $partes) : 'Sin ubicación';
     }
+
+    /**
+     * La ubicación separada por nivel —piso, pasillo, rack, nivel, posición—,
+     * para mostrarla en columnas en vez de un solo texto donde no se distingue
+     * qué es cada parte. Sale del árbol del almacén si el rollo tiene un punto
+     * elegido ahí (subiendo por sus padres), o de los campos de texto de siempre
+     * si no.
+     *
+     * @return array{almacen: ?string, piso: ?string, pasillo: ?string, rack: ?string, nivel: ?string, posicion: ?string}
+     */
+    public function ubicacionDetallada(): array
+    {
+        $detalle = [
+            'almacen' => $this->almacen?->nombre,
+            'piso' => null,
+            'pasillo' => null,
+            'rack' => null,
+            'nivel' => null,
+            'posicion' => null,
+        ];
+
+        if ($this->almacen_ubicacion_id) {
+            $nodo = $this->relationLoaded('ubicacion') ? $this->ubicacion : $this->ubicacion()->first();
+
+            while ($nodo) {
+                if (array_key_exists($nodo->tipo, $detalle)) {
+                    $detalle[$nodo->tipo] = $nodo->nombre;
+                }
+                $nodo = $nodo->padre;
+            }
+
+            return $detalle;
+        }
+
+        foreach (['pasillo', 'rack', 'nivel', 'posicion'] as $campo) {
+            $detalle[$campo] = $this->{$campo} ?: null;
+        }
+
+        return $detalle;
+    }
 }

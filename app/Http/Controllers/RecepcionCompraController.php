@@ -40,7 +40,13 @@ class RecepcionCompraController extends Controller
      */
     public function pendientesDeCompra(Compra $compra)
     {
-        $compra->load(['detalles.presentacion.producto.marca', 'detalles.presentacion.producto.colores', 'proveedor:id,nombre', 'ordenCompra:id,codigo']);
+        $compra->load([
+            'detalles.presentacion.producto.marca',
+            'detalles.presentacion.producto.colores',
+            'detalles.color:id,nombre,codigo',
+            'proveedor:id,nombre',
+            'ordenCompra:id,codigo',
+        ]);
 
         $pendientes = $compra->pendientePorLinea();
         $recibidos = $compra->recibidoPorLinea();
@@ -58,6 +64,14 @@ class RecepcionCompraController extends Controller
             'codigo' => $d->presentacion?->producto?->codigo,
             'marca' => $d->presentacion?->producto?->marca?->nombre,
             'unidad' => $d->presentacion?->nombre,
+            // Lo que la compra ya dice de esta línea: la recepción lo muestra en
+            // vez de volver a pedirlo (el color con el que se compró, cuántos
+            // rollos se pidieron).
+            'color_id' => $d->producto_color_id,
+            'color' => $d->color
+                ? ['id' => $d->color->id, 'nombre' => $d->color->nombre, 'codigo' => $d->color->codigo]
+                : null,
+            'rollos' => $d->rollos ? (int) $d->rollos : null,
             'costo_unitario' => (float) $d->costo_unitario,
             'cantidad_pedida' => (float) $d->cantidad,
             'cantidad_recibida' => $recibidos[$d->id] ?? 0,
@@ -72,6 +86,8 @@ class RecepcionCompraController extends Controller
                 // La orden con la que se pidió (KET-001-26): así el almacén
                 // reconoce de qué envío se trata.
                 'orden' => $compra->ordenCompra?->codigo,
+                // En la que se pactó: los costos de las líneas vienen en ella.
+                'moneda' => $compra->moneda_origen ?: 'PEN',
                 'proveedor_id' => $compra->proveedor_id,
                 'proveedor' => $compra->proveedor?->nombre,
                 'tipo_documento' => $compra->tipo_documento,

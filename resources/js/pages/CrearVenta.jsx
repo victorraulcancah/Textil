@@ -728,22 +728,22 @@ export default function CrearVenta() {
                                             className="block w-full rounded-md border-0 bg-gray-50 px-3 py-2 text-center text-sm text-gray-500 shadow-sm ring-1 ring-inset ring-gray-300"
                                         />
                                     </div>
-                                    <Select
+                                    <SearchSelect
                                         label="Unidad"
                                         value={panel.producto_presentacion_id}
                                         disabled={!panel.producto_id}
-                                        onChange={(e) =>
-                                            elegirUnidad(e.target.value)
+                                        clearable={false}
+                                        placeholder={
+                                            panel.producto_id ? "Elegir…" : "—"
                                         }
-                                        options={[
-                                            {
-                                                value: "",
-                                                label: panel.producto_id
-                                                    ? "Unidad…"
-                                                    : "—",
-                                            },
-                                            ...unidadesPanel,
-                                        ]}
+                                        emptyText="Sin unidades"
+                                        onChange={(id) =>
+                                            id &&
+                                            String(id) !==
+                                                String(panel.producto_presentacion_id) &&
+                                            elegirUnidad(id)
+                                        }
+                                        options={unidadesPanel}
                                     />
                                     <Input
                                         label="Cantidad"
@@ -878,20 +878,27 @@ export default function CrearVenta() {
                                                     {producto?.nombre ?? "—"}
                                                 </td>
                                                 <td className="px-3 py-2">
-                                                    <Select
+                                                    <SearchSelect
                                                         value={
                                                             it.producto_presentacion_id
                                                         }
-                                                        onChange={(e) =>
+                                                        clearable={false}
+                                                        emptyText="Sin unidades"
+                                                        onChange={(id) =>
+                                                            id &&
+                                                            String(id) !==
+                                                                String(
+                                                                    it.producto_presentacion_id,
+                                                                ) &&
                                                             cambiarUnidadItem(
                                                                 i,
-                                                                e.target.value,
+                                                                id,
                                                             )
                                                         }
                                                         options={unidadesDe(
                                                             it.producto_id,
                                                         )}
-                                                        aria-label="Unidad"
+                                                        className="min-w-[120px]"
                                                     />
                                                 </td>
                                                 <td className="px-3 py-2">
@@ -1030,22 +1037,23 @@ export default function CrearVenta() {
                                     </p>
                                 )}
                             </div>
-                            <Select
+                            <SearchSelect
                                 label="Almacén"
                                 value={form.almacen_id}
                                 // Cambiar de almacén invalida los productos ya elegidos.
-                                onChange={(e) => {
-                                    setField("almacen_id", e.target.value);
+                                onChange={(id) => {
+                                    // Elegir el mismo almacén no vacía lo ya cargado.
+                                    if ((id ?? "") === String(form.almacen_id ?? "")) return;
+                                    setField("almacen_id", id ?? "");
                                     setItems([]);
                                     limpiarPanel();
                                 }}
-                                options={[
-                                    { value: "", label: "Selecciona…" },
-                                    ...opcionesAlmacen(
-                                        almacenes,
-                                        form.almacen_id,
-                                    ),
-                                ]}
+                                placeholder="Seleccione un almacén"
+                                emptyText="Sin coincidencias"
+                                options={opcionesAlmacen(
+                                    almacenes,
+                                    form.almacen_id,
+                                )}
                             />
                             <Select
                                 label="Tipo de pago"

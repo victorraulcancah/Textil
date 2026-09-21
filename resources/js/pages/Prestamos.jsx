@@ -655,15 +655,15 @@ export default function Prestamos() {
                                             searchTitle="Buscador avanzado con filtros"
                                             onSearch={(q) => setPicker({ open: true, query: q })}
                                         />
-                                        <Select
+                                        <SearchSelect
                                             label="Unidad"
                                             value={panel.producto_presentacion_id}
                                             disabled={!panel.producto_id}
-                                            onChange={(e) => setPanel((p) => ({ ...p, producto_presentacion_id: e.target.value }))}
-                                            options={[
-                                                { value: '', label: panel.producto_id ? 'Unidad…' : '—' },
-                                                ...unidadesDe(panel.producto_id).map((u) => ({ value: u.value, label: esPrestado ? `${u.label} (disp. ${num(u.disponible)})` : u.label })),
-                                            ]}
+                                            clearable={false}
+                                            placeholder={panel.producto_id ? 'Elegir…' : '—'}
+                                            emptyText="Sin unidades"
+                                            onChange={(id) => id && setPanel((p) => ({ ...p, producto_presentacion_id: id }))}
+                                            options={unidadesDe(panel.producto_id).map((u) => ({ value: u.value, label: esPrestado ? `${u.label} (disp. ${num(u.disponible)})` : u.label }))}
                                         />
                                         <Input label="Cantidad" type="number" min="0" step="any" value={panel.cantidad}
                                             onChange={(e) => setPanel((p) => ({ ...p, cantidad: e.target.value }))} className="text-right" />

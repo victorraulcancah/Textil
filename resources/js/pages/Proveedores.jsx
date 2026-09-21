@@ -4,7 +4,26 @@ import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import PageHeader, { CreateButton } from '../components/PageHeader';
+import ConsultarDocumento from '../components/ConsultarDocumento';
 import { Alert, Badge, Button, DataTable, Input, Modal, Select } from '../components/ui';
+
+// Con qué documento se identifica un proveedor nacional: los mismos que en Clientes.
+const TIPOS_DOCUMENTO = [
+    { value: 'RUC', label: 'RUC' },
+    { value: 'DNI', label: 'DNI' },
+    { value: 'CE', label: 'Carné Ext.' },
+    { value: 'SIN', label: 'Sin documento' },
+];
+
+/** Cuántos caracteres tiene el número de cada documento. */
+const LARGO_DOCUMENTO = { RUC: 11, DNI: 8, CE: 12 };
+
+/** Solo dígitos para RUC y DNI; letras y números para el carné de extranjería. */
+const limpiarDocumento = (tipo, valor) => {
+    const texto = String(valor ?? '');
+    if (tipo === 'CE') return texto.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, LARGO_DOCUMENTO.CE);
+    return texto.replace(/\D/g, '').slice(0, LARGO_DOCUMENTO[tipo] ?? 11);
+};
 
 const emptyForm = {
     nombre: '',
@@ -15,6 +34,8 @@ const emptyForm = {
     // compra: KET-001-26. Opcional.
     codigo_corto: '',
     ruc: '',
+    // De qué documento es el número de arriba: RUC, DNI, CE o SIN.
+    tipo_documento: 'RUC',
     tax_id: '',
     pais: '',
     direccion: '',
@@ -74,6 +95,8 @@ export default function Proveedores() {
             tipo: p.tipo ?? 'nacional',
             codigo_corto: p.codigo_corto ?? '',
             ruc: p.ruc ?? '',
+            // Los proveedores anteriores al tipo se reconocen por el largo.
+            tipo_documento: p.tipo_documento ?? (p.ruc && p.ruc.length === 8 ? 'DNI' : 'RUC'),
             tax_id: p.tax_id ?? '',
             pais: p.pais ?? '',
             direccion: p.direccion ?? '',
@@ -134,6 +157,16 @@ export default function Proveedores() {
         if (formErrors[name]) setFormErrors((prev) => ({ ...prev, [name]: undefined }));
     };
 
+    /** Otro documento, otro largo: el número se ajusta y "sin documento" lo vacía. */
+    const cambiarTipoDocumento = (tipo) => {
+        setForm((prev) => ({
+            ...prev,
+            tipo_documento: tipo,
+            ruc: tipo === 'SIN' ? '' : limpiarDocumento(tipo, prev.ruc),
+        }));
+        setFormErrors((prev) => ({ ...prev, ruc: undefined, tipo_documento: undefined }));
+    };
+
     const columns = [
         {
             key: 'nombre',
@@ -158,7 +191,21 @@ export default function Proveedores() {
                 </span>
             ),
         },
-        { key: 'ruc', label: 'RUC', render: (row) => row.ruc || <span className="text-gray-400">—</span> },
+        {
+            key: 'ruc',
+            label: 'RUC / DNI',
+            render: (row) =>
+                row.ruc ? (
+                    <span>
+                        {row.tipo_documento && row.tipo_documento !== 'RUC' && (
+                            <span className="mr-1 text-xs text-warm-400">{row.tipo_documento}</span>
+                        )}
+                        {row.ruc}
+                    </span>
+                ) : (
+                    <span className="text-gray-400">—</span>
+                ),
+        },
         {
             key: 'contacto_nombre',
             label: 'Contacto',
@@ -327,9 +374,52 @@ export default function Proveedores() {
                         ))}
                     </div>
 
+                    {/* Igual que en Clientes: se elige el tipo de documento, se escribe
+                        el número y la lupa trae el nombre y la dirección de SUNAT (RUC)
+                        o de RENIEC (DNI). El nombre va debajo porque se llena solo. */}
+                    {form.tipo === 'nacional' && (
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                            <Select
+                                label="Tipo doc."
+                                value={form.tipo_documento}
+                                onChange={(e) => cambiarTipoDocumento(e.target.value)}
+                                options={TIPOS_DOCUMENTO}
+                            />
+                            <div className="flex items-end gap-2 sm:col-span-2">
+                                <Input
+                                    label="N° Documento"
+                                    className="flex-1"
+                                    inputMode={form.tipo_documento === 'CE' ? 'text' : 'numeric'}
+                                    maxLength={LARGO_DOCUMENTO[form.tipo_documento]}
+                                    disabled={form.tipo_documento === 'SIN'}
+                                    value={form.ruc}
+                                    onChange={(e) => field('ruc', limpiarDocumento(form.tipo_documento, e.target.value))}
+                                    error={formErrors.ruc}
+                                />
+                                {(form.tipo_documento === 'RUC' || form.tipo_documento === 'DNI') && (
+                                    <ConsultarDocumento
+                                        tipo={form.tipo_documento === 'RUC' ? 'ruc' : 'dni'}
+                                        numero={form.ruc}
+                                        className="mb-px shrink-0"
+                                        onResult={(d) => {
+                                            if (form.tipo_documento === 'RUC') {
+                                                field('nombre', d.razon_social ?? '');
+                                                if (d.direccion) field('direccion', d.direccion);
+                                                if (d.telefono) field('telefono', d.telefono);
+                                            } else {
+                                                field('nombre', d.nombre_completo ?? '');
+                                            }
+                                        }}
+                                    />
+                                )}
+                            </div>
+                        </div>
+                    )}
+
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <Input
                             label={form.tipo === 'extranjero' ? 'Nombre o razón social' : 'Nombre'}
+                            className={form.tipo === 'nacional' ? 'sm:col-span-2' : undefined}
                             value={form.nombre}
                             onChange={(e) => field('nombre', e.target.value)}
                             error={formErrors.nombre}
@@ -349,7 +439,7 @@ export default function Proveedores() {
                             </p>
                         </div>
 
-                        {form.tipo === 'extranjero' ? (
+                        {form.tipo === 'extranjero' && (
                             <>
                                 <Input
                                     label="Tax ID"
@@ -361,8 +451,6 @@ export default function Proveedores() {
                                 <Input label="País" value={form.pais} onChange={(e) => field('pais', e.target.value)} error={formErrors.pais} />
                                 <Input label="Fax" value={form.fax} onChange={(e) => field('fax', e.target.value)} error={formErrors.fax} />
                             </>
-                        ) : (
-                            <Input label="RUC" value={form.ruc} onChange={(e) => field('ruc', e.target.value)} error={formErrors.ruc} />
                         )}
 
                         <Input label="Contacto" value={form.contacto_nombre} onChange={(e) => field('contacto_nombre', e.target.value)} error={formErrors.contacto_nombre} />

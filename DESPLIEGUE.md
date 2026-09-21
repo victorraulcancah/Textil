@@ -188,3 +188,10 @@ va a dejar con acceso completo.
 Por si vienes de `bautista`, que está en el mismo servidor: aquí **no hay**
 worker de colas, ni servicio de WhatsApp, ni websockets. No hay ningún daemon
 que reiniciar después de desplegar. Es solo web.
+
+
+
+poner el componete reutilizable al color en crear pedido, nota de venta un select buscador.
+en pedido ocultar sub total ya que nose sabe los metrajes
+en pedido en modal de buscador de producto poner stock acumilado y por selecioanr pedida
+ver histrial de ventas en kardex

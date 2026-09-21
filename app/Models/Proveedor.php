@@ -23,6 +23,8 @@ class Proveedor extends Model
         // numeración de orden de compra: KET-001-26.
         'codigo_corto',
         'ruc',
+        // De qué documento es el número guardado en `ruc`: RUC, DNI, CE o SIN.
+        'tipo_documento',
         // Identificador tributario del proveedor extranjero: no todos usan
         // RUC peruano.
         'tax_id',

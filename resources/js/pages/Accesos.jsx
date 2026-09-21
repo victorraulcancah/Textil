@@ -5,7 +5,7 @@ import api from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
-import { Alert, Badge, Button, Select, Spinner, cn } from '../components/ui';
+import { Alert, Badge, Button, SearchSelect, Spinner, cn } from '../components/ui';
 
 /**
  * Qué puede hacer cada rol, en tres niveles: módulo → submódulo → acciones.
@@ -141,10 +141,12 @@ export default function Accesos() {
                     {/* Roles: lista en escritorio, selector en móvil */}
                     <aside className="lg:sticky lg:top-4 lg:self-start">
                         <div className="lg:hidden">
-                            <Select
+                            <SearchSelect
                                 label="Rol"
                                 value={rolId}
-                                onChange={(e) => setRolId(e.target.value)}
+                                clearable={false}
+                                onChange={(id) => id && setRolId(id)}
+                                emptyText="Sin coincidencias"
                                 options={roles.map((r) => ({ value: String(r.id), label: r.name }))}
                             />
                         </div>

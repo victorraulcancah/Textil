@@ -5,6 +5,7 @@ import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import MetodoCajaPicker from '../components/MetodoCajaPicker';
+import ColorSelect from '../components/ColorSelect';
 import ProductoPickerModal from '../components/ProductoPickerModal';
 import { Button, Input, Modal, SearchSelect, Select, Spinner } from '../components/ui';
 
@@ -593,17 +594,10 @@ export default function CrearCompra() {
                             (hilos, cierres) que no se piden por color. */}
                         {productoPanel?.colores?.length > 0 && (
                             <div className="mt-4 grid grid-cols-2 gap-4">
-                                <Select
-                                    label="Color"
+                                <ColorSelect
+                                    colores={productoPanel.colores}
                                     value={panel.producto_color_id}
-                                    onChange={(e) => setPanelCampo({ producto_color_id: e.target.value })}
-                                    options={[
-                                        { value: '', label: 'Cualquier color' },
-                                        ...productoPanel.colores.map((c) => ({
-                                            value: String(c.id),
-                                            label: c.codigo ? `${c.nombre} (${c.codigo})` : c.nombre,
-                                        })),
-                                    ]}
+                                    onChange={(id) => setPanelCampo({ producto_color_id: id })}
                                 />
                                 <Input
                                     label="Rollos"
@@ -627,15 +621,17 @@ export default function CrearCompra() {
                                     className="block w-full rounded-md border-0 bg-gray-50 px-3 py-2 text-center text-sm text-gray-500 shadow-sm ring-1 ring-inset ring-gray-300"
                                 />
                             </div>
-                            <Select
+                            <SearchSelect
                                 label="Unidad"
                                 value={panel.producto_presentacion_id}
                                 disabled={!panel.producto_id}
-                                onChange={(e) => elegirUnidad(e.target.value)}
-                                options={[
-                                    { value: '', label: panel.producto_id ? 'Unidad…' : '—' },
-                                    ...unidadesPanel,
-                                ]}
+                                clearable={false}
+                                placeholder={panel.producto_id ? 'Elegir…' : '—'}
+                                emptyText="Sin unidades"
+                                onChange={(id) =>
+                                    id && String(id) !== String(panel.producto_presentacion_id) && elegirUnidad(id)
+                                }
+                                options={unidadesPanel}
                             />
                             <Input
                                 label="Cantidad"
@@ -711,11 +707,16 @@ export default function CrearCompra() {
                                                 <td className="px-3 py-2 font-semibold text-warm-900">{producto?.nombre ?? '—'}</td>
                                                 <td className="px-3 py-2 text-warm-600">{colorItem?.nombre ?? '—'}</td>
                                                 <td className="px-3 py-2">
-                                                    <Select
+                                                    <SearchSelect
                                                         value={it.producto_presentacion_id}
-                                                        onChange={(e) => cambiarUnidadItem(i, e.target.value)}
+                                                        clearable={false}
+                                                        emptyText="Sin unidades"
+                                                        onChange={(id) =>
+                                                            id &&
+                                                            String(id) !== String(it.producto_presentacion_id) &&
+                                                            cambiarUnidadItem(i, id)
+                                                        }
                                                         options={unidadesDe(it.producto_id)}
-                                                        aria-label="Unidad"
                                                         className="min-w-[120px]"
                                                     />
                                                 </td>

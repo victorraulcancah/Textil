@@ -7,6 +7,7 @@ import Layout from '../components/Layout';
 import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
 import DetalleCard from '../components/ui/DetalleCard';
 import PageHeader, { CreateButton } from '../components/PageHeader';
+import ColorSelect from '../components/ColorSelect';
 import PdfViewerModal from '../components/PdfViewerModal';
 import ProductoPickerModal from '../components/ProductoPickerModal';
 import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select, Tabs } from '../components/ui';
@@ -896,28 +897,28 @@ export default function Transferencias() {
                                             onSearch={(q) => setPicker({ open: true, query: q })}
                                         />
                                         {coloresOrigenDe(panel.producto_id).length > 0 && (
-                                            <Select
-                                                label="Color"
+                                            <ColorSelect
+                                                colores={coloresOrigenDe(panel.producto_id)}
                                                 value={panel.producto_color_id}
-                                                onChange={(e) => setPanel((p) => ({ ...p, producto_color_id: e.target.value }))}
-                                                options={[
-                                                    { value: '', label: 'Elige…' },
-                                                    ...coloresOrigenDe(panel.producto_id).map((c) => ({
-                                                        value: String(c.id),
-                                                        label: c.codigo ? `${c.nombre} (${c.codigo}) · ${num(c.metros)} m` : `${c.nombre} · ${num(c.metros)} m`,
-                                                    })),
-                                                ]}
+                                                onChange={(id) => setPanel((p) => ({ ...p, producto_color_id: id }))}
+                                                placeholder="Elige…"
+                                                // Con los metros que hay de cada color en el origen.
+                                                describir={(c) =>
+                                                    c.codigo
+                                                        ? `${c.nombre} (${c.codigo}) · ${num(c.metros)} m`
+                                                        : `${c.nombre} · ${num(c.metros)} m`
+                                                }
                                             />
                                         )}
-                                        <Select
+                                        <SearchSelect
                                             label="Unidad"
                                             value={panel.producto_presentacion_id}
                                             disabled={!panel.producto_id}
-                                            onChange={(e) => setPanel((p) => ({ ...p, producto_presentacion_id: e.target.value }))}
-                                            options={[
-                                                { value: '', label: panel.producto_id ? 'Unidad…' : '—' },
-                                                ...unidadesDe(panel.producto_id).map((u) => ({ value: u.value, label: `${u.label} (disp. ${num(u.disponible)})` })),
-                                            ]}
+                                            clearable={false}
+                                            placeholder={panel.producto_id ? 'Elegir…' : '—'}
+                                            emptyText="Sin unidades"
+                                            onChange={(id) => id && setPanel((p) => ({ ...p, producto_presentacion_id: id }))}
+                                            options={unidadesDe(panel.producto_id).map((u) => ({ value: u.value, label: `${u.label} (disp. ${num(u.disponible)})` }))}
                                         />
                                         <Input label="Cantidad" type="number" min="0" step="any" value={panel.cantidad}
                                             onChange={(e) => setPanel((p) => ({ ...p, cantidad: e.target.value }))} className="text-right" />

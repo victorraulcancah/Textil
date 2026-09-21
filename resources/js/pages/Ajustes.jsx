@@ -1057,22 +1057,19 @@ export default function Ajustes() {
                                                                 />
                                                             </td>
                                                             <td className="px-3 py-2">
-                                                                <Select
+                                                                <SearchSelect
                                                                     value={d.producto_presentacion_id}
                                                                     disabled={!d.producto_id}
-                                                                    onChange={(e) =>
+                                                                    clearable={false}
+                                                                    placeholder={d.producto_id ? 'Elegir…' : '—'}
+                                                                    emptyText="Sin unidades"
+                                                                    onChange={(id) =>
+                                                                        id &&
                                                                         setDetalle(index, {
-                                                                            producto_presentacion_id: e.target.value,
+                                                                            producto_presentacion_id: id,
                                                                         })
                                                                     }
-                                                                    aria-label="Unidad derivada"
-                                                                    options={[
-                                                                        {
-                                                                            value: '',
-                                                                            label: d.producto_id ? 'Unidad…' : '—',
-                                                                        },
-                                                                        ...unidades,
-                                                                    ]}
+                                                                    options={unidades}
                                                                 />
                                                             </td>
                                                             <td className="px-3 py-2 text-right">

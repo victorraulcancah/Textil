@@ -1,9 +1,11 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Camera, PackageCheck, ScanLine, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Camera, Eye, PackageCheck, ScanLine, X } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { opcionesAlmacen } from '../lib/almacenes';
 import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
+import ColorSelect from './ColorSelect';
 import EscanerCamara from './EscanerCamara';
 import { Alert, Badge, Button, Input, Modal, SearchSelect, Select, Spinner, cn } from './ui';
 
@@ -72,8 +74,8 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
     const [rollosPorLinea, setRollosPorLinea] = useState({});
     /**
      * El árbol de ubicaciones del almacén elegido: piso → pasillo → rack →
-     * nivel → posición. Vacío si ese almacén todavía no lo tiene armado —
-     * ahí se sigue escribiendo la ubicación a mano, como antes.
+     * nivel → posición. Vacío si ese almacén todavía no lo tiene armado: en
+     * ese caso los rollos entran sin ubicación y se avisa dónde armarlo.
      */
     const [arbolUbicaciones, setArbolUbicaciones] = useState([]);
     const [subiendoPackingList, setSubiendoPackingList] = useState(false);
@@ -240,8 +242,17 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
         }
     };
 
-    // Cambiar de almacén trae su propio árbol de ubicaciones (o ninguno).
+    // Cambiar de almacén trae su propio árbol de ubicaciones (o ninguno), y lo
+    // que se había elegido en el anterior ya no existe en este.
     useEffect(() => {
+        setRollosPorLinea((prev) =>
+            Object.fromEntries(
+                Object.entries(prev).map(([clave, c]) => [
+                    clave,
+                    { ...c, ubicacion_seleccion: [], almacen_ubicacion_id: null },
+                ]),
+            ),
+        );
         if (!form.almacen_id) {
             setArbolUbicaciones([]);
             return;
@@ -288,14 +299,8 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
             .flatMap((l) => {
                 const clave = String(l.compra_detalle_id);
                 const cap = rollosPorLinea[clave];
-                const ubicacion = {
-                    // Dónde se guardan estos rollos dentro del almacén.
-                    almacen_ubicacion_id: cap?.almacen_ubicacion_id || null,
-                    pasillo: cap?.pasillo || null,
-                    rack: cap?.rack || null,
-                    nivel: cap?.nivel || null,
-                    posicion: cap?.posicion || null,
-                };
+                // Dónde se guardan estos rollos: un punto del árbol del almacén.
+                const ubicacion = { almacen_ubicacion_id: cap?.almacen_ubicacion_id || null };
 
                 // Con packing list cargado, entra solo lo que el almacén escaneó
                 // (un detalle por color); lo que no llegó sigue pendiente.
@@ -321,7 +326,7 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
                         ...(rollos.length
                             ? {
                                   rollos,
-                                  producto_color_id: cap.color_id || null,
+                                  producto_color_id: l.color_id || cap.color_id || null,
                                   codigo_proveedor: cap.codigo || null,
                                   ...ubicacion,
                               }
@@ -689,13 +694,38 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
                                                     <td className="px-3 py-2 text-warm-500">{l.codigo ?? '—'}</td>
                                                     <td className="px-3 py-2 font-semibold text-warm-900">
                                                         {l.producto}
+                                                        {l.color && (
+                                                            <span className="ml-1 text-xs font-normal text-warm-500">
+                                                                · {l.color.nombre}
+                                                            </span>
+                                                        )}
+                                                        {/* Lo que dice la compra de esta línea. */}
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setCap('detalle', !cap?.detalle)}
+                                                            aria-label={`Ver detalle de ${l.producto}`}
+                                                            aria-expanded={Boolean(cap?.detalle)}
+                                                            title="Ver detalle de la compra"
+                                                            className={cn(
+                                                                'ml-2 inline-flex rounded-md p-1 align-middle text-warm-500 transition hover:bg-primary-50 hover:text-primary-600',
+                                                                cap?.detalle && 'bg-primary-50 text-primary-600',
+                                                            )}
+                                                        >
+                                                            <Eye className="h-4 w-4" />
+                                                        </button>
                                                         {porRollos && (
                                                             <button
                                                                 type="button"
                                                                 onClick={() => setCap('abierto', !cap?.abierto)}
-                                                                className="ml-2 rounded-md px-1.5 py-0.5 text-xs font-medium text-primary-600 transition hover:bg-primary-50"
+                                                                className="ml-1 rounded-md px-1.5 py-0.5 text-xs font-medium text-primary-600 transition hover:bg-primary-50"
                                                             >
-                                                                {cap?.abierto ? 'Ocultar rollos' : 'Capturar rollos'}
+                                                                {enLista.length > 0
+                                                                    ? cap?.abierto
+                                                                        ? 'Ocultar ubicación'
+                                                                        : 'Indicar ubicación'
+                                                                    : cap?.abierto
+                                                                      ? 'Ocultar rollos'
+                                                                      : 'Capturar rollos'}
                                                             </button>
                                                         )}
                                                     </td>
@@ -736,6 +766,19 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
                                                     </td>
                                                 </tr>
 
+                                                {cap?.detalle && (
+                                                    <tr className="bg-gray-50">
+                                                        <td colSpan={7} className="px-3 py-3">
+                                                            <DetalleLineaCompra
+                                                                linea={l}
+                                                                compra={datos?.compra}
+                                                                enLista={enLista}
+                                                                escaneados={escaneados}
+                                                            />
+                                                        </td>
+                                                    </tr>
+                                                )}
+
                                                 {porRollos && cap?.abierto && (
                                                     <tr className="bg-gray-50">
                                                         <td colSpan={7} className="px-3 py-3">
@@ -747,17 +790,25 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
                                                                 </p>
                                                             ) : (
                                                                 <div className="grid gap-3 sm:grid-cols-[14rem_10rem_1fr]">
-                                                                    <SearchSelect
-                                                                        label="Color"
-                                                                        value={cap?.color_id ?? ''}
-                                                                        onChange={(v) => setCap('color_id', v ?? '')}
-                                                                        placeholder="Elegir color…"
-                                                                        emptyText="Sin coincidencias"
-                                                                        options={l.colores.map((c) => ({
-                                                                            value: String(c.id),
-                                                                            label: c.codigo ? `${c.nombre} (${c.codigo})` : c.nombre,
-                                                                        }))}
-                                                                    />
+                                                                    {l.color ? (
+                                                                        <div>
+                                                                            <p className="mb-1 text-sm font-medium text-warm-800">Color</p>
+                                                                            <div className="flex h-10 items-center rounded-md border border-edge bg-gray-50 px-3 text-sm text-warm-900">
+                                                                                {l.color.nombre}
+                                                                                {l.color.codigo ? ` (${l.color.codigo})` : ''}
+                                                                            </div>
+                                                                            <p className="mt-1 text-xs text-warm-400">
+                                                                                Es el color con el que se compró.
+                                                                            </p>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <ColorSelect
+                                                                            colores={l.colores}
+                                                                            value={cap?.color_id ?? ''}
+                                                                            onChange={(id) => setCap('color_id', id)}
+                                                                            placeholder="Elegir color…"
+                                                                        />
+                                                                    )}
                                                                     <div>
                                                                         <Input
                                                                             label="Código de rollo (opcional)"
@@ -791,9 +842,9 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
 
                                                             {/* Dónde se guardan. Se aplica a todos los
                                                                 rollos de esta línea; después cada uno se
-                                                                puede mover por su cuenta. Con el almacén
-                                                                ya armado en pisos, se elige de ahí; si no,
-                                                                se sigue escribiendo a mano. */}
+                                                                puede mover por su cuenta. Se elige siempre
+                                                                del árbol del almacén (piso → pasillo → rack
+                                                                → nivel → posición), no se escribe. */}
                                                             <div className="mt-3">
                                                                 <p className="mb-1 text-sm font-medium text-warm-800">
                                                                     Ubicación en el almacén{' '}
@@ -801,39 +852,28 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
                                                                         (opcional)
                                                                     </span>
                                                                 </p>
-                                                                {arbolUbicaciones.length > 0 ? (
+                                                                {!form.almacen_id ? (
+                                                                    <p className="text-sm text-warm-500">
+                                                                        Elige primero el almacén receptor para ver sus ubicaciones.
+                                                                    </p>
+                                                                ) : arbolUbicaciones.length > 0 ? (
                                                                     <CascadaUbicacion
                                                                         arbol={arbolUbicaciones}
                                                                         cap={cap}
                                                                         setCap={setCap}
                                                                     />
                                                                 ) : (
-                                                                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                                                                        <Input
-                                                                            placeholder="Pasillo"
-                                                                            aria-label="Pasillo"
-                                                                            value={cap?.pasillo ?? ''}
-                                                                            onChange={(e) => setCap('pasillo', e.target.value)}
-                                                                        />
-                                                                        <Input
-                                                                            placeholder="Rack"
-                                                                            aria-label="Rack"
-                                                                            value={cap?.rack ?? ''}
-                                                                            onChange={(e) => setCap('rack', e.target.value)}
-                                                                        />
-                                                                        <Input
-                                                                            placeholder="Nivel"
-                                                                            aria-label="Nivel"
-                                                                            value={cap?.nivel ?? ''}
-                                                                            onChange={(e) => setCap('nivel', e.target.value)}
-                                                                        />
-                                                                        <Input
-                                                                            placeholder="Posición"
-                                                                            aria-label="Posición"
-                                                                            value={cap?.posicion ?? ''}
-                                                                            onChange={(e) => setCap('posicion', e.target.value)}
-                                                                        />
-                                                                    </div>
+                                                                    <p className="text-sm text-warm-500">
+                                                                        Este almacén todavía no tiene ubicaciones armadas, así que los
+                                                                        rollos entran sin ubicación. Se arman en{' '}
+                                                                        <Link
+                                                                            to="/almacenes"
+                                                                            className="font-medium text-primary-600 hover:underline"
+                                                                        >
+                                                                            Inventario → Almacenes
+                                                                        </Link>{' '}
+                                                                        (editar el almacén y agregar sus ubicaciones).
+                                                                    </p>
                                                                 )}
                                                             </div>
 
@@ -893,6 +933,54 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
 }
 
 const ETIQUETA_NIVEL = { piso: 'Piso', pasillo: 'Pasillo', rack: 'Rack', nivel: 'Nivel', posicion: 'Posición' };
+
+/**
+ * Lo que la compra (y la orden) ya dicen de una línea, a la vista de quien
+ * recibe: qué se pidió, en qué color, cuántos rollos y a qué costo. Así no se
+ * vuelve a preguntar en la recepción lo que ya se sabe desde la orden.
+ */
+function DetalleLineaCompra({ linea, compra, enLista, escaneados }) {
+    const moneda = compra?.moneda === 'USD' ? 'USD' : 'PEN';
+    const dinero = (n) =>
+        new Intl.NumberFormat(moneda === 'USD' ? 'en-US' : 'es-PE', { style: 'currency', currency: moneda }).format(
+            Number(n) || 0,
+        );
+
+    const datos = [
+        ['Orden de compra', compra?.orden],
+        ['Compra', compra?.numero_compra],
+        ['Producto', `${linea.producto}${linea.codigo ? ` (${linea.codigo})` : ''}`],
+        [
+            'Color',
+            linea.color
+                ? `${linea.color.nombre}${linea.color.codigo ? ` (${linea.color.codigo})` : ''}`
+                : 'Sin color en la compra',
+        ],
+        [
+            'Pedido',
+            `${num(linea.cantidad_pedida)} ${linea.unidad ?? ''}${
+                linea.rollos ? ` en ${linea.rollos} rollo${linea.rollos === 1 ? '' : 's'}` : ''
+            }`.trim(),
+        ],
+        ['Costo', `${dinero(linea.costo_unitario)} por ${linea.unidad ?? 'unidad'}`],
+        ['Ya recibido', num(linea.cantidad_recibida)],
+        ['Pendiente', num(linea.pendiente)],
+        ...(enLista.length > 0
+            ? [['Packing list', `${enLista.length} rollos cargados · ${escaneados.length} escaneados`]]
+            : []),
+    ].filter(([, valor]) => valor != null && valor !== '');
+
+    return (
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4">
+            {datos.map(([etiqueta, valor]) => (
+                <div key={etiqueta}>
+                    <dt className="text-xs uppercase tracking-wide text-warm-400">{etiqueta}</dt>
+                    <dd className="text-sm font-medium text-warm-900">{valor}</dd>
+                </div>
+            ))}
+        </dl>
+    );
+}
 
 /**
  * Selects en cascada: piso → pasillo → rack → nivel → posición, hasta donde

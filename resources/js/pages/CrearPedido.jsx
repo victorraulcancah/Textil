@@ -5,9 +5,10 @@ import api, { asList } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
+import ColorSelect from '../components/ColorSelect';
 import ProductoPickerModal from '../components/ProductoPickerModal';
 import { tipoUnidad } from '../lib/unidades';
-import { Alert, Button, Input, SearchSelect, Select, Spinner } from '../components/ui';
+import { Alert, Button, Input, SearchSelect, Spinner } from '../components/ui';
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
 const money = (n) =>
@@ -440,19 +441,10 @@ export default function CrearPedido() {
                         {/* Solo si la tela tiene colores registrados: hay
                             insumos (hilos, cierres) que no se piden por color. */}
                         {producto?.colores?.length > 0 && (
-                            <Select
-                                label="Color"
+                            <ColorSelect
+                                colores={producto.colores}
                                 value={nueva.producto_color_id}
-                                onChange={(e) =>
-                                    setNueva((prev) => ({ ...prev, producto_color_id: e.target.value }))
-                                }
-                                options={[
-                                    { value: '', label: 'Cualquier color' },
-                                    ...producto.colores.map((c) => ({
-                                        value: String(c.id),
-                                        label: c.codigo ? `${c.nombre} (${c.codigo})` : c.nombre,
-                                    })),
-                                ]}
+                                onChange={(id) => setNueva((prev) => ({ ...prev, producto_color_id: id }))}
                             />
                         )}
 
@@ -467,26 +459,23 @@ export default function CrearPedido() {
                                 readOnly
                                 disabled
                             />
-                            <Select
+                            <SearchSelect
                                 label="Unidad"
                                 value={nueva.producto_presentacion_id}
-                                onChange={(e) => {
-                                    const elegida = presentaciones.find(
-                                        (p) => String(p.id) === e.target.value,
-                                    );
+                                disabled={!producto}
+                                clearable={false}
+                                placeholder={producto ? 'Elegir…' : '—'}
+                                emptyText="Sin unidades"
+                                onChange={(id) => {
+                                    if (!id) return;
+                                    const elegida = presentaciones.find((p) => String(p.id) === id);
                                     // Se cambia esta línea nada más; la
                                     // preferencia para las siguientes se
                                     // actualiza al agregarla.
-                                    setNueva((prev) => ({
-                                        ...prev,
-                                        producto_presentacion_id: e.target.value,
-                                    }));
+                                    setNueva((prev) => ({ ...prev, producto_presentacion_id: id }));
                                     if (elegida) setUnidadPreferida(tipoUnidad(elegida));
                                 }}
-                                options={[
-                                    { value: '', label: producto ? 'Elegir' : '—' },
-                                    ...presentaciones.map((p) => ({ value: String(p.id), label: p.nombre })),
-                                ]}
+                                options={presentaciones.map((p) => ({ value: String(p.id), label: p.nombre }))}
                             />
                             <Input
                                 label="Cantidad"
@@ -573,21 +562,23 @@ export default function CrearPedido() {
                                                 }
 
                                                 return (
-                                                    <Select
+                                                    <SearchSelect
                                                         value={String(l.producto_presentacion_id)}
-                                                        aria-label="Presentación"
+                                                        clearable={false}
+                                                        emptyText="Sin unidades"
                                                         // Otra presentación, otro precio: se toma el
                                                         // de venta de la nueva, igual que en la venta.
-                                                        onChange={(e) => {
+                                                        onChange={(id) => {
+                                                            if (!id || id === String(l.producto_presentacion_id)) return;
                                                             const elegida = opciones.find(
-                                                                (pr) => String(pr.id) === e.target.value,
+                                                                (pr) => String(pr.id) === id,
                                                             );
                                                             setLineas((prev) =>
                                                                 prev.map((x, j) =>
                                                                     j === i
                                                                         ? {
                                                                               ...x,
-                                                                              producto_presentacion_id: e.target.value,
+                                                                              producto_presentacion_id: id,
                                                                               presentacion: elegida?.nombre ?? x.presentacion,
                                                                               precio_unitario:
                                                                                   elegida?.precio_venta != null

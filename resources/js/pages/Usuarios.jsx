@@ -4,7 +4,7 @@ import api from '../lib/api';
 import ConsultarDocumento from '../components/ConsultarDocumento';
 import Layout from '../components/Layout';
 import PageHeader, { CreateButton } from '../components/PageHeader';
-import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select } from '../components/ui';
+import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect } from '../components/ui';
 
 export default function Usuarios() {
     const [users, setUsers] = useState([]);
@@ -144,16 +144,16 @@ export default function Usuarios() {
 
     const userFilters = (
         <div className="flex flex-wrap items-end gap-3">
-            <Select
-                label="Rol"
-                value={filterRole}
-                onChange={(e) => setFilterRole(e.target.value)}
-                options={[
-                    { value: '', label: 'Todos' },
-                    ...roles.map((r) => ({ value: r.name, label: r.name })),
-                ]}
-                className="w-48"
-            />
+            <div className="w-48">
+                <SearchSelect
+                    label="Rol"
+                    value={filterRole}
+                    onChange={(v) => setFilterRole(v ?? '')}
+                    placeholder="Todos"
+                    emptyText="Sin coincidencias"
+                    options={roles.map((r) => ({ value: r.name, label: r.name }))}
+                />
+            </div>
         </div>
     );
 
@@ -305,15 +305,13 @@ export default function Usuarios() {
                         onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
                         error={errors.password}
                     />
-                    <Select
+                    <SearchSelect
                         label="Rol"
-                        name="role"
                         value={form.role}
-                        onChange={(e) => setForm((prev) => ({ ...prev, role: e.target.value }))}
-                        options={[
-                            { value: '', label: 'Sin rol' },
-                            ...roles.map((r) => ({ value: r.name, label: r.name })),
-                        ]}
+                        onChange={(v) => setForm((prev) => ({ ...prev, role: v ?? '' }))}
+                        placeholder="Sin rol"
+                        emptyText="Sin coincidencias"
+                        options={roles.map((r) => ({ value: r.name, label: r.name }))}
                         error={errors.role}
                     />
                     <SearchSelect

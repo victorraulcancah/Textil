@@ -132,6 +132,21 @@ class Rollo extends Model
         return $this->hasMany(OrdenVentaRollo::class);
     }
 
+    /**
+     * Metros que ya se apartaron de este rollo para un pedido que todavía no
+     * sale. El rollo mide lo mismo hasta el despacho, pero esos metros ya
+     * tienen dueño: sirve para mostrar el corte preparado y lo que le queda.
+     */
+    public function cortesPendientes()
+    {
+        return $this->hasMany(OrdenVentaRollo::class)
+            ->whereHas('detalle.ordenVenta', fn ($q) => $q->whereIn('estado', [
+                OrdenVenta::SOLICITADO,
+                OrdenVenta::PREPARANDO,
+                OrdenVenta::SEPARADO,
+            ]));
+    }
+
     /** Solo los rollos que se pueden vender. */
     public function scopeDisponibles(Builder $query): Builder
     {

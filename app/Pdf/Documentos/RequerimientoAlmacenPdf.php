@@ -4,6 +4,7 @@ namespace App\Pdf\Documentos;
 
 use App\Models\OrdenVenta;
 use App\Pdf\DocumentoPdf;
+use App\Pdf\ProductoConColor;
 
 /**
  * El papel que baja al almacén: qué hay que juntar.
@@ -33,13 +34,14 @@ class RequerimientoAlmacenPdf implements DocumentoPdf
             'vendedor:id,name',
             'usuarioPrepara:id,name',
             'detalles.presentacion.producto:id,codigo,nombre',
+            'detalles.color:id,codigo,nombre',
             'detalles.rollos.rollo.color',
         ])->findOrFail($id);
 
         $filas = $orden->detalles->map(fn ($d, $i) => [
             'n' => $i + 1,
-            'codigo' => $d->presentacion?->producto?->codigo ?? '—',
-            'producto' => $d->presentacion?->producto?->nombre ?? '—',
+            'codigo' => ProductoConColor::codigo($d->presentacion?->producto, $d->color),
+            'producto' => ProductoConColor::nombre($d->presentacion?->producto, $d->color),
             'presentacion' => $d->presentacion?->nombre ?? '—',
             'metros' => number_format((float) $d->metros, 2),
             'asignado' => number_format($d->metrosAsignados(), 2),

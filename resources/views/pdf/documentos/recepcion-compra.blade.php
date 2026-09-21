@@ -41,7 +41,7 @@
         <x-pdf.items
             :columnas="[
                 ['label' => 'Ítem', 'key' => 'n', 'width' => '32px'],
-                ['label' => 'Código', 'key' => 'codigo', 'width' => '72px'],
+                ['label' => 'Código', 'key' => 'codigo', 'width' => '98px'],
                 ['label' => 'Descripción', 'key' => 'producto'],
                 ['label' => 'Unidad', 'key' => 'unidad', 'width' => '90px'],
                 ['label' => 'Pedida', 'key' => 'pedida', 'align' => 'right', 'width' => '60px'],
@@ -50,8 +50,26 @@
                 ['label' => 'Rechazada', 'key' => 'rechazada', 'align' => 'right', 'width' => '68px'],
             ]"
             :filas="$filas"
-            :minFilas="8" />
-        <table class="marco" style="margin-bottom: 20px;">
+            :minFilas="$totalRollos ? 2 : 8" />
+
+        {{-- Qué rollos llegaron realmente: el detalle de arriba dice cuántos
+             metros, esto dice con qué piezas y quién las recibió. --}}
+        @if ($totalRollos)
+            <div class="strong upper" style="font-size: 8px; margin: 8px 0 4px;">
+                Rollos recibidos · {{ $totalRollos }} · {{ $totalMetrosRollos }} m
+            </div>
+            <x-pdf.items
+                :columnas="[
+                    ['label' => 'Rollo', 'key' => 'codigo', 'width' => '125px'],
+                    ['label' => 'Producto', 'key' => 'producto'],
+                    ['label' => 'Metros', 'key' => 'metros', 'align' => 'right', 'width' => '62px'],
+                    ['label' => 'Peso neto (kg)', 'key' => 'peso', 'align' => 'right', 'width' => '90px'],
+                    ['label' => 'Recibió', 'key' => 'recibio', 'width' => '110px'],
+                ]"
+                :filas="$rollos" />
+        @endif
+
+        <table class="marco" style="margin: 8px 0 20px;">
             <tr><td>
                 <span class="strong upper" style="font-size: 8px;">Observaciones</span><br>
                 {{ $recepcion->observaciones ?: '—' }}

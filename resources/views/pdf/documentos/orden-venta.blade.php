@@ -29,7 +29,7 @@
     <x-pdf.items
         :columnas="[
             ['label' => '#', 'key' => 'n', 'width' => '30px'],
-            ['label' => 'Código', 'key' => 'codigo', 'width' => '70px'],
+            ['label' => 'Código', 'key' => 'codigo', 'width' => '98px'],
             ['label' => 'Producto', 'key' => 'producto'],
             ['label' => 'Presentación', 'key' => 'presentacion', 'width' => '110px'],
             ['label' => 'Cantidad', 'key' => 'cantidad', 'align' => 'right', 'width' => '70px'],
@@ -57,7 +57,7 @@
         <div class="strong upper" style="font-size: 8px; margin: 14px 0 4px 0;">Rollos entregados</div>
         <x-pdf.items
             :columnas="[
-                ['label' => 'Rollo', 'key' => 'codigo', 'width' => '120px'],
+                ['label' => 'Rollo', 'key' => 'codigo', 'width' => '135px'],
                 ['label' => 'Producto', 'key' => 'producto'],
                 ['label' => 'Color', 'key' => 'color', 'width' => '110px'],
                 ['label' => 'Metros', 'key' => 'metros', 'align' => 'right', 'width' => '80px'],

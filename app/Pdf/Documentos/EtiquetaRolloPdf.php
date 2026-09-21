@@ -52,6 +52,10 @@ class EtiquetaRolloPdf implements DocumentoPdf
             'color' => $rollo->color?->nombre ?? '—',
             'codigo_color' => $rollo->color?->codigo,
             'codigo' => $rollo->codigo,
+            // El metraje de fábrica no cambia nunca; el saldo baja con cada
+            // corte. La etiqueta destaca el primero y avisa del segundo solo
+            // cuando ya no coinciden (rollo cortado que se vuelve a imprimir).
+            'metros_fabrica' => number_format((float) $rollo->metros_inicial, 2),
             'metros' => number_format((float) $rollo->metros_actual, 2),
             // El neto es el que se pesó al llegar; si no se registró (rollos
             // viejos, o ingresos que no lo piden), no se imprime la línea.

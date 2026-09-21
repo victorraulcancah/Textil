@@ -4,6 +4,7 @@ namespace App\Pdf\Documentos;
 
 use App\Models\OrdenVenta;
 use App\Pdf\DocumentoPdf;
+use App\Pdf\ProductoConColor;
 
 /**
  * El pedido impreso: lo que se le muestra o se le manda al cliente.
@@ -33,8 +34,8 @@ class OrdenVentaPdf implements DocumentoPdf
             'documento' => $orden->documento,
             'filas' => $orden->detalles->map(fn ($d, $i) => [
                 'n' => $i + 1,
-                'codigo' => $d->presentacion?->producto?->codigo ?? '—',
-                'producto' => $d->presentacion?->producto?->nombre ?? '—',
+                'codigo' => ProductoConColor::codigo($d->presentacion?->producto, $d->color),
+                'producto' => ProductoConColor::nombre($d->presentacion?->producto, $d->color),
                 'presentacion' => $d->presentacion?->nombre ?? '—',
                 'cantidad' => number_format((float) $d->cantidad, 2),
                 'metros' => number_format((float) $d->metros, 2),
@@ -71,6 +72,7 @@ class OrdenVentaPdf implements DocumentoPdf
             'almacen:id,nombre',
             'vendedor:id,name',
             'detalles.presentacion.producto:id,codigo,nombre',
+            'detalles.color:id,codigo,nombre',
             'detalles.rollos.rollo.color',
         ])->findOrFail($id);
     }

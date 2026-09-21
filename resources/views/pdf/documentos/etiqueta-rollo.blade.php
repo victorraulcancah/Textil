@@ -78,9 +78,15 @@
                     </div>
                     <div class="codigo">{{ $e['codigo'] }}</div>
                     <div class="metraje">
-                        {{ $e['metros'] }} m
+                        {{ $e['metros_fabrica'] }} m
                         @if ($e['peso_kg'])
                             <span class="peso">· peso neto {{ $e['peso_kg'] }} kg</span>
+                        @endif
+                    </div>
+                    <div class="linea">
+                        <span class="et">Metraje de fábrica</span>
+                        @if ($e['metros'] !== $e['metros_fabrica'])
+                            &nbsp;·&nbsp;<span class="et">Saldo actual:</span> <strong>{{ $e['metros'] }} m</strong>
                         @endif
                     </div>
                     @if ($e['orden'] || $e['posicion'])

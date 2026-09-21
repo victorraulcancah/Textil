@@ -26,6 +26,7 @@ class RolloController extends Controller
     private const RELACIONES = [
         'producto:id,codigo,nombre', 'color', 'almacen:id,nombre', 'cliente:id,nombre',
         'importacion:id,codigo,documento,fecha_llegada',
+        'cortesPendientes.detalle.ordenVenta:id,serie,numero,estado',
         // Hasta 5 niveles: piso → pasillo → rack → nivel → posición.
         'ubicacion.padre.padre.padre.padre',
     ];

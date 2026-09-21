@@ -218,6 +218,15 @@ export default function StockPorRollo() {
                     {row.metros_actual !== row.metros_inicial && (
                         <span className="ml-1 text-xs text-warm-400">de {num(row.metros_inicial)}</span>
                     )}
+                    {/* El corte ya está preparado pero el pedido no salió: el
+                        rollo baja recién al despacharlo. */}
+                    {row.corte_preparado && (
+                        <span className="block text-xs text-amber-700">
+                            Corte preparado de {num(row.corte_preparado.metros)} m
+                            {row.corte_preparado.pedidos?.length ? ` (${row.corte_preparado.pedidos.join(', ')})` : ''}
+                            {' · '}quedan {num(row.corte_preparado.saldo)} m
+                        </span>
+                    )}
                 </span>
             ),
         },
@@ -435,6 +444,12 @@ export default function StockPorRollo() {
                                     { label: 'Metros', value: `${num(r.metros_actual)} m` },
                                     { label: 'Peso', value: r.peso_kg ? `${num(r.peso_kg)} kg` : '—' },
                                     { label: 'Ubicación', value: r.ubicacion },
+                                    ...(r.corte_preparado
+                                        ? [{
+                                            label: 'Corte preparado',
+                                            value: `${num(r.corte_preparado.metros)} m · quedan ${num(r.corte_preparado.saldo)} m`,
+                                        }]
+                                        : []),
                                 ]}
                                 columnas={3}
                             />

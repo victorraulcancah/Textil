@@ -20,7 +20,7 @@
     <x-pdf.items
         :columnas="[
             ['label' => '#', 'key' => 'n', 'width' => '28px'],
-            ['label' => 'Código', 'key' => 'codigo', 'width' => '70px'],
+            ['label' => 'Código', 'key' => 'codigo', 'width' => '98px'],
             ['label' => 'Producto', 'key' => 'producto'],
             ['label' => 'Presentación', 'key' => 'presentacion', 'width' => '105px'],
             ['label' => 'Pedido', 'key' => 'metros', 'align' => 'right', 'width' => '65px'],

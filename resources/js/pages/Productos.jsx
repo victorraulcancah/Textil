@@ -1741,7 +1741,7 @@ export default function Productos() {
                                                         value={
                                                             v.precio_venta !== ''
                                                                 ? v.precio_venta
-                                                                : fila
+                                                                : fila && fila.costo_en_venta != null
                                                                   ? conDecimales(fila.precio_venta)
                                                                   : ''
                                                         }

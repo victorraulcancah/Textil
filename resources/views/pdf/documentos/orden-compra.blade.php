@@ -50,7 +50,7 @@
         <x-pdf.items
             :columnas="[
                 ['label' => 'Ítem', 'key' => 'n', 'width' => '32px'],
-                ['label' => 'Código', 'key' => 'codigo', 'width' => '72px'],
+                ['label' => 'Código', 'key' => 'codigo', 'width' => '98px'],
                 ['label' => 'Cant.', 'key' => 'cantidad', 'align' => 'right', 'width' => '55px'],
                 ['label' => 'Unidad', 'key' => 'unidad', 'width' => '90px'],
                 ['label' => 'Descripción', 'key' => 'producto'],

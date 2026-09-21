@@ -40,6 +40,7 @@
                 'Comprobante' => $tipoDocLabel . ' ' . $docProveedor,
                 'Orden' => $compra->ordenCompra?->codigo ?: '—',
                 'F. compra' => optional($compra->fecha)->format('d/m/Y'),
+                'Moneda' => $monedaLabel,
                 'Forma pago' => $pagoTxt,
                 'Vencimiento' => optional($compra->fecha_vencimiento)->format('d/m/Y') ?: '—',
                 'Estado' => $estado,
@@ -47,7 +48,7 @@
         <x-pdf.items
             :columnas="[
                 ['label' => 'Ítem', 'key' => 'n', 'width' => '32px'],
-                ['label' => 'Código', 'key' => 'codigo', 'width' => '72px'],
+                ['label' => 'Código', 'key' => 'codigo', 'width' => '98px'],
                 ['label' => 'Cant.', 'key' => 'cantidad', 'align' => 'right', 'width' => '55px'],
                 ['label' => 'Unidad', 'key' => 'unidad', 'width' => '90px'],
                 ['label' => 'Descripción', 'key' => 'producto'],

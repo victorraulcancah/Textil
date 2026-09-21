@@ -50,6 +50,10 @@ class RolloResource extends JsonResource
             'estado' => $this->estado,
             'estado_label' => Rollo::ESTADOS[$this->estado] ?? $this->estado,
 
+            // Corte ya preparado para un pedido que aún no sale: el rollo mide
+            // lo mismo hasta el despacho, pero de esos metros ya no se dispone.
+            'corte_preparado' => $this->cortePreparado(),
+
             'pasillo' => $this->pasillo,
             'rack' => $this->rack,
             'nivel' => $this->nivel,
@@ -74,6 +78,34 @@ class RolloResource extends JsonResource
             'movimientos' => RolloMovimientoResource::collection($this->whenLoaded('movimientos')),
 
             'created_at' => $this->created_at,
+        ];
+    }
+
+    /**
+     * Cuánto se cortó de este rollo para pedidos que todavía no salen, y cuánto
+     * le queda. Un rollo que se lleva entero no tiene corte: no se parte.
+     */
+    private function cortePreparado(): ?array
+    {
+        if (! $this->relationLoaded('cortesPendientes')) {
+            return null;
+        }
+
+        $metros = (float) $this->cortesPendientes->sum('metros');
+        $actual = (float) $this->metros_actual;
+
+        if ($metros <= 0 || $metros >= $actual) {
+            return null;
+        }
+
+        return [
+            'metros' => $metros,
+            'saldo' => round($actual - $metros, 2),
+            'pedidos' => $this->cortesPendientes
+                ->map(fn ($c) => $c->detalle?->ordenVenta?->documento)
+                ->filter()
+                ->unique()
+                ->values(),
         ];
     }
 }

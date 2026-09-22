@@ -3,7 +3,7 @@ import { ArrowDownLeft, ArrowRightLeft, ArrowUpRight, Package } from 'lucide-rea
 import api, { asList } from '../lib/api';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
-import { Alert, Badge, Button, DataTable, DateRangePicker, SearchSelect, Select } from '../components/ui';
+import { Alert, Badge, Button, DataTable, DateRangePicker, Modal, SearchSelect, Select } from '../components/ui';
 
 /** Fecha y hora en dos líneas: cabe en una columna estrecha sin desbordarse. */
 const fmtFecha = (value) => {
@@ -74,6 +74,16 @@ export default function Movimientos() {
     const [filterHasta, setFilterHasta] = useState('');
     const [activeFilters, setActiveFilters] = useState({});
 
+    /** Producto cuyo historial completo se ve en el modal, o null si está cerrado. */
+    const [productoModal, setProductoModal] = useState(null);
+    /** Filtros propios del modal, detrás de su propio ícono de filtros. */
+    const [modalFilterTipo, setModalFilterTipo] = useState('');
+    const [modalFilterAlmacen, setModalFilterAlmacen] = useState('');
+    const [modalFilterOrigen, setModalFilterOrigen] = useState('');
+    const [modalFilterDesde, setModalFilterDesde] = useState('');
+    const [modalFilterHasta, setModalFilterHasta] = useState('');
+    const [modalActiveFilters, setModalActiveFilters] = useState({});
+
     const load = useCallback(async () => {
         setLoading(true);
         setError(null);
@@ -133,6 +143,66 @@ export default function Movimientos() {
     });
 
     const filterCount = Object.keys(activeFilters).length;
+
+    /**
+     * Abre el historial completo de un producto. Nace con los filtros que ya
+     * estén activos en la tabla principal (fecha, tipo, almacén, movimiento):
+     * si venías viendo "desde el 1 de setiembre", el historial de este
+     * producto también arranca ahí, no desde el principio de los tiempos.
+     */
+    const abrirHistorial = (row) => {
+        if (!row.producto_id) return;
+        setProductoModal({ id: row.producto_id, nombre: row.producto?.nombre ?? '—' });
+        setModalFilterTipo(activeFilters.tipo ?? '');
+        setModalFilterAlmacen(activeFilters.almacen ?? '');
+        setModalFilterOrigen(activeFilters.origen ?? '');
+        setModalFilterDesde(activeFilters.desde ?? '');
+        setModalFilterHasta(activeFilters.hasta ?? '');
+        setModalActiveFilters({
+            ...(activeFilters.tipo && { tipo: activeFilters.tipo }),
+            ...(activeFilters.almacen && { almacen: activeFilters.almacen }),
+            ...(activeFilters.origen && { origen: activeFilters.origen }),
+            ...(activeFilters.desde && { desde: activeFilters.desde }),
+            ...(activeFilters.hasta && { hasta: activeFilters.hasta }),
+        });
+    };
+
+    const applyModalFilters = () => {
+        const next = {};
+        if (modalFilterTipo) next.tipo = modalFilterTipo;
+        if (modalFilterAlmacen) next.almacen = modalFilterAlmacen;
+        if (modalFilterOrigen) next.origen = modalFilterOrigen;
+        if (modalFilterDesde) next.desde = modalFilterDesde;
+        if (modalFilterHasta) next.hasta = modalFilterHasta;
+        setModalActiveFilters(next);
+    };
+
+    const clearModalFilters = () => {
+        setModalFilterTipo('');
+        setModalFilterAlmacen('');
+        setModalFilterOrigen('');
+        setModalFilterDesde('');
+        setModalFilterHasta('');
+        setModalActiveFilters({});
+    };
+
+    const modalFilterCount = Object.keys(modalActiveFilters).length;
+
+    /** El historial de ese producto, con los filtros propios del modal ya aplicados. */
+    const historialProducto = productoModal
+        ? movimientos.filter((m) => {
+              if (String(m.producto_id) !== String(productoModal.id)) return false;
+              if (modalActiveFilters.tipo && m.tipo_movimiento !== modalActiveFilters.tipo) return false;
+              if (modalActiveFilters.almacen) {
+                  const id = m.almacen_id ?? m.almacen?.id;
+                  if (String(id) !== modalActiveFilters.almacen) return false;
+              }
+              if (modalActiveFilters.origen && m.origen !== modalActiveFilters.origen) return false;
+              if (modalActiveFilters.desde && (!m.fecha || m.fecha.slice(0, 10) < modalActiveFilters.desde)) return false;
+              if (modalActiveFilters.hasta && (!m.fecha || m.fecha.slice(0, 10) > modalActiveFilters.hasta)) return false;
+              return true;
+          })
+        : [];
 
     const filters = (
         <div className="flex flex-wrap items-end gap-3">
@@ -205,6 +275,58 @@ export default function Movimientos() {
         </div>
     );
 
+    /** Los mismos filtros de arriba, pero detrás del ícono de filtros del modal. */
+    const modalFiltersUI = (
+        <div className="flex flex-wrap items-end gap-3">
+            <Select
+                label="Tipo"
+                value={modalFilterTipo}
+                onChange={(e) => setModalFilterTipo(e.target.value)}
+                options={[
+                    { value: '', label: 'Todos' },
+                    { value: 'entrada', label: 'Entrada' },
+                    { value: 'salida', label: 'Salida' },
+                ]}
+                className="w-36"
+            />
+            <SearchSelect
+                label="Almacén"
+                value={modalFilterAlmacen}
+                onChange={(v) => setModalFilterAlmacen(v ?? '')}
+                placeholder="Todos"
+                emptyText="Sin coincidencias"
+                options={almacenes.map((a) => ({ value: String(a.id), label: a.nombre }))}
+                className="w-44"
+            />
+            <Select
+                label="Movimiento"
+                value={modalFilterOrigen}
+                onChange={(e) => setModalFilterOrigen(e.target.value)}
+                options={[
+                    { value: '', label: 'Todos' },
+                    ...[
+                        ...new Set(
+                            movimientos
+                                .filter((m) => String(m.producto_id) === String(productoModal?.id))
+                                .map((m) => m.origen)
+                                .filter(Boolean),
+                        ),
+                    ].map((origen) => ({ value: origen, label: ORIGEN_LABEL[origen] ?? origen })),
+                ]}
+                className="w-44"
+            />
+            <DateRangePicker
+                label="Rango de fecha"
+                desde={modalFilterDesde}
+                hasta={modalFilterHasta}
+                onChange={(d, h) => {
+                    setModalFilterDesde(d);
+                    setModalFilterHasta(h);
+                }}
+            />
+        </div>
+    );
+
     const esEntrada = (row) => row.tipo_movimiento === 'entrada';
     const cantAbs = (row) => Math.abs(Number(row.cantidad ?? 0));
 
@@ -257,12 +379,23 @@ export default function Movimientos() {
             key: 'producto',
             label: 'Producto',
             getSearchValue: (row) => row.producto?.nombre,
-            render: (row) => (
-                <span className="inline-flex items-center gap-2 font-medium text-warm-900">
-                    <Package className="h-4 w-4 text-primary-600" />
-                    {row.producto?.nombre ?? '—'}
-                </span>
-            ),
+            render: (row) =>
+                row.producto_id ? (
+                    <button
+                        type="button"
+                        onClick={() => abrirHistorial(row)}
+                        title="Ver todo el historial de este producto"
+                        className="inline-flex items-center gap-2 font-medium text-primary-700 underline decoration-dotted underline-offset-2 transition hover:text-primary-900"
+                    >
+                        <Package className="h-4 w-4 shrink-0 text-primary-600" />
+                        <span className="truncate">{row.producto?.nombre ?? '—'}</span>
+                    </button>
+                ) : (
+                    <span className="inline-flex items-center gap-2 font-medium text-warm-900">
+                        <Package className="h-4 w-4 text-primary-600" />
+                        {row.producto?.nombre ?? '—'}
+                    </span>
+                ),
         },
         {
             // Solo lo saben los movimientos que nacen de rollos (recepciones y
@@ -435,6 +568,9 @@ export default function Movimientos() {
         },
     ];
 
+    // El producto y el código ya están en el título del modal: sobran en su tabla.
+    const columnasHistorial = columns.filter((c) => c.key !== 'producto' && c.key !== 'codigo');
+
     return (
         <Layout>
             <PageHeader
@@ -455,6 +591,27 @@ export default function Movimientos() {
                 onApplyFilters={applyFilters}
                 onClearFilters={clearFilters}
             />
+
+            <Modal
+                open={Boolean(productoModal)}
+                onClose={() => setProductoModal(null)}
+                title={productoModal ? `Historial de ${productoModal.nombre}` : ''}
+                description="Nace con los mismos filtros que tengas activos arriba; ajústalos aquí sin afectar la tabla principal."
+                size="3xl"
+                footer={<Button variant="secondary" onClick={() => setProductoModal(null)}>Cerrar</Button>}
+            >
+                <DataTable
+                    columns={columnasHistorial}
+                    rows={historialProducto}
+                    searchPlaceholder="Buscar en este historial..."
+                    emptyMessage="Sin movimientos con estos filtros."
+                    filterable
+                    filters={modalFiltersUI}
+                    filterCount={modalFilterCount}
+                    onApplyFilters={applyModalFilters}
+                    onClearFilters={clearModalFilters}
+                />
+            </Modal>
         </Layout>
     );
 }

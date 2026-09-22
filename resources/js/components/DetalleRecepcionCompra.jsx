@@ -24,7 +24,6 @@ const fechaHora = (iso) =>
 const ESTADO_RECEPCION = {
     completa: { label: 'Completa', variant: 'green' },
     parcial: { label: 'Parcial', variant: 'amber' },
-    deshecha: { label: 'Deshecha', variant: 'red' },
 };
 
 const ESTADO_PACKING = {
@@ -186,15 +185,10 @@ export default function DetalleRecepcionCompra({ open, onClose, compraId }) {
 
                         {/* Una tarjeta por recepción, con sus líneas y sus rollos. */}
                         {recepciones.map((r) => {
-                            const estado = r.vigente
-                                ? (ESTADO_RECEPCION[r.estado] ?? { label: r.estado, variant: 'gray' })
-                                : ESTADO_RECEPCION.deshecha;
+                            const estado = ESTADO_RECEPCION[r.estado] ?? { label: r.estado, variant: 'gray' };
 
                             return (
-                                <section
-                                    key={r.id}
-                                    className={`rounded-lg border border-edge ${r.vigente ? '' : 'opacity-70'}`}
-                                >
+                                <section key={r.id} className="rounded-lg border border-edge">
                                     <header className="flex flex-wrap items-center justify-between gap-3 border-b border-edge bg-gray-50 px-4 py-3">
                                         <div className="min-w-0">
                                             <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-warm-900">

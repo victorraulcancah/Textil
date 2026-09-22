@@ -150,6 +150,8 @@ class RecepcionCompraController extends Controller
             'rollos.ubicacion.padre.padre.padre.padre',
         ])
             ->where('compra_id', $compra->id)
+            // Una recepción deshecha devolvió su mercadería: no se muestra.
+            ->where('activo', true)
             ->orderBy('id')
             ->get()
             ->map(fn (RecepcionCompra $r) => [
@@ -157,8 +159,6 @@ class RecepcionCompraController extends Controller
                 'documento' => $r->documento,
                 'fecha' => $r->fecha_recepcion?->toIso8601String(),
                 'estado' => $r->estado,
-                // Una recepción deshecha devolvió su mercadería: se ve, pero no cuenta.
-                'vigente' => (bool) $r->activo,
                 'almacen' => $r->almacen?->nombre,
                 'recibe' => $r->usuarioRecibe?->name,
                 'observaciones' => $r->observaciones,
@@ -197,8 +197,7 @@ class RecepcionCompraController extends Controller
             ])
             ->values();
 
-        $vigentes = $recepciones->where('vigente', true);
-        $rollosRecibidos = $vigentes->flatMap(fn ($r) => $r['rollos']);
+        $rollosRecibidos = $recepciones->flatMap(fn ($r) => $r['rollos']);
 
         return response()->json([
             'compra' => [
@@ -218,7 +217,7 @@ class RecepcionCompraController extends Controller
                 ->map(fn ($f) => $this->filaPackingList($f->loadMissing('color:id,nombre,codigo')))
                 ->values(),
             'resumen' => [
-                'recepciones' => $vigentes->count(),
+                'recepciones' => $recepciones->count(),
                 'rollos' => $rollosRecibidos->count(),
                 'metros' => round((float) $rollosRecibidos->sum('metros'), 2),
             ],

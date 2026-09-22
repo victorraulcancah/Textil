@@ -22,6 +22,7 @@ import Existencias from './pages/Existencias';
 import StockPorRollo from './pages/StockPorRollo';
 import Movimientos from './pages/Movimientos';
 import Transferencias from './pages/Transferencias';
+import CrearTransferencia from './pages/CrearTransferencia';
 import Ajustes from './pages/Ajustes';
 import TomasInventario from './pages/TomasInventario';
 import Prestamos from './pages/Prestamos';
@@ -75,6 +76,8 @@ const routes = [
     // Alias del nombre anterior, para no romper enlaces guardados.
     { path: '/movimientos', element: <Movimientos /> },
     { path: '/transferencias', element: <Transferencias /> },
+    { path: '/transferencias/nueva', element: <CrearTransferencia /> },
+    { path: '/transferencias/:id/editar', element: <CrearTransferencia /> },
     { path: '/ajustes', element: <Ajustes /> },
     { path: '/tomas-inventario', element: <TomasInventario /> },
     { path: '/prestamos', element: <Prestamos /> },

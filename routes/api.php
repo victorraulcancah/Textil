@@ -125,7 +125,8 @@ Route::middleware('auth:api')->group(function () {
     Route::get('movimientos', [MovimientoInventarioController::class, 'index']);
     Route::apiResource('transferencias', TransferenciaController::class);
     Route::apiResource('motivos-traslado', MotivoTrasladoController::class)->except(['show']);
-    Route::post('transferencias/{transferencia}/enviar', [TransferenciaController::class, 'enviar']);
+    Route::post('transferencias/{transferencia}/aprobar', [TransferenciaController::class, 'aprobar']);
+    Route::post('transferencias/{transferencia}/rechazar', [TransferenciaController::class, 'rechazar']);
     Route::post('transferencias/{transferencia}/recibir', [TransferenciaController::class, 'recibir']);
     Route::post('transferencias/{transferencia}/anular', [TransferenciaController::class, 'anular']);
     Route::apiResource('ajustes', AjusteInventarioController::class);

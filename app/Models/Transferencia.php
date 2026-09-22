@@ -38,6 +38,7 @@ class Transferencia extends Model
         'usuario_envio_id',
         'usuario_recepcion_id',
         'observaciones',
+        'motivo_rechazo',
     ];
 
     protected $appends = ['documento'];

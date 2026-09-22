@@ -35,6 +35,9 @@ return [
         'exportar' => 'Exportar',
         // Repartir los pedidos entre los almaceneros: lo hace el encargado.
         'asignar' => 'Asignar tareas',
+        // La bandeja de solicitudes de traslado: decide si el traslado sale
+        // o no. Quien lo crea no necesariamente puede autorizarlo.
+        'aprobar' => 'Aprobar / rechazar',
     ],
 
     // Las que tiene cualquier submódulo. "Imprimir" no está aquí: solo la
@@ -179,7 +182,21 @@ return [
                     'acciones' => ['ver', 'editar', 'asignar'],
                 ],
                 'kardex' => ['label' => 'Kardex', 'apis' => ['movimientos'], 'acciones' => ['ver']],
-                'transferencias' => ['label' => 'Traslados', 'apis' => ['transferencias', 'motivos-traslado'], 'pdf' => ['guia-traslado']],
+                'transferencias' => [
+                    'label' => 'Traslados',
+                    'apis' => ['transferencias', 'motivos-traslado'],
+                    'pdf' => ['guia-traslado'],
+                    // Bandeja de solicitudes: aprobar (autoriza y descuenta el
+                    // origen) y rechazar los decide quien autoriza el traslado,
+                    // no necesariamente quien lo crea. Recepcionar es del
+                    // almacén destino, no de quien solo puede crear guías.
+                    'patrones' => [
+                        'transferencias/*/aprobar' => 'aprobar',
+                        'transferencias/*/rechazar' => 'aprobar',
+                        'transferencias/*/recibir' => 'editar',
+                    ],
+                    'acciones' => ['ver', 'crear', 'editar', 'eliminar', 'aprobar'],
+                ],
                 'ajustes' => ['label' => 'Ajustes', 'apis' => ['ajustes'], 'pdf' => ['ajuste']],
                 'tomas-inventario' => ['label' => 'Tomas de inventario', 'apis' => ['tomas-inventario']],
                 'prestamos' => ['label' => 'Préstamos', 'apis' => ['prestamos'], 'pdf' => ['prestamo']],

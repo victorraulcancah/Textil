@@ -141,17 +141,19 @@ class TransferenciaController extends Controller
     }
 
     /**
-     * Enviar: descuenta el stock del almacén de origen y pasa a "en tránsito".
+     * Aprueba la solicitud: descuenta el stock del almacén de origen y pasa
+     * a "en tránsito". Aprobar y enviar son el mismo paso: quien autoriza el
+     * traslado es quien lo despacha, no hace falta un clic aparte.
      *
      * Lo que se lleva por rollos no es solo un número: los rollos mismos
      * cambian de almacén (o se parten, si lo pedido no coincide con rollos
      * completos), para que no queden contados en un lado y físicamente en
      * el otro.
      */
-    public function enviar(Transferencia $transferencia)
+    public function aprobar(Transferencia $transferencia)
     {
         if ($transferencia->estado !== 'pendiente') {
-            return response()->json(['message' => 'El traslado ya fue enviado o cancelado.'], 422);
+            return response()->json(['message' => 'Solo se puede aprobar una solicitud pendiente.'], 422);
         }
 
         try {
@@ -190,6 +192,27 @@ class TransferenciaController extends Controller
         } catch (\RuntimeException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
+
+        return response()->json($transferencia->fresh());
+    }
+
+    /**
+     * Rechaza la solicitud: no se toca el stock, queda cerrada con el motivo
+     * de quien la revisó. A diferencia de anular (el propio creador se
+     * arrepiente), esto lo hace quien la evalúa y la descarta.
+     */
+    public function rechazar(Request $request, Transferencia $transferencia)
+    {
+        if ($transferencia->estado !== 'pendiente') {
+            return response()->json(['message' => 'Solo se puede rechazar una solicitud pendiente.'], 422);
+        }
+
+        $data = $request->validate(['motivo' => 'nullable|string|max:500']);
+
+        $transferencia->update([
+            'estado' => 'rechazada',
+            'motivo_rechazo' => $data['motivo'] ?? null,
+        ]);
 
         return response()->json($transferencia->fresh());
     }

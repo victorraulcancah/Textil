@@ -39,8 +39,10 @@ class OrdenVentaPdf implements DocumentoPdf
                 'presentacion' => $d->presentacion?->nombre ?? '—',
                 'cantidad' => number_format((float) $d->cantidad, 2),
                 'metros' => number_format((float) $d->metros, 2),
-                'precio' => number_format((float) $d->precio_unitario, 2),
-                'importe' => number_format((float) $d->subtotal, 2),
+                // No se sabe el metraje real del rollo: no se imprime un
+                // precio que todavía es una estimación.
+                'precio' => $d->precio_oculto ? 'Por confirmar' : number_format((float) $d->precio_unitario, 2),
+                'importe' => $d->precio_oculto ? '—' : number_format((float) $d->subtotal, 2),
             ])->all(),
             'rollos' => $this->rollos($orden),
             'total_metros' => number_format((float) $orden->detalles->sum('metros'), 2),

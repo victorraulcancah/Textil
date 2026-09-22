@@ -36,6 +36,9 @@ class StoreOrdenVentaRequest extends FormRequest
             'detalles.*.precio_unitario' => 'nullable|numeric|min:0',
             'detalles.*.descuento' => 'nullable|numeric|min:0',
             'detalles.*.descripcion' => 'nullable|string|max:500',
+            // Precio "por confirmar": no se sabe el metraje real del rollo
+            // todavía. La línea no entra al subtotal del pedido.
+            'detalles.*.precio_oculto' => 'nullable|boolean',
         ];
     }
 

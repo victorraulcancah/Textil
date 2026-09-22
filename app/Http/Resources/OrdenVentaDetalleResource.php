@@ -41,6 +41,9 @@ class OrdenVentaDetalleResource extends JsonResource
             'precio_unitario' => (float) $this->precio_unitario,
             'descuento' => (float) $this->descuento,
             'subtotal' => (float) $this->subtotal,
+            // No se sabe el metraje real del rollo: el precio es una
+            // estimación y no entra al subtotal del pedido.
+            'precio_oculto' => (bool) $this->precio_oculto,
 
             // Cuánto lleva cubierto el almacén de esta línea.
             'metros_asignados' => $this->whenLoaded('rollos', fn () => $this->metrosAsignados()),

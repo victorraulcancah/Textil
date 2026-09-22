@@ -467,6 +467,14 @@ class OrdenVentaService
     {
         $this->exigirTransicion($orden, OrdenVenta::FACTURADO);
 
+        // Una línea con el precio por confirmar no se factura en blanco: hay
+        // que saber el metraje real del rollo y poner el precio antes.
+        if ($orden->detalles()->where('precio_oculto', true)->exists()) {
+            throw new \DomainException(
+                'Hay líneas con el precio por confirmar: complétalo antes de facturar.'
+            );
+        }
+
         return DB::transaction(function () use ($orden, $datos) {
             $orden->load(['detalles.rollos.rollo', 'detalles.presentacion']);
 
@@ -740,6 +748,9 @@ class OrdenVentaService
             $precio = round((float) ($linea['precio_unitario'] ?? 0), 2);
             $descuento = round((float) ($linea['descuento'] ?? 0), 2);
             $importe = round($cantidad * $precio - $descuento, 2);
+            // Con un rollo no se sabe el metraje real hasta pesarlo: el
+            // precio es una estimación que no debe sumar al pedido.
+            $precioOculto = (bool) ($linea['precio_oculto'] ?? false);
 
             $orden->detalles()->create([
                 'producto_presentacion_id' => $presentacion->id,
@@ -753,10 +764,13 @@ class OrdenVentaService
                 'precio_unitario' => $precio,
                 'descuento' => $descuento,
                 'subtotal' => $importe,
+                'precio_oculto' => $precioOculto,
             ]);
 
-            $subtotal += $cantidad * $precio;
-            $descuentos += $descuento;
+            if (! $precioOculto) {
+                $subtotal += $cantidad * $precio;
+                $descuentos += $descuento;
+            }
         }
 
         $orden->update([

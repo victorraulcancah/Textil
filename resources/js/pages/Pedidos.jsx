@@ -418,8 +418,8 @@ export default function Pedidos() {
                                 campos={[
                                     { label: 'Cant.', value: `${num(d.cantidad)} (${num(d.metros)} m)` },
                                     { label: 'Cubierto', value: `${num(d.metros_asignados)} m` },
-                                    { label: 'P. unit.', value: money(d.precio_unitario) },
-                                    { label: 'Importe', value: money(d.subtotal), valueClassName: 'text-primary-600' },
+                                    { label: 'P. unit.', value: d.precio_oculto ? 'Por confirmar' : money(d.precio_unitario) },
+                                    { label: 'Importe', value: d.precio_oculto ? '—' : money(d.subtotal), valueClassName: 'text-primary-600' },
                                 ]}
                             />
                         ))}
@@ -601,8 +601,12 @@ function DetallePedido({ pedido, procesando, onAccion, onFacturar, onPdf }) {
                                         <span className="text-xs text-warm-400">Sin asignar</span>
                                     )}
                                 </td>
-                                <td className="px-4 py-2 text-right">{money(d.precio_unitario)}</td>
-                                <td className="px-4 py-2 text-right font-medium">{money(d.subtotal)}</td>
+                                <td className="px-4 py-2 text-right">
+                                    {d.precio_oculto ? <span className="text-warm-400">Por confirmar</span> : money(d.precio_unitario)}
+                                </td>
+                                <td className="px-4 py-2 text-right font-medium">
+                                    {d.precio_oculto ? <span className="font-normal text-warm-400">—</span> : money(d.subtotal)}
+                                </td>
                             </tr>
                         ))}
                     </tbody>

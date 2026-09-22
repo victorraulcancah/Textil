@@ -126,6 +126,7 @@ export default function CrearPedido() {
                             descripcion: d.descripcion ?? '',
                             cantidad: String(d.cantidad),
                             precio_unitario: String(d.precio_unitario),
+                            precio_oculto: Boolean(d.precio_oculto),
                         })),
                     );
                 }
@@ -255,6 +256,7 @@ export default function CrearPedido() {
                 descripcion: nueva.descripcion.trim(),
                 cantidad: nueva.cantidad,
                 precio_unitario: nueva.precio_unitario,
+                precio_oculto: false,
             },
         ]);
 
@@ -306,6 +308,7 @@ export default function CrearPedido() {
                     descripcion: '',
                     cantidad: String(cantidad),
                     precio_unitario: String(Number(presentacion.precio_venta) || 0),
+                    precio_oculto: false,
                 });
             });
 
@@ -328,7 +331,13 @@ export default function CrearPedido() {
     const quitar = (i) => setLineas((prev) => prev.filter((_, j) => j !== i));
 
     const total = useMemo(
-        () => lineas.reduce((s, l) => s + (Number(l.cantidad) || 0) * (Number(l.precio_unitario) || 0), 0),
+        () =>
+            lineas.reduce(
+                // Una línea con precio por confirmar no suma: no se sabe el
+                // metraje real del rollo todavía.
+                (s, l) => (l.precio_oculto ? s : s + (Number(l.cantidad) || 0) * (Number(l.precio_unitario) || 0)),
+                0,
+            ),
         [lineas],
     );
 
@@ -350,6 +359,7 @@ export default function CrearPedido() {
                     cantidad: Number(l.cantidad) || 0,
                     precio_unitario: Number(l.precio_unitario) || 0,
                     descripcion: l.descripcion || null,
+                    precio_oculto: Boolean(l.precio_oculto),
                 })),
             };
 
@@ -526,7 +536,15 @@ export default function CrearPedido() {
                                     </tr>
                                 )}
 
-                                {lineas.map((l, i) => (
+                                {lineas.map((l, i) => {
+                                    // Con Rollo no se sabe el metraje real hasta pesarlo: se
+                                    // ofrece marcar el precio como "por confirmar".
+                                    const presentacionLinea = productos
+                                        .flatMap((p) => p.presentaciones ?? [])
+                                        .find((pr) => String(pr.id) === String(l.producto_presentacion_id));
+                                    const esRollo = tipoUnidad(presentacionLinea) === 'rollo';
+
+                                    return (
                                     <tr key={i}>
                                         <td className="px-3 py-2">
                                             <span className="font-medium text-warm-900">{l.producto}</span>
@@ -608,17 +626,36 @@ export default function CrearPedido() {
                                             />
                                         </td>
                                         <td className="px-3 py-2 text-right">
-                                            <Input
-                                                type="number"
-                                                step="0.01"
-                                                min="0"
-                                                value={l.precio_unitario}
-                                                onChange={(e) => cambiar(i, 'precio_unitario', e.target.value)}
-                                                className="w-28 text-right"
-                                            />
+                                            {esRollo && (
+                                                <label className="mb-1 flex items-center justify-end gap-1.5 text-[11px] font-medium text-warm-500">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={Boolean(l.precio_oculto)}
+                                                        onChange={(e) => cambiar(i, 'precio_oculto', e.target.checked)}
+                                                        className="h-3.5 w-3.5 rounded border-gray-300 accent-primary-600"
+                                                    />
+                                                    Por confirmar
+                                                </label>
+                                            )}
+                                            {l.precio_oculto ? (
+                                                <span className="text-warm-400">—</span>
+                                            ) : (
+                                                <Input
+                                                    type="number"
+                                                    step="0.01"
+                                                    min="0"
+                                                    value={l.precio_unitario}
+                                                    onChange={(e) => cambiar(i, 'precio_unitario', e.target.value)}
+                                                    className="w-28 text-right"
+                                                />
+                                            )}
                                         </td>
                                         <td className="px-3 py-2 text-right font-medium text-warm-900">
-                                            {money((Number(l.cantidad) || 0) * (Number(l.precio_unitario) || 0))}
+                                            {l.precio_oculto ? (
+                                                <span className="font-normal text-warm-400">Por confirmar</span>
+                                            ) : (
+                                                money((Number(l.cantidad) || 0) * (Number(l.precio_unitario) || 0))
+                                            )}
                                         </td>
                                         <td className="px-3 py-2 text-center">
                                             <button
@@ -631,7 +668,8 @@ export default function CrearPedido() {
                                             </button>
                                         </td>
                                     </tr>
-                                ))}
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>

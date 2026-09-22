@@ -240,6 +240,22 @@ export default function CrearTransferencia() {
           ) / 100
         : disponibleDe(panel.producto_id, panel.producto_presentacion_id);
 
+    /**
+     * La presentación más fina de este producto (menor factor de conversión,
+     * casi siempre el metro). El campo "Disponible" siempre se muestra en
+     * esa unidad —no en la que esté elegida en "Unidad"— para no perder de
+     * vista, por redondear a rollos enteros, la tela suelta que sí hay.
+     */
+    const unidadMenorPanel = (productoDe(panel.producto_id)?.presentaciones ?? [])
+        .filter((p) => p.activo !== false)
+        .reduce(
+            (menor, p) => (!menor || (Number(p.factor_conversion) || 1) < (Number(menor.factor_conversion) || 1) ? p : menor),
+            null,
+        );
+    const disponibleMenorPanel = colorPanel
+        ? Math.floor((Number(colorPanel.metros) / (Number(unidadMenorPanel?.factor_conversion) || 1)) * 100) / 100
+        : disponibleDe(panel.producto_id, unidadMenorPanel?.id);
+
     const agregarProducto = () => {
         if (!form.almacen_origen_id) return toast.error('Elige primero el almacén de origen.');
         if (!panel.producto_id) return toast.error('Busca y elige un producto.');
@@ -443,7 +459,7 @@ export default function CrearTransferencia() {
                                         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                                             <Input
                                                 label="Disponible"
-                                                value={panel.producto_id ? `${num(disponiblePanel)} ${unidadesDe(panel.producto_id).find((u) => String(u.value) === String(panel.producto_presentacion_id))?.label ?? ''}`.trim() : ''}
+                                                value={panel.producto_id ? `${num(disponibleMenorPanel)} ${unidadMenorPanel?.nombre ?? ''}`.trim() : ''}
                                                 readOnly
                                                 disabled
                                             />

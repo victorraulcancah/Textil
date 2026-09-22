@@ -35,6 +35,9 @@ class OrdenVentaDetalle extends Model
         'precio_unitario',
         'descuento',
         'subtotal',
+        // El precio es una estimación mientras no se sepa el metraje real de
+        // un rollo: marcada, la línea no entra al subtotal ni se muestra.
+        'precio_oculto',
     ];
 
     protected function casts(): array
@@ -46,6 +49,7 @@ class OrdenVentaDetalle extends Model
             'precio_unitario' => 'decimal:2',
             'descuento' => 'decimal:2',
             'subtotal' => 'decimal:2',
+            'precio_oculto' => 'boolean',
         ];
     }
 

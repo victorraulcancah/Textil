@@ -18,6 +18,11 @@ class CompraPagoResource extends JsonResource
             'cuenta_bancaria_id' => $this->cuenta_bancaria_id,
             'billetera_id' => $this->billetera_id,
             'monto' => $this->monto,
+            'moneda' => $this->moneda,
+            // Si salió en soles: cuánto y a qué tipo de cambio (`monto` es lo
+            // que abonó a la compra, en su moneda).
+            'monto_pen' => $this->monto_pen,
+            'tipo_cambio' => $this->tipo_cambio,
             'cuenta_bancaria' => $this->whenLoaded('cuentaBancaria'),
             'billetera' => $this->whenLoaded('billetera'),
             'created_at' => $this->created_at,

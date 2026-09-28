@@ -68,6 +68,9 @@ class StoreCompraRequest extends FormRequest
             'pagos.*.cuenta_bancaria_id' => 'nullable|exists:cuentas_bancarias,id',
             'pagos.*.billetera_id' => 'nullable|exists:billeteras_digitales,id',
             'pagos.*.monto' => 'required_with:pagos|numeric|min:0',
+            // "PEN" en una compra en otra moneda: el monto viene en soles y se
+            // abona su equivalente al tipo de cambio de la compra.
+            'pagos.*.moneda' => 'nullable|in:PEN,USD,CNY,EUR',
         ];
     }
 

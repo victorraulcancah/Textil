@@ -22,7 +22,12 @@ const panelVacio = {
     cantidad: '1',
     costo_unitario: '0',
 };
-const emptyPago = () => ({ tipo: 'efectivo', cuentaId: '', billeteraId: '', monto: '' });
+/** `moneda` vacía = la moneda de la compra; "PEN" = se paga con soles. */
+const emptyPago = () => ({ tipo: 'efectivo', cuentaId: '', billeteraId: '', monto: '', moneda: '' });
+
+const NOMBRE_MONEDA = { PEN: 'Soles', USD: 'Dólares', CNY: 'Yuanes', EUR: 'Euros' };
+
+const redondear = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
 /** Datos propios de una compra al exterior: iguales a los de la orden de compra. */
 const exteriorVacio = {
@@ -172,7 +177,9 @@ export default function CrearCompra() {
                     tipo: p.metodo,
                     cuentaId: p.cuenta_bancaria_id ? String(p.cuenta_bancaria_id) : '',
                     billeteraId: p.billetera_id ? String(p.billetera_id) : '',
-                    monto: String(p.monto),
+                    // Pagado en soles: se vuelve a mostrar lo que salió en soles.
+                    moneda: p.monto_pen != null ? 'PEN' : '',
+                    monto: String(p.monto_pen != null ? Number(p.monto_pen) : p.monto),
                 }));
                 if (pagosCompra.length) {
                     setPagos(pagosCompra);
@@ -419,27 +426,78 @@ export default function CrearCompra() {
     const esContado = form.forma_pago === 'contado';
 
     /**
+     * Una compra en otra moneda se puede pagar con soles: cada pago dice en
+     * qué moneda salió, y los soles se llevan a la moneda de la compra con el
+     * tipo de cambio que se puso a mano arriba.
+     */
+    const tipoCambio = Number(form.tipo_cambio) || 0;
+    const admiteSoles = Boolean(form.moneda_origen) && form.moneda_origen !== 'PEN';
+    const enSoles = (p) => admiteSoles && p.moneda === 'PEN';
+    /** Lo que un pago abona a la compra, en la moneda de la compra. */
+    const abonoDe = (p) =>
+        enSoles(p) ? (tipoCambio > 0 ? redondear((Number(p.monto) || 0) / tipoCambio) : 0) : Number(p.monto) || 0;
+    /** El total de la compra en la moneda en que sale ese pago. */
+    const totalEn = (p) => (enSoles(p) ? redondear(total * tipoCambio) : total);
+
+    /**
      * En modo simple hay un solo pago: al contado cubre el total automáticamente,
      * y a crédito es un adelanto opcional. El modo mixto abre la lista completa.
      */
     const pagosEfectivos = mixto
         ? pagos
-        : [{ ...pagos[0], monto: esContado ? String(total) : pagos[0].monto }];
+        : [{ ...pagos[0], monto: esContado ? String(totalEn(pagos[0])) : pagos[0].monto }];
 
-    const pagado = pagosEfectivos.reduce((acc, p) => acc + (Number(p.monto) || 0), 0);
+    const pagado = pagosEfectivos.reduce((acc, p) => acc + abonoDe(p), 0);
     const saldo = total - pagado;
+
+    /** Cambia la moneda de un pago, llevando lo ya escrito a la otra moneda. */
+    const cambiarMonedaPago = (i, moneda) =>
+        setPagos((prev) =>
+            prev.map((p, idx) => {
+                if (idx !== i || p.moneda === moneda) return p;
+                const monto = Number(p.monto) || 0;
+                if (!monto || tipoCambio <= 0) return { ...p, moneda };
+                return {
+                    ...p,
+                    moneda,
+                    monto: String(moneda === 'PEN' ? redondear(monto * tipoCambio) : redondear(monto / tipoCambio)),
+                };
+            }),
+        );
 
     const alternarMixto = () => {
         setMixto((prev) => {
             // Al abrir el modo mixto, el primer pago arranca con el total pendiente.
             if (!prev && !Number(pagos[0].monto)) {
-                setPagos((ps) => ps.map((p, i) => (i === 0 ? { ...p, monto: String(total) } : p)));
+                setPagos((ps) => ps.map((p, i) => (i === 0 ? { ...p, monto: String(totalEn(p)) } : p)));
             }
             // Al volver a simple se conserva solo el primer pago.
             if (prev) setPagos((ps) => ps.slice(0, 1));
             return !prev;
         });
     };
+
+    /** "Pagar en: Dólares | Soles", solo si la compra no es en soles. */
+    const selectorMoneda = (pago, onChange) =>
+        admiteSoles ? (
+            <div className="inline-flex rounded-lg border border-edge bg-gray-50 p-0.5">
+                {[form.moneda_origen, 'PEN'].map((m) => {
+                    const activa = (pago.moneda || form.moneda_origen) === m;
+                    return (
+                        <button
+                            key={m}
+                            type="button"
+                            onClick={() => onChange(m === form.moneda_origen ? '' : 'PEN')}
+                            className={`rounded-md px-3 py-1 text-xs font-semibold transition ${
+                                activa ? 'bg-white text-primary-700 shadow-sm' : 'text-warm-500 hover:text-warm-700'
+                            }`}
+                        >
+                            {NOMBRE_MONEDA[m] ?? m}
+                        </button>
+                    );
+                })}
+            </div>
+        ) : null;
 
     const guardar = async () => {
         if (items.length === 0) {
@@ -504,6 +562,8 @@ export default function CrearCompra() {
                     cuenta_bancaria_id: p.tipo === 'transferencia' ? p.cuentaId || null : null,
                     billetera_id: p.tipo === 'billetera' ? p.billeteraId || null : null,
                     monto: p.monto,
+                    // En soles: el backend abona su equivalente al tipo de cambio.
+                    ...(enSoles(p) ? { moneda: 'PEN' } : {}),
                 })),
         };
 
@@ -848,7 +908,11 @@ export default function CrearCompra() {
                                 <p className="mt-1 text-sm text-warm-900">
                                     {mixto
                                         ? `${pagos.length} métodos · Pagado ${money(pagado, form.moneda_origen)}`
-                                        : `${pagos[0].tipo === 'efectivo' ? 'Efectivo' : pagos[0].tipo === 'transferencia' ? 'Transferencia' : 'Billetera'} · ${money(total, form.moneda_origen)}`}
+                                        : `${pagos[0].tipo === 'efectivo' ? 'Efectivo' : pagos[0].tipo === 'transferencia' ? 'Transferencia' : 'Billetera'} · ${
+                                              enSoles(pagos[0])
+                                                  ? `${money(totalEn(pagos[0]), 'PEN')} (= ${money(total, form.moneda_origen)})`
+                                                  : money(total, form.moneda_origen)
+                                          }`}
                                 </p>
                                 {mixto && Math.abs(saldo) > 0.001 && (
                                     <p className={`mt-0.5 text-xs font-semibold ${saldo > 0 ? 'text-amber-600' : 'text-red-600'}`}>
@@ -906,10 +970,30 @@ export default function CrearCompra() {
                                     onChange={({ tipo, cuentaId, billeteraId }) => setPago(0, { tipo, cuentaId, billeteraId })}
                                 />
 
+                                {admiteSoles && (
+                                    <div className="flex items-center justify-between gap-3">
+                                        <span className="text-sm font-medium text-warm-700">Pagar en</span>
+                                        {selectorMoneda(pagos[0], (moneda) => setPago(0, { moneda }))}
+                                    </div>
+                                )}
+
                                 {esContado ? (
-                                    <div className="flex items-center justify-between rounded-lg bg-primary-50 px-3 py-2.5 text-sm">
-                                        <span className="text-warm-500">Se paga el total</span>
-                                        <span className="font-bold text-primary-700">{money(total, form.moneda_origen)}</span>
+                                    <div className="rounded-lg bg-primary-50 px-3 py-2.5 text-sm">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-warm-500">Se paga el total</span>
+                                            <span className="font-bold text-primary-700">
+                                                {enSoles(pagos[0]) && tipoCambio <= 0
+                                                    ? '—'
+                                                    : money(totalEn(pagos[0]), enSoles(pagos[0]) ? 'PEN' : form.moneda_origen)}
+                                            </span>
+                                        </div>
+                                        {enSoles(pagos[0]) && (
+                                            <p className="mt-1 text-right text-xs text-warm-500">
+                                                {tipoCambio > 0
+                                                    ? `= ${money(total, form.moneda_origen)} al tipo de cambio ${tipoCambio}`
+                                                    : 'Pon el tipo de cambio de la compra para calcular cuánto es en soles.'}
+                                            </p>
+                                        )}
                                     </div>
                                 ) : (
                                     <Input
@@ -938,12 +1022,20 @@ export default function CrearCompra() {
                                                 onChange={({ tipo, cuentaId, billeteraId }) => setPago(i, { tipo, cuentaId, billeteraId })}
                                             />
                                             <div className="mt-2 flex items-center gap-2">
-                                                <Input type="number" min="0" step="any" placeholder="Monto" value={p.monto} onChange={(e) => setPago(i, { monto: e.target.value })} className="text-right" />
+                                                {selectorMoneda(p, (moneda) => cambiarMonedaPago(i, moneda))}
+                                                <Input type="number" min="0" step="any" placeholder={enSoles(p) ? 'Monto en soles' : 'Monto'} value={p.monto} onChange={(e) => setPago(i, { monto: e.target.value })} className="text-right" />
                                                 <button type="button" onClick={() => removePago(i)} disabled={pagos.length === 1}
                                                     className="rounded-md p-2 text-red-600 transition hover:bg-red-50 disabled:opacity-40" aria-label="Quitar">
                                                     <Trash2 className="h-4 w-4" />
                                                 </button>
                                             </div>
+                                            {enSoles(p) && (
+                                                <p className="mt-1 text-right text-xs text-warm-500">
+                                                    {tipoCambio > 0
+                                                        ? `= ${money(abonoDe(p), form.moneda_origen)} al tipo de cambio ${tipoCambio}`
+                                                        : 'Pon el tipo de cambio de la compra para convertir los soles.'}
+                                                </p>
+                                            )}
                                         </div>
                                     ))}
                                 </div>

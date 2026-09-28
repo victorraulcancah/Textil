@@ -11,6 +11,7 @@ use App\Models\CuentaPorPagar;
 use App\Models\SerieDocumento;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class CompraController extends Controller
 {
@@ -318,22 +319,43 @@ class CompraController extends Controller
         }
     }
 
-    /** Registra los pagos, ignorando los de monto cero. */
+    /**
+     * Registra los pagos, ignorando los de monto cero.
+     *
+     * Cada pago abona a la compra en su moneda (`monto`). Una compra en
+     * dólares se puede pagar con soles: ese pago llega en soles y se abona su
+     * equivalente al tipo de cambio de la compra, el que se puso a mano.
+     */
     private function crearPagos(Compra $compra, array $pagos): void
     {
+        $moneda = $compra->moneda_origen ?: 'PEN';
+        $tipoCambio = (float) $compra->tipo_cambio;
+
         foreach ($pagos as $pago) {
             if ((float) $pago['monto'] <= 0) {
                 continue;
             }
 
+            $enSoles = $moneda !== 'PEN' && ($pago['moneda'] ?? $moneda) === 'PEN';
+
+            // Sin tipo de cambio no hay cómo saber cuánto abonan esos soles:
+            // se guardarían como si fueran dólares.
+            if ($enSoles && $tipoCambio <= 0) {
+                throw ValidationException::withMessages([
+                    'tipo_cambio' => 'Para pagar en soles una compra en otra moneda, pon el tipo de cambio.',
+                ]);
+            }
+
+            $montoPen = $enSoles ? round((float) $pago['monto'], 2) : null;
+
             $compra->pagos()->create([
                 'metodo' => $pago['metodo'],
                 'cuenta_bancaria_id' => $pago['metodo'] === 'transferencia' ? ($pago['cuenta_bancaria_id'] ?? null) : null,
                 'billetera_id' => $pago['metodo'] === 'billetera' ? ($pago['billetera_id'] ?? null) : null,
-                'monto' => (float) $pago['monto'],
-                // Lo que se pagó, en la moneda de la compra: si es en dólares,
-                // el monto ya viene en dólares, no hay que convertir nada.
-                'moneda' => $compra->moneda_origen ?: 'PEN',
+                'monto' => $enSoles ? round($montoPen / $tipoCambio, 2) : (float) $pago['monto'],
+                'moneda' => $moneda,
+                'monto_pen' => $montoPen,
+                'tipo_cambio' => $enSoles ? $tipoCambio : null,
             ]);
         }
     }

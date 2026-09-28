@@ -21,7 +21,15 @@ const metodoPagoLabel = (p) => {
     return 'Efectivo';
 };
 
-const emptyLinea = () => ({ tipo: 'efectivo', cuentaId: '', billeteraId: '', monto: '', referencia: '' });
+/**
+ * `moneda` vacía = la moneda de la deuda; "PEN" = se paga con soles, al
+ * `tipoCambio` del día que se escribe a mano.
+ */
+const emptyLinea = () => ({ tipo: 'efectivo', cuentaId: '', billeteraId: '', monto: '', referencia: '', moneda: '', tipoCambio: '' });
+
+const NOMBRE_MONEDA = { PEN: 'Soles', USD: 'Dólares', CNY: 'Yuanes', EUR: 'Euros' };
+
+const redondear = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
 /**
  * Modal reutilizable de pagos de una cuenta por cobrar/pagar.
@@ -65,7 +73,23 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo, onSaved 
     const anulada = state?.estado === 'anulado';
     const saldo = Number(state?.saldo) || 0;
     const puedePagar = !anulada && saldo > 0.005;
-    const nuevoTotal = lineas.reduce((acc, l) => acc + (Number(l.monto) || 0), 0);
+
+    /**
+     * Una deuda con un proveedor en dólares se puede pagar con soles: el
+     * monto va en soles y se abona su equivalente al tipo de cambio del día.
+     * Solo al pagar: los cobros a clientes no cambian.
+     */
+    const monedaDeuda = state?.moneda || 'PEN';
+    const admiteSoles = !esCobrar && monedaDeuda !== 'PEN';
+    const enSoles = (l) => admiteSoles && l.moneda === 'PEN';
+    /** Lo que una línea abona a la deuda, en la moneda de la deuda. */
+    const abonoDe = (l) => {
+        if (!enSoles(l)) return Number(l.monto) || 0;
+        const tc = Number(l.tipoCambio) || 0;
+        return tc > 0 ? redondear((Number(l.monto) || 0) / tc) : 0;
+    };
+    const nuevoTotal = lineas.reduce((acc, l) => acc + abonoDe(l), 0);
+    const faltaTipoCambio = (l) => enSoles(l) && Number(l.monto) > 0 && !(Number(l.tipoCambio) > 0);
 
     const setLinea = (i, patch) => setLineas((p) => p.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
     const addLinea = () => setLineas((p) => [...p, emptyLinea()]);
@@ -82,11 +106,57 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo, onSaved 
         billetera_id: l.tipo === 'billetera' ? l.billeteraId || null : null,
         monto: Number(l.monto),
         referencia: l.referencia || null,
+        // En soles: el backend abona su equivalente al tipo de cambio del día.
+        ...(enSoles(l) ? { moneda: 'PEN', tipo_cambio: Number(l.tipoCambio) } : {}),
     });
+
+    /** "Dólares | Soles" y, en soles, el tipo de cambio del día. */
+    const controlesMoneda = (l, onChange) =>
+        admiteSoles ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+                <div className="inline-flex rounded-lg border border-edge bg-gray-50 p-0.5">
+                    {[monedaDeuda, 'PEN'].map((m) => {
+                        const activa = (l.moneda || monedaDeuda) === m;
+                        return (
+                            <button
+                                key={m}
+                                type="button"
+                                onClick={() => onChange({ moneda: m === monedaDeuda ? '' : 'PEN' })}
+                                className={`rounded-md px-3 py-1 text-xs font-semibold transition ${
+                                    activa ? 'bg-white text-primary-700 shadow-sm' : 'text-warm-500 hover:text-warm-700'
+                                }`}
+                            >
+                                {NOMBRE_MONEDA[m] ?? m}
+                            </button>
+                        );
+                    })}
+                </div>
+                {enSoles(l) && (
+                    <>
+                        <Input
+                            type="number"
+                            min="0"
+                            step="0.0001"
+                            placeholder="T.C. del día"
+                            value={l.tipoCambio}
+                            onChange={(e) => onChange({ tipoCambio: e.target.value })}
+                            className="w-32 text-right"
+                            aria-label="Tipo de cambio"
+                        />
+                        <span className="text-xs text-warm-500">
+                            {Number(l.tipoCambio) > 0
+                                ? `= ${money(abonoDe(l), monedaDeuda)}`
+                                : 'Pon el tipo de cambio del día'}
+                        </span>
+                    </>
+                )}
+            </div>
+        ) : null;
 
     const registrar = async () => {
         const validos = lineas.filter((l) => Number(l.monto) > 0);
         if (validos.length === 0) return toast.error('Agrega al menos un pago con monto.');
+        if (validos.some(faltaTipoCambio)) return toast.error('Para pagar en soles, pon el tipo de cambio del día.');
         if (nuevoTotal > saldo + 0.01) return toast.error('El pago excede el saldo pendiente.');
         setSaving(true);
         try {
@@ -103,18 +173,23 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo, onSaved 
     };
 
     const startEdit = (p) => {
+        const pagadoEnSoles = p.monto_pen != null;
         setEditId(p.id);
         setEditForm({
             tipo: p.forma_pago,
             cuentaId: p.cuenta_bancaria_id ? String(p.cuenta_bancaria_id) : '',
             billeteraId: p.billetera_id ? String(p.billetera_id) : '',
-            monto: String(p.monto),
+            // Pagado en soles: se edita lo que salió en soles, con su tipo de cambio.
+            monto: String(pagadoEnSoles ? Number(p.monto_pen) : Number(p.monto)),
             referencia: p.referencia ?? '',
+            moneda: pagadoEnSoles ? 'PEN' : '',
+            tipoCambio: pagadoEnSoles && p.tipo_cambio ? String(Number(p.tipo_cambio)) : '',
         });
     };
 
     const guardarEdit = async () => {
         if (!(Number(editForm.monto) > 0)) return toast.error('El monto debe ser mayor a 0.');
+        if (faltaTipoCambio(editForm)) return toast.error('Para pagar en soles, pon el tipo de cambio del día.');
         setSaving(true);
         try {
             const res = await api.put(`${basePath}/pagos/${editId}`, toPayload(editForm));
@@ -130,7 +205,8 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo, onSaved 
     };
 
     const anular = async (p) => {
-        if (!window.confirm(`¿Anular este pago de ${money(p.monto, p.moneda || state.moneda)}? Se revertirá el movimiento de caja.`)) return;
+        const importe = p.monto_pen != null ? money(p.monto_pen, 'PEN') : money(p.monto, p.moneda || state.moneda);
+        if (!window.confirm(`¿Anular este pago de ${importe}? Se revertirá el movimiento de caja.`)) return;
         setSaving(true);
         try {
             const res = await api.delete(`${basePath}/pagos/${p.id}`);
@@ -176,16 +252,27 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo, onSaved 
                                     onChange={({ tipo, cuentaId, billeteraId }) => setEditForm((f) => ({ ...f, tipo, cuentaId, billeteraId }))}
                                 />
                                 <div className="flex items-center gap-2">
-                                    <Input type="number" min="0" step="any" placeholder="Monto" value={editForm.monto} onChange={(e) => setEditForm((f) => ({ ...f, monto: e.target.value }))} className="w-28 text-right" />
+                                    <Input type="number" min="0" step="any" placeholder={enSoles(editForm) ? 'Monto en soles' : 'Monto'} value={editForm.monto} onChange={(e) => setEditForm((f) => ({ ...f, monto: e.target.value }))} className="w-28 text-right" />
                                     <Input placeholder="Referencia" value={editForm.referencia} onChange={(e) => setEditForm((f) => ({ ...f, referencia: e.target.value }))} className="flex-1" />
                                     <button type="button" onClick={guardarEdit} disabled={saving} className="rounded-md p-2 text-green-600 hover:bg-green-100" aria-label="Guardar"><Check className="h-4 w-4" /></button>
                                     <button type="button" onClick={() => setEditId(null)} className="rounded-md p-2 text-gray-500 hover:bg-gray-100" aria-label="Cancelar"><X className="h-4 w-4" /></button>
                                 </div>
+                                {controlesMoneda(editForm, (patch) => setEditForm((f) => ({ ...f, ...patch })))}
                             </div>
                         ) : (
                             <div key={p.id} className="flex items-center gap-3 px-3 py-2 text-sm">
                                 <Badge variant="blue">{metodoPagoLabel(p)}</Badge>
-                                <span className="font-medium text-warm-900">{money(p.monto, p.moneda || state.moneda)}</span>
+                                {p.monto_pen != null ? (
+                                    // Pagado en soles: lo que salió y lo que abonó a la deuda.
+                                    <span className="font-medium text-warm-900">
+                                        {money(p.monto_pen, 'PEN')}
+                                        <span className="ml-1 text-xs font-normal text-warm-500">
+                                            T.C. {Number(p.tipo_cambio)} = {money(p.monto, p.moneda || state.moneda)}
+                                        </span>
+                                    </span>
+                                ) : (
+                                    <span className="font-medium text-warm-900">{money(p.monto, p.moneda || state.moneda)}</span>
+                                )}
                                 <span className="text-warm-500">{p.fecha}</span>
                                 {p.referencia && <span className="text-warm-400">· {p.referencia}</span>}
                                 <div className="ml-auto flex items-center gap-1">
@@ -219,10 +306,11 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo, onSaved 
                                     onChange={({ tipo, cuentaId, billeteraId }) => setLinea(i, { tipo, cuentaId, billeteraId })}
                                 />
                                 <div className="mt-2 flex items-center gap-2">
-                                    <Input type="number" min="0" step="any" placeholder="Monto" value={l.monto} onChange={(e) => setLinea(i, { monto: e.target.value })} className="w-28 text-right" />
+                                    <Input type="number" min="0" step="any" placeholder={enSoles(l) ? 'Monto en soles' : 'Monto'} value={l.monto} onChange={(e) => setLinea(i, { monto: e.target.value })} className="w-28 text-right" />
                                     <Input placeholder="Referencia (opc.)" value={l.referencia} onChange={(e) => setLinea(i, { referencia: e.target.value })} className="flex-1" />
                                     <button type="button" onClick={() => removeLinea(i)} disabled={lineas.length === 1} className="rounded-md p-2 text-red-600 hover:bg-red-50 disabled:opacity-40" aria-label="Quitar"><Trash2 className="h-4 w-4" /></button>
                                 </div>
+                                {controlesMoneda(l, (patch) => setLinea(i, patch))}
                             </div>
                         ))}
                     </div>

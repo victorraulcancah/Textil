@@ -15,6 +15,10 @@ class CuentaPorPagarPago extends Model
         'billetera_id',
         'monto',
         'moneda',
+        // Pagada en soles una deuda en otra moneda: cuánto salió en soles y a
+        // qué tipo de cambio del día. `monto` es lo que eso abona, en `moneda`.
+        'monto_pen',
+        'tipo_cambio',
         'movimiento_caja_id',
         'referencia',
         'fecha',
@@ -24,6 +28,8 @@ class CuentaPorPagarPago extends Model
     {
         return [
             'monto' => 'decimal:2',
+            'monto_pen' => 'decimal:2',
+            'tipo_cambio' => 'decimal:4',
             'fecha' => 'date',
         ];
     }

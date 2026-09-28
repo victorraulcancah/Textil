@@ -10,8 +10,8 @@ use Spatie\Permission\Models\Role;
 
 /**
  * Datos mínimos para arrancar en PRODUCCIÓN: roles, empresa, usuario
- * administrador y los catálogos base del sistema (métodos de pago y motivos de
- * movimiento). NO carga datos de demostración.
+ * administrador y los catálogos base del sistema (CatalogosBaseSeeder: unidades
+ * de medida, métodos de pago y motivos). NO carga datos de demostración.
  *
  * A diferencia de DatabaseSeeder (que llama a DemoSeeder / DashboardDemoSeeder
  * con clientes, ventas y stock de prueba), este seeder es seguro para una
@@ -77,11 +77,7 @@ class ProductionSeeder extends Seeder
         }
 
         // ── Catálogos base del sistema (idempotentes) ──
-        $this->call([
-            UnidadesMedidaSeeder::class,
-            MetodosPagoSeeder::class,
-            MotivosMovimientoSeeder::class,
-        ]);
+        $this->call(CatalogosBaseSeeder::class);
 
         $this->command?->info("Empresa: {$empresa->razon_social} (RUC {$empresa->ruc})");
         $this->command?->info("Administrador: {$email}");

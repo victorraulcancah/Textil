@@ -8,6 +8,8 @@ use App\Http\Requests\Compra\UpdateCompraRequest;
 use App\Http\Resources\CompraResource;
 use App\Models\Compra;
 use App\Models\CuentaPorPagar;
+use App\Models\MovimientoCaja;
+use App\Services\CajaService;
 use App\Models\SerieDocumento;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -92,6 +94,7 @@ class CompraController extends Controller
             $this->crearDetalles($compra, $data['detalles']);
             $this->crearPagos($compra, $data['pagos'] ?? []);
             $this->sincronizarCuentaPorPagar($compra);
+            $this->sincronizarSalidasDeCaja($compra);
 
             return $compra;
         });
@@ -141,6 +144,7 @@ class CompraController extends Controller
             }
 
             $this->sincronizarCuentaPorPagar($compra->fresh());
+            $this->sincronizarSalidasDeCaja($compra->fresh());
         });
 
         return CompraResource::make($compra->fresh()->load(self::RELACIONES));
@@ -190,6 +194,8 @@ class CompraController extends Controller
             $compra->update(['estado' => 'anulada']);
             // Anulada la compra, la deuda con el proveedor ya no existe.
             CuentaPorPagar::where('compra_id', $compra->id)->delete();
+            // Y lo que se pagó al contado vuelve a la caja.
+            $this->sincronizarSalidasDeCaja($compra->fresh());
         });
 
         return CompraResource::make($compra->fresh());
@@ -199,6 +205,7 @@ class CompraController extends Controller
     {
         DB::transaction(function () use ($compra) {
             CuentaPorPagar::where('compra_id', $compra->id)->delete();
+            MovimientoCaja::where('documento_referencia_tipo', 'compra')->where('documento_referencia_id', $compra->id)->delete();
             $compra->detalles()->delete();
             $compra->pagos()->delete();
             $compra->delete();
@@ -327,6 +334,50 @@ class CompraController extends Controller
      * dólares se puede pagar con soles: ese pago llega en soles y se abona su
      * equivalente al tipo de cambio de la compra, el que se puso a mano.
      */
+    /**
+     * Lo que se paga al contado sale de la caja: un egreso por cada pago de la
+     * compra, en la caja abierta de quien la registra. Se rehace completo cada
+     * vez que la compra cambia, y una compra anulada no deja ninguno.
+     */
+    private function sincronizarSalidasDeCaja(Compra $compra): void
+    {
+        MovimientoCaja::where('documento_referencia_tipo', 'compra')
+            ->where('documento_referencia_id', $compra->id)
+            ->delete();
+
+        if ($compra->estado === 'anulada' || $compra->forma_pago !== 'contado') {
+            return;
+        }
+
+        $cajas = app(CajaService::class);
+        $apertura = $cajas->aperturaPara();
+        if (! $apertura) {
+            return;
+        }
+
+        $motivo = $cajas->motivo('Salida por pago de compra');
+        $documento = $compra->numero_compra ?? "#{$compra->id}";
+
+        foreach ($compra->pagos()->get() as $pago) {
+            // Pagado con soles una compra en otra moneda: salieron soles.
+            $enSoles = $pago->monto_pen !== null;
+
+            MovimientoCaja::create([
+                'apertura_caja_id' => $apertura->id,
+                'tipo' => 'egreso',
+                'motivo_movimiento_id' => $motivo,
+                'descripcion' => "Pago de la compra {$documento}",
+                'cuenta_bancaria_id' => $pago->metodo === 'transferencia' ? $pago->cuenta_bancaria_id : null,
+                'billetera_id' => $pago->metodo === 'billetera' ? $pago->billetera_id : null,
+                'monto' => $enSoles ? $pago->monto_pen : $pago->monto,
+                'moneda' => $enSoles ? 'PEN' : ($pago->moneda ?: 'PEN'),
+                'fecha' => optional($compra->fecha)->toDateString() ?? now()->toDateString(),
+                'documento_referencia_tipo' => 'compra',
+                'documento_referencia_id' => $compra->id,
+            ]);
+        }
+    }
+
     private function crearPagos(Compra $compra, array $pagos): void
     {
         $moneda = $compra->moneda_origen ?: 'PEN';

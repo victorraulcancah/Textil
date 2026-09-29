@@ -75,6 +75,9 @@ class CuentaPorPagarController extends Controller
                     ? MovimientoCaja::create([
                         'apertura_caja_id' => $apertura->id,
                         'tipo' => 'egreso',
+                        'motivo_movimiento_id' => app(\App\Services\CajaService::class)->motivo('Salida por pago a proveedor'),
+                        'descripcion' => 'Pago a '.($cuenta->proveedor?->nombre ?? 'proveedor')
+                            .($cuenta->compra ? ' · compra '.($cuenta->compra->numero_compra ?? "#{$cuenta->compra->id}") : ''),
                         'cuenta_bancaria_id' => $cuentaBancariaId,
                         'billetera_id' => $billeteraId,
                         ...$this->egreso($cuenta, $abono),
@@ -178,7 +181,7 @@ class CuentaPorPagarController extends Controller
 
     private function aperturaAbierta(): ?AperturaCaja
     {
-        return AperturaCaja::where('estado', 'abierta')->latest('fecha_apertura')->first();
+        return app(\App\Services\CajaService::class)->aperturaPara();
     }
 
     /**

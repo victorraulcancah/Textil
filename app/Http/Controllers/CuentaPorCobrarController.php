@@ -74,6 +74,9 @@ class CuentaPorCobrarController extends Controller
                     ? MovimientoCaja::create([
                         'apertura_caja_id' => $apertura->id,
                         'tipo' => 'ingreso',
+                        'motivo_movimiento_id' => app(\App\Services\CajaService::class)->motivo('Ingreso por cobranza'),
+                        'descripcion' => 'Cobranza'.($cuenta->notaVenta ? " de la venta {$cuenta->notaVenta->serie}-{$cuenta->notaVenta->numero}" : '')
+                            .($cuenta->total_cuotas > 1 ? " (cuota {$cuenta->numero_cuota}/{$cuenta->total_cuotas})" : ''),
                         'cuenta_bancaria_id' => $cuentaBancariaId,
                         'billetera_id' => $billeteraId,
                         'monto' => $ingreso['monto'],
@@ -190,7 +193,7 @@ class CuentaPorCobrarController extends Controller
 
     private function aperturaAbierta(): ?AperturaCaja
     {
-        return AperturaCaja::where('estado', 'abierta')->latest('fecha_apertura')->first();
+        return app(\App\Services\CajaService::class)->aperturaPara();
     }
 
     /**

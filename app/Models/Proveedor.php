@@ -49,14 +49,14 @@ class Proveedor extends Model
         return $this->hasMany(OrdenCompra::class);
     }
 
-    /** Prefijo del código automático: EXT- para extranjeros, NC- para nacionales. */
+    /** Prefijo del código automático: EXT- para extranjeros, NAC- para nacionales. */
     public static function prefijoDe(?string $tipo): string
     {
-        return $tipo === 'extranjero' ? 'EXT-' : 'NC-';
+        return $tipo === 'extranjero' ? 'EXT-' : 'NAC-';
     }
 
     /**
-     * Siguiente código libre de su tipo: EXT-1, EXT-2… o NC-1, NC-2…
+     * Siguiente código libre de su tipo: EXT-1, EXT-2… o NAC-1, NAC-2…
      * No se reutiliza el de un proveedor borrado: se avanza desde el mayor.
      */
     public static function generarCodigo(?string $tipo): string

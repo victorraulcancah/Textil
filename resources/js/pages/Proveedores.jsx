@@ -475,11 +475,11 @@ export default function Proveedores() {
                             onChange={(e) => field('nombre', e.target.value)}
                             error={formErrors.nombre}
                         />
-                        {/* El código lo pone el sistema: EXT-1, EXT-2… para extranjeros y NC-1, NC-2… para nacionales. */}
+                        {/* El código lo pone el sistema: EXT-1, EXT-2… para extranjeros y NAC-1, NAC-2… para nacionales. */}
                         <Input
                             label="Código"
                             value={editing ? form.codigo : ''}
-                            placeholder={form.tipo === 'extranjero' ? 'Se genera: EXT-1, EXT-2…' : 'Se genera: NC-1, NC-2…'}
+                            placeholder={form.tipo === 'extranjero' ? 'Se genera: EXT-1, EXT-2…' : 'Se genera: NAC-1, NAC-2…'}
                             readOnly
                             className="bg-gray-50 font-mono text-gray-600"
                             error={formErrors.codigo}

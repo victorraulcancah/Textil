@@ -59,6 +59,12 @@ class Cliente extends Model
         return $this->belongsTo(TipoPrecio::class);
     }
 
+    /** Lo que debe: una cuenta por cada cuota de sus ventas a crédito. */
+    public function cuentasPorCobrar()
+    {
+        return $this->hasMany(CuentaPorCobrar::class);
+    }
+
     /** Cuánto se le fía; sin una, se le vende al contado. */
     public function lineaCredito()
     {

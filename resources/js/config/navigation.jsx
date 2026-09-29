@@ -24,6 +24,8 @@ import {
     ClipboardCheck,
     ShoppingBag,
     Contact,
+    FileSearch,
+    DollarSign,
     Tag,
     Briefcase,
     ReceiptText,
@@ -113,7 +115,9 @@ export const navigation = [
             { label: 'Cierres de Caja', icon: Lock, to: '/cierres-caja', permiso: 'tesoreria.cierres-caja' },
             { label: 'Motivos de Movimiento', icon: ListChecks, to: '/motivos-movimiento', permiso: 'tesoreria.motivos-movimiento' },
             { label: 'Cuentas por Cobrar', icon: HandCoins, to: '/cuentas-por-cobrar', permiso: 'tesoreria.cuentas-por-cobrar' },
+            { label: 'Estado de cuenta', icon: FileSearch, to: '/estado-cuenta', permiso: 'tesoreria.estado-cuenta' },
             { label: 'Cuentas por Pagar', icon: Receipt, to: '/cuentas-por-pagar', permiso: 'tesoreria.cuentas-por-pagar' },
+            { label: 'Tipo de cambio', icon: DollarSign, to: '/tipos-cambio', permiso: 'tesoreria.tipos-cambio' },
         ],
     },
     {

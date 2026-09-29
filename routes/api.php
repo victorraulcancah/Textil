@@ -78,6 +78,7 @@ Route::middleware('auth:api')->group(function () {
     Route::post('tipos-cambio/sunat', [\App\Http\Controllers\TipoCambioController::class, 'sunat']);
 
     // Estado de cuenta de un cliente: pantalla, Excel (y el PDF va por /pdf).
+    Route::get('estado-cuenta', [\App\Http\Controllers\EstadoCuentaController::class, 'index']);
     Route::get('estado-cuenta/{cliente}', [\App\Http\Controllers\EstadoCuentaController::class, 'show']);
     Route::get('estado-cuenta/{cliente}/excel', [\App\Http\Controllers\EstadoCuentaController::class, 'excel']);
 
@@ -128,6 +129,8 @@ Route::middleware('auth:api')->group(function () {
     // Lee el Excel del packing list y devuelve una vista previa; no crea nada
     // todavía —recién se guarda cuando el almacenero confirma la recepción—.
     Route::post('recepciones-compra/leer-packing-list', [RecepcionCompraController::class, 'leerPackingList']);
+    // La plantilla del packing list de una compra, para llenarla y cargarla.
+    Route::get('recepciones-compra/plantilla-packing-list/{compra}', [RecepcionCompraController::class, 'plantillaPackingList']);
     // El almacén escanea cada rollo al recibirlo (y puede deshacer un error).
     Route::post('recepciones-compra/escanear', [RecepcionCompraController::class, 'escanearRollo']);
     Route::get('compras/{compra}/recepciones', [RecepcionCompraController::class, 'detalleDeCompra']);

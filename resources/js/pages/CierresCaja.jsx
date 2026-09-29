@@ -7,8 +7,8 @@ import PageHeader from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
 import { Alert, Badge, Button, DataTable, SearchSelect, Select } from '../components/ui';
 
-const money = (n) =>
-    new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(n) || 0);
+const money = (n, moneda = 'PEN') =>
+    new Intl.NumberFormat('es-PE', { style: 'currency', currency: moneda || 'PEN' }).format(Number(n) || 0);
 
 const fechaHora = (v) => (v ? new Date(v).toLocaleString('es-PE') : '—');
 const fechaCorta = (v) => (v ? new Date(v).toLocaleDateString('es-PE') : '—');
@@ -126,16 +126,26 @@ export default function CierresCaja() {
         </div>
     );
 
-    const diferenciaBadge = (row) => {
-        const dif = Number(row.diferencia) || 0;
-        if (Math.abs(dif) < 0.001) return <Badge variant="green">Cuadró</Badge>;
+    const badgeDe = (valor, moneda) => {
+        const dif = Number(valor) || 0;
+        if (Math.abs(dif) < 0.001) return <Badge variant="green">Cuadró{moneda === 'USD' ? ' (US$)' : ''}</Badge>;
         return (
             <Badge variant={dif < 0 ? 'red' : 'amber'}>
                 {dif < 0 ? 'Faltó ' : 'Sobró '}
-                {money(Math.abs(dif))}
+                {money(Math.abs(dif), moneda)}
             </Badge>
         );
     };
+
+    const diferenciaBadge = (row) =>
+        row.diferencia_usd != null ? (
+            <span className="flex flex-col items-start gap-1">
+                {badgeDe(row.diferencia, 'PEN')}
+                {badgeDe(row.diferencia_usd, 'USD')}
+            </span>
+        ) : (
+            badgeDe(row.diferencia, 'PEN')
+        );
 
     const columns = [
         {
@@ -217,7 +227,14 @@ export default function CierresCaja() {
             width: '115px',
             align: 'right',
             searchable: false,
-            render: (row) => <span className="font-semibold text-warm-900">{money(row.monto_contado)}</span>,
+            render: (row) => (
+                <span className="font-semibold text-warm-900">
+                    {money(row.monto_contado)}
+                    {row.monto_contado_usd != null && (
+                        <span className="block text-xs font-normal text-warm-500">{money(row.monto_contado_usd, 'USD')}</span>
+                    )}
+                </span>
+            ),
         },
         {
             key: 'diferencia',
@@ -301,7 +318,7 @@ export default function CierresCaja() {
             searchable: false,
             render: (row) => (
                 <span className={row.tipo === 'ingreso' ? 'font-semibold text-green-600' : 'font-semibold text-red-600'}>
-                    {row.tipo === 'ingreso' ? '+' : '-'} {money(row.monto)}
+                    {row.tipo === 'ingreso' ? '+' : '-'} {money(row.monto, row.moneda)}
                 </span>
             ),
         },
@@ -381,6 +398,14 @@ export default function CierresCaja() {
                                 Billeteras:{' '}
                                 <strong className="text-warm-900">{money(seleccionado.billeteras)}</strong>
                             </span>
+                            {seleccionado.ingresos_usd != null && (
+                                <span>
+                                    Dólares:{' '}
+                                    <strong className="text-warm-900">
+                                        +{money(seleccionado.ingresos_usd, 'USD')} / -{money(seleccionado.egresos_usd, 'USD')}
+                                    </strong>
+                                </span>
+                            )}
                         </span>
                     )}
                 </div>

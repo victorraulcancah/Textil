@@ -168,7 +168,7 @@ export default function LineaCreditoModal({ open, onClose, cliente, valor, tipoP
             size="2xl"
             footer={
                 <div className="flex w-full flex-wrap items-center justify-between gap-2">
-                    {cliente?.id ? (
+                    {cliente?.id && puede('tesoreria.estado-cuenta') ? (
                         <Button
                             variant="secondary"
                             onClick={() => window.open(`/estado-cuenta?cliente=${cliente.id}`, '_blank', 'noopener')}

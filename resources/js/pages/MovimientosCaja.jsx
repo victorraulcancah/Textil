@@ -8,8 +8,8 @@ import PdfViewerModal from '../components/PdfViewerModal';
 import MetodoCajaPicker from '../components/MetodoCajaPicker';
 import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select } from '../components/ui';
 
-const money = (n) =>
-    new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(n) || 0);
+const money = (n, moneda = 'PEN') =>
+    new Intl.NumberFormat('es-PE', { style: 'currency', currency: moneda || 'PEN' }).format(Number(n) || 0);
 
 const fecha = (v) => {
     if (!v) return '—';
@@ -158,7 +158,7 @@ export default function MovimientosCaja() {
             align: 'right',
             render: (row) => (
                 <span className={row.tipo === 'ingreso' ? 'text-green-600' : 'text-red-600'}>
-                    {row.tipo === 'ingreso' ? '+' : '-'} {money(row.monto)}
+                    {row.tipo === 'ingreso' ? '+' : '-'} {money(row.monto, row.moneda)}
                 </span>
             ),
         },

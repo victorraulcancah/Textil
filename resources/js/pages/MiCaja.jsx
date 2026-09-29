@@ -7,8 +7,8 @@ import PageHeader from '../components/PageHeader';
 import MetodoCajaPicker from '../components/MetodoCajaPicker';
 import { Alert, Badge, Button, Card, DataTable, Input, Modal, SearchSelect, Select, Spinner } from '../components/ui';
 
-const money = (n) =>
-    new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(n) || 0);
+const money = (n, moneda = 'PEN') =>
+    new Intl.NumberFormat('es-PE', { style: 'currency', currency: moneda || 'PEN' }).format(Number(n) || 0);
 
 const fechaHora = (v) => (v ? new Date(v).toLocaleString('es-PE') : '—');
 const fechaCorta = (v) => {
@@ -50,6 +50,8 @@ export default function MiCaja() {
     const [montoInicial, setMontoInicial] = useState('');
     const [cerrarOpen, setCerrarOpen] = useState(false);
     const [montoContado, setMontoContado] = useState('');
+    // Los dólares del cajón se cuentan aparte.
+    const [montoContadoUsd, setMontoContadoUsd] = useState('');
 
     const [regTipo, setRegTipo] = useState(null); // 'ingreso' | 'egreso'
     const [mov, setMov] = useState(emptyMov());
@@ -97,13 +99,18 @@ export default function MiCaja() {
     const cerrar = async () => {
         setSaving(true);
         try {
-            const res = await api.post('/mi-caja/cerrar', { monto_contado: Number(montoContado) || 0 });
+            const res = await api.post('/mi-caja/cerrar', {
+                monto_contado: Number(montoContado) || 0,
+                ...(montoContadoUsd !== '' ? { monto_contado_usd: Number(montoContadoUsd) || 0 } : {}),
+            });
             setData(res.data);
             setCerrarOpen(false);
             setMontoContado('');
+            setMontoContadoUsd('');
             toast.success('Caja cerrada. Arqueo registrado.');
         } catch (err) {
-            toast.error(err.response?.data?.message ?? 'No se pudo cerrar la caja.');
+            const errores = err.response?.data?.errors;
+            toast.error(errores ? Object.values(errores)[0]?.[0] : err.response?.data?.message ?? 'No se pudo cerrar la caja.');
         } finally {
             setSaving(false);
         }
@@ -150,6 +157,9 @@ export default function MiCaja() {
     // no se cuentan en el arqueo del cajón.
     const otrosMedios = (resumen?.otros_ingresos ?? 0) - (resumen?.otros_egresos ?? 0);
     const diferencia = (Number(montoContado) || 0) - esperado;
+    // Los dólares (ventas o cobros en dólares) van aparte: null si no hubo.
+    const dolares = resumen?.dolares ?? null;
+    const diferenciaUsd = (Number(montoContadoUsd) || 0) - (dolares?.esperado ?? 0);
 
     // Opciones de método según lo que acepta la caja.
     const motivosTipo = motivos.filter(
@@ -248,7 +258,7 @@ export default function MiCaja() {
             ),
         },
         { key: 'metodo', label: 'Método', getSearchValue: (r) => metodoLabel(r), render: (r) => metodoLabel(r) },
-        { key: 'monto', label: 'Monto', align: 'right', render: (r) => <span className={r.tipo === 'ingreso' ? 'text-green-600' : 'text-red-600'}>{r.tipo === 'ingreso' ? '+' : '-'} {money(r.monto)}</span> },
+        { key: 'monto', label: 'Monto', align: 'right', render: (r) => <span className={r.tipo === 'ingreso' ? 'text-green-600' : 'text-red-600'}>{r.tipo === 'ingreso' ? '+' : '-'} {money(r.monto, r.moneda)}</span> },
     ];
 
     const openReg = (tipo) => {
@@ -282,7 +292,7 @@ export default function MiCaja() {
                             <div className="mb-4 flex flex-wrap gap-2">
                                 <Button variant="success" onClick={() => openReg('ingreso')}><ArrowUpCircle className="h-4 w-4" /> Nuevo ingreso</Button>
                                 <Button variant="danger" onClick={() => openReg('egreso')}><ArrowDownCircle className="h-4 w-4" /> Nuevo gasto</Button>
-                                <Button variant="secondary" onClick={() => { setCerrarOpen(true); setMontoContado(''); }}><Lock className="h-4 w-4" /> Cerrar caja</Button>
+                                <Button variant="secondary" onClick={() => { setCerrarOpen(true); setMontoContado(''); setMontoContadoUsd(''); }}><Lock className="h-4 w-4" /> Cerrar caja</Button>
                             </div>
 
                             <div className="mb-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
@@ -291,6 +301,13 @@ export default function MiCaja() {
                                 <Stat icon={ArrowDownCircle} label="Gastos" value={money(resumen?.egresos)} accent="text-red-600" bg="bg-red-50" />
                                 <Stat icon={Wallet} label="Efectivo esperado" value={money(esperado)} accent="text-primary-600" bg="bg-primary-50" />
                             </div>
+                            {dolares && (
+                                <div className="mb-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
+                                    <Stat icon={ArrowUpCircle} label="Ingresos en dólares" value={money(dolares.ingresos, 'USD')} accent="text-green-600" bg="bg-green-50" />
+                                    <Stat icon={ArrowDownCircle} label="Egresos en dólares" value={money(dolares.egresos, 'USD')} accent="text-red-600" bg="bg-red-50" />
+                                    <Stat icon={Wallet} label="Dólares esperados" value={money(dolares.esperado, 'USD')} accent="text-primary-600" bg="bg-primary-50" />
+                                </div>
+                            )}
 
                             <h3 className="mb-2 text-sm font-bold text-warm-900">Movimientos de esta apertura</h3>
                             <DataTable
@@ -346,6 +363,20 @@ export default function MiCaja() {
                         <div className={`rounded-lg px-3 py-2 text-sm font-medium ${diferencia < 0 ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}>
                             {diferencia < 0 ? 'Faltante' : 'Sobrante'}: {money(Math.abs(diferencia))}
                         </div>
+                    )}
+                    {dolares && (
+                        <>
+                            <div className="flex justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm">
+                                <span className="text-warm-500">Dólares esperados</span>
+                                <span className="font-semibold text-warm-900">{money(dolares.esperado, 'USD')}</span>
+                            </div>
+                            <Input label="Dólares contados (US$)" type="number" min="0" step="0.01" placeholder="0.00" value={montoContadoUsd} onChange={(e) => setMontoContadoUsd(e.target.value)} />
+                            {montoContadoUsd !== '' && Math.abs(diferenciaUsd) > 0.001 && (
+                                <div className={`rounded-lg px-3 py-2 text-sm font-medium ${diferenciaUsd < 0 ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}>
+                                    {diferenciaUsd < 0 ? 'Faltante' : 'Sobrante'}: {money(Math.abs(diferenciaUsd), 'USD')}
+                                </div>
+                            )}
+                        </>
                     )}
                 </div>
             </Modal>

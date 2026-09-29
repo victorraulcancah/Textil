@@ -596,7 +596,10 @@ class RecepcionCompraController extends Controller
         }
 
         try {
-            $hoja = \PhpOffice\PhpSpreadsheet\IOFactory::load($data['archivo']->getRealPath())->getActiveSheet();
+            $libro = \PhpOffice\PhpSpreadsheet\IOFactory::load($data['archivo']->getRealPath());
+            // La plantilla trae la hoja "Packing list"; si se guardó parado en
+            // otra (la de códigos), igual se lee la correcta.
+            $hoja = $libro->getSheetByName('Packing list') ?? $libro->getActiveSheet();
         } catch (\Throwable $e) {
             return response()->json(['message' => 'No se pudo leer el archivo: ¿es un Excel válido?'], 422);
         }
@@ -765,6 +768,97 @@ class RecepcionCompraController extends Controller
             'detalles' => array_values($grupos),
             'advertencias' => $advertencias,
             'packing_list' => $this->resumenPackingList($compra),
+        ]);
+    }
+
+    /**
+     * La plantilla del packing list de una compra, lista para llenar: la hoja
+     * "Packing list" con las columnas que lee "Cargar packing list" (la de
+     * Producto con una lista de los productos de esta compra) y la hoja
+     * "Códigos" con cada producto y sus colores —código, nombre y cómo lo
+     * llama el proveedor— para pasar a nuestros códigos lo que manda el
+     * proveedor.
+     */
+    public function plantillaPackingList(Compra $compra)
+    {
+        $compra->load(['detalles.presentacion.producto.colores', 'ordenCompra:id,codigo']);
+
+        $libro = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $negrita = ['font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']], 'fill' => [
+            'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '4F46E5'],
+        ]];
+
+        // Hoja 1: la que se llena y se vuelve a cargar.
+        $hoja = $libro->getActiveSheet();
+        $hoja->setTitle('Packing list');
+        $hoja->fromArray(['Orden', 'Código único', 'Producto', 'Color', 'Metros', 'Peso neto', 'Envío'], null, 'A1');
+        $hoja->getStyle('A1:G1')->applyFromArray($negrita);
+        $hoja->freezePane('A2');
+        foreach (['A' => 16, 'B' => 22, 'C' => 20, 'D' => 10, 'E' => 10, 'F' => 11, 'G' => 14] as $columna => $ancho) {
+            $hoja->getColumnDimension($columna)->setWidth($ancho);
+        }
+        // Códigos como texto: "0074" no debe quedar en 74, ni un código único en notación científica.
+        $hoja->getStyle('A2:D1000')->getNumberFormat()->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_TEXT);
+
+        // De qué orden es esta compra, como nota en la cabecera "Orden".
+        $orden = (string) ($compra->ordenCompra?->codigo ?? '');
+
+        // Hoja 2: los códigos válidos de esta compra.
+        $codigos = $libro->createSheet();
+        $codigos->setTitle('Códigos');
+        $codigos->fromArray(['Producto (código)', 'Producto', 'Color (código)', 'Color', 'Como lo llama el proveedor'], null, 'A1');
+        $codigos->getStyle('A1:E1')->applyFromArray($negrita);
+        $fila = 2;
+        $productos = $compra->detalles->map(fn ($d) => $d->presentacion?->producto)->filter()->unique('id');
+        foreach ($productos as $producto) {
+            $colores = $producto->colores->where('activo', true)->sortBy('codigo');
+            if ($colores->isEmpty()) {
+                $codigos->fromArray([$producto->codigo, $producto->nombre, '', 'Sin colores', ''], null, "A{$fila}", true);
+                $fila++;
+                continue;
+            }
+            foreach ($colores as $color) {
+                $codigos->fromArray([$producto->codigo, $producto->nombre, $color->codigo, $color->nombre, $color->nombre_proveedor], null, "A{$fila}", true);
+                $fila++;
+            }
+        }
+        $codigos->getStyle("A2:C{$fila}")->getNumberFormat()->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_TEXT);
+        foreach (range('A', 'E') as $columna) {
+            $codigos->getColumnDimension($columna)->setAutoSize(true);
+        }
+        $codigos->fromArray([
+            ['Cómo llenar la hoja "Packing list"'],
+            ['Una fila por rollo. Código único: el del rollo (se escanea al llegar). Metros: el metraje de fábrica.'],
+            ['Producto y Color: los códigos de esta hoja. También vale el producto con su color en una sola columna (01-01-030-0074).'],
+            ['Orden y Envío son opcionales. No cambies los títulos de las columnas.'],
+        ], null, 'G1');
+        $codigos->getStyle('G1')->getFont()->setBold(true);
+
+        // Producto: una lista con los de esta compra, para no escribir uno que no viene.
+        $lista = $productos->pluck('codigo')->filter()->implode(',');
+        if ($lista !== '' && strlen($lista) <= 250) {
+            $validacion = $hoja->getCell('C2')->getDataValidation();
+            $validacion->setType(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::TYPE_LIST)
+                ->setErrorStyle(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::STYLE_WARNING)
+                ->setAllowBlank(true)
+                ->setShowDropDown(true)
+                ->setShowErrorMessage(true)
+                ->setErrorTitle('Producto')
+                ->setError('Ese producto no está en esta compra. Revisa la hoja "Códigos".')
+                ->setFormula1('"'.$lista.'"');
+            $hoja->setDataValidation('C2:C1000', $validacion);
+        }
+        if ($orden !== '') {
+            $hoja->getComment('A1')->getText()->createTextRun("Esta compra es de la orden {$orden}.");
+        }
+
+        $libro->setActiveSheetIndex(0);
+        $archivo = 'plantilla-packing-list-'.\Illuminate\Support\Str::slug($compra->numero_compra ?: (string) $compra->id).'.xlsx';
+
+        return response()->streamDownload(function () use ($libro) {
+            (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($libro))->save('php://output');
+        }, $archivo, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         ]);
     }
 

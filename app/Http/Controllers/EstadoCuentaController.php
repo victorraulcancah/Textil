@@ -21,6 +21,31 @@ class EstadoCuentaController extends Controller
 
     public function __construct(protected EstadoCuentaService $estados) {}
 
+    /**
+     * Los clientes que alguna vez compraron a crédito, con lo que deben hoy
+     * por moneda: para elegir de quién ver el estado de cuenta sin depender
+     * del permiso de Clientes.
+     */
+    public function index()
+    {
+        $deudas = \App\Models\CuentaPorCobrar::whereIn('estado', ['pendiente', 'parcial'])
+            ->selectRaw('cliente_id, moneda, SUM(saldo) AS saldo')
+            ->groupBy('cliente_id', 'moneda')
+            ->get()
+            ->groupBy('cliente_id');
+
+        return response()->json(
+            Cliente::whereHas('cuentasPorCobrar')
+                ->orderBy('nombre')
+                ->get(['id', 'codigo', 'nombre', 'numero_documento'])
+                ->map(fn (Cliente $c) => $c->only(['id', 'codigo', 'nombre', 'numero_documento']) + [
+                    'deuda' => ($deudas->get($c->id) ?? collect())
+                        ->mapWithKeys(fn ($d) => [$d->moneda => round((float) $d->saldo, 2)])
+                        ->all(),
+                ]),
+        );
+    }
+
     public function show(Request $request, Cliente $cliente)
     {
         $fechas = $this->fechas($request);

@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Wallet } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { FileSearch, Wallet } from 'lucide-react';
 import api, { asList } from '../lib/api';
+import { useAuth } from '../lib/auth';
+import { money } from '../lib/moneda';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import PagosCuentaModal from '../components/PagosCuentaModal';
@@ -14,10 +17,13 @@ const ESTADOS = [
     { value: 'anulado', label: 'Anulado' },
 ];
 
-const money = (n) =>
-    new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(n) || 0);
+// "2026-10-29" sin hora se leería como UTC y en Perú saldría el día anterior.
+const fecha = (v) => (v ? new Date(`${String(v).slice(0, 10)}T00:00:00`).toLocaleDateString('es-PE') : '—');
 
-const fecha = (v) => (v ? new Date(v).toLocaleDateString('es-PE') : '—');
+const hoy = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
 const estadoBadge = (estado) => {
     const map = { pendiente: 'red', parcial: 'amber', pagado: 'green', anulado: 'gray' };
@@ -25,6 +31,8 @@ const estadoBadge = (estado) => {
 };
 
 export default function CuentasPorCobrar() {
+    const navigate = useNavigate();
+    const { puede } = useAuth();
     const [rows, setRows] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -49,25 +57,48 @@ export default function CuentasPorCobrar() {
     }, [load]);
 
     const columns = [
-        { key: 'id', label: '#', render: (row) => <Badge variant="blue">{String(row.id).padStart(2, '0')}</Badge> },
+        {
+            key: 'documento',
+            label: 'Venta',
+            getSearchValue: (row) => (row.nota_venta ? `${row.nota_venta.serie}-${row.nota_venta.numero}` : ''),
+            render: (row) => (
+                <span className="inline-flex items-center gap-1.5">
+                    <Badge variant="blue">
+                        {row.nota_venta ? `${row.nota_venta.serie}-${row.nota_venta.numero}` : `#${row.id}`}
+                    </Badge>
+                    {row.total_cuotas > 1 && (
+                        <span className="text-xs text-warm-500">
+                            Cuota {row.numero_cuota}/{row.total_cuotas}
+                        </span>
+                    )}
+                </span>
+            ),
+        },
         {
             key: 'cliente',
             label: 'Cliente',
             render: (row) => row.cliente?.nombre ?? <span className="text-gray-400">—</span>,
         },
-        { key: 'fecha_vencimiento', label: 'Vence', render: (row) => fecha(row.fecha_vencimiento) },
-        { key: 'monto_total', label: 'Total', align: 'right', render: (row) => money(row.monto_total) },
+        {
+            key: 'fecha_vencimiento',
+            label: 'Vence',
+            render: (row) => {
+                const vencida = ['pendiente', 'parcial'].includes(row.estado) && String(row.fecha_vencimiento).slice(0, 10) < hoy();
+                return <span className={vencida ? 'font-semibold text-red-600' : ''}>{fecha(row.fecha_vencimiento)}</span>;
+            },
+        },
+        { key: 'monto_total', label: 'Total', align: 'right', render: (row) => money(row.monto_total, row.moneda) },
         {
             key: 'monto_pagado',
             label: 'Pagado',
             align: 'right',
-            render: (row) => <span className="text-green-600">{money(row.monto_pagado)}</span>,
+            render: (row) => <span className="text-green-600">{money(row.monto_pagado, row.moneda)}</span>,
         },
         {
             key: 'saldo',
             label: 'Saldo',
             align: 'right',
-            render: (row) => <span className="font-medium text-red-600">{money(row.saldo)}</span>,
+            render: (row) => <span className="font-medium text-red-600">{money(row.saldo, row.moneda)}</span>,
         },
         { key: 'estado', label: 'Estado', render: (row) => estadoBadge(row.estado) },
         {
@@ -76,9 +107,22 @@ export default function CuentasPorCobrar() {
             type: 'actions',
             align: 'right',
             actions: (row) => (
-                <Button size="sm" variant="secondary" onClick={() => setPagoCuenta(row)}>
-                    <Wallet className="h-4 w-4" /> Pagos
-                </Button>
+                <>
+                    <Button size="sm" variant="secondary" onClick={() => setPagoCuenta(row)}>
+                        <Wallet className="h-4 w-4" /> Pagos
+                    </Button>
+                    {puede('tesoreria.estado-cuenta') && (
+                        <button
+                            type="button"
+                            aria-label="Estado de cuenta"
+                            title="Estado de cuenta del cliente"
+                            onClick={() => navigate(`/estado-cuenta?cliente=${row.cliente_id}`)}
+                            className="rounded-md p-1.5 text-primary-600 transition hover:bg-primary-50"
+                        >
+                            <FileSearch className="h-4 w-4" />
+                        </button>
+                    )}
+                </>
             ),
         },
     ];

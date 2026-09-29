@@ -153,6 +153,8 @@ return [
                     // poder confirmarla: eso lo hace el encargado ("crear").
                     'patrones' => [
                         'recepciones-compra/leer-packing-list' => 'importar',
+                        // Quien carga el packing list baja su plantilla.
+                        'recepciones-compra/plantilla-packing-list/*' => 'importar',
                         'recepciones-compra/escanear' => 'editar',
                         'recepciones-compra/quitar-escaneo' => 'editar',
                     ],

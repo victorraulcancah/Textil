@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Camera, ClipboardList, PackageCheck, ScanLine, X } from 'lucide-react';
+import { Camera, ClipboardList, Download, PackageCheck, ScanLine, X } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { opcionesAlmacen } from '../lib/almacenes';
 import { useAuth } from '../lib/auth';
@@ -79,6 +79,7 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
      */
     const [arbolUbicaciones, setArbolUbicaciones] = useState([]);
     const [subiendoPackingList, setSubiendoPackingList] = useState(false);
+    const [bajandoPlantilla, setBajandoPlantilla] = useState(false);
     /** La línea (compra_detalle_id) cuyos rollos y ubicación se están viendo en su modal. */
     const [lineaRollosId, setLineaRollosId] = useState(null);
     /**
@@ -137,6 +138,30 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
             setCargando(false);
         }
     }, [compraId, toast]);
+
+    /**
+     * La plantilla del packing list de esta compra: las columnas que se leen,
+     * con la lista de sus productos y una hoja con los códigos de producto y
+     * color válidos.
+     */
+    const descargarPlantilla = async () => {
+        setBajandoPlantilla(true);
+        try {
+            const { data } = await api.get(`/recepciones-compra/plantilla-packing-list/${compraId}`, { responseType: 'blob' });
+            const url = URL.createObjectURL(data);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `plantilla-packing-list-${datos?.compra?.numero_compra ?? compraId}.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 4000);
+        } catch {
+            toast.error('No se pudo descargar la plantilla.');
+        } finally {
+            setBajandoPlantilla(false);
+        }
+    };
 
     /** Trae del servidor el packing list de la compra y lo que ya se escaneó. */
     const refrescarPackingList = useCallback(async () => {
@@ -508,11 +533,22 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
                                             className="block flex-1 text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-primary-50 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary-700 hover:file:bg-primary-100"
                                         />
                                         {subiendoPackingList && <Spinner className="h-4 w-4 text-primary-600" />}
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            size="sm"
+                                            loading={bajandoPlantilla}
+                                            onClick={descargarPlantilla}
+                                            title="Excel con las columnas y los códigos de esta compra"
+                                        >
+                                            <Download className="h-4 w-4" /> Descargar plantilla
+                                        </Button>
                                     </div>
                                     <p className="mt-1 text-xs text-warm-400">
-                                        Cargar packing list: un Excel con una fila por rollo (orden, código único,
-                                        producto, color, metros, peso neto). Los rollos quedan por recibir hasta que
-                                        se escaneen; aún no suman al stock.
+                                        Descarga la plantilla, llénala con una fila por rollo (código único, producto,
+                                        color, metros, peso neto) y cárgala aquí. En la hoja "Códigos" están los
+                                        productos y colores de esta compra. Los rollos quedan por recibir hasta que se
+                                        escaneen; aún no suman al stock.
                                     </p>
                                 </div>
                             )}

@@ -74,7 +74,7 @@ class AlmacenController extends Controller
         // rollos que un pedido ya separó o está preparando: es lo que un
         // vendedor puede prometer sin pisar a otro cliente.
         $porColor = \App\Models\Rollo::query()
-            ->selectRaw('producto_id, almacen_id, producto_color_id, count(*) as rollos, sum(metros_actual) as metros, sum(case when estado = ? then metros_actual else 0 end) as metros_disponibles', [\App\Models\Rollo::DISPONIBLE])
+            ->selectRaw('producto_id, almacen_id, producto_color_id, count(*) as rollos, sum(case when estado = ? then 1 else 0 end) as rollos_disponibles, sum(metros_actual) as metros, sum(case when estado = ? then metros_actual else 0 end) as metros_disponibles', [\App\Models\Rollo::DISPONIBLE, \App\Models\Rollo::DISPONIBLE])
             ->where('metros_actual', '>', 0)
             ->whereIn('producto_id', $filas->pluck('producto_id')->unique())
             ->groupBy('producto_id', 'almacen_id', 'producto_color_id')
@@ -84,15 +84,17 @@ class AlmacenController extends Controller
 
         // Lo que los pedidos ya reservaron de un color y aún no tiene rollo
         // asignado: sigue en su estante, "disponible", pero ya tiene dueño.
-        $pendientes = \App\Models\OrdenVentaDetalle::query()
+        $reservadas = \App\Models\OrdenVentaDetalle::query()
             ->whereNotNull('cantidad_reservada')
             ->whereNotNull('producto_color_id')
             ->with(['presentacion:id,producto_id', 'rollos'])
             ->get()
-            ->groupBy(fn ($d) => $d->presentacion?->producto_id.'-'.$d->reserva_almacen_id.'-'.$d->producto_color_id)
-            ->map(fn ($grupo) => $grupo->sum(fn ($d) => $d->metrosPendientes()));
+            ->groupBy(fn ($d) => $d->presentacion?->producto_id.'-'.$d->reserva_almacen_id.'-'.$d->producto_color_id);
+        $pendientes = $reservadas->map(fn ($grupo) => $grupo->sum(fn ($d) => $d->metrosPendientes()));
+        // Y de lo pedido en rollos enteros, cuántos rollos faltan asignar.
+        $rollosPendientes = $reservadas->map(fn ($grupo) => $grupo->sum(fn ($d) => $d->esPorRollos() ? $d->rollosPendientes() : 0));
 
-        $filas->each(function ($fila) use ($porColor, $pendientes) {
+        $filas->each(function ($fila) use ($porColor, $pendientes, $rollosPendientes) {
             $grupo = $porColor->get($fila->producto_id.'-'.$fila->almacen_id, collect());
 
             $fila->colores = $grupo
@@ -102,6 +104,11 @@ class AlmacenController extends Controller
                     'codigo' => $r->color?->codigo,
                     'hex' => $r->color?->hex,
                     'rollos' => (int) $r->rollos,
+                    'rollos_disponibles' => max(
+                        0,
+                        (int) $r->rollos_disponibles
+                            - (int) ($rollosPendientes[$fila->producto_id.'-'.$fila->almacen_id.'-'.$r->producto_color_id] ?? 0)
+                    ),
                     'metros' => round((float) $r->metros, 2),
                     'metros_disponibles' => round(max(
                         0,

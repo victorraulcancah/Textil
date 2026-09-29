@@ -46,6 +46,19 @@ class ProductoPresentacion extends Model
 
         return round($cantidad * $factor / $basePorMetro, 2);
     }
+
+    /**
+     * Lo contrario: cuántas unidades de este formato son esos metros. En el
+     * formato "Metro" es lo mismo; en uno de "Rollo 50 m", 100 m son 2.
+     */
+    public function desdeMetros(float $metros): float
+    {
+        $basePorMetro = max((float) ($this->producto?->factorBasePorMetro() ?? 1), 0.0001);
+        $factor = max((float) ($this->factor_conversion ?: 1), 0.0001);
+
+        return round($metros * $basePorMetro / $factor, 4);
+    }
+
     public function unidadBase() { return $this->belongsTo(UnidadMedida::class, 'unidad_base_id'); }
     public function complementario() { return $this->belongsTo(Producto::class, 'producto_complementario_id'); }
 

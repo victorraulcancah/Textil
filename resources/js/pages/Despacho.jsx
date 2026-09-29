@@ -11,6 +11,9 @@ import { Alert, Badge, Button, Modal, Spinner, cn } from '../components/ui';
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
 
+/** "1 rollo" / "3 rollos". */
+const rollosTexto = (n) => `${num(n)} rollo${Number(n) === 1 ? '' : 's'}`;
+
 /**
  * Preparación y despacho: la pantalla del almacenero.
  *
@@ -139,7 +142,8 @@ export default function Despacho() {
                 const { data } = await api.post(`/ordenes-venta/${detalle.id}/escanear`, {
                     codigo: valor,
                 });
-                const texto = `Rollo correcto · ${num(data.metros)} m · ${data.verificados}/${data.total}`;
+                // Entero (se va tal cual) o corte (se saca un trozo al despachar).
+                const texto = `Rollo correcto · ${num(data.metros)} m ${data.entero ? 'entero' : 'de corte'} · ${num(data.verificados)}/${num(data.total)} m`;
                 setUltimo({ ok: true, codigo: data.rollo.codigo, metros: data.metros, texto: 'Rollo correcto' });
                 await cargarDetalle(detalle.id);
 
@@ -260,7 +264,8 @@ export default function Despacho() {
     // de rollos, junta la cantidad que pidió el cliente.
     const lineas = detalle?.detalles ?? [];
     const verificados = lineas.reduce((s, d) => s + Number(d.metros_asignados || 0), 0);
-    const total = lineas.reduce((s, d) => s + Number(d.metros || 0), 0);
+    // En las líneas por rollos cuenta lo real de lo escaneado más lo estimado de lo que falta.
+    const total = lineas.reduce((s, d) => s + Number(d.metros_totales ?? d.metros ?? 0), 0);
     const completo = lineas.length > 0 && lineas.every((d) => d.cubierta);
 
     return (
@@ -348,6 +353,7 @@ export default function Despacho() {
                                             </span>
                                             <span className="mt-0.5 block truncate text-xs text-warm-500">
                                                 {p.cliente ?? 'Cliente varios'} · {num(p.total_metros)} m
+                                                {p.rollos_pedidos > 0 ? ` · ${rollosTexto(p.rollos_pedidos)}` : ''}
                                             </span>
                                             {/* A quién le tocó, si el encargado ya lo repartió. */}
                                             {p.asignados?.length > 0 && (
@@ -552,13 +558,22 @@ export default function Despacho() {
                                                         {d.color.nombre}
                                                     </span>
                                                 )}
-                                                <span className="text-warm-500">{d.presentacion}</span>
+                                                <span className="text-warm-500">
+                                                    {d.modo === 'rollos' ? 'Rollos enteros' : d.presentacion}
+                                                </span>
+                                                {/* Por rollos se cuentan rollos, midan lo que midan;
+                                                    por metros, los metros que faltan. */}
                                                 <span className="ml-auto font-medium text-warm-900">
-                                                    {num(d.metros_asignados)} / {num(d.metros)} m
+                                                    {d.modo === 'rollos'
+                                                        ? `${num(d.rollos_asignados)} / ${rollosTexto(d.rollos_pedidos)} · ${num(d.metros_asignados)} m`
+                                                        : `${num(d.metros_asignados)} / ${num(d.metros)} m`}
                                                 </span>
                                                 {!d.cubierta && (
                                                     <Badge variant="amber">
-                                                        Faltan {num(d.metros_pendientes)} m
+                                                        Faltan{' '}
+                                                        {d.modo === 'rollos'
+                                                            ? rollosTexto(d.rollos_pendientes)
+                                                            : `${num(d.metros_pendientes)} m`}
                                                     </Badge>
                                                 )}
                                             </div>
@@ -579,7 +594,11 @@ export default function Despacho() {
                                                             </span>
                                                             <span>{r.color ?? '—'}</span>
                                                             <span>{num(r.metros)} m</span>
-                                                            {r.es_parcial && <Badge variant="amber">Cortar</Badge>}
+                                                            {r.es_parcial ? (
+                                                                <Badge variant="amber">Cortar</Badge>
+                                                            ) : (
+                                                                <Badge variant="green">Entero</Badge>
+                                                            )}
                                                             {/* El corte: cuánto sale para este pedido y cuánto
                                                                 queda en el rollo. El rollo baja recién al despachar. */}
                                                             {r.es_parcial && r.metros_rollo > r.metros && (

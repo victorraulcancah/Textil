@@ -104,12 +104,32 @@ class StoreNotaVentaRequest extends FormRequest
             }
 
             $permitidas = $almacen->unidadesVenta->pluck('nombre')->implode(', ');
+            // Un local que vende rollos acepta la tela por metro si se lleva
+            // el rollo entero: se cobran sus metros reales, pero sale el rollo.
+            $vendeRollos = $almacen->unidadesVenta->contains(
+                fn ($u) => str_contains(mb_strtolower($u->nombre.' '.$u->abreviatura), 'rollo')
+            );
 
             foreach ((array) $this->input('detalles', []) as $i => $detalle) {
                 $presentacion = \App\Models\ProductoPresentacion::with('producto')
                     ->find($detalle['producto_presentacion_id'] ?? null);
 
                 if (! $presentacion || $almacen->vendeEn($presentacion->unidad_base_id)) {
+                    continue;
+                }
+
+                $rollo = ! empty($detalle['rollo_id']) ? \App\Models\Rollo::find($detalle['rollo_id']) : null;
+                if ($vendeRollos && $rollo) {
+                    $metros = $presentacion->aMetros((float) ($detalle['cantidad'] ?? 0));
+                    if ($metros + 0.001 >= (float) $rollo->metros_actual) {
+                        continue;
+                    }
+
+                    $v->errors()->add(
+                        "detalles.{$i}.cantidad",
+                        "En {$almacen->nombre} solo se venden rollos enteros: el rollo {$rollo->codigo} tiene ".rtrim(rtrim(number_format((float) $rollo->metros_actual, 2, '.', ''), '0'), '.').' m.',
+                    );
+
                     continue;
                 }
 

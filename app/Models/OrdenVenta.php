@@ -203,14 +203,20 @@ class OrdenVenta extends Model
         return $lineas->isNotEmpty() && $lineas->every(fn ($d) => $d->estaCubierta());
     }
 
-    /** Metros pedidos y metros ya cubiertos, para las pantallas. */
+    /**
+     * Metros pedidos y metros ya cubiertos, para las pantallas. En las líneas
+     * por rollos cuenta además cuántos rollos van de los pedidos.
+     */
     public function avance(): array
     {
         $lineas = $this->relationLoaded('detalles') ? $this->detalles : $this->detalles()->with('rollos')->get();
+        $porRollos = $lineas->filter->esPorRollos();
 
         return [
-            'pedidos' => round((float) $lineas->sum('metros'), 2),
+            'pedidos' => round($lineas->sum(fn ($d) => $d->metrosTotales()), 2),
             'asignados' => round($lineas->sum(fn ($d) => $d->metrosAsignados()), 2),
+            'rollos_pedidos' => (int) $porRollos->sum('rollos_pedidos'),
+            'rollos_asignados' => $porRollos->sum(fn ($d) => $d->rollosAsignados()),
         ];
     }
 }

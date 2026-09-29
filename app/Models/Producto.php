@@ -30,6 +30,8 @@ class Producto extends Model
         'unidad_compra_id',
         'unidad_base_id',
         'factor_compra_base',
+        // Metraje promedio de un rollo: solo para estimar un pedido en rollos.
+        'metros_por_rollo',
         'descripcion',
         'imagen',
         'ficha_tecnica',
@@ -116,6 +118,7 @@ class Producto extends Model
         return [
             'precio_base' => 'decimal:4',
             'factor_compra_base' => 'decimal:2',
+            'metros_por_rollo' => 'decimal:2',
             'stock_minimo' => 'decimal:2',
             'stock_maximo' => 'decimal:2',
             'afecto_igv' => 'boolean',
@@ -182,6 +185,32 @@ class Producto extends Model
         );
 
         return (float) ($porMetro?->factor_conversion ?: 1);
+    }
+
+    /**
+     * El formato que se vende por metro. Una tela se vende siempre así: en
+     * rollos enteros o en cortes, pero cobrando los metros reales al precio
+     * del metro. Null si el producto no se vende por metro.
+     */
+    public function presentacionMetro(): ?ProductoPresentacion
+    {
+        $presentaciones = $this->relationLoaded('presentaciones')
+            ? $this->presentaciones
+            : $this->presentaciones()->with('unidadBase')->get();
+
+        return $presentaciones->first(fn ($p) => strtolower($p->unidadBase?->abreviatura ?? '') === 'm');
+    }
+
+    /** Una tela: se vende por metro, en rollos que traen su propio metraje. */
+    public function esTela(): bool
+    {
+        return $this->presentacionMetro() !== null;
+    }
+
+    /** Metraje promedio de un rollo, para estimar un pedido en rollos; null si no se sabe. */
+    public function metrosPorRollo(): ?float
+    {
+        return (float) $this->metros_por_rollo > 0 ? (float) $this->metros_por_rollo : null;
     }
 
     /**

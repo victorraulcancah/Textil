@@ -38,14 +38,17 @@ class RequerimientoAlmacenPdf implements DocumentoPdf
             'detalles.rollos.rollo.color',
         ])->findOrFail($id);
 
+        // En rollos enteros el almacenero junta rollos, midan lo que midan.
+        $rollos = fn ($n) => $n.($n === 1 ? ' rollo' : ' rollos');
+
         $filas = $orden->detalles->map(fn ($d, $i) => [
             'n' => $i + 1,
             'codigo' => ProductoConColor::codigo($d->presentacion?->producto, $d->color),
             'producto' => ProductoConColor::nombre($d->presentacion?->producto, $d->color),
-            'presentacion' => $d->presentacion?->nombre ?? '—',
-            'metros' => number_format((float) $d->metros, 2),
-            'asignado' => number_format($d->metrosAsignados(), 2),
-            'pendiente' => number_format($d->metrosPendientes(), 2),
+            'presentacion' => $d->esPorRollos() ? 'Rollos enteros' : ($d->presentacion?->nombre ?? '—'),
+            'metros' => $d->esPorRollos() ? $rollos((int) $d->rollos_pedidos) : number_format((float) $d->metros, 2),
+            'asignado' => $d->esPorRollos() ? $rollos($d->rollosAsignados()) : number_format($d->metrosAsignados(), 2),
+            'pendiente' => $d->esPorRollos() ? $rollos($d->rollosPendientes()) : number_format($d->metrosPendientes(), 2),
             'nota' => $d->descripcion,
             // Los rollos que ya se juntaron, para que el papel sirva también
             // como constancia de lo que salió.
@@ -59,7 +62,7 @@ class RequerimientoAlmacenPdf implements DocumentoPdf
             'documento' => $orden->requerimiento_numero ?? $orden->documento,
             'filas' => $filas,
             'total_lineas' => count($filas),
-            'total_metros' => number_format((float) $orden->detalles->sum('metros'), 2),
+            'total_metros' => number_format((float) $orden->detalles->sum(fn ($d) => $d->metrosTotales()), 2),
         ];
     }
 

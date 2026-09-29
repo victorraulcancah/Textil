@@ -48,6 +48,7 @@ class ProductoResource extends JsonResource
             'unidad_compra_id' => $this->unidad_compra_id,
             'unidad_base' => new UnidadMedidaResource($this->whenLoaded('unidadBase')),
             'factor_compra_base' => $this->factor_compra_base,
+            'metros_por_rollo' => $this->metros_por_rollo !== null ? (float) $this->metros_por_rollo : null,
             'descripcion' => $this->descripcion,
             'imagen' => $this->imagen,
             'ficha_tecnica' => $this->ficha_tecnica,

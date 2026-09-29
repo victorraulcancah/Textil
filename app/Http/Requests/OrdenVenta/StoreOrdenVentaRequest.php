@@ -34,7 +34,11 @@ class StoreOrdenVentaRequest extends FormRequest
             'detalles.*.producto_presentacion_id' => 'required|exists:producto_presentaciones,id',
             // Opcional: el almacén solo exige el color cuando la línea lo trae.
             'detalles.*.producto_color_id' => 'nullable|exists:producto_colores,id',
-            'detalles.*.cantidad' => 'required|numeric|min:0.01',
+            // Una tela se pide en metros o en rollos enteros; por rollos la
+            // cantidad la estima el servicio con el metraje promedio.
+            'detalles.*.modo' => 'nullable|in:metros,rollos',
+            'detalles.*.rollos_pedidos' => 'required_if:detalles.*.modo,rollos|nullable|integer|min:1|max:9999',
+            'detalles.*.cantidad' => 'required_unless:detalles.*.modo,rollos|nullable|numeric|min:0.01',
             'detalles.*.precio_unitario' => 'nullable|numeric|min:0',
             'detalles.*.descuento' => 'nullable|numeric|min:0',
             'detalles.*.descripcion' => 'nullable|string|max:500',

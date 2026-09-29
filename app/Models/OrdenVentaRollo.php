@@ -22,6 +22,9 @@ class OrdenVentaRollo extends Model
         'orden_venta_detalle_id',
         'rollo_id',
         'metros',
+        // Cuánto medía el rollo al tomarlo, y si salió entero o fue un corte.
+        'metros_rollo',
+        'entero',
         'escaneado_at',
         'usuario_escanea_id',
     ];
@@ -30,6 +33,8 @@ class OrdenVentaRollo extends Model
     {
         return [
             'metros' => 'decimal:2',
+            'metros_rollo' => 'decimal:2',
+            'entero' => 'boolean',
             'escaneado_at' => 'datetime',
         ];
     }
@@ -49,9 +54,11 @@ class OrdenVentaRollo extends Model
         return $this->belongsTo(User::class, 'usuario_escanea_id');
     }
 
-    /** ¿Se corta el rollo o se lleva entero? */
+    /** ¿Se corta el rollo o se lleva entero? Contra lo que medía al tomarlo. */
     public function esParcial(): bool
     {
-        return (float) $this->metros < (float) ($this->rollo?->metros_actual ?? 0);
+        $medida = $this->metros_rollo !== null ? (float) $this->metros_rollo : (float) ($this->rollo?->metros_actual ?? 0);
+
+        return (float) $this->metros + 0.001 < $medida;
     }
 }

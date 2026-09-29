@@ -5,6 +5,7 @@ use App\Http\Requests\Producto\StoreProductoRequest;
 use App\Http\Requests\Producto\UpdateProductoRequest;
 use App\Http\Resources\ProductoResource;
 use App\Models\Almacen;
+use App\Models\Color;
 use App\Models\Producto;
 use App\Models\ProductoAlmacenStock;
 use App\Models\ProductoLote;
@@ -16,6 +17,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use App\Support\Permisos;
 
 class ProductoController extends Controller
 {
@@ -42,6 +44,12 @@ class ProductoController extends Controller
         'transferencia_detalles',
         'toma_inventario_detalles',
         'movimientos_inventario',
+        // Pedidos y compras en curso también apuntan a su formato.
+        'orden_venta_detalles',
+        'orden_compra_detalles',
+        'solicitud_compra_detalles',
+        'recepcion_compra_detalles',
+        'devolucion_proveedor_detalles',
     ];
 
     public function index(Request $request)
@@ -54,6 +62,174 @@ class ProductoController extends Controller
             ->latest('id')
             ->paginate($perPage);
         return ProductoResource::collection($productos);
+    }
+
+    /**
+     * La plantilla para cargar los colores de una tela desde Excel: la hoja
+     * "Colores" (Código, Nombre, Nombre del proveedor) y, aparte, el catálogo
+     * de colores que ya existen, para copiar sus códigos.
+     */
+    public function plantillaColores()
+    {
+        $libro = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+
+        $hoja = $libro->getActiveSheet();
+        $hoja->setTitle('Colores');
+        $hoja->fromArray(['Código', 'Nombre', 'Nombre del proveedor'], null, 'A1');
+        $hoja->getStyle('A1:C1')->getFont()->setBold(true);
+        // El código como texto: si no, Excel se come los ceros (0074 → 74).
+        $hoja->getStyle('A2:A1000')->getNumberFormat()
+            ->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_TEXT);
+        foreach (['A' => 12, 'B' => 28, 'C' => 34] as $columna => $ancho) {
+            $hoja->getColumnDimension($columna)->setWidth($ancho);
+        }
+
+        $catalogo = $libro->createSheet();
+        $catalogo->setTitle('Catálogo');
+        $catalogo->fromArray(['Código', 'Nombre'], null, 'A1');
+        $catalogo->getStyle('A1:B1')->getFont()->setBold(true);
+        $fila = 2;
+        foreach (Color::where('activo', true)->orderBy('codigo')->get(['codigo', 'nombre']) as $color) {
+            $catalogo->setCellValueExplicit("A{$fila}", $color->codigo, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $catalogo->setCellValue("B{$fila}", $color->nombre);
+            $fila++;
+        }
+        $catalogo->getColumnDimension('A')->setWidth(12);
+        $catalogo->getColumnDimension('B')->setWidth(28);
+
+        $libro->setActiveSheetIndex(0);
+
+        return response()->streamDownload(function () use ($libro) {
+            (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($libro))->save('php://output');
+        }, 'plantilla-colores.xlsx', [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ]);
+    }
+
+    /**
+     * Lee un Excel con los colores de una tela y los devuelve listos para el
+     * formulario, cruzados con el catálogo: por código y, si no trae código,
+     * por nombre. Lo que no está en el catálogo se crea ahí (si quien lo sube
+     * puede crear colores). No toca el producto: eso pasa al guardarlo.
+     */
+    public function importarColores(Request $request)
+    {
+        $request->validate(
+            ['archivo' => 'required|file|mimes:xlsx,xls|max:5120'],
+            [
+                'archivo.required' => 'Elige el archivo de Excel.',
+                'archivo.mimes' => 'El archivo debe ser un Excel (.xlsx o .xls).',
+                'archivo.max' => 'El archivo no debe superar 5 MB.',
+            ],
+        );
+
+        try {
+            $libro = \PhpOffice\PhpSpreadsheet\IOFactory::load($request->file('archivo')->getRealPath());
+        } catch (\Throwable) {
+            return response()->json(['message' => 'No se pudo leer el archivo: ¿es un Excel válido?'], 422);
+        }
+
+        $hoja = $libro->getSheetByName('Colores') ?? $libro->getSheet(0);
+        $filas = $hoja->toArray(null, true, true, false);
+
+        $normalizar = fn ($t) => mb_strtolower(trim((string) preg_replace('/\s+/', ' ', strtr(
+            (string) $t, ['á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'Á' => 'a', 'É' => 'e', 'Í' => 'i', 'Ó' => 'o', 'Ú' => 'u']
+        ))));
+
+        $alias = [
+            'codigo' => ['codigo', 'cod', 'cod.', 'codigo de color', 'codigo color'],
+            'nombre' => ['nombre', 'color', 'nombre del color'],
+            'proveedor' => ['nombre del proveedor', 'nombre proveedor', 'proveedor', 'color del proveedor'],
+        ];
+        $col = [];
+        foreach ($filas[0] ?? [] as $indice => $texto) {
+            foreach ($alias as $clave => $nombres) {
+                if (in_array($normalizar($texto), $nombres, true)) {
+                    $col[$clave] = $indice;
+                }
+            }
+        }
+
+        if (! isset($col['codigo']) && ! isset($col['nombre'])) {
+            return response()->json([
+                'message' => 'No se encontraron las columnas del Excel. Se esperan: Código, Nombre, Nombre del proveedor.',
+            ], 422);
+        }
+
+        $puedeCrear = Permisos::puede($request->user(), 'catalogo.colores.crear');
+        $todos = Color::all();
+        $porCodigo = $todos->keyBy('codigo');
+        $porNombre = $todos->keyBy(fn ($c) => $normalizar($c->nombre));
+
+        $colores = [];
+        $nuevos = [];
+        $advertencias = [];
+        $vistos = [];
+
+        DB::transaction(function () use ($filas, $col, $normalizar, $puedeCrear, &$porCodigo, &$porNombre, &$colores, &$nuevos, &$advertencias, &$vistos) {
+            foreach (array_slice($filas, 1) as $i => $fila) {
+                $n = $i + 2;
+                $codigo = isset($col['codigo']) ? trim((string) ($fila[$col['codigo']] ?? '')) : '';
+                $nombre = isset($col['nombre']) ? trim((string) ($fila[$col['nombre']] ?? '')) : '';
+                $proveedor = isset($col['proveedor']) ? trim((string) ($fila[$col['proveedor']] ?? '')) : '';
+
+                if ($codigo === '' && $nombre === '') {
+                    continue; // fila vacía
+                }
+
+                // Excel se come los ceros a la izquierda: 74 vuelve a ser 0074.
+                if (ctype_digit($codigo) && strlen($codigo) < 4) {
+                    $codigo = str_pad($codigo, 4, '0', STR_PAD_LEFT);
+                }
+
+                $color = ($codigo !== '' ? $porCodigo->get($codigo) : null)
+                    ?? ($nombre !== '' ? $porNombre->get($normalizar($nombre)) : null);
+
+                if (! $color) {
+                    if ($nombre === '') {
+                        $advertencias[] = "Fila {$n}: el código {$codigo} no está en el catálogo y no trae nombre para crearlo.";
+                        continue;
+                    }
+                    if (! $puedeCrear) {
+                        $advertencias[] = "Fila {$n}: \"{$nombre}\" no está en el catálogo y no tienes permiso para crear colores.";
+                        continue;
+                    }
+                    if ($codigo !== '' && mb_strlen($codigo) !== 4) {
+                        $advertencias[] = "Fila {$n}: el código \"{$codigo}\" no es válido (son 4 caracteres, ej. 0074); \"{$nombre}\" se crea con uno nuevo.";
+                        $codigo = '';
+                    }
+
+                    $color = Color::create([
+                        'codigo' => $codigo !== '' ? $codigo : Color::generarCodigo(),
+                        'nombre' => $nombre,
+                        'activo' => true,
+                    ]);
+                    $porCodigo->put($color->codigo, $color);
+                    $porNombre->put($normalizar($color->nombre), $color);
+                    $nuevos[] = "{$color->codigo} {$color->nombre}";
+                }
+
+                // Repetido en el mismo archivo: una sola vez.
+                if (isset($vistos[$color->id])) {
+                    continue;
+                }
+                $vistos[$color->id] = true;
+
+                $colores[] = [
+                    'color_id' => $color->id,
+                    'nombre' => $color->nombre,
+                    'codigo' => $color->codigo,
+                    'hex' => $color->hex,
+                    'nombre_proveedor' => $proveedor !== '' ? $proveedor : null,
+                ];
+            }
+        });
+
+        return response()->json([
+            'colores' => $colores,
+            'nuevos' => $nuevos,
+            'advertencias' => $advertencias,
+        ]);
     }
 
     public function store(StoreProductoRequest $request)

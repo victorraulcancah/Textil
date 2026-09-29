@@ -17,7 +17,7 @@ class NotaVentaController extends Controller
 
     public function index()
     {
-        $notas = NotaVenta::with(['cliente', 'almacen', 'vendedor', 'ordenVenta:id,serie,numero', 'detalles.presentacion.producto.marca', 'pagos.metodoPago'])
+        $notas = NotaVenta::with(['cliente', 'almacen', 'vendedor', 'ordenVenta:id,serie,numero', 'detalles.presentacion.producto.marca', 'detalles.rollo.color', 'pagos.metodoPago'])
             ->orderBy('created_at', 'desc')
             ->paginate(15);
 

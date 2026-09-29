@@ -35,6 +35,11 @@ use Illuminate\Support\Facades\DB;
  * es lo único que puede saber. Qué rollos cubren esos metros, y desde qué
  * almacén, lo decide el almacenero escaneándolos: cada escaneo asigna un rollo
  * a la línea que le corresponde y descuenta de lo que falta.
+ *
+ * La tela también se pide en rollos enteros —"3 rollos de Polinán negro"—.
+ * Cada rollo trae su metraje real y se cobra por metro: el pedido nace con los
+ * metros estimados al metraje promedio y, a medida que el almacén escanea,
+ * se revaloriza con los metros de cada rollo. La nota lleva una fila por rollo.
  */
 class OrdenVentaService
 {
@@ -219,11 +224,14 @@ class OrdenVentaService
         $orden->load('detalles.rollos');
 
         if (! $orden->estaVerificada()) {
-            $faltan = $orden->detalles->sum(fn ($d) => $d->metrosPendientes());
+            $faltanRollos = $orden->detalles->filter->esPorRollos()->sum(fn ($d) => $d->rollosPendientes());
+            $faltanMetros = $orden->detalles->reject->esPorRollos()->sum(fn ($d) => $d->metrosPendientes());
+            $partes = array_filter([
+                $faltanRollos > 0 ? $faltanRollos.($faltanRollos === 1 ? ' rollo' : ' rollos') : null,
+                $faltanMetros > 0 ? round($faltanMetros, 2).' m' : null,
+            ]);
 
-            throw new \DomainException(
-                'Faltan '.round($faltan, 2).' m por cubrir antes de darlo por separado.'
-            );
+            throw new \DomainException('Faltan '.implode(' y ', $partes).' por cubrir antes de darlo por separado.');
         }
 
         return DB::transaction(function () use ($orden) {
@@ -315,15 +323,23 @@ class OrdenVentaService
                 $orden = $this->empezarPreparacion($orden, $rollo->almacen_id);
             }
 
-            // Se toma lo que falte, sin pasarse de lo que da el rollo.
-            $metros = min($linea->metrosPendientes(), (float) $rollo->metros_actual);
+            // Por rollos, el rollo sale entero, mida lo que mida. Por metros se
+            // toma lo que falte, sin pasarse de lo que da el rollo.
+            $metrosRollo = (float) $rollo->metros_actual;
+            $metros = $linea->esPorRollos() ? $metrosRollo : min($linea->metrosPendientes(), $metrosRollo);
 
             $linea->rollos()->create([
                 'rollo_id' => $rollo->id,
                 'metros' => $metros,
+                'metros_rollo' => $metrosRollo,
+                'entero' => $metros + 0.001 >= $metrosRollo,
                 'escaneado_at' => now(),
                 'usuario_escanea_id' => auth()->id(),
             ]);
+
+            // El pedido se cobra con los metros reales de lo que ya se escaneó.
+            $this->revalorizar($linea);
+            $this->recalcularTotales($orden);
 
             $this->rollos->cambiarEstado(
                 $rollo,
@@ -339,9 +355,12 @@ class OrdenVentaService
             return [
                 'rollo' => ['id' => $rollo->id, 'codigo' => $codigo, 'metros_actual' => (float) $rollo->metros_actual],
                 'metros' => $metros,
+                'entero' => $metros + 0.001 >= $metrosRollo,
                 'producto' => $rollo->producto?->nombre,
                 'verificados' => $avance['asignados'],
                 'total' => $avance['pedidos'],
+                'rollos_asignados' => $avance['rollos_asignados'],
+                'rollos_pedidos' => $avance['rollos_pedidos'],
                 'completo' => $orden->estaVerificada(),
             ];
         });
@@ -358,7 +377,8 @@ class OrdenVentaService
             $orden->load('detalles.rollos.rollo');
 
             foreach ($orden->detalles as $linea) {
-                foreach ($linea->rollos->where('rollo_id', $rolloId) as $asignado) {
+                $quitados = $linea->rollos->where('rollo_id', $rolloId);
+                foreach ($quitados as $asignado) {
                     if ($asignado->rollo) {
                         $this->rollos->cambiarEstado(
                             $asignado->rollo,
@@ -370,7 +390,11 @@ class OrdenVentaService
                     }
                     $asignado->delete();
                 }
+                if ($quitados->isNotEmpty()) {
+                    $this->revalorizar($linea);
+                }
             }
+            $this->recalcularTotales($orden);
 
             // Si se sacó un rollo, el pedido ya no está completo.
             if ($orden->estado === OrdenVenta::SEPARADO) {
@@ -432,7 +456,7 @@ class OrdenVentaService
                     $this->stock->salida(
                         $linea->presentacion,
                         $orden->almacen,
-                        (float) $linea->cantidad,
+                        $linea->cantidadDespachada(),
                         0,
                         'despacho_pedido',
                         'orden_venta',
@@ -477,7 +501,12 @@ class OrdenVentaService
         }
 
         return DB::transaction(function () use ($orden, $datos) {
-            $orden->load(['detalles.rollos.rollo', 'detalles.presentacion']);
+            $orden->load(['detalles.rollos.rollo', 'detalles.presentacion.unidadBase', 'detalles.presentacion.producto.presentaciones.unidadBase']);
+
+            // Una fila por rollo, con sus metros reales: los totales salen de ahí.
+            $detalles = $this->detallesParaNota($orden);
+            $descuentos = round(collect($detalles)->sum('descuento'), 2);
+            $total = round(collect($detalles)->sum('subtotal'), 2);
 
             $nota = $this->notasVenta->crear([
                 'serie' => $datos['serie'] ?? 'NV01',
@@ -494,11 +523,11 @@ class OrdenVentaService
                 'tipo_pago' => $datos['tipo_pago'] ?? 'contado',
                 'cuotas' => $datos['cuotas'] ?? [],
                 'autorizar_exceso' => (bool) ($datos['autorizar_exceso'] ?? false),
-                'subtotal' => (float) $orden->subtotal,
-                'descuento_total' => (float) $orden->descuento_total,
-                'total' => (float) $orden->total,
+                'subtotal' => round($total + $descuentos, 2),
+                'descuento_total' => $descuentos,
+                'total' => $total,
                 'observaciones' => "Pedido {$orden->documento}",
-                'detalles' => $this->detallesParaNota($orden),
+                'detalles' => $detalles,
                 'pagos' => $datos['pagos'] ?? [],
             ]);
 
@@ -538,16 +567,108 @@ class OrdenVentaService
      */
     private function detallesParaNota(OrdenVenta $orden): array
     {
-        return $orden->detalles->map(fn ($linea) => [
-            'producto_presentacion_id' => $linea->producto_presentacion_id,
-            // Un rollo por línea no cabe: la nota guarda el primero como
-            // referencia y la trazabilidad fina vive en el pedido.
-            'rollo_id' => $linea->rollos->first()?->rollo_id,
-            'cantidad' => (float) $linea->cantidad,
-            'precio_unitario' => (float) $linea->precio_unitario,
-            'descuento' => (float) $linea->descuento,
-            'subtotal' => (float) $linea->subtotal,
-        ])->all();
+        $filas = [];
+
+        foreach ($orden->detalles as $linea) {
+            $asignados = $linea->rollos->values();
+
+            // Lo que no sale de rollos (un hilo, un cierre) va como se pidió.
+            if ($asignados->isEmpty()) {
+                $filas[] = [
+                    'producto_presentacion_id' => $linea->producto_presentacion_id,
+                    'rollo_id' => null,
+                    'cantidad' => (float) $linea->cantidad,
+                    'precio_unitario' => (float) $linea->precio_unitario,
+                    'descuento' => (float) $linea->descuento,
+                    'subtotal' => (float) $linea->subtotal,
+                ];
+
+                continue;
+            }
+
+            // La tela: una fila por rollo, con sus metros reales al precio del
+            // metro. Las filas suman justo lo de la línea: la última se queda
+            // con los céntimos del redondeo y con el descuento, si lo hay.
+            $metro = $linea->presentacion->producto?->presentacionMetro() ?? $linea->presentacion;
+            $porMetro = $this->precioPorMetro($linea);
+            $bruto = round((float) $linea->subtotal + (float) $linea->descuento, 2);
+            $ultima = $asignados->count() - 1;
+            $acumulado = 0.0;
+
+            foreach ($asignados as $i => $asignado) {
+                $metros = (float) $asignado->metros;
+                $importe = $i === $ultima ? round($bruto - $acumulado, 2) : round($metros * $porMetro, 2);
+                $acumulado += $importe;
+                $descuento = $i === $ultima ? (float) $linea->descuento : 0.0;
+
+                $filas[] = [
+                    'producto_presentacion_id' => $metro->id,
+                    'rollo_id' => $asignado->rollo_id,
+                    'metros_rollo' => $asignado->metros_rollo !== null ? (float) $asignado->metros_rollo : $metros,
+                    'rollo_entero' => (bool) $asignado->entero,
+                    'cantidad' => $metro->desdeMetros($metros),
+                    'precio_unitario' => round($porMetro, 2),
+                    'descuento' => $descuento,
+                    'subtotal' => round($importe - $descuento, 2),
+                ];
+            }
+        }
+
+        return $filas;
+    }
+
+    /**
+     * El precio de un metro de esa línea, sin redondear. Si se pidió por metro
+     * es el mismo; si en un formato de varios metros (un "Rollo 50 m"), su parte.
+     */
+    private function precioPorMetro(OrdenVentaDetalle $linea): float
+    {
+        $metros = $linea->presentacion->aMetros(1);
+
+        return $metros > 0 ? (float) $linea->precio_unitario / $metros : (float) $linea->precio_unitario;
+    }
+
+    /**
+     * Revaloriza una línea pedida en rollos con lo que el almacén ya asignó:
+     * cada rollo a sus metros reales (redondeado igual que en la nota) y lo
+     * que falta, al metraje estimado. Una línea por metros no cambia: el
+     * cliente pidió esos metros a ese precio, salgan de uno o de varios rollos.
+     */
+    private function revalorizar(OrdenVentaDetalle $linea): void
+    {
+        if (! $linea->esPorRollos()) {
+            return;
+        }
+
+        $linea->load('rollos', 'presentacion.unidadBase', 'presentacion.producto.presentaciones.unidadBase');
+
+        $precio = $this->precioPorMetro($linea);
+        $asignados = (float) $linea->rollos->sum('metros');
+        $pendientes = $linea->metrosPendientes();
+
+        $linea->update([
+            'cantidad' => round($linea->presentacion->desdeMetros($asignados + $pendientes), 2),
+            'subtotal' => round(
+                $linea->rollos->sum(fn ($r) => round((float) $r->metros * $precio, 2))
+                + round($pendientes * $precio, 2)
+                - (float) $linea->descuento,
+                2,
+            ),
+        ]);
+    }
+
+    /** Los totales del pedido, sumando sus líneas (las de precio por confirmar no cuentan). */
+    private function recalcularTotales(OrdenVenta $orden): void
+    {
+        $lineas = $orden->detalles()->where('precio_oculto', false)->get(['subtotal', 'descuento']);
+        $descuentos = round((float) $lineas->sum('descuento'), 2);
+        $total = round((float) $lineas->sum('subtotal'), 2);
+
+        $orden->update([
+            'subtotal' => round($total + $descuentos, 2),
+            'descuento_total' => $descuentos,
+            'total' => $total,
+        ]);
     }
 
     /**
@@ -660,7 +781,7 @@ class OrdenVentaService
                 $this->stock->entrada(
                     $linea->presentacion,
                     $orden->almacen,
-                    (float) $linea->cantidad,
+                    $linea->cantidadDespachada(),
                     0,
                     'anulacion_despacho',
                     'orden_venta',
@@ -708,7 +829,14 @@ class OrdenVentaService
 
                 $asignado->delete();
             }
+
+            // Sin sus rollos, la línea vuelve a valer lo estimado.
+            if ($linea->rollos->isNotEmpty()) {
+                $this->revalorizar($linea);
+            }
         }
+
+        $this->recalcularTotales($orden);
     }
 
     /** Columnas propias del pedido (sin serie, número ni estado). */
@@ -755,6 +883,27 @@ class OrdenVentaService
                 continue;
             }
 
+            // Una tela se puede pedir en rollos enteros: se cobra por metro, así
+            // que la línea va en su formato "Metro" con los metros estimados al
+            // metraje promedio; al escanear, se cobran los reales.
+            $porRollos = ($linea['modo'] ?? OrdenVentaDetalle::MODO_METROS) === OrdenVentaDetalle::MODO_ROLLOS;
+            $rollosPedidos = null;
+            if ($porRollos) {
+                $producto = $presentacion->producto;
+                if (! $producto?->esTela()) {
+                    throw new \DomainException("\"{$producto?->nombre}\" no se vende por rollos.");
+                }
+                $promedio = $producto->metrosPorRollo();
+                if (! $promedio) {
+                    throw new \DomainException(
+                        "Pon el metraje promedio por rollo de \"{$producto->nombre}\" (en Productos) para pedirlo por rollos."
+                    );
+                }
+                $presentacion = $producto->presentacionMetro();
+                $rollosPedidos = max(1, (int) ($linea['rollos_pedidos'] ?? 0));
+                $linea['cantidad'] = round($rollosPedidos * $promedio, 2);
+            }
+
             $cantidad = round((float) $linea['cantidad'], 2);
             $precio = round((float) ($linea['precio_unitario'] ?? 0), 2);
             $descuento = round((float) ($linea['descuento'] ?? 0), 2);
@@ -769,6 +918,8 @@ class OrdenVentaService
                 // se especifica, el almacén solo puede cubrir la línea con
                 // rollos de ese color.
                 'producto_color_id' => $linea['producto_color_id'] ?? null,
+                'modo' => $porRollos ? OrdenVentaDetalle::MODO_ROLLOS : OrdenVentaDetalle::MODO_METROS,
+                'rollos_pedidos' => $rollosPedidos,
                 'cantidad' => $cantidad,
                 'descripcion' => $linea['descripcion'] ?? null,
                 'metros' => $this->aMetros($presentacion, $cantidad),

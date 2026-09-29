@@ -19,6 +19,16 @@ const money = (n, moneda = 'PEN') =>
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
 
+/**
+ * La tela de una fila que salió de un rollo: entero o corte, con su código y
+ * color. null en lo que no sale de rollos.
+ */
+const rolloDe = (d) => {
+    if (!d.rollo) return null;
+    const tipo = d.rollo_entero ? 'Rollo entero' : `Corte${d.metros_rollo ? ` de ${num(d.metros_rollo)} m` : ''}`;
+    return { tipo, detalle: [d.rollo.codigo, d.rollo.color].filter(Boolean).join(' · ') };
+};
+
 export default function NotasVenta() {
     const toast = useToast();
     const navigate = useNavigate();
@@ -348,7 +358,11 @@ export default function NotasVenta() {
                                 <DetalleCard
                                     key={d.id}
                                     titulo={producto?.nombre ?? d.producto_nombre ?? '—'}
-                                    subtitulo={[producto?.codigo, d.presentacion?.nombre, producto?.marca?.nombre]
+                                    subtitulo={[
+                                        producto?.codigo,
+                                        rolloDe(d) ? `${rolloDe(d).tipo} · ${rolloDe(d).detalle}` : d.presentacion?.nombre,
+                                        producto?.marca?.nombre,
+                                    ]
                                         .filter(Boolean)
                                         .join(' · ')}
                                     campos={[
@@ -417,7 +431,19 @@ export default function NotasVenta() {
                                             {producto?.nombre ?? d.producto_nombre ?? '—'}
                                         </td>
                                         <td className="px-3 py-2 text-warm-500">{producto?.marca?.nombre ?? '—'}</td>
-                                        <td className="px-3 py-2 text-warm-500">{d.presentacion?.nombre ?? '—'}</td>
+                                        <td className="px-3 py-2 text-warm-500">
+                                            {rolloDe(d) ? (
+                                                // Tela de un rollo: entero o corte, y de cuál.
+                                                <>
+                                                    <span className={d.rollo_entero ? 'text-green-700' : 'text-amber-700'}>
+                                                        {rolloDe(d).tipo}
+                                                    </span>
+                                                    <span className="block text-xs text-warm-400">{rolloDe(d).detalle}</span>
+                                                </>
+                                            ) : (
+                                                (d.presentacion?.nombre ?? '—')
+                                            )}
+                                        </td>
                                         <td className="px-3 py-2 text-right text-warm-900">{num(d.cantidad)}</td>
                                         <td className="px-3 py-2 text-right text-warm-900">{money(d.precio_unitario, seleccionada?.moneda)}</td>
                                         <td className="px-3 py-2 text-right text-warm-500">
@@ -527,7 +553,11 @@ export default function NotasVenta() {
                                             <tr key={d.id}>
                                                 <td className="px-3 py-2">
                                                     <span className="font-medium text-warm-900">{d.producto_nombre ?? 'Producto'}</span>
-                                                    {d.presentacion?.nombre && <span className="text-warm-400"> · {d.presentacion.nombre}</span>}
+                                                    {rolloDe(d) ? (
+                                                        <span className="text-warm-400"> · {rolloDe(d).tipo} · {rolloDe(d).detalle}</span>
+                                                    ) : (
+                                                        d.presentacion?.nombre && <span className="text-warm-400"> · {d.presentacion.nombre}</span>
+                                                    )}
                                                 </td>
                                                 <td className="px-3 py-2 text-right">{Number(d.cantidad)}</td>
                                                 <td className="px-3 py-2 text-right">{money(d.precio_unitario, detalle.moneda)}</td>

@@ -34,6 +34,8 @@ class UpdateProductoRequest extends FormRequest
             'unidad_compra_id' => 'nullable|exists:unidades_medida,id',
             'unidad_base_id' => 'nullable|exists:unidades_medida,id',
             'factor_compra_base' => 'nullable|numeric|min:0.01',
+            // Tela: metraje promedio de un rollo, para estimar un pedido en rollos.
+            'metros_por_rollo' => 'nullable|numeric|min:0.01|max:99999',
             'descripcion' => 'nullable|string|max:5000',
             'imagen' => 'nullable|string|max:255',
             'ficha_tecnica' => 'nullable|string|max:255',

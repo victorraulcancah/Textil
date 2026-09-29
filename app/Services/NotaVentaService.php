@@ -187,6 +187,14 @@ class NotaVentaService
             $this->exigirRollo($detalle, $nota);
 
             if ($rollo) {
+                // Lo que medía el rollo al venderlo y si se fue entero o fue
+                // un corte: es lo que la nota muestra en cada fila.
+                $metros = $detalle->presentacion->aMetros((float) $detalle->cantidad);
+                $detalle->update([
+                    'metros_rollo' => (float) $rollo->metros_actual,
+                    'rollo_entero' => $metros + 0.001 >= (float) $rollo->metros_actual,
+                ]);
+
                 $this->cortarRollo($rollo, $detalle, $nota);
             }
 
@@ -456,7 +464,7 @@ class NotaVentaService
             $this->stockService->entrada(
                 $linea->presentacion,
                 $pedido->almacen,
-                (float) $linea->cantidad,
+                $linea->cantidadDespachada(),
                 0,
                 $origen,
                 'nota_venta',

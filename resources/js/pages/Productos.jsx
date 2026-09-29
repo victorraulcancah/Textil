@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Edit, Eye, Package, Plus, PlusCircle, Save, Trash2 } from 'lucide-react';
+import { Download, Edit, Eye, FileSpreadsheet, Package, Plus, PlusCircle, Save, Trash2 } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { calcularPresentaciones, describirContenido } from '../lib/unidades';
 import { useToast } from '../lib/toast';
@@ -33,6 +33,8 @@ const emptyProducto = {
     sub_marca_id: '',
     unidad_medida_id: '',
     factor_compra_base: '1',
+    // Tela: metraje promedio de un rollo, para estimar un pedido en rollos.
+    metros_por_rollo: '',
     stock_minimo: '',
     stock_maximo: '',
     activo: true,
@@ -82,7 +84,7 @@ const PESTANA_DEL_CAMPO = {
     colores: ['colores'],
     comercial: [
         'unidad_medida_id', 'unidad_base_id', 'unidad_compra_id',
-        'factor_compra_base', 'presentaciones', 'stock_minimo', 'stock_maximo',
+        'factor_compra_base', 'presentaciones', 'stock_minimo', 'stock_maximo', 'metros_por_rollo',
         // Nombres que usa la validación del propio formulario.
         'compra_unidad', 'compra_cantidad', 'compra_contenido', 'ventas', 'tipo_cambio',
     ],
@@ -147,6 +149,10 @@ export default function Productos() {
     const [compra, setCompra] = useState(compraVacia);
     const [ventas, setVentas] = useState([ventaVacia()]);
     const [colores, setColores] = useState([]);
+    /** Carga de colores desde Excel: si está subiendo y lo que no pudo agregar. */
+    const [cargandoColores, setCargandoColores] = useState(false);
+    const [avisosColores, setAvisosColores] = useState([]);
+    const excelColoresRef = useRef(null);
     /** Proveedores que traen esta tela, cada uno con su código y su precio. */
     const [provs, setProvs] = useState([]);
     /** Foto elegida en el formulario; se sube después de guardar el producto. */
@@ -229,6 +235,15 @@ export default function Productos() {
         label: u.abreviatura ? `${u.nombre} (${u.abreviatura})` : u.nombre,
     }));
     const unidadNombre = (id) => unidades.find((u) => String(u.id) === String(id))?.nombre ?? '';
+    /**
+     * El nombre con que se guarda el formato de esa unidad. Al editar, el que
+     * ya tenía ("Metro (al corte)"): el servidor reconoce los formatos por
+     * nombre, y con otro lo daría por nuevo y se perderían sus precios.
+     */
+    const nombreDeFormato = (unidadId) =>
+        (editing?.presentaciones ?? []).find(
+            (p) => p.activo !== false && String(p.unidad_base?.id ?? '') === String(unidadId),
+        )?.nombre || unidadNombre(unidadId);
 
     // ---- Abrir / editar ----
     const openCreate = () => {
@@ -236,8 +251,11 @@ export default function Productos() {
         pesoAutoRef.current = '';
         setForm(emptyProducto);
         setCompra(compraVacia());
-        setVentas([ventaVacia()]);
+        // Un producto se vende en una sola unidad: la tela, por metro.
+        const unidadMetro = unidades.find((u) => (u.abreviatura ?? '').toLowerCase() === 'm');
+        setVentas([{ ...ventaVacia(), unidad_id: unidadMetro ? String(unidadMetro.id) : '' }]);
         setColores([]);
+        setAvisosColores([]);
         setProvs([]);
         setImagenFile(null);
         setErrors({});
@@ -269,6 +287,7 @@ export default function Productos() {
             sub_marca_id: relId('sub_marca_id', 'sub_marca'),
             unidad_medida_id: relId('unidad_medida_id', 'unidad_medida'),
             factor_compra_base: prod.factor_compra_base ?? '1',
+            metros_por_rollo: prod.metros_por_rollo != null ? String(prod.metros_por_rollo) : '',
             stock_minimo: prod.stock_minimo ?? '',
             stock_maximo: prod.stock_maximo ?? '',
             activo: prod.activo !== false,
@@ -311,15 +330,23 @@ export default function Productos() {
                               (Number(prod.factor_compra_base) || 0) || '',
                       ),
         });
+        // Se vende en una sola unidad: la del metro si la tiene; si no, la menor.
+        const activas = pres.filter((p) => p.activo !== false);
+        const principal =
+            activas.find((p) => (p.unidad_base?.abreviatura ?? '').toLowerCase() === 'm') ??
+            [...activas].sort((a, b) => (Number(a.factor_conversion) || 0) - (Number(b.factor_conversion) || 0))[0];
         setVentas(
-            pres.length
-                ? pres.map((p) => ({
-                      unidad_id: p.unidad_base?.id ? String(p.unidad_base.id) : '',
-                      margen: p.margen != null ? String(p.margen) : '',
-                      precio_venta: p.precio_venta != null ? String(p.precio_venta) : '',
-                  }))
+            principal
+                ? [
+                      {
+                          unidad_id: principal.unidad_base?.id ? String(principal.unidad_base.id) : '',
+                          margen: principal.margen != null ? String(principal.margen) : '',
+                          precio_venta: principal.precio_venta != null ? String(principal.precio_venta) : '',
+                      },
+                  ]
                 : [ventaVacia()],
         );
+        setAvisosColores([]);
         setProvs(
             (Array.isArray(prod.proveedores) ? prod.proveedores : []).map((pv) => ({
                 proveedor_id: String(pv.proveedor_id ?? ''),
@@ -353,22 +380,7 @@ export default function Productos() {
     const setCompraField = (campo) => (e) => {
         const valor = e.target.value;
         setCompra((prev) => ({ ...prev, [campo]: valor }));
-
-        // La unidad de compra se guarda siempre como formato (si no, no se
-        // podría registrar la compra en esa unidad). Se agrega a la lista para
-        // que se vea y se le pueda poner precio de venta; se puede quitar.
-        if (campo === 'unidad_compra_id' && valor) {
-            setVentas((prev) =>
-                prev.some((v) => String(v.unidad_id) === String(valor))
-                    ? prev
-                    : [...prev.filter((v) => v.unidad_id), { ...ventaVacia(), unidad_id: valor }],
-            );
-        }
     };
-
-    const addVenta = () => setVentas((prev) => [...prev, ventaVacia()]);
-    const removeVenta = (index) =>
-        setVentas((prev) => (prev.length === 1 ? prev : prev.filter((_, i) => i !== index)));
 
     /**
      * El % de ganancia y el precio de venta son dos vistas del mismo dato: al
@@ -417,10 +429,41 @@ export default function Productos() {
             ? tipoCambio
             : 1 / tipoCambio;
 
+    /**
+     * Lo que se guarda: la unidad en que se vende y, aparte, la de compra (sin
+     * ella no se podría registrar la compra en esa unidad). Ya no hay formatos:
+     * un producto es uno solo y lo que varía es el color y el metraje del rollo.
+     */
+    const ventasParaCalculo = useMemo(() => {
+        const lista = ventas.filter((v) => v.unidad_id).slice(0, 1);
+        if (
+            compra.unidad_compra_id &&
+            !lista.some((v) => String(v.unidad_id) === String(compra.unidad_compra_id))
+        ) {
+            lista.push({ ...ventaVacia(), unidad_id: String(compra.unidad_compra_id) });
+        }
+        return lista;
+    }, [ventas, compra.unidad_compra_id]);
+
     const calculo = useMemo(
-        () => calcularPresentaciones({ unidades, compra, ventas, tasa }),
-        [unidades, compra, ventas, tasa],
+        () => calcularPresentaciones({ unidades, compra, ventas: ventasParaCalculo, tasa }),
+        [unidades, compra, ventasParaCalculo, tasa],
     );
+
+    /** La unidad en que se vende (el metro, en una tela). */
+    const ventaPrincipal = ventas[0] ?? ventaVacia();
+    const vendePorMetro =
+        (unidades.find((u) => String(u.id) === String(ventaPrincipal.unidad_id))?.abreviatura ?? '').toLowerCase() ===
+        'm';
+
+    /** Al editar: los formatos que tenía y que, al guardar, dejan de venderse. */
+    const formatosQueSalen = useMemo(() => {
+        if (!editing) return [];
+        const quedan = new Set(calculo.filas.map((fila) => nombreDeFormato(fila.unidad_id)));
+        return (editing.presentaciones ?? [])
+            .filter((p) => p.activo !== false && !quedan.has(p.nombre))
+            .map((p) => p.nombre);
+    }, [editing, calculo]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const filaDe = (unidadId) =>
         calculo.filas.find((f) => String(f.unidad_id) === String(unidadId)) ?? null;
@@ -437,12 +480,8 @@ export default function Productos() {
         if (!compra.unidad_compra_id) next.compra_unidad = 'Indique en qué compra el producto';
         if (!(Number(compra.cantidad) > 0)) next.compra_cantidad = 'Indique cuánto trae';
         if (!compra.unidad_contenido_id) next.compra_contenido = 'Indique la unidad del contenido';
-        if (ventas.filter((v) => v.unidad_id).length === 0) {
-            next.ventas = 'Agregue al menos un formato de venta';
-        }
-        const repetidas = ventas.map((v) => String(v.unidad_id)).filter(Boolean);
-        if (new Set(repetidas).size !== repetidas.length) {
-            next.ventas = 'Hay formatos de venta repetidos';
+        if (!ventaPrincipal.unidad_id) {
+            next.ventas = 'Elige en qué unidad se vende (la tela, por metro)';
         }
         // Sin tipo de cambio no hay cómo sugerir el precio: o se escribe la tasa
         // o cada formato lleva su precio a mano. Guardar un 0 en silencio dejaría
@@ -471,7 +510,7 @@ export default function Productos() {
 
     const buildPresentaciones = () =>
         calculo.filas.map((f, i) => ({
-            nombre: unidadNombre(f.unidad_id) || `Presentación ${i + 1}`,
+            nombre: nombreDeFormato(f.unidad_id) || `Presentación ${i + 1}`,
             unidad_base_id: f.unidad_id,
             factor_conversion: f.factor,
             precio_compra: +f.precio_compra.toFixed(4),
@@ -505,6 +544,8 @@ export default function Productos() {
             marca_id: form.marca_id || undefined,
             sub_marca_id: form.sub_marca_id || undefined,
             factor_compra_base: calculo.factorCompraBase || undefined,
+            // Se manda vacío como null: así se puede borrar.
+            metros_por_rollo: form.metros_por_rollo === '' ? null : Number(form.metros_por_rollo),
             stock_minimo: num(form.stock_minimo),
             stock_maximo: num(form.stock_maximo),
             descripcion: str(form.descripcion),
@@ -612,6 +653,90 @@ export default function Productos() {
     };
 
     // ---- Creación rápida de catálogos ----
+    /** La plantilla de colores: Código, Nombre, Nombre del proveedor, y el catálogo aparte. */
+    const descargarPlantillaColores = async () => {
+        try {
+            const { data } = await api.get('/productos/plantilla-colores', { responseType: 'blob' });
+            const url = URL.createObjectURL(data);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'plantilla-colores.xlsx';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 4000);
+        } catch {
+            toast.error('No se pudo descargar la plantilla.');
+        }
+    };
+
+    /**
+     * Los colores de un Excel. El servidor los cruza con el catálogo (y crea
+     * los que falten); aquí se suman a la lista sin repetir los que ya están.
+     * Se guardan con el producto, igual que los que se agregan a mano.
+     */
+    const subirExcelColores = async (e) => {
+        const archivo = e.target.files?.[0];
+        e.target.value = '';
+        if (!archivo) return;
+
+        setCargandoColores(true);
+        setAvisosColores([]);
+        try {
+            const fd = new FormData();
+            fd.append('archivo', archivo);
+            const { data } = await api.post('/productos/colores-excel', fd, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+            });
+
+            const lista = colores.filter((c) => c.color_id || c.nombre.trim());
+            let agregados = 0;
+            for (const c of data.colores ?? []) {
+                const i = lista.findIndex(
+                    (x) =>
+                        (x.color_id && String(x.color_id) === String(c.color_id)) ||
+                        x.nombre.trim().toLowerCase() === String(c.nombre).toLowerCase(),
+                );
+                if (i !== -1) {
+                    // Ya estaba: solo se completa el nombre del proveedor si faltaba.
+                    if (!lista[i].nombre_proveedor && c.nombre_proveedor) {
+                        lista[i] = { ...lista[i], nombre_proveedor: c.nombre_proveedor };
+                    }
+                    continue;
+                }
+                lista.push({
+                    color_id: String(c.color_id),
+                    nombre: c.nombre,
+                    codigo: c.codigo ?? '',
+                    hex: c.hex || '#1f3a93',
+                    nombre_proveedor: c.nombre_proveedor ?? '',
+                });
+                agregados++;
+            }
+            setColores(lista);
+            setAvisosColores(data.advertencias ?? []);
+
+            // Los nuevos del catálogo, para que el selector los tenga.
+            if ((data.nuevos ?? []).length) {
+                api.get('/colores').then((r) => setColoresCatalogo(asList(r))).catch(() => {});
+            }
+
+            const nuevos = (data.nuevos ?? []).length;
+            toast.success(
+                `${agregados} color${agregados === 1 ? '' : 'es'} agregado${agregados === 1 ? '' : 's'}` +
+                    (nuevos ? ` · ${nuevos} nuevo${nuevos === 1 ? '' : 's'} en el catálogo` : '') +
+                    '. Se guardan con el producto.',
+            );
+        } catch (err) {
+            const v = err.response?.data?.errors;
+            toast.error(
+                (v && Object.values(v)[0]?.[0]) ?? err.response?.data?.message ?? 'No se pudo leer el Excel.',
+            );
+        } finally {
+            setCargandoColores(false);
+        }
+    };
+
     const handleQuickCreated = async (tipo, nuevo, quickInfo) => {
         await load();
         if (tipo === 'marca') setForm((p) => ({ ...p, marca_id: String(nuevo.id), sub_marca_id: '' }));
@@ -1395,14 +1520,39 @@ export default function Productos() {
                             <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-500">
                                 Colores disponibles
                             </h3>
-                            <Button
-                                variant="secondary"
-                                size="sm"
-                                onClick={() => setColores((prev) => [...prev, colorVacio()])}
-                            >
-                                <Plus className="h-4 w-4" />
-                                Agregar color
-                            </Button>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <Button type="button" variant="ghost" size="sm" onClick={descargarPlantillaColores}>
+                                    <Download className="h-4 w-4" />
+                                    Plantilla
+                                </Button>
+                                {/* Todos los colores de la tela de una vez, desde Excel. */}
+                                <input
+                                    ref={excelColoresRef}
+                                    type="file"
+                                    accept=".xlsx,.xls"
+                                    className="hidden"
+                                    onChange={subirExcelColores}
+                                />
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    size="sm"
+                                    loading={cargandoColores}
+                                    onClick={() => excelColoresRef.current?.click()}
+                                >
+                                    <FileSpreadsheet className="h-4 w-4" />
+                                    Subir Excel
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() => setColores((prev) => [...prev, colorVacio()])}
+                                >
+                                    <Plus className="h-4 w-4" />
+                                    Agregar color
+                                </Button>
+                            </div>
                         </div>
                         <p className="mb-3 text-xs text-warm-400">
                             En qué colores existe esta tela. El código del color se suma al de la
@@ -1410,6 +1560,21 @@ export default function Productos() {
                             01-01-001-0074. Cada rollo lleva su propio código único, el de la
                             orden de compra (KET-001-26-000001).
                         </p>
+                        <p className="mb-3 text-xs text-warm-400">
+                            Para cargar muchos de una vez, sube un Excel con Código, Nombre y Nombre del
+                            proveedor (descarga la plantilla: trae el catálogo de colores). Lo que no esté en
+                            el catálogo se crea.
+                        </p>
+                        {avisosColores.length > 0 && (
+                            <Alert variant="warning" className="mb-3">
+                                <p className="font-medium">No se agregaron {avisosColores.length} fila(s):</p>
+                                <ul className="mt-1 list-disc pl-5 text-xs">
+                                    {avisosColores.map((a, i) => (
+                                        <li key={i}>{a}</li>
+                                    ))}
+                                </ul>
+                            </Alert>
+                        )}
 
                         {colores.length === 0 ? (
                             <p className="rounded-lg border border-dashed border-edge px-4 py-8 text-center text-sm text-warm-400">
@@ -1622,7 +1787,9 @@ export default function Productos() {
                         </div>
                     </section>
 
-                    {/* Cómo lo vendo */}
+                    {/* Cómo lo vendo: un solo producto en una sola unidad (la tela, por
+                        metro). Lo que varía es el color y el metraje de cada rollo,
+                        no el formato: ya no hay "Rollo 50 m", "Yarda" ni "Retazo". */}
                     <section>
                         <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
                             <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-500">
@@ -1649,10 +1816,6 @@ export default function Productos() {
                                         </button>
                                     ))}
                                 </div>
-                                <Button variant="secondary" size="sm" onClick={addVenta}>
-                                    <Plus className="h-4 w-4" />
-                                    Agregar formato
-                                </Button>
                                 {/* Los precios ya no se ponen aquí: tienen su propia vista. */}
                                 {editing && (
                                     <Link
@@ -1664,11 +1827,6 @@ export default function Productos() {
                                 )}
                             </div>
                         </div>
-                        {errors.ventas && (
-                            <Alert variant="warning" className="mb-2">
-                                {errors.ventas}
-                            </Alert>
-                        )}
                         {monedasDistintas && (
                             <div className="mb-2 rounded-md bg-blue-50 p-3 ring-1 ring-inset ring-blue-200">
                                 <div className="flex flex-wrap items-end gap-3">
@@ -1693,78 +1851,98 @@ export default function Productos() {
                                 </div>
                             </div>
                         )}
-                        <div className="overflow-x-auto rounded-lg border border-edge">
-                            <table className="w-full min-w-[640px] text-sm">
-                                <thead>
-                                    <tr className="bg-primary-600 text-left text-xs text-white">
-                                        <th className="px-2 py-2 font-medium">Vendo por</th>
-                                        <th className="px-2 py-2 font-medium">Me cuesta ({form.moneda_compra})</th>
-                                        <th className="px-2 py-2 font-medium">Precio principal ({form.moneda_venta})</th>
-                                        <th className="w-10 px-2 py-2" />
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {ventas.map((v, i) => {
-                                        const fila = filaDe(v.unidad_id);
-                                        return (
-                                            <tr key={i} className="border-t border-edge">
-                                                <td className="px-2 py-1.5">
-                                                    <SearchSelect
-                                                        value={v.unidad_id}
-                                                        onChange={(val) => setVentaField(i, 'unidad_id', val ?? '')}
-                                                        placeholder="Elegir formato…"
-                                                        emptyText="Sin coincidencias"
-                                                        options={unidadOptions}
-                                                    />
-                                                </td>
-                                                <td className="px-2 py-1.5 text-warm-600">
-                                                    {fila ? money(fila.precio_compra, form.moneda_compra) : '—'}
-                                                    {/* En la moneda de venta, para comparar con el precio. */}
-                                                    {fila && monedasDistintas && fila.costo_en_venta != null && (
-                                                        <span className="block text-xs text-warm-400">
-                                                            ≈ {money(fila.costo_en_venta, form.moneda_venta)}
-                                                        </span>
-                                                    )}
-                                                </td>
-                                                {/* El precio se pone en la lista de precios. A un
-                                                    formato nuevo se le sugiere uno con el % de siempre. */}
-                                                <td className="px-2 py-1.5">
-                                                    {v.precio_venta !== '' ? (
-                                                        <span className="font-medium text-warm-900">
-                                                            {money(v.precio_venta, form.moneda_venta)}
-                                                        </span>
-                                                    ) : fila && fila.costo_en_venta != null ? (
-                                                        <span className="text-warm-500" title="Se guarda así; luego lo ajustas en la lista de precios">
-                                                            ≈ {money(fila.precio_venta, form.moneda_venta)}
-                                                            <span className="ml-1 text-xs">sugerido</span>
-                                                        </span>
-                                                    ) : (
-                                                        '—'
-                                                    )}
-                                                </td>
-                                                <td className="px-2 py-1.5 text-center">
-                                                    <button
-                                                        type="button"
-                                                        aria-label="Quitar"
-                                                        disabled={ventas.length === 1}
-                                                        onClick={() => removeVenta(i)}
-                                                        className="rounded p-1 text-red-600 transition hover:bg-red-50 disabled:opacity-30"
-                                                    >
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
-                        </div>
+                        {(() => {
+                            const fila = filaDe(ventaPrincipal.unidad_id);
+                            const por = unidadNombre(ventaPrincipal.unidad_id).toLowerCase();
+                            return (
+                                <div className="grid gap-4 sm:grid-cols-3">
+                                    <SearchSelect
+                                        label="Vendo por"
+                                        value={ventaPrincipal.unidad_id}
+                                        onChange={(val) => setVentaField(0, 'unidad_id', val ?? '')}
+                                        placeholder="Elegir unidad…"
+                                        emptyText="Sin coincidencias"
+                                        options={unidadOptions}
+                                        error={errors.ventas}
+                                    />
+                                    <div>
+                                        <span className="mb-1 block text-sm font-medium text-gray-700">
+                                            Me cuesta{por ? ` (por ${por})` : ''}
+                                        </span>
+                                        <p className="py-2 text-sm text-warm-700">
+                                            {fila ? money(fila.precio_compra, form.moneda_compra) : '—'}
+                                            {/* En la moneda de venta, para comparar con el precio. */}
+                                            {fila && monedasDistintas && fila.costo_en_venta != null && (
+                                                <span className="ml-1 text-xs text-warm-400">
+                                                    ≈ {money(fila.costo_en_venta, form.moneda_venta)}
+                                                </span>
+                                            )}
+                                        </p>
+                                    </div>
+                                    {/* El precio se pone en la lista de precios. A un
+                                        producto nuevo se le sugiere uno con el % de siempre. */}
+                                    <div>
+                                        <span className="mb-1 block text-sm font-medium text-gray-700">
+                                            Precio principal{por ? ` (por ${por})` : ''}
+                                        </span>
+                                        <p className="py-2 text-sm">
+                                            {ventaPrincipal.precio_venta !== '' ? (
+                                                <span className="font-medium text-warm-900">
+                                                    {money(ventaPrincipal.precio_venta, form.moneda_venta)}
+                                                </span>
+                                            ) : fila && fila.costo_en_venta != null ? (
+                                                <span className="text-warm-500" title="Se guarda así; luego lo ajustas en la lista de precios">
+                                                    ≈ {money(fila.precio_venta, form.moneda_venta)}
+                                                    <span className="ml-1 text-xs">sugerido</span>
+                                                </span>
+                                            ) : (
+                                                '—'
+                                            )}
+                                        </p>
+                                    </div>
+                                </div>
+                            );
+                        })()}
+
+                        {/* La tela: se vende por color, en rollos enteros (cada uno
+                            con su metraje real) o en cortes, cobrando por metro. */}
+                        {vendePorMetro && (
+                            <div className="mt-3 rounded-md bg-gray-50 p-3 ring-1 ring-inset ring-gray-200">
+                                <div className="flex flex-wrap items-end gap-3">
+                                    <div className="w-52">
+                                        <Input
+                                            label="Metraje promedio por rollo (m)"
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            placeholder="50"
+                                            value={form.metros_por_rollo}
+                                            onChange={setField('metros_por_rollo')}
+                                            error={errors.metros_por_rollo}
+                                        />
+                                    </div>
+                                    <p className="min-w-[16rem] flex-1 text-xs text-warm-600">
+                                        Es un solo producto: lo que varía es el color y el metraje de cada rollo.
+                                        Se vende en rollos enteros o en cortes, cobrando los metros reales al
+                                        precio del metro. Este promedio solo estima un pedido en rollos antes de
+                                        saber qué rollos salen.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+
+                        {formatosQueSalen.length > 0 && (
+                            <Alert variant="info" className="mt-3">
+                                Al guardar dejan de venderse los formatos {formatosQueSalen.join(', ')}: el producto
+                                se vende {vendePorMetro ? 'por metro, en rollos enteros o cortes' : 'en una sola unidad'}.
+                            </Alert>
+                        )}
+
                         <p className="mt-2 text-xs text-warm-500">
-                            La unidad en que compras se guarda siempre como formato, para poder
-                            registrar la compra en ella.{' '}
-                            El costo de cada formato sale de tu precio de compra. Los precios de venta
-                            (Minorista, Mayorista, por cantidad, IGV) se ponen en la Lista de precios; a un
-                            formato nuevo se le sugiere uno con {ventaVacia().margen} % de ganancia.
+                            La unidad en que compras se guarda aparte, para poder registrar la compra en ella. El
+                            costo sale de tu precio de compra. Los precios de venta (Minorista, Mayorista, por
+                            cantidad, IGV) se ponen en la Lista de precios; a un producto nuevo se le sugiere uno
+                            con {ventaVacia().margen} % de ganancia.
                             {calculo.baseId && (
                                 <>
                                     {' '}El stock se contará en{' '}

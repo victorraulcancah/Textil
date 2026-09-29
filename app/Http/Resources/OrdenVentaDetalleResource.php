@@ -32,6 +32,10 @@ class OrdenVentaDetalleResource extends JsonResource
                 'hex' => $this->color->hex,
             ] : null),
 
+            // "rollos": N rollos enteros, cada uno con su metraje real;
+            // "metros": X metros, cortando si hace falta.
+            'modo' => $this->modo ?? 'metros',
+            'rollos_pedidos' => $this->rollos_pedidos !== null ? (int) $this->rollos_pedidos : null,
             'cantidad' => (float) $this->cantidad,
             'descripcion' => $this->descripcion,
             'metros' => (float) $this->metros,
@@ -48,6 +52,10 @@ class OrdenVentaDetalleResource extends JsonResource
             // Cuánto lleva cubierto el almacén de esta línea.
             'metros_asignados' => $this->whenLoaded('rollos', fn () => $this->metrosAsignados()),
             'metros_pendientes' => $this->whenLoaded('rollos', fn () => $this->metrosPendientes()),
+            // Por rollos: los metros reales de lo asignado más lo estimado de lo que falta.
+            'metros_totales' => $this->whenLoaded('rollos', fn () => $this->metrosTotales()),
+            'rollos_asignados' => $this->whenLoaded('rollos', fn () => $this->rollosAsignados()),
+            'rollos_pendientes' => $this->whenLoaded('rollos', fn () => $this->esPorRollos() ? $this->rollosPendientes() : null),
             'cubierta' => $this->whenLoaded('rollos', fn () => $this->estaCubierta()),
 
             // Los rollos concretos son cosa del almacén: quien solo vende ve
@@ -60,7 +68,8 @@ class OrdenVentaDetalleResource extends JsonResource
                     'codigo' => $r->rollo?->codigo,
                     'color' => $r->rollo?->color?->nombre,
                     'metros' => (float) $r->metros,
-                    'metros_rollo' => (float) ($r->rollo?->metros_actual ?? 0),
+                    // Lo que medía al tomarlo (el rollo baja recién al despachar).
+                    'metros_rollo' => (float) ($r->metros_rollo ?? $r->rollo?->metros_actual ?? 0),
                     'es_parcial' => $r->esParcial(),
                     'escaneado_at' => $r->escaneado_at,
                     // Quién lo escaneó: varios almaceneros pueden preparar el

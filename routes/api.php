@@ -102,6 +102,10 @@ Route::middleware('auth:api')->group(function () {
     Route::apiResource('sub-marcas', SubMarcaController::class);
     // Antes del apiResource: si no, {producto} capturaría "…/imagen".
     Route::post('productos/{producto}/imagen', [ProductoController::class, 'subirImagen']);
+    // Los colores de una tela desde Excel: la plantilla y la carga (antes del
+    // resource, para que "plantilla-colores" no se lea como un {producto}).
+    Route::get('productos/plantilla-colores', [ProductoController::class, 'plantillaColores']);
+    Route::post('productos/colores-excel', [ProductoController::class, 'importarColores']);
     Route::apiResource('productos', ProductoController::class);
     // Lista de precios: tipos (Minorista, Mayorista…) y los precios de cada producto.
     Route::apiResource('tipos-precio', TipoPrecioController::class)->except(['show'])->parameters(['tipos-precio' => 'tipoPrecio']);

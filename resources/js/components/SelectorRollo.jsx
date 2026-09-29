@@ -13,8 +13,11 @@ const metros = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 
  *
  * Al editar una venta, el rollo que ya tenía puede no estar "disponible" (se
  * vendió entero, por ejemplo); se trae aparte para que siga apareciendo.
+ *
+ * `onChange(id, rollo)` entrega también el rollo (con sus metros), y
+ * `excluir` deja fuera los que ya se eligieron en otras filas.
  */
-export default function SelectorRollo({ productoId, almacenId, value, onChange }) {
+export default function SelectorRollo({ productoId, almacenId, value, onChange, excluir = [] }) {
     const [rollos, setRollos] = useState([]);
     const [cargando, setCargando] = useState(false);
 
@@ -69,13 +72,15 @@ export default function SelectorRollo({ productoId, almacenId, value, onChange }
         );
     }
 
+    const fuera = new Set(excluir.map(String));
+
     return (
         <SearchSelect
             value={value ?? ''}
-            onChange={(v) => onChange(v ?? '')}
+            onChange={(v) => onChange(v ?? '', rollos.find((r) => String(r.id) === String(v)) ?? null)}
             placeholder="Elegir rollo…"
             emptyText="Sin coincidencias"
-            options={rollos.map((r) => ({
+            options={rollos.filter((r) => String(r.id) === String(value) || !fuera.has(String(r.id))).map((r) => ({
                 value: String(r.id),
                 label: `${r.codigo} · ${r.color?.nombre ?? 'sin color'} · ${metros(r.metros_actual)} m`,
                 keywords: r.codigo,

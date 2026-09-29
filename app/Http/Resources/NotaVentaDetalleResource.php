@@ -18,12 +18,17 @@ class NotaVentaDetalleResource extends JsonResource
                 'id' => $this->rollo->id,
                 'codigo' => $this->rollo->codigo,
                 'color' => $this->rollo->relationLoaded('color') ? $this->rollo->color?->nombre : null,
+                'color_codigo' => $this->rollo->relationLoaded('color') ? $this->rollo->color?->codigo : null,
             ] : null),
+            // Lo que medía el rollo al venderlo (el "factor") y si salió entero o fue un corte.
+            'metros_rollo' => $this->metros_rollo !== null ? (float) $this->metros_rollo : null,
+            'rollo_entero' => (bool) $this->rollo_entero,
             'cantidad' => $this->cantidad,
             'precio_unitario' => $this->precio_unitario,
             'descuento' => $this->descuento,
             'subtotal' => $this->subtotal,
             'producto_nombre' => $this->presentacion?->producto?->nombre,
+            'producto_codigo' => $this->presentacion?->producto?->codigo,
             'presentacion' => ProductoPresentacionResource::make($this->whenLoaded('presentacion')),
         ];
     }

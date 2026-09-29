@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, ClipboardList, Eraser, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, ChevronRight, ClipboardList, Eraser, Plus, Trash2 } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
@@ -10,7 +10,7 @@ import ProductoPickerModal from '../components/ProductoPickerModal';
 import { tipoUnidad } from '../lib/unidades';
 import { precioPara } from '../lib/precios';
 import { cargarTipoCambio, convertir, money, MONEDAS } from '../lib/moneda';
-import { Alert, Button, Input, SearchSelect, Select, Spinner } from '../components/ui';
+import { Alert, Button, Input, SearchSelect, Select, Spinner, cn } from '../components/ui';
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
 
@@ -77,6 +77,8 @@ export default function CrearPedido() {
 
     /** Líneas ya agregadas al pedido. */
     const [lineas, setLineas] = useState([]);
+    /** Las telas desplegadas en la tabla (sus colores a la vista): { [productoId]: true }. */
+    const [abiertas, setAbiertas] = useState({});
 
     /** Buscador avanzado: se abre con lo que ya se haya escrito arriba. */
     const [picker, setPicker] = useState({ open: false, query: '' });
@@ -600,7 +602,40 @@ export default function CrearPedido() {
         );
 
     const quitar = (i) => setLineas((prev) => prev.filter((_, j) => j !== i));
+    /** Quita de una vez todos los colores de una tela. */
+    const quitarVarias = (indices) => setLineas((prev) => prev.filter((_, j) => !indices.includes(j)));
+    /** Un solo precio por metro para todos los colores de una tela. */
+    const precioDeTela = (indices, valor) =>
+        setLineas((prev) =>
+            prev.map((l, j) => (indices.includes(j) ? { ...l, precio_unitario: valor, precio_manual: true } : l)),
+        );
+    const alternar = (clave) => setAbiertas((prev) => ({ ...prev, [clave]: !prev[clave] }));
     const hayRollos = lineas.some((l) => l.modo === ROLLOS);
+
+    /**
+     * Lo que se ve en la tabla: cada tela pedida en rollos es una sola fila
+     * (sus colores se despliegan debajo); lo demás va línea por línea.
+     */
+    const filasTabla = useMemo(() => {
+        const filas = [];
+        const telas = new Map();
+
+        lineas.forEach((l, i) => {
+            if (l.modo !== ROLLOS) {
+                filas.push({ tipo: 'linea', clave: `l${i}`, l, i });
+                return;
+            }
+            const clave = String(productoDe(l.producto_presentacion_id)?.id ?? `p${l.producto_presentacion_id}`);
+            if (!telas.has(clave)) {
+                const tela = { tipo: 'tela', clave, producto: l.producto, indices: [] };
+                telas.set(clave, tela);
+                filas.push(tela);
+            }
+            telas.get(clave).indices.push(i);
+        });
+
+        return filas;
+    }, [lineas, productos]); // eslint-disable-line react-hooks/exhaustive-deps
 
     /**
      * Lo que ya se sabe cobrar. Una línea con precio por confirmar no suma, y
@@ -845,37 +880,176 @@ export default function CrearPedido() {
                                     </tr>
                                 )}
 
-                                {lineas.map((l, i) => {
+                                {filasTabla.map((fila) => {
+                                    // Una tela: una fila y, al desplegarla, sus colores con los rollos.
+                                    if (fila.tipo === 'tela') {
+                                        const colores = fila.indices.map((i) => ({ l: lineas[i], i }));
+                                        const rollos = colores.reduce((suma, { l }) => suma + (Number(l.rollos_pedidos) || 0), 0);
+                                        const precios = [...new Set(colores.map(({ l }) => String(l.precio_unitario)))];
+                                        const abierta = Boolean(abiertas[fila.clave]);
+                                        const error = colores
+                                            .map(({ i }) => errores[`detalles.${i}.cantidad`] ?? errores[`detalles.${i}.rollos_pedidos`])
+                                            .find(Boolean);
+                                        const hexDe = (l) =>
+                                            (productoDe(l.producto_presentacion_id)?.colores ?? []).find(
+                                                (c) => String(c.id) === String(l.producto_color_id),
+                                            )?.hex;
+
+                                        return (
+                                            <Fragment key={fila.clave}>
+                                                <tr className="cursor-pointer transition hover:bg-gray-50" onClick={() => alternar(fila.clave)}>
+                                                    <td className="px-3 py-2">
+                                                        <span className="flex items-center gap-2">
+                                                            <button
+                                                                type="button"
+                                                                aria-expanded={abierta}
+                                                                aria-label={abierta ? 'Ocultar colores' : 'Ver colores'}
+                                                                className="rounded p-0.5 text-warm-500 hover:bg-gray-100"
+                                                            >
+                                                                <ChevronRight
+                                                                    className={cn(
+                                                                        'h-4 w-4 transition-transform duration-300',
+                                                                        abierta && 'rotate-90',
+                                                                    )}
+                                                                />
+                                                            </button>
+                                                            <span className="font-medium text-warm-900">{fila.producto}</span>
+                                                            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-warm-700">
+                                                                {colores.length} color{colores.length === 1 ? '' : 'es'}
+                                                            </span>
+                                                        </span>
+                                                        {error && <span className="block pl-7 text-xs text-red-600">{error[0]}</span>}
+                                                    </td>
+                                                    <td className="px-3 py-2 text-warm-700">Rollo</td>
+                                                    <td className="px-3 py-2 text-right font-medium text-warm-900">
+                                                        {rollos} rollo{rollos === 1 ? '' : 's'}
+                                                    </td>
+                                                    {/* Un precio por metro para toda la tela; cada color puede llevar el suyo. */}
+                                                    <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
+                                                        <Input
+                                                            type="number"
+                                                            step="0.01"
+                                                            min="0"
+                                                            value={precios.length === 1 ? precios[0] : ''}
+                                                            placeholder={precios.length === 1 ? undefined : 'varios'}
+                                                            onChange={(e) => precioDeTela(fila.indices, e.target.value)}
+                                                            className="ml-auto w-28 text-right"
+                                                            aria-label={`Precio por metro de ${fila.producto}`}
+                                                        />
+                                                        <span className="mt-0.5 block text-[11px] text-warm-500">por metro</span>
+                                                    </td>
+                                                    <td className="px-3 py-2 text-right font-normal text-warm-500">Por definir</td>
+                                                    <td className="px-3 py-2 text-center" onClick={(e) => e.stopPropagation()}>
+                                                        <button
+                                                            type="button"
+                                                            aria-label={`Quitar ${fila.producto}`}
+                                                            onClick={() => quitarVarias(fila.indices)}
+                                                            className="rounded-md p-1.5 text-red-600 transition hover:bg-red-50"
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                                {/* Los colores se despliegan con una animación de altura. */}
+                                                <tr className="border-b-0">
+                                                    <td colSpan={6} className="p-0">
+                                                        <div
+                                                            className={cn(
+                                                                'grid transition-[grid-template-rows] duration-300 ease-out',
+                                                                abierta ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]',
+                                                            )}
+                                                        >
+                                                            <div className="overflow-hidden">
+                                                                <div
+                                                                    className={cn(
+                                                                        'bg-gray-50/70 py-1 pl-10 pr-3 transition-opacity duration-300',
+                                                                        abierta ? 'border-b border-gray-100 opacity-100' : 'opacity-0',
+                                                                    )}
+                                                                >
+                                                                    <div className="grid grid-cols-[1fr_7rem_8rem_2.5rem] items-center gap-3 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-warm-500">
+                                                                        <span>Color</span>
+                                                                        <span className="text-right">Rollos</span>
+                                                                        <span className="text-right">Precio por metro</span>
+                                                                        <span />
+                                                                    </div>
+                                                                    {colores.map(({ l, i }) => (
+                                                                        <div
+                                                                            key={i}
+                                                                            className="grid grid-cols-[1fr_7rem_8rem_2.5rem] items-center gap-3 px-2 py-1.5"
+                                                                        >
+                                                                            <span className="inline-flex items-center gap-2 font-medium uppercase text-warm-800">
+                                                                                <span
+                                                                                    className="h-3 w-3 shrink-0 rounded-full ring-1 ring-black/10"
+                                                                                    style={{ backgroundColor: hexDe(l) || '#9ca3af' }}
+                                                                                />
+                                                                                {l.color || 'Cualquier color'}
+                                                                            </span>
+                                                                            <Input
+                                                                                type="number"
+                                                                                step="1"
+                                                                                min="1"
+                                                                                value={l.rollos_pedidos}
+                                                                                onChange={(e) => cambiar(i, 'rollos_pedidos', e.target.value)}
+                                                                                className="text-right"
+                                                                                aria-label={`Rollos de ${fila.producto} ${l.color}`}
+                                                                                tabIndex={abierta ? 0 : -1}
+                                                                            />
+                                                                            <Input
+                                                                                type="number"
+                                                                                step="0.01"
+                                                                                min="0"
+                                                                                value={l.precio_unitario}
+                                                                                onChange={(e) => cambiar(i, 'precio_unitario', e.target.value)}
+                                                                                className="text-right"
+                                                                                aria-label={`Precio por metro de ${fila.producto} ${l.color}`}
+                                                                                tabIndex={abierta ? 0 : -1}
+                                                                            />
+                                                                            <button
+                                                                                type="button"
+                                                                                aria-label={`Quitar ${l.color || 'color'}`}
+                                                                                onClick={() => quitar(i)}
+                                                                                tabIndex={abierta ? 0 : -1}
+                                                                                className="rounded-md p-1.5 text-red-600 transition hover:bg-red-50"
+                                                                            >
+                                                                                <Trash2 className="h-4 w-4" />
+                                                                            </button>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            </Fragment>
+                                        );
+                                    }
+
+                                    // Lo demás (hilos, cierres…): una línea por producto.
+                                    const { l, i } = fila;
                                     // Con un formato "Rollo" de metraje fijo (antiguo) no se sabe
                                     // el metraje real: se ofrece marcar el precio como "por confirmar".
-                                    const presentacionLinea = presentacionDe(l.producto_presentacion_id);
-                                    const esRollo = tipoUnidad(presentacionLinea) === 'rollo';
-                                    // Una tela en rollos: la cantidad son rollos y el importe, por definir.
-                                    const porRollos = l.modo === ROLLOS;
+                                    const esRollo = tipoUnidad(presentacionDe(l.producto_presentacion_id)) === 'rollo';
 
                                     return (
-                                    <tr key={i}>
-                                        <td className="px-3 py-2">
-                                            <span className="font-medium text-warm-900">{l.producto}</span>
-                                            {l.color && (
-                                                <span className="ml-1.5 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-warm-700">
-                                                    {l.color}
-                                                </span>
-                                            )}
-                                            {l.descripcion && (
-                                                <span className="block text-xs text-warm-500">{l.descripcion}</span>
-                                            )}
-                                            {(errores[`detalles.${i}.cantidad`] ?? errores[`detalles.${i}.rollos_pedidos`]) && (
-                                                <span className="block text-xs text-red-600">
-                                                    {(errores[`detalles.${i}.cantidad`] ?? errores[`detalles.${i}.rollos_pedidos`])[0]}
-                                                </span>
-                                            )}
-                                        </td>
-                                        <td className="px-3 py-2">
-                                            {porRollos ? (
-                                                <span className="text-warm-700">Rollo</span>
-                                            ) : (
-                                                (() => {
+                                        <tr key={fila.clave}>
+                                            <td className="px-3 py-2">
+                                                <span className="font-medium text-warm-900">{l.producto}</span>
+                                                {l.color && (
+                                                    <span className="ml-1.5 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-warm-700">
+                                                        {l.color}
+                                                    </span>
+                                                )}
+                                                {l.descripcion && (
+                                                    <span className="block text-xs text-warm-500">{l.descripcion}</span>
+                                                )}
+                                                {errores[`detalles.${i}.cantidad`] && (
+                                                    <span className="block text-xs text-red-600">
+                                                        {errores[`detalles.${i}.cantidad`][0]}
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td className="px-3 py-2">
+                                                {(() => {
                                                     // La línea no guarda el producto: se deduce de su
                                                     // presentación, así funciona también al editar.
                                                     const opciones = unidadesDe(productoDe(l.producto_presentacion_id));
@@ -906,86 +1080,62 @@ export default function CrearPedido() {
                                                             options={opciones}
                                                         />
                                                     );
-                                                })()
-                                            )}
-                                        </td>
-                                        <td className="px-3 py-2 text-right">
-                                            {porRollos ? (
-                                                <>
-                                                    <Input
-                                                        type="number"
-                                                        step="1"
-                                                        min="1"
-                                                        value={l.rollos_pedidos}
-                                                        onChange={(e) => cambiar(i, 'rollos_pedidos', e.target.value)}
-                                                        className="w-24 text-right"
-                                                        aria-label="Rollos"
-                                                    />
-                                                    <span className="mt-0.5 block text-[11px] text-warm-500">rollos</span>
-                                                </>
-                                            ) : (
+                                                })()}
+                                            </td>
+                                            <td className="px-3 py-2 text-right">
                                                 <Input
                                                     type="number"
                                                     step="0.01"
                                                     min="0"
                                                     value={l.cantidad}
                                                     onChange={(e) => cambiar(i, 'cantidad', e.target.value)}
-                                                    className="w-24 text-right"
+                                                    className="ml-auto w-24 text-right"
                                                 />
-                                            )}
-                                        </td>
-                                        <td className="px-3 py-2 text-right">
-                                            {esRollo && (
-                                                <label className="mb-1 flex items-center justify-end gap-1.5 text-[11px] font-medium text-warm-500">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={Boolean(l.precio_oculto)}
-                                                        onChange={(e) => cambiar(i, 'precio_oculto', e.target.checked)}
-                                                        className="h-3.5 w-3.5 rounded border-gray-300 accent-primary-600"
-                                                    />
-                                                    Por confirmar
-                                                </label>
-                                            )}
-                                            {l.precio_oculto ? (
-                                                <span className="text-warm-400">—</span>
-                                            ) : (
-                                                <>
+                                            </td>
+                                            <td className="px-3 py-2 text-right">
+                                                {esRollo && (
+                                                    <label className="mb-1 flex items-center justify-end gap-1.5 text-[11px] font-medium text-warm-500">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={Boolean(l.precio_oculto)}
+                                                            onChange={(e) => cambiar(i, 'precio_oculto', e.target.checked)}
+                                                            className="h-3.5 w-3.5 rounded border-gray-300 accent-primary-600"
+                                                        />
+                                                        Por confirmar
+                                                    </label>
+                                                )}
+                                                {l.precio_oculto ? (
+                                                    <span className="text-warm-400">—</span>
+                                                ) : (
                                                     <Input
                                                         type="number"
                                                         step="0.01"
                                                         min="0"
                                                         value={l.precio_unitario}
                                                         onChange={(e) => cambiar(i, 'precio_unitario', e.target.value)}
-                                                        className="w-28 text-right"
-                                                        aria-label={porRollos ? 'Precio por metro' : 'Precio de venta'}
+                                                        className="ml-auto w-28 text-right"
+                                                        aria-label="Precio de venta"
                                                     />
-                                                    {porRollos && (
-                                                        <span className="mt-0.5 block text-[11px] text-warm-500">por metro</span>
-                                                    )}
-                                                </>
-                                            )}
-                                        </td>
-                                        <td className="px-3 py-2 text-right font-medium text-warm-900">
-                                            {l.precio_oculto ? (
-                                                <span className="font-normal text-warm-400">Por confirmar</span>
-                                            ) : porRollos ? (
-                                                // Cada rollo se cobra por sus metros reales, al separarlo.
-                                                <span className="font-normal text-warm-500">Por definir</span>
-                                            ) : (
-                                                money((Number(l.cantidad) || 0) * (Number(l.precio_unitario) || 0), cabecera.moneda)
-                                            )}
-                                        </td>
-                                        <td className="px-3 py-2 text-center">
-                                            <button
-                                                type="button"
-                                                aria-label="Quitar"
-                                                onClick={() => quitar(i)}
-                                                className="rounded-md p-1.5 text-red-600 transition hover:bg-red-50"
-                                            >
-                                                <Trash2 className="h-4 w-4" />
-                                            </button>
-                                        </td>
-                                    </tr>
+                                                )}
+                                            </td>
+                                            <td className="px-3 py-2 text-right font-medium text-warm-900">
+                                                {l.precio_oculto ? (
+                                                    <span className="font-normal text-warm-400">Por confirmar</span>
+                                                ) : (
+                                                    money((Number(l.cantidad) || 0) * (Number(l.precio_unitario) || 0), cabecera.moneda)
+                                                )}
+                                            </td>
+                                            <td className="px-3 py-2 text-center">
+                                                <button
+                                                    type="button"
+                                                    aria-label="Quitar"
+                                                    onClick={() => quitar(i)}
+                                                    className="rounded-md p-1.5 text-red-600 transition hover:bg-red-50"
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </button>
+                                            </td>
+                                        </tr>
                                     );
                                 })}
                             </tbody>

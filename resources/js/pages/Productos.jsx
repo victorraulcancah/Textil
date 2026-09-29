@@ -1911,6 +1911,24 @@ export default function Productos() {
                         {(() => {
                             const fila = filaDe(ventaPrincipal.unidad_id);
                             const por = unidadNombre(ventaPrincipal.unidad_id).toLowerCase();
+                            // Una tela se vende por rollo pero se cobra por metro: el metro se
+                            // ofrece como "Rollo · precio por metro" y la unidad "Rollo" no se
+                            // ofrece (elegirla contaría el stock en rollos, no en metros).
+                            const ventaOptions = unidades
+                                .filter(
+                                    (u) =>
+                                        !/rollo/i.test(`${u.nombre} ${u.abreviatura ?? ''}`) ||
+                                        String(u.id) === String(ventaPrincipal.unidad_id),
+                                )
+                                .map((u) => ({
+                                    value: String(u.id),
+                                    label:
+                                        (u.abreviatura ?? '').toLowerCase() === 'm'
+                                            ? 'Rollo · precio por metro'
+                                            : u.abreviatura
+                                              ? `${u.nombre} (${u.abreviatura})`
+                                              : u.nombre,
+                                }));
                             return (
                                 <div className="grid gap-4 sm:grid-cols-3">
                                     <SearchSelect
@@ -1919,7 +1937,7 @@ export default function Productos() {
                                         onChange={(val) => setVentaField(0, 'unidad_id', val ?? '')}
                                         placeholder="Elegir unidad…"
                                         emptyText="Sin coincidencias"
-                                        options={unidadOptions}
+                                        options={ventaOptions}
                                         error={errors.ventas}
                                     />
                                     <div>

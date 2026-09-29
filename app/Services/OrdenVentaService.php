@@ -869,7 +869,7 @@ class OrdenVentaService
     {
         $orden->detalles()->delete();
 
-        $presentaciones = ProductoPresentacion::with('producto.presentaciones.unidadBase')
+        $presentaciones = ProductoPresentacion::with('producto.presentaciones.unidadBase', 'producto.colores')
             ->whereIn('id', collect($detalles)->pluck('producto_presentacion_id'))
             ->get()
             ->keyBy('id');
@@ -893,10 +893,10 @@ class OrdenVentaService
                 if (! $producto?->esTela()) {
                     throw new \DomainException("\"{$producto?->nombre}\" no se vende por rollos.");
                 }
-                $promedio = $producto->metrosPorRollo();
+                $promedio = $producto->metrosPorRollo(isset($linea['producto_color_id']) ? (int) $linea['producto_color_id'] : null);
                 if (! $promedio) {
                     throw new \DomainException(
-                        "Pon el metraje promedio por rollo de \"{$producto->nombre}\" (en Productos) para pedirlo por rollos."
+                        "Pon el metraje del rollo de cada color de \"{$producto->nombre}\" (en Productos → Compra y venta) para pedirlo por rollos."
                     );
                 }
                 $presentacion = $producto->presentacionMetro();

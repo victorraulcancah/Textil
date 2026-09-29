@@ -66,23 +66,67 @@ class ProductoController extends Controller
 
     /**
      * La plantilla para cargar los colores de una tela desde Excel: la hoja
-     * "Colores" (Código, Nombre, Nombre del proveedor) y, aparte, el catálogo
-     * de colores que ya existen, para copiar sus códigos.
+     * "Colores" (Código, Nombre, Nombre del proveedor, Metraje) y, aparte, el
+     * catálogo de colores que ya existen, para copiar sus códigos.
+     *
+     * Nunca sale vacía: con ?producto_id= trae los colores de esa tela (para
+     * corregir o agregar y volver a subirla); sin tela, o si aún no tiene
+     * colores, unas filas de ejemplo del catálogo con su metraje.
      */
-    public function plantillaColores()
+    public function plantillaColores(Request $request)
     {
         $libro = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
 
         $hoja = $libro->getActiveSheet();
         $hoja->setTitle('Colores');
-        $hoja->fromArray(['Código', 'Nombre', 'Nombre del proveedor'], null, 'A1');
-        $hoja->getStyle('A1:C1')->getFont()->setBold(true);
+        $hoja->fromArray(['Código', 'Nombre', 'Nombre del proveedor', 'Metraje (m)'], null, 'A1');
+        $hoja->getStyle('A1:D1')->getFont()->setBold(true);
         // El código como texto: si no, Excel se come los ceros (0074 → 74).
         $hoja->getStyle('A2:A1000')->getNumberFormat()
             ->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_TEXT);
-        foreach (['A' => 12, 'B' => 28, 'C' => 34] as $columna => $ancho) {
+        foreach (['A' => 12, 'B' => 28, 'C' => 34, 'D' => 14] as $columna => $ancho) {
             $hoja->getColumnDimension($columna)->setWidth($ancho);
         }
+
+        $producto = $request->filled('producto_id')
+            ? Producto::with(['colores' => fn ($q) => $q->orderBy('id')])->find($request->integer('producto_id'))
+            : null;
+        $conColores = $producto && $producto->colores->isNotEmpty();
+
+        $filas = $conColores
+            ? $producto->colores->map(fn ($c) => [
+                (string) $c->codigo,
+                $c->nombre,
+                $c->nombre_proveedor,
+                $c->metros_por_rollo !== null ? (float) $c->metros_por_rollo : null,
+            ])
+            : Color::where('activo', true)->orderBy('codigo')->take(3)->get()->values()
+                // El proveedor nombra el color a su manera: "Negro (Ha Qing)".
+                ->map(fn ($c, $i) => [
+                    (string) $c->codigo,
+                    $c->nombre,
+                    mb_convert_case(mb_strtolower($c->nombre), MB_CASE_TITLE).' (Ha Qing)',
+                    [63, 64, 65][$i],
+                ]);
+
+        $fila = 2;
+        foreach ($filas as [$codigo, $nombre, $proveedor, $metraje]) {
+            $hoja->setCellValueExplicit("A{$fila}", $codigo, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $hoja->setCellValue("B{$fila}", $nombre);
+            if ($proveedor) {
+                $hoja->setCellValue("C{$fila}", $proveedor);
+            }
+            if ($metraje !== null) {
+                $hoja->setCellValue("D{$fila}", $metraje);
+            }
+            $fila++;
+        }
+
+        // La nota va fuera de las columnas que se leen: no entra como color.
+        $hoja->setCellValue('F1', $conColores
+            ? "Colores de {$producto->nombre}: corrige o agrega filas y vuelve a subirlo."
+            : 'Las filas de abajo son un ejemplo: cámbialas por los colores de tu tela (el código y el nombre, como en la hoja Catálogo) y el metraje de su rollo.');
+        $hoja->getStyle('F1')->getFont()->setItalic(true)->getColor()->setRGB('6B6B6B');
 
         $catalogo = $libro->createSheet();
         $catalogo->setTitle('Catálogo');
@@ -101,7 +145,7 @@ class ProductoController extends Controller
 
         return response()->streamDownload(function () use ($libro) {
             (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($libro))->save('php://output');
-        }, 'plantilla-colores.xlsx', [
+        }, $conColores ? "colores-{$producto->codigo}.xlsx" : 'plantilla-colores.xlsx', [
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         ]);
     }
@@ -140,6 +184,7 @@ class ProductoController extends Controller
             'codigo' => ['codigo', 'cod', 'cod.', 'codigo de color', 'codigo color'],
             'nombre' => ['nombre', 'color', 'nombre del color'],
             'proveedor' => ['nombre del proveedor', 'nombre proveedor', 'proveedor', 'color del proveedor'],
+            'metraje' => ['metraje', 'metraje (m)', 'metros', 'metros (m)', 'factor', 'metraje del rollo', 'metros por rollo'],
         ];
         $col = [];
         foreach ($filas[0] ?? [] as $indice => $texto) {
@@ -152,7 +197,7 @@ class ProductoController extends Controller
 
         if (! isset($col['codigo']) && ! isset($col['nombre'])) {
             return response()->json([
-                'message' => 'No se encontraron las columnas del Excel. Se esperan: Código, Nombre, Nombre del proveedor.',
+                'message' => 'No se encontraron las columnas del Excel. Se esperan: Código, Nombre, Nombre del proveedor, Metraje (m).',
             ], 422);
         }
 
@@ -172,6 +217,8 @@ class ProductoController extends Controller
                 $codigo = isset($col['codigo']) ? trim((string) ($fila[$col['codigo']] ?? '')) : '';
                 $nombre = isset($col['nombre']) ? trim((string) ($fila[$col['nombre']] ?? '')) : '';
                 $proveedor = isset($col['proveedor']) ? trim((string) ($fila[$col['proveedor']] ?? '')) : '';
+                $metrajeTexto = isset($col['metraje']) ? str_replace(',', '.', trim((string) ($fila[$col['metraje']] ?? ''))) : '';
+                $metraje = is_numeric($metrajeTexto) && (float) $metrajeTexto > 0 ? round((float) $metrajeTexto, 2) : null;
 
                 if ($codigo === '' && $nombre === '') {
                     continue; // fila vacía
@@ -209,6 +256,10 @@ class ProductoController extends Controller
                     $nuevos[] = "{$color->codigo} {$color->nombre}";
                 }
 
+                if ($metrajeTexto !== '' && $metraje === null) {
+                    $advertencias[] = "Fila {$n}: el metraje \"{$metrajeTexto}\" de \"{$color->nombre}\" no es un número; se agrega sin metraje.";
+                }
+
                 // Repetido en el mismo archivo: una sola vez.
                 if (isset($vistos[$color->id])) {
                     continue;
@@ -221,6 +272,7 @@ class ProductoController extends Controller
                     'codigo' => $color->codigo,
                     'hex' => $color->hex,
                     'nombre_proveedor' => $proveedor !== '' ? $proveedor : null,
+                    'metros_por_rollo' => $metraje,
                 ];
             }
         });
@@ -346,6 +398,8 @@ class ProductoController extends Controller
                 // El proveedor nombra los colores a su manera; se guarda tal
                 // cual para poder cruzar su packing list en el próximo embarque.
                 'nombre_proveedor' => $c['nombre_proveedor'] ?? null,
+                // El metraje del rollo de este color.
+                'metros_por_rollo' => $c['metros_por_rollo'] ?? null,
                 'hex' => $c['hex'] ?? null,
                 'activo' => $c['activo'] ?? true,
             ];

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ArrowDownLeft, ArrowRightLeft, ArrowUpRight, Package } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import Layout from '../components/Layout';
@@ -104,6 +105,19 @@ export default function Movimientos() {
     useEffect(() => {
         load();
     }, [load]);
+
+    // Desde Productos (clic derecho → Movimientos): se abre el historial de ese producto.
+    const [searchParams, setSearchParams] = useSearchParams();
+    useEffect(() => {
+        const id = searchParams.get('producto');
+        if (!id || loading) return;
+        const nombre =
+            searchParams.get('nombre') ??
+            movimientos.find((m) => String(m.producto_id) === id)?.producto?.nombre ??
+            '—';
+        setProductoModal({ id, nombre });
+        setSearchParams({}, { replace: true });
+    }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const applyFilters = () => {
         const next = {};

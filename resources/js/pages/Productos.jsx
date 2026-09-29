@@ -1,10 +1,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Download, Edit, Eye, FileSpreadsheet, Package, Plus, PlusCircle, Save, Trash2 } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import {
+    Download,
+    Edit,
+    Eye,
+    FileSpreadsheet,
+    History,
+    Layers,
+    Package,
+    Palette,
+    Plus,
+    PlusCircle,
+    Save,
+    Tag,
+    Trash2,
+} from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { calcularPresentaciones, describirContenido } from '../lib/unidades';
 import { useToast } from '../lib/toast';
+import { useAuth } from '../lib/auth';
 import Layout from '../components/Layout';
+import MenuContextual from '../components/MenuContextual';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import { Alert, Badge, Button, DataTable, Input, Modal, OptionSelect, SearchSelect, Select, Tabs, cn } from '../components/ui';
 
@@ -33,8 +49,6 @@ const emptyProducto = {
     sub_marca_id: '',
     unidad_medida_id: '',
     factor_compra_base: '1',
-    // Tela: metraje promedio de un rollo, para estimar un pedido en rollos.
-    metros_por_rollo: '',
     stock_minimo: '',
     stock_maximo: '',
     activo: true,
@@ -84,7 +98,7 @@ const PESTANA_DEL_CAMPO = {
     colores: ['colores'],
     comercial: [
         'unidad_medida_id', 'unidad_base_id', 'unidad_compra_id',
-        'factor_compra_base', 'presentaciones', 'stock_minimo', 'stock_maximo', 'metros_por_rollo',
+        'factor_compra_base', 'presentaciones', 'stock_minimo', 'stock_maximo', 'colores',
         // Nombres que usa la validación del propio formulario.
         'compra_unidad', 'compra_cantidad', 'compra_contenido', 'ventas', 'tipo_cambio',
     ],
@@ -103,7 +117,17 @@ function pestanaConError(campos) {
 }
 
 /** Un color del muestrario: "Azul Marino - Cód. 402". */
-const colorVacio = () => ({ color_id: '', nombre: '', nombre_proveedor: '', codigo: '', hex: '#1f3a93' });
+const colorVacio = () => ({
+    color_id: '',
+    nombre: '',
+    nombre_proveedor: '',
+    // El metraje del rollo de este color (su "factor").
+    metros_por_rollo: '',
+    codigo: '',
+    hex: '#1f3a93',
+});
+
+const formatoMetros = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
 
 /** Un proveedor de la tela: la misma la puede traer más de uno. */
 const provVacio = () => ({
@@ -127,6 +151,13 @@ const ventaVacia = () => ({ unidad_id: '', margen: '25', precio_venta: '' });
 
 export default function Productos() {
     const toast = useToast();
+    const navigate = useNavigate();
+    const { puede } = useAuth();
+    /** Clic derecho sobre un producto: dónde se abrió el menú y de qué producto. */
+    const [menu, setMenu] = useState(null);
+    const cerrarMenu = useCallback(() => setMenu(null), []);
+    /** El producto cuyos colores (con su stock) se ven en el modal. */
+    const [coloresDe, setColoresDe] = useState(null);
     const [productos, setProductos] = useState([]);
     const [categorias, setCategorias] = useState([]);
     const [marcas, setMarcas] = useState([]);
@@ -287,7 +318,6 @@ export default function Productos() {
             sub_marca_id: relId('sub_marca_id', 'sub_marca'),
             unidad_medida_id: relId('unidad_medida_id', 'unidad_medida'),
             factor_compra_base: prod.factor_compra_base ?? '1',
-            metros_por_rollo: prod.metros_por_rollo != null ? String(prod.metros_por_rollo) : '',
             stock_minimo: prod.stock_minimo ?? '',
             stock_maximo: prod.stock_maximo ?? '',
             activo: prod.activo !== false,
@@ -361,6 +391,7 @@ export default function Productos() {
                 color_id: c.color_id ? String(c.color_id) : '',
                 nombre: c.nombre ?? '',
                 nombre_proveedor: c.nombre_proveedor ?? '',
+                metros_por_rollo: c.metros_por_rollo != null ? String(Number(c.metros_por_rollo)) : '',
                 codigo: c.codigo ?? '',
                 hex: c.hex ?? '#1f3a93',
             })),
@@ -429,6 +460,41 @@ export default function Productos() {
             ? tipoCambio
             : 1 / tipoCambio;
 
+    /** La unidad en que se vende (el metro, en una tela). */
+    const ventaPrincipal = ventas[0] ?? ventaVacia();
+    const vendePorMetro =
+        (unidades.find((u) => String(u.id) === String(ventaPrincipal.unidad_id))?.abreviatura ?? '').toLowerCase() ===
+        'm';
+
+    /**
+     * Una tela que se compra por rollo (o por metro) no necesita decir cuánto
+     * trae: cada rollo trae el metraje de su color (la tabla de la tela) y un
+     * metro, un metro. El formato de compra toma como contenido el promedio
+     * del metraje de los colores, en metros.
+     */
+    const unidadCompra = unidades.find((u) => String(u.id) === String(compra.unidad_compra_id)) ?? null;
+    const unidadMetro = unidades.find((u) => (u.abreviatura ?? '').toLowerCase() === 'm') ?? null;
+    const compraPorRollo = /rollo/i.test(`${unidadCompra?.nombre ?? ''} ${unidadCompra?.abreviatura ?? ''}`);
+    const compraPorMetro = (unidadCompra?.abreviatura ?? '').toLowerCase() === 'm';
+    const contenidoAutomatico = vendePorMetro && Boolean(unidadMetro) && (compraPorRollo || compraPorMetro);
+    const metrajeColores = useMemo(() => {
+        const metrajes = colores.map((c) => Number(c.metros_por_rollo) || 0).filter((m) => m > 0);
+        return metrajes.length
+            ? Math.round((metrajes.reduce((suma, m) => suma + m, 0) / metrajes.length) * 100) / 100
+            : 0;
+    }, [colores]);
+    const compraEfectiva = useMemo(
+        () =>
+            contenidoAutomatico
+                ? {
+                      ...compra,
+                      cantidad: String(compraPorMetro ? 1 : metrajeColores || ''),
+                      unidad_contenido_id: String(unidadMetro.id),
+                  }
+                : compra,
+        [compra, contenidoAutomatico, compraPorMetro, metrajeColores, unidadMetro],
+    );
+
     /**
      * Lo que se guarda: la unidad en que se vende y, aparte, la de compra (sin
      * ella no se podría registrar la compra en esa unidad). Ya no hay formatos:
@@ -446,15 +512,9 @@ export default function Productos() {
     }, [ventas, compra.unidad_compra_id]);
 
     const calculo = useMemo(
-        () => calcularPresentaciones({ unidades, compra, ventas: ventasParaCalculo, tasa }),
-        [unidades, compra, ventasParaCalculo, tasa],
+        () => calcularPresentaciones({ unidades, compra: compraEfectiva, ventas: ventasParaCalculo, tasa }),
+        [unidades, compraEfectiva, ventasParaCalculo, tasa],
     );
-
-    /** La unidad en que se vende (el metro, en una tela). */
-    const ventaPrincipal = ventas[0] ?? ventaVacia();
-    const vendePorMetro =
-        (unidades.find((u) => String(u.id) === String(ventaPrincipal.unidad_id))?.abreviatura ?? '').toLowerCase() ===
-        'm';
 
     /** Al editar: los formatos que tenía y que, al guardar, dejan de venderse. */
     const formatosQueSalen = useMemo(() => {
@@ -478,8 +538,15 @@ export default function Productos() {
         // El código ya no se pide en el formulario: lo genera el servidor.
         if (!form.nombre.trim()) next.nombre = 'Ingrese el nombre';
         if (!compra.unidad_compra_id) next.compra_unidad = 'Indique en qué compra el producto';
-        if (!(Number(compra.cantidad) > 0)) next.compra_cantidad = 'Indique cuánto trae';
-        if (!compra.unidad_contenido_id) next.compra_contenido = 'Indique la unidad del contenido';
+        if (contenidoAutomatico) {
+            // Lo que trae cada rollo sale del metraje de sus colores.
+            if (!(Number(compraEfectiva.cantidad) > 0)) {
+                next.compra_cantidad = 'Pon el metraje del rollo de los colores en la tabla de la tela';
+            }
+        } else {
+            if (!(Number(compra.cantidad) > 0)) next.compra_cantidad = 'Indique cuánto trae';
+            if (!compra.unidad_contenido_id) next.compra_contenido = 'Indique la unidad del contenido';
+        }
         if (!ventaPrincipal.unidad_id) {
             next.ventas = 'Elige en qué unidad se vende (la tela, por metro)';
         }
@@ -544,8 +611,6 @@ export default function Productos() {
             marca_id: form.marca_id || undefined,
             sub_marca_id: form.sub_marca_id || undefined,
             factor_compra_base: calculo.factorCompraBase || undefined,
-            // Se manda vacío como null: así se puede borrar.
-            metros_por_rollo: form.metros_por_rollo === '' ? null : Number(form.metros_por_rollo),
             stock_minimo: num(form.stock_minimo),
             stock_maximo: num(form.stock_maximo),
             descripcion: str(form.descripcion),
@@ -570,6 +635,8 @@ export default function Productos() {
                     nombre: c.nombre.trim(),
                     color_id: c.color_id || undefined,
                     nombre_proveedor: str(c.nombre_proveedor),
+                    // Vacío como null: así se puede borrar.
+                    metros_por_rollo: Number(c.metros_por_rollo) > 0 ? Number(c.metros_por_rollo) : null,
                     codigo: str(c.codigo),
                     hex: str(c.hex),
                 })),
@@ -653,14 +720,21 @@ export default function Productos() {
     };
 
     // ---- Creación rápida de catálogos ----
-    /** La plantilla de colores: Código, Nombre, Nombre del proveedor, y el catálogo aparte. */
+    /**
+     * La plantilla de colores (Código, Nombre, Nombre del proveedor, Metraje y
+     * el catálogo aparte). Al editar trae los colores guardados de la tela; si
+     * no, unas filas de ejemplo.
+     */
     const descargarPlantillaColores = async () => {
         try {
-            const { data } = await api.get('/productos/plantilla-colores', { responseType: 'blob' });
+            const { data } = await api.get('/productos/plantilla-colores', {
+                params: editing ? { producto_id: editing.id } : {},
+                responseType: 'blob',
+            });
             const url = URL.createObjectURL(data);
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'plantilla-colores.xlsx';
+            a.download = editing?.colores?.length ? `colores-${editing.codigo}.xlsx` : 'plantilla-colores.xlsx';
             document.body.appendChild(a);
             a.click();
             a.remove();
@@ -698,10 +772,12 @@ export default function Productos() {
                         x.nombre.trim().toLowerCase() === String(c.nombre).toLowerCase(),
                 );
                 if (i !== -1) {
-                    // Ya estaba: solo se completa el nombre del proveedor si faltaba.
-                    if (!lista[i].nombre_proveedor && c.nombre_proveedor) {
-                        lista[i] = { ...lista[i], nombre_proveedor: c.nombre_proveedor };
-                    }
+                    // Ya estaba: el Excel completa o corrige su proveedor y su metraje.
+                    lista[i] = {
+                        ...lista[i],
+                        ...(c.nombre_proveedor ? { nombre_proveedor: c.nombre_proveedor } : {}),
+                        ...(c.metros_por_rollo ? { metros_por_rollo: String(c.metros_por_rollo) } : {}),
+                    };
                     continue;
                 }
                 lista.push({
@@ -710,6 +786,7 @@ export default function Productos() {
                     codigo: c.codigo ?? '',
                     hex: c.hex || '#1f3a93',
                     nombre_proveedor: c.nombre_proveedor ?? '',
+                    metros_por_rollo: c.metros_por_rollo ? String(c.metros_por_rollo) : '',
                 });
                 agregados++;
             }
@@ -984,7 +1061,7 @@ export default function Productos() {
         <Layout>
             <PageHeader
                 title="Productos"
-                description="Administra el catálogo, sus unidades derivadas y precios"
+                description="Administra el catálogo y sus colores. Clic derecho sobre uno para ver sus colores, movimientos y más."
                 actions={<CreateButton onClick={openCreate}>Crear producto</CreateButton>}
             />
 
@@ -996,6 +1073,10 @@ export default function Productos() {
 
             <DataTable
                 columns={columns}
+                onRowContextMenu={(row, e) => {
+                    e.preventDefault();
+                    setMenu({ x: e.clientX, y: e.clientY, producto: row });
+                }}
                 rows={filteredProductos}
                 loading={loading}
                 searchPlaceholder="Buscar productos..."
@@ -1561,9 +1642,10 @@ export default function Productos() {
                             orden de compra (KET-001-26-000001).
                         </p>
                         <p className="mb-3 text-xs text-warm-400">
-                            Para cargar muchos de una vez, sube un Excel con Código, Nombre y Nombre del
-                            proveedor (descarga la plantilla: trae el catálogo de colores). Lo que no esté en
-                            el catálogo se crea.
+                            Para cargar muchos de una vez, sube un Excel con Código, Nombre, Nombre del
+                            proveedor y Metraje (m) (descarga la plantilla: trae el catálogo de colores). Lo que
+                            no esté en el catálogo se crea. El metraje del rollo de cada color se ve y se
+                            corrige en Compra y venta.
                         </p>
                         {avisosColores.length > 0 && (
                             <Alert variant="warning" className="mb-3">
@@ -1765,26 +1847,41 @@ export default function Productos() {
                                 value={compra.precio}
                                 onChange={setCompraField('precio')}
                             />
-                            <Input
-                                label={`¿Cuánto trae ${unidadCompraTexto}?`}
-                                type="number"
-                                step="any"
-                                min="0"
-                                placeholder="50"
-                                value={compra.cantidad}
-                                onChange={setCompraField('cantidad')}
-                                error={errors.compra_cantidad}
-                            />
-                            <SearchSelect
-                                label="¿En qué unidad?"
-                                value={compra.unidad_contenido_id}
-                                onChange={(v) => setCompraField('unidad_contenido_id')({ target: { value: v ?? '' } })}
-                                placeholder="Seleccionar unidad…"
-                                emptyText="Sin coincidencias"
-                                options={unidadOptions}
-                                error={errors.compra_contenido}
-                            />
+                            {/* Una tela por rollo o por metro no pregunta cuánto trae:
+                                lo dice el metraje de cada color (abajo). */}
+                            {!contenidoAutomatico && (
+                                <>
+                                    <Input
+                                        label={`¿Cuánto trae ${unidadCompraTexto}?`}
+                                        type="number"
+                                        step="any"
+                                        min="0"
+                                        placeholder="50"
+                                        value={compra.cantidad}
+                                        onChange={setCompraField('cantidad')}
+                                        error={errors.compra_cantidad}
+                                    />
+                                    <SearchSelect
+                                        label="¿En qué unidad?"
+                                        value={compra.unidad_contenido_id}
+                                        onChange={(v) => setCompraField('unidad_contenido_id')({ target: { value: v ?? '' } })}
+                                        placeholder="Seleccionar unidad…"
+                                        emptyText="Sin coincidencias"
+                                        options={unidadOptions}
+                                        error={errors.compra_contenido}
+                                    />
+                                </>
+                            )}
                         </div>
+                        {contenidoAutomatico && (
+                            <p className={cn('mt-2 text-xs', errors.compra_cantidad ? 'font-medium text-red-600' : 'text-warm-500')}>
+                                {compraPorMetro
+                                    ? 'Se compra por metro: no hace falta decir cuánto trae.'
+                                    : metrajeColores > 0
+                                      ? `Cada rollo trae el metraje de su color (la tabla de la tela, en Cómo lo vendo): en promedio ${formatoMetros(metrajeColores)} m.`
+                                      : 'Cada rollo trae el metraje de su color: ponlo en la tabla de la tela, en Cómo lo vendo.'}
+                            </p>
+                        )}
                     </section>
 
                     {/* Cómo lo vendo: un solo producto en una sola unidad (la tela, por
@@ -1904,32 +2001,131 @@ export default function Productos() {
                             );
                         })()}
 
-                        {/* La tela: se vende por color, en rollos enteros (cada uno
-                            con su metraje real) o en cortes, cobrando por metro. */}
-                        {vendePorMetro && (
-                            <div className="mt-3 rounded-md bg-gray-50 p-3 ring-1 ring-inset ring-gray-200">
-                                <div className="flex flex-wrap items-end gap-3">
-                                    <div className="w-52">
-                                        <Input
-                                            label="Metraje promedio por rollo (m)"
-                                            type="number"
-                                            step="0.01"
-                                            min="0"
-                                            placeholder="50"
-                                            value={form.metros_por_rollo}
-                                            onChange={setField('metros_por_rollo')}
-                                            error={errors.metros_por_rollo}
-                                        />
+                        {/* La tela con todos sus colores, como en la nota de venta:
+                            cada color es su rollo, con su metraje (el factor) y lo que
+                            vale al precio del metro. El metraje se pone aquí. */}
+                        {vendePorMetro &&
+                            (() => {
+                                const filaPrincipal = filaDe(ventaPrincipal.unidad_id);
+                                const precioMetro =
+                                    ventaPrincipal.precio_venta !== ''
+                                        ? Number(ventaPrincipal.precio_venta) || 0
+                                        : Number(filaPrincipal?.precio_venta) || 0;
+                                const filas = colores.filter((c) => c.color_id || c.nombre.trim());
+                                const metrosTotal = filas.reduce((s, c) => s + (Number(c.metros_por_rollo) || 0), 0);
+                                const sinMetraje = filas.filter((c) => !(Number(c.metros_por_rollo) > 0)).length;
+
+                                return (
+                                    <div className="mt-4">
+                                        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                                            <h4 className="text-sm font-bold uppercase text-warm-900">
+                                                Tela: {form.nombre.trim() || 'sin nombre'}
+                                            </h4>
+                                            <Button type="button" variant="secondary" size="sm" onClick={() => setTab('colores')}>
+                                                <Plus className="h-4 w-4" />
+                                                Agregar colores
+                                            </Button>
+                                        </div>
+                                        <div className="overflow-x-auto rounded-lg border border-edge">
+                                            <table className="w-full min-w-[680px] text-sm">
+                                                <thead>
+                                                    <tr className="bg-primary-600 text-left text-xs font-semibold uppercase tracking-wide text-white">
+                                                        <th className="px-3 py-2">Ítem</th>
+                                                        <th className="px-3 py-2">Color</th>
+                                                        <th className="px-3 py-2 text-center">Rollo</th>
+                                                        <th className="px-3 py-2 text-right">Factor (m)</th>
+                                                        <th className="px-3 py-2 text-right">Metros</th>
+                                                        <th className="px-3 py-2 text-right">Precio unitario</th>
+                                                        <th className="px-3 py-2 text-right">Precio total</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-gray-100">
+                                                    {filas.length === 0 && (
+                                                        <tr>
+                                                            <td colSpan={7} className="px-3 py-6 text-center text-sm text-warm-400">
+                                                                Agrega los colores de la tela en la pestaña Colores (o súbelos de un
+                                                                Excel con su metraje).
+                                                            </td>
+                                                        </tr>
+                                                    )}
+                                                    {filas.map((c) => {
+                                                        const i = colores.indexOf(c);
+                                                        const metros = Number(c.metros_por_rollo) || 0;
+                                                        return (
+                                                            <tr key={i}>
+                                                                <td className="px-3 py-1.5 font-mono text-xs text-warm-700">
+                                                                    {[form.codigo.trim(), c.codigo].filter(Boolean).join('-') || '—'}
+                                                                </td>
+                                                                <td className="px-3 py-1.5">
+                                                                    <span className="inline-flex items-center gap-2 font-medium uppercase text-warm-900">
+                                                                        <span
+                                                                            className="h-3 w-3 shrink-0 rounded-full ring-1 ring-black/10"
+                                                                            style={{ backgroundColor: c.hex || '#9ca3af' }}
+                                                                        />
+                                                                        {c.nombre || '—'}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="px-3 py-1.5 text-center text-warm-700">1R</td>
+                                                                <td className="px-3 py-1.5">
+                                                                    <Input
+                                                                        type="number"
+                                                                        step="0.01"
+                                                                        min="0"
+                                                                        placeholder="0"
+                                                                        value={c.metros_por_rollo}
+                                                                        onChange={(e) =>
+                                                                            setColores((prev) =>
+                                                                                prev.map((x, j) =>
+                                                                                    j === i ? { ...x, metros_por_rollo: e.target.value } : x,
+                                                                                ),
+                                                                            )
+                                                                        }
+                                                                        aria-label={`Metraje del rollo ${c.nombre}`}
+                                                                        className="ml-auto w-24 text-right"
+                                                                    />
+                                                                </td>
+                                                                <td className="px-3 py-1.5 text-right text-warm-900">
+                                                                    {metros ? formatoMetros(metros) : '—'}
+                                                                </td>
+                                                                <td className="px-3 py-1.5 text-right text-warm-700">
+                                                                    {money(precioMetro, form.moneda_venta)}
+                                                                </td>
+                                                                <td className="px-3 py-1.5 text-right font-medium text-warm-900">
+                                                                    {metros ? money(metros * precioMetro, form.moneda_venta) : '—'}
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                                {filas.length > 0 && (
+                                                    <tfoot>
+                                                        <tr className="border-t-2 border-edge bg-gray-50 text-sm font-bold text-warm-900">
+                                                            <td className="px-3 py-2 uppercase" colSpan={2}>
+                                                                Sub total
+                                                            </td>
+                                                            <td className="px-3 py-2 text-center">{filas.length}</td>
+                                                            <td />
+                                                            <td className="px-3 py-2 text-right">{formatoMetros(metrosTotal)}</td>
+                                                            <td />
+                                                            <td className="px-3 py-2 text-right">
+                                                                {money(metrosTotal * precioMetro, form.moneda_venta)}
+                                                            </td>
+                                                        </tr>
+                                                    </tfoot>
+                                                )}
+                                            </table>
+                                        </div>
+                                        <p className="mt-2 text-xs text-warm-500">
+                                            Es un solo producto: lo que varía es el color y el metraje de su rollo (el
+                                            factor). Se vende en rollos enteros o en cortes, cobrando los metros reales de
+                                            cada rollo al precio del metro; este metraje sirve para estimar un pedido en
+                                            rollos de ese color.
+                                            {sinMetraje > 0 &&
+                                                ` Falta el metraje de ${sinMetraje} color${sinMetraje === 1 ? '' : 'es'}.`}
+                                        </p>
                                     </div>
-                                    <p className="min-w-[16rem] flex-1 text-xs text-warm-600">
-                                        Es un solo producto: lo que varía es el color y el metraje de cada rollo.
-                                        Se vende en rollos enteros o en cortes, cobrando los metros reales al
-                                        precio del metro. Este promedio solo estima un pedido en rollos antes de
-                                        saber qué rollos salen.
-                                    </p>
-                                </div>
-                            </div>
-                        )}
+                                );
+                            })()}
 
                         {formatosQueSalen.length > 0 && (
                             <Alert variant="info" className="mt-3">
@@ -2062,7 +2258,219 @@ export default function Productos() {
                     </div>
                 )}
             </Modal>
+
+            <MenuContextual
+                menu={menu}
+                onClose={cerrarMenu}
+                titulo={menu?.producto?.nombre}
+                items={[
+                    { label: 'Ver detalle', icon: Eye, onClick: () => setDetalle(menu.producto) },
+                    { label: 'Editar producto', icon: Edit, onClick: () => openEdit(menu.producto) },
+                    '-',
+                    { label: 'Colores y stock', icon: Palette, onClick: () => setColoresDe(menu.producto) },
+                    {
+                        label: 'Movimientos (kardex)',
+                        icon: History,
+                        hidden: !puede('inventario.kardex'),
+                        onClick: () =>
+                            navigate(
+                                `/kardex?producto=${menu.producto.id}&nombre=${encodeURIComponent(menu.producto.nombre)}`,
+                            ),
+                    },
+                    {
+                        label: 'Rollos en stock',
+                        icon: Layers,
+                        hidden: !puede('inventario.rollos'),
+                        onClick: () => navigate(`/stock-rollos?producto=${menu.producto.id}`),
+                    },
+                    '-',
+                    {
+                        label: 'Lista de precios',
+                        icon: Tag,
+                        hidden: !puede('catalogo.lista-precios'),
+                        onClick: () => navigate(`/lista-precios?producto=${menu.producto.id}`),
+                    },
+                ]}
+            />
+
+            {coloresDe && (
+                <ColoresProductoModal
+                    producto={coloresDe}
+                    onClose={() => setColoresDe(null)}
+                    verRollos={
+                        puede('inventario.rollos')
+                            ? (colorId) =>
+                                  navigate(
+                                      `/stock-rollos?producto=${coloresDe.id}${colorId ? `&color=${colorId}` : ''}`,
+                                  )
+                            : null
+                    }
+                />
+            )}
         </Layout>
+    );
+}
+
+/**
+ * Los colores de una tela, cada uno con el metraje de su rollo y lo que hay
+ * disponible de él (rollos y metros, sumando todos los almacenes). Lo que no
+ * está disponible —separado para un pedido, por ejemplo— no cuenta.
+ */
+function ColoresProductoModal({ producto, onClose, verRollos }) {
+    const [stock, setStock] = useState(null);
+    const [sinPermiso, setSinPermiso] = useState(false);
+
+    useEffect(() => {
+        let vivo = true;
+        api.get('/existencias', { params: { producto_id: producto.id } })
+            .then((res) => {
+                if (!vivo) return;
+                // Por color: sumando todos los almacenes.
+                const porColor = {};
+                for (const fila of asList(res)) {
+                    for (const c of fila.colores ?? []) {
+                        const clave = String(c.id ?? 'sin');
+                        const actual = porColor[clave] ?? { id: c.id, nombre: c.nombre, codigo: c.codigo, hex: c.hex, rollos: 0, metros: 0 };
+                        actual.rollos += Number(c.rollos_disponibles ?? c.rollos) || 0;
+                        actual.metros += Number(c.metros_disponibles ?? c.metros) || 0;
+                        porColor[clave] = actual;
+                    }
+                }
+                setStock(porColor);
+            })
+            .catch(() => {
+                if (!vivo) return;
+                setSinPermiso(true);
+                setStock({});
+            });
+        return () => {
+            vivo = false;
+        };
+    }, [producto.id]);
+
+    // Los colores de la tela y, además, lo que haya en stock de un color que ya no está en su lista.
+    const filas = [
+        ...(producto.colores ?? []).map((c) => ({
+            id: c.id,
+            nombre: c.nombre,
+            codigo: c.codigo,
+            hex: c.hex,
+            proveedor: c.nombre_proveedor,
+            metraje: Number(c.metros_por_rollo) || 0,
+        })),
+        ...Object.values(stock ?? {})
+            .filter((s) => !(producto.colores ?? []).some((c) => String(c.id) === String(s.id)))
+            .map((s) => ({ id: s.id, nombre: s.nombre ?? 'Sin color', codigo: s.codigo, hex: s.hex, proveedor: null, metraje: 0 })),
+    ];
+    const stockDe = (id) => stock?.[String(id ?? 'sin')] ?? { rollos: 0, metros: 0 };
+    const totalRollos = filas.reduce((s, f) => s + stockDe(f.id).rollos, 0);
+    const totalMetros = filas.reduce((s, f) => s + stockDe(f.id).metros, 0);
+
+    return (
+        <Modal
+            open
+            onClose={onClose}
+            title={`Colores de ${producto.nombre}`}
+            description={`${filas.length} color${filas.length === 1 ? '' : 'es'} · lo disponible, sumando todos los almacenes`}
+            size="3xl"
+            footer={
+                <>
+                    {verRollos && (
+                        <Button variant="secondary" onClick={() => verRollos(null)}>
+                            <Layers className="h-4 w-4" />
+                            Ver todos los rollos
+                        </Button>
+                    )}
+                    <Button variant="secondary" onClick={onClose}>
+                        Cerrar
+                    </Button>
+                </>
+            }
+        >
+            {sinPermiso && (
+                <Alert variant="warning" className="mb-3">
+                    No se pudo consultar el stock (Existencias): se muestran solo los colores.
+                </Alert>
+            )}
+            <div className="overflow-x-auto rounded-lg border border-edge">
+                <table className="w-full min-w-[680px] text-sm">
+                    <thead>
+                        <tr className="bg-primary-600 text-left text-xs font-semibold uppercase tracking-wide text-white">
+                            <th className="px-3 py-2">Ítem</th>
+                            <th className="px-3 py-2">Color</th>
+                            <th className="px-3 py-2">Nombre del proveedor</th>
+                            <th className="px-3 py-2 text-right">Metraje del rollo</th>
+                            <th className="px-3 py-2 text-right">Rollos disp.</th>
+                            <th className="px-3 py-2 text-right">Metros disp.</th>
+                            {verRollos && <th className="w-24 px-3 py-2" />}
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                        {filas.length === 0 && (
+                            <tr>
+                                <td colSpan={7} className="px-3 py-8 text-center text-sm text-warm-400">
+                                    Esta tela no tiene colores. Agrégalos en Editar producto → Colores.
+                                </td>
+                            </tr>
+                        )}
+                        {filas.map((f) => {
+                            const s = stockDe(f.id);
+                            return (
+                                <tr key={f.id ?? 'sin'}>
+                                    <td className="px-3 py-2 font-mono text-xs text-warm-700">
+                                        {[producto.codigo, f.codigo].filter(Boolean).join('-') || '—'}
+                                    </td>
+                                    <td className="px-3 py-2">
+                                        <span className="inline-flex items-center gap-2 font-medium uppercase text-warm-900">
+                                            <span
+                                                className="h-3 w-3 shrink-0 rounded-full ring-1 ring-black/10"
+                                                style={{ backgroundColor: f.hex || '#9ca3af' }}
+                                            />
+                                            {f.nombre}
+                                        </span>
+                                    </td>
+                                    <td className="px-3 py-2 text-warm-600">{f.proveedor || '—'}</td>
+                                    <td className="px-3 py-2 text-right text-warm-900">
+                                        {f.metraje ? `${formatoMetros(f.metraje)} m` : '—'}
+                                    </td>
+                                    <td className="px-3 py-2 text-right text-warm-900">
+                                        {stock === null ? '…' : formatoMetros(s.rollos)}
+                                    </td>
+                                    <td className="px-3 py-2 text-right font-medium text-warm-900">
+                                        {stock === null ? '…' : `${formatoMetros(s.metros)} m`}
+                                    </td>
+                                    {verRollos && (
+                                        <td className="px-3 py-2 text-right">
+                                            {s.rollos > 0 && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => verRollos(f.id)}
+                                                    className="text-xs font-semibold text-primary-600 hover:text-primary-800"
+                                                >
+                                                    Rollos →
+                                                </button>
+                                            )}
+                                        </td>
+                                    )}
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                    {filas.length > 0 && stock !== null && (
+                        <tfoot>
+                            <tr className="border-t-2 border-edge bg-gray-50 text-sm font-bold text-warm-900">
+                                <td className="px-3 py-2 uppercase" colSpan={4}>
+                                    Total
+                                </td>
+                                <td className="px-3 py-2 text-right">{formatoMetros(totalRollos)}</td>
+                                <td className="px-3 py-2 text-right">{formatoMetros(totalMetros)} m</td>
+                                {verRollos && <td />}
+                            </tr>
+                        </tfoot>
+                    )}
+                </table>
+            </div>
+        </Modal>
     );
 }
 

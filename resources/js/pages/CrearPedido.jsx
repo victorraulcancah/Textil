@@ -25,8 +25,23 @@ const ROLLOS = 'rollos';
 const presentacionMetroDe = (producto) =>
     (producto?.presentaciones ?? []).find((p) => p.activo !== false && tipoUnidad(p) === 'metro') ?? null;
 
-/** Metraje promedio de un rollo de esa tela (0 si no se sabe): solo para estimar. */
-const promedioRolloDe = (producto) => Number(producto?.metros_por_rollo) || 0;
+/**
+ * El metraje del rollo, solo para estimar (0 si no se sabe). Va por color: el
+ * de ese color; sin color (o si no lo tiene), el promedio de los colores de la
+ * tela; y si ninguno lo tiene, el de la tela.
+ */
+const metrajeDe = (producto, colorId) => {
+    const colores = producto?.colores ?? [];
+    const delColor = colorId ? colores.find((c) => String(c.id) === String(colorId)) : null;
+    if (Number(delColor?.metros_por_rollo) > 0) return Number(delColor.metros_por_rollo);
+
+    const conMetraje = colores.map((c) => Number(c.metros_por_rollo) || 0).filter((m) => m > 0);
+    if (conMetraje.length) {
+        return Math.round((conMetraje.reduce((s, m) => s + m, 0) / conMetraje.length) * 100) / 100;
+    }
+
+    return Number(producto?.metros_por_rollo) || 0;
+};
 
 /**
  * Las unidades en que se pide un producto. Una tela es un solo producto que
@@ -53,7 +68,8 @@ const unidadesDe = (producto) => {
  *
  * Una tela también se pide en rollos enteros —"3 rollos de Polinán negro"—:
  * cada rollo trae su metraje y se cobra por metro, así que el importe es una
- * estimación (al metraje promedio) hasta que el almacén escanea los rollos.
+ * estimación (al metraje del rollo de ese color) hasta que el almacén escanea
+ * los rollos.
  *
  * Por lo mismo aquí no se elige almacén.
  */
@@ -219,7 +235,7 @@ export default function CrearPedido() {
         null;
 
     // En rollos, la cantidad escrita son rollos: los metros se estiman al promedio.
-    const promedioNueva = promedioRolloDe(producto);
+    const promedioNueva = metrajeDe(producto, nueva.producto_color_id);
     const porRollosNueva = nueva.modo === ROLLOS;
     const metrosNueva = porRollosNueva ? redondear((Number(nueva.cantidad) || 0) * promedioNueva) : Number(nueva.cantidad) || 0;
 
@@ -339,7 +355,7 @@ export default function CrearPedido() {
                 ...prev,
                 modo: ROLLOS,
                 producto_presentacion_id: String(metro.id),
-                precio_unitario: precioDeLista(metro, (Number(prev.cantidad) || 1) * (promedioRolloDe(producto) || 1)),
+                precio_unitario: precioDeLista(metro, (Number(prev.cantidad) || 1) * (metrajeDe(producto) || 1)),
                 precioManual: false,
                 producto_color_id: '',
             }));
@@ -444,7 +460,7 @@ export default function CrearPedido() {
                 // cobrados al precio del metro.
                 const metro = tipoUnidad(presentacion) === 'rollo' ? presentacionMetroDe(producto) : null;
                 if (metro) {
-                    const promedio = promedioRolloDe(producto);
+                    const promedio = metrajeDe(producto, color?.id);
                     const rollos = Math.max(1, Math.round(cantidad));
                     const j = next.findIndex(
                         (l) =>
@@ -543,7 +559,9 @@ export default function CrearPedido() {
                 const next = { ...l, [campo]: valor };
                 if (campo === 'precio_unitario') next.precio_manual = true;
                 if (campo === 'rollos_pedidos') {
-                    next.cantidad = String(redondear((Number(valor) || 0) * promedioRolloDe(productoDe(l.producto_presentacion_id))));
+                    next.cantidad = String(
+                        redondear((Number(valor) || 0) * metrajeDe(productoDe(l.producto_presentacion_id), l.producto_color_id)),
+                    );
                 }
                 if ((campo === 'cantidad' || campo === 'rollos_pedidos') && !l.precio_manual) {
                     next.precio_unitario = precioDeLista(presentacionDe(l.producto_presentacion_id), next.cantidad);
@@ -570,7 +588,7 @@ export default function CrearPedido() {
                     const metros =
                         ((Number(x.cantidad) || 0) * (Number(actual?.factor_conversion) || 1)) /
                         (Number(metro.factor_conversion) || 1);
-                    const promedio = promedioRolloDe(prod);
+                    const promedio = metrajeDe(prod, x.producto_color_id);
                     const rollos = promedio > 0 ? Math.max(1, Math.round(metros / promedio)) : 1;
 
                     return {
@@ -812,13 +830,14 @@ export default function CrearPedido() {
                             (promedioNueva > 0 ? (
                                 <p className="-mt-2 text-xs text-warm-500">
                                     {Number(nueva.cantidad) > 0 ? `≈ ${num(metrosNueva)} m · ` : ''}
-                                    Promedio de {num(promedioNueva)} m por rollo. Se cobran los metros reales de
-                                    cada rollo.
+                                    Rollo de ≈ {num(promedioNueva)} m
+                                    {nueva.producto_color_id ? '' : ' (promedio de sus colores)'}. Se cobran los metros
+                                    reales de cada rollo.
                                 </p>
                             ) : (
                                 <p className="-mt-2 text-xs font-medium text-red-600">
-                                    Esta tela no tiene metraje promedio por rollo: ponlo en Productos para pedirla
-                                    por rollos.
+                                    Esta tela no tiene el metraje del rollo de sus colores: ponlo en Productos →
+                                    Compra y venta para pedirla por rollos.
                                 </p>
                             ))}
 
@@ -858,7 +877,7 @@ export default function CrearPedido() {
                                     // Rollos enteros: la cantidad son rollos y el importe, una estimación.
                                     const porRollos = l.modo === ROLLOS;
                                     const promedioLinea = porRollos
-                                        ? promedioRolloDe(productoDe(l.producto_presentacion_id))
+                                        ? metrajeDe(productoDe(l.producto_presentacion_id), l.producto_color_id)
                                         : 0;
 
                                     return (
@@ -932,7 +951,7 @@ export default function CrearPedido() {
                                                         </span>
                                                     ) : (
                                                         <span className="mt-0.5 block text-[11px] font-medium text-red-600">
-                                                            Sin metraje promedio
+                                                            Sin metraje del rollo
                                                         </span>
                                                     )}
                                                 </>

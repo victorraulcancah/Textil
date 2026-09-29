@@ -88,6 +88,8 @@ class UpdateProductoRequest extends FormRequest
             'colores.*.color_id' => 'nullable|exists:colores,id',
             // Como lo llama el proveedor, para poder cruzar su packing list.
             'colores.*.nombre_proveedor' => 'nullable|string|max:255',
+            // El metraje del rollo de ese color (su "factor").
+            'colores.*.metros_por_rollo' => 'nullable|numeric|min:0.01|max:99999',
             'colores.*.codigo' => 'nullable|string|max:255',
             'colores.*.hex' => 'nullable|string|max:9',
             'colores.*.activo' => 'boolean',

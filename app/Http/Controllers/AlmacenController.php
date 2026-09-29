@@ -64,6 +64,10 @@ class AlmacenController extends Controller
         if ($request->filled('almacen_id')) {
             $query->where('almacen_id', $request->integer('almacen_id'));
         }
+        // Las existencias de un solo producto (sus colores, desde Productos).
+        if ($request->filled('producto_id')) {
+            $query->where('producto_id', $request->integer('producto_id'));
+        }
 
         // Lo último cargado primero, igual que en el resto de listados.
         $filas = $query->latest('id')->get();

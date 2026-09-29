@@ -207,9 +207,26 @@ class Producto extends Model
         return $this->presentacionMetro() !== null;
     }
 
-    /** Metraje promedio de un rollo, para estimar un pedido en rollos; null si no se sabe. */
-    public function metrosPorRollo(): ?float
+    /**
+     * El metraje del rollo, para estimar un pedido en rollos antes de saber
+     * qué rollos salen. Va por color: el de ese color; sin color (o si ese no
+     * lo tiene), el promedio de los colores; y si ninguno lo tiene, el de la
+     * tela (el de su antiguo formato "Rollo"). Null si no se sabe.
+     */
+    public function metrosPorRollo(?int $colorId = null): ?float
     {
+        $colores = $this->relationLoaded('colores') ? $this->colores : $this->colores()->get();
+
+        $color = $colorId ? $colores->firstWhere('id', $colorId) : null;
+        if ($color && (float) $color->metros_por_rollo > 0) {
+            return (float) $color->metros_por_rollo;
+        }
+
+        $conMetraje = $colores->filter(fn ($c) => (float) $c->metros_por_rollo > 0);
+        if ($conMetraje->isNotEmpty()) {
+            return round((float) $conMetraje->avg(fn ($c) => (float) $c->metros_por_rollo), 2);
+        }
+
         return (float) $this->metros_por_rollo > 0 ? (float) $this->metros_por_rollo : null;
     }
 

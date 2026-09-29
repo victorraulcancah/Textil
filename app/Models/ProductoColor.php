@@ -17,6 +17,9 @@ class ProductoColor extends Model
         'color_id',
         'nombre',
         'nombre_proveedor',
+        // El metraje del rollo de este color (su "factor"): la tela es una
+        // sola y cada color es su rollo, como la talla de un polo.
+        'metros_por_rollo',
         'codigo',
         'hex',
         'imagen',
@@ -25,7 +28,7 @@ class ProductoColor extends Model
 
     protected function casts(): array
     {
-        return ['activo' => 'boolean'];
+        return ['activo' => 'boolean', 'metros_por_rollo' => 'decimal:2'];
     }
 
     public function producto()

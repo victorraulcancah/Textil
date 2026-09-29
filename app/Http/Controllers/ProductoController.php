@@ -27,7 +27,7 @@ class ProductoController extends Controller
         'unidadCompra', 'unidadBase', 'tipoTela.familia',
         'presentaciones.unidadBase', 'presentaciones.complementario',
         'presentaciones.precios.tipoPrecio:id,principal,activo',
-        'colores.color',
+        'colores.color', 'colores.proveedor:id,nombre',
         'lotes',
     ];
 
@@ -59,7 +59,7 @@ class ProductoController extends Controller
 
         // Con su lista de precios: pedidos y ventas toman de ahí el precio
         // según el tipo de precio del cliente y la cantidad.
-        $productos = Producto::with(['marca', 'subMarca', 'proveedores:id,nombre', 'categoria', 'subCategoria', 'tipoTela.familia', 'unidadMedida', 'presentaciones.unidadBase', 'presentaciones.precios.tipoPrecio:id,principal,activo', 'colores'])
+        $productos = Producto::with(['marca', 'subMarca', 'proveedores:id,nombre', 'categoria', 'subCategoria', 'tipoTela.familia', 'unidadMedida', 'presentaciones.unidadBase', 'presentaciones.precios.tipoPrecio:id,principal,activo', 'colores.proveedor:id,nombre'])
             ->latest('id')
             ->paginate($perPage);
         return ProductoResource::collection($productos);
@@ -67,8 +67,8 @@ class ProductoController extends Controller
 
     /**
      * La plantilla para cargar los colores de una tela desde Excel: la hoja
-     * "Colores" (Código, Nombre, Nombre del proveedor, Metraje) y, aparte, el
-     * catálogo de colores que ya existen, para copiar sus códigos.
+     * "Colores" (Código, Nombre, Metraje, Proveedor) y, aparte, el catálogo de
+     * colores que ya existen y los proveedores registrados, para copiar de ahí.
      *
      * Nunca sale vacía: con ?producto_id= trae los colores de esa tela (para
      * corregir o agregar y volver a subirla); sin tela, o si aún no tiene
@@ -80,61 +80,51 @@ class ProductoController extends Controller
 
         $hoja = $libro->getActiveSheet();
         $hoja->setTitle('Colores');
-        $hoja->fromArray(['Código', 'Nombre', 'Nombre del proveedor', 'Metraje (m)', 'Proveedor'], null, 'A1');
-        $hoja->getStyle('A1:E1')->getFont()->setBold(true);
+        $hoja->fromArray(['Código', 'Nombre', 'Metraje (m)', 'Proveedor'], null, 'A1');
+        $hoja->getStyle('A1:D1')->getFont()->setBold(true);
         // El código como texto: si no, Excel se come los ceros (0074 → 74).
         $hoja->getStyle('A2:A1000')->getNumberFormat()
             ->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_TEXT);
-        foreach (['A' => 12, 'B' => 28, 'C' => 34, 'D' => 14, 'E' => 32] as $columna => $ancho) {
+        foreach (['A' => 12, 'B' => 28, 'C' => 14, 'D' => 34] as $columna => $ancho) {
             $hoja->getColumnDimension($columna)->setWidth($ancho);
         }
 
         $producto = $request->filled('producto_id')
-            ? Producto::with(['colores' => fn ($q) => $q->orderBy('id'), 'proveedores'])->find($request->integer('producto_id'))
+            ? Producto::with(['colores' => fn ($q) => $q->orderBy('id'), 'colores.proveedor:id,nombre'])->find($request->integer('producto_id'))
             : null;
         $conColores = $producto && $producto->colores->isNotEmpty();
-        // El proveedor de la tela; en el ejemplo, uno de los registrados.
-        $proveedorTela = $producto?->proveedorPrincipal()?->nombre
-            ?? Proveedor::where('activo', true)->orderBy('nombre')->value('nombre');
+        // En el ejemplo, uno de los proveedores registrados.
+        $proveedorEjemplo = Proveedor::where('activo', true)->orderBy('nombre')->value('nombre');
 
         $filas = $conColores
             ? $producto->colores->map(fn ($c) => [
                 (string) $c->codigo,
                 $c->nombre,
-                $c->nombre_proveedor,
                 $c->metros_por_rollo !== null ? (float) $c->metros_por_rollo : null,
+                $c->proveedor?->nombre,
             ])
             : Color::where('activo', true)->orderBy('codigo')->take(3)->get()->values()
-                // El proveedor nombra el color a su manera: "Negro (Ha Qing)".
-                ->map(fn ($c, $i) => [
-                    (string) $c->codigo,
-                    $c->nombre,
-                    mb_convert_case(mb_strtolower($c->nombre), MB_CASE_TITLE).' (Ha Qing)',
-                    [63, 64, 65][$i],
-                ]);
+                ->map(fn ($c, $i) => [(string) $c->codigo, $c->nombre, [63, 64, 65][$i], $proveedorEjemplo]);
 
         $fila = 2;
-        foreach ($filas as [$codigo, $nombre, $proveedor, $metraje]) {
+        foreach ($filas as [$codigo, $nombre, $metraje, $proveedor]) {
             $hoja->setCellValueExplicit("A{$fila}", $codigo, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
             $hoja->setCellValue("B{$fila}", $nombre);
-            if ($proveedor) {
-                $hoja->setCellValue("C{$fila}", $proveedor);
-            }
             if ($metraje !== null) {
-                $hoja->setCellValue("D{$fila}", $metraje);
+                $hoja->setCellValue("C{$fila}", $metraje);
             }
-            if ($proveedorTela) {
-                $hoja->setCellValue("E{$fila}", $proveedorTela);
+            if ($proveedor) {
+                $hoja->setCellValue("D{$fila}", $proveedor);
             }
             $fila++;
         }
 
         // La nota va fuera de las columnas que se leen: no entra como color.
-        $hoja->setCellValue('G1', $conColores
+        $hoja->setCellValue('F1', $conColores
             ? "Colores de {$producto->nombre}: corrige o agrega filas y vuelve a subirlo."
             : 'Las filas de abajo son un ejemplo: cámbialas por los colores de tu tela (el código y el nombre, como en la hoja Catálogo) y el metraje de su rollo.');
-        $hoja->setCellValue('G2', 'En Proveedor va uno de tus proveedores registrados (hoja Proveedores): al subir el Excel queda elegido para la tela.');
-        $hoja->getStyle('G1:G2')->getFont()->setItalic(true)->getColor()->setRGB('6B6B6B');
+        $hoja->setCellValue('F2', 'En Proveedor va uno de tus proveedores registrados (hoja Proveedores), el que trae ese color: al subir el Excel queda elegido en el color.');
+        $hoja->getStyle('F1:F2')->getFont()->setItalic(true)->getColor()->setRGB('6B6B6B');
 
         $catalogo = $libro->createSheet();
         $catalogo->setTitle('Catálogo');
@@ -177,7 +167,9 @@ class ProductoController extends Controller
      * Lee un Excel con los colores de una tela y los devuelve listos para el
      * formulario, cruzados con el catálogo: por código y, si no trae código,
      * por nombre. Lo que no está en el catálogo se crea ahí (si quien lo sube
-     * puede crear colores). No toca el producto: eso pasa al guardarlo.
+     * puede crear colores). Cada color lleva su proveedor, uno de los
+     * registrados (por nombre, RUC o código). No toca el producto: eso pasa
+     * al guardarlo.
      */
     public function importarColores(Request $request)
     {
@@ -206,10 +198,8 @@ class ProductoController extends Controller
         $alias = [
             'codigo' => ['codigo', 'cod', 'cod.', 'codigo de color', 'codigo color'],
             'nombre' => ['nombre', 'color', 'nombre del color'],
-            // Cómo llama el proveedor a ese color: "Negro (Ha Qing)".
-            'nombre_proveedor' => ['nombre del proveedor', 'nombre proveedor', 'color del proveedor', 'nombre en el proveedor'],
-            // El proveedor de la tela, uno de los registrados: por nombre, RUC o código.
-            'empresa' => ['proveedor', 'empresa', 'ruc', 'ruc del proveedor', 'proveedor registrado'],
+            // El proveedor que trae ese color, uno de los registrados: por nombre, RUC o código.
+            'proveedor' => ['proveedor', 'nombre del proveedor', 'nombre proveedor', 'empresa', 'ruc', 'ruc del proveedor', 'proveedor registrado'],
             'metraje' => ['metraje', 'metraje (m)', 'metros', 'metros (m)', 'factor', 'metraje del rollo', 'metros por rollo'],
         ];
         $col = [];
@@ -223,7 +213,7 @@ class ProductoController extends Controller
 
         if (! isset($col['codigo']) && ! isset($col['nombre'])) {
             return response()->json([
-                'message' => 'No se encontraron las columnas del Excel. Se esperan: Código, Nombre, Nombre del proveedor, Metraje (m), Proveedor.',
+                'message' => 'No se encontraron las columnas del Excel. Se esperan: Código, Nombre, Metraje (m), Proveedor.',
             ], 422);
         }
 
@@ -237,7 +227,7 @@ class ProductoController extends Controller
         $advertencias = [];
         $vistos = [];
 
-        // El proveedor de la tela: el primero del Excel que esté registrado.
+        // Cada color con su proveedor: uno de los registrados.
         $proveedores = Proveedor::all(['id', 'nombre', 'ruc', 'tax_id', 'codigo', 'codigo_corto']);
         $buscarProveedor = function (string $texto) use ($proveedores, $normalizar) {
             $clave = $normalizar($texto);
@@ -247,30 +237,14 @@ class ProductoController extends Controller
                     $normalizar($p->ruc), $normalizar($p->tax_id), $normalizar($p->codigo), $normalizar($p->codigo_corto),
                 ]), true));
         };
-        $elegido = null;
-        $avisados = [];
-        foreach (array_slice($filas, 1) as $i => $fila) {
-            $texto = isset($col['empresa']) ? trim((string) ($fila[$col['empresa']] ?? '')) : '';
-            if ($texto === '' || isset($avisados[$texto])) {
-                continue;
-            }
-            $avisados[$texto] = true;
-            $prov = $buscarProveedor($texto);
-            if (! $prov) {
-                $advertencias[] = "Fila ".($i + 2).": el proveedor \"{$texto}\" no está registrado en Proveedores.";
-            } elseif (! $elegido) {
-                $elegido = $prov;
-            } elseif ($prov->id !== $elegido->id) {
-                $advertencias[] = "Fila ".($i + 2).": el Excel trae otro proveedor (\"{$prov->nombre}\"); la tela queda con \"{$elegido->nombre}\".";
-            }
-        }
+        $sinRegistrar = [];
 
-        DB::transaction(function () use ($filas, $col, $normalizar, $puedeCrear, &$porCodigo, &$porNombre, &$colores, &$nuevos, &$advertencias, &$vistos) {
+        DB::transaction(function () use ($filas, $col, $normalizar, $puedeCrear, $buscarProveedor, &$sinRegistrar, &$porCodigo, &$porNombre, &$colores, &$nuevos, &$advertencias, &$vistos) {
             foreach (array_slice($filas, 1) as $i => $fila) {
                 $n = $i + 2;
                 $codigo = isset($col['codigo']) ? trim((string) ($fila[$col['codigo']] ?? '')) : '';
                 $nombre = isset($col['nombre']) ? trim((string) ($fila[$col['nombre']] ?? '')) : '';
-                $proveedor = isset($col['nombre_proveedor']) ? trim((string) ($fila[$col['nombre_proveedor']] ?? '')) : '';
+                $proveedorTexto = isset($col['proveedor']) ? trim((string) ($fila[$col['proveedor']] ?? '')) : '';
                 $metrajeTexto = isset($col['metraje']) ? str_replace(',', '.', trim((string) ($fila[$col['metraje']] ?? ''))) : '';
                 $metraje = is_numeric($metrajeTexto) && (float) $metrajeTexto > 0 ? round((float) $metrajeTexto, 2) : null;
 
@@ -320,12 +294,19 @@ class ProductoController extends Controller
                 }
                 $vistos[$color->id] = true;
 
+                $proveedor = $proveedorTexto !== '' ? $buscarProveedor($proveedorTexto) : null;
+                if ($proveedorTexto !== '' && ! $proveedor && ! isset($sinRegistrar[$proveedorTexto])) {
+                    $sinRegistrar[$proveedorTexto] = true;
+                    $advertencias[] = "Fila {$n}: el proveedor \"{$proveedorTexto}\" no está registrado en Proveedores; el color queda sin proveedor.";
+                }
+
                 $colores[] = [
                     'color_id' => $color->id,
                     'nombre' => $color->nombre,
                     'codigo' => $color->codigo,
                     'hex' => $color->hex,
-                    'nombre_proveedor' => $proveedor !== '' ? $proveedor : null,
+                    'proveedor_id' => $proveedor?->id,
+                    'proveedor' => $proveedor?->nombre,
                     'metros_por_rollo' => $metraje,
                 ];
             }
@@ -335,8 +316,6 @@ class ProductoController extends Controller
             'colores' => $colores,
             'nuevos' => $nuevos,
             'advertencias' => $advertencias,
-            // El proveedor de la tela que trae el Excel (registrado), o null.
-            'proveedor' => $elegido ? ['id' => $elegido->id, 'nombre' => $elegido->nombre] : null,
         ]);
     }
 
@@ -348,7 +327,10 @@ class ProductoController extends Controller
             $producto = Producto::create($this->soloProducto($data));
             $this->syncPresentaciones($producto, $data['presentaciones'] ?? []);
             $this->syncColores($producto, $data['colores'] ?? []);
-            $this->syncProveedores($producto, $data['proveedores'] ?? []);
+            if (! empty($data['proveedores'])) {
+                $this->syncProveedores($producto, $data['proveedores']);
+            }
+            $this->proveedoresDeLosColores($producto, $data['colores'] ?? []);
             $this->registrarLoteInicial($producto, $data['lote'] ?? null);
             return $producto;
         });
@@ -384,6 +366,9 @@ class ProductoController extends Controller
             }
             if (array_key_exists('proveedores', $data)) {
                 $this->syncProveedores($producto, $data['proveedores'] ?? []);
+            }
+            if (array_key_exists('colores', $data)) {
+                $this->proveedoresDeLosColores($producto, $data['colores'] ?? []);
             }
         });
 
@@ -454,6 +439,8 @@ class ProductoController extends Controller
                 // El proveedor nombra los colores a su manera; se guarda tal
                 // cual para poder cruzar su packing list en el próximo embarque.
                 'nombre_proveedor' => $c['nombre_proveedor'] ?? null,
+                // El proveedor registrado que trae este color.
+                'proveedor_id' => $c['proveedor_id'] ?? null,
                 // El metraje del rollo de este color.
                 'metros_por_rollo' => $c['metros_por_rollo'] ?? null,
                 'hex' => $c['hex'] ?? null,
@@ -664,6 +651,40 @@ class ProductoController extends Controller
                 $stock->save();
             }
         }
+    }
+
+    /**
+     * Los proveedores de la tela son los de sus colores: cada color lo trae un
+     * proveedor registrado y la tela queda con esos (el principal, el del
+     * primer color que lo tenga). Lo que ya tenía cada uno (su código, su
+     * precio de referencia) se conserva. Sin colores no se toca nada.
+     */
+    private function proveedoresDeLosColores(Producto $producto, array $lista): void
+    {
+        $colores = collect($lista)->filter(fn ($c) => trim($c['nombre'] ?? '') !== '');
+        if ($colores->isEmpty()) {
+            return;
+        }
+
+        $ids = $colores->pluck('proveedor_id')->filter()->map(fn ($id) => (int) $id)->unique()->values();
+        $actuales = $producto->proveedores()->get()->keyBy('id');
+        $hayPrincipal = $ids->contains(fn ($id) => (bool) $actuales->get($id)?->pivot->principal);
+
+        $filas = [];
+        foreach ($ids as $i => $id) {
+            $pivot = $actuales->get($id)?->pivot;
+            $filas[$id] = [
+                'codigo_proveedor' => $pivot?->codigo_proveedor,
+                'precio_referencia' => $pivot?->precio_referencia,
+                'moneda' => $pivot?->moneda ?? 'PEN',
+                'dias_entrega' => $pivot?->dias_entrega,
+                'principal' => $hayPrincipal ? (bool) $pivot?->principal : $i === 0,
+                'activo' => $pivot?->activo ?? true,
+                'observaciones' => $pivot?->observaciones,
+            ];
+        }
+
+        $producto->proveedores()->sync($filas);
     }
 
     /**

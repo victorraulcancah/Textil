@@ -90,7 +90,7 @@ const TABS = [
 const PESTANA_DEL_CAMPO = {
     general: [
         'codigo', 'codigo_barras', 'nombre', 'descripcion_ticket', 'activo',
-        'tipo_tela_id', 'marca_id', 'sub_marca_id', 'proveedores',
+        'familia_id', 'tipo_tela_id', 'marca_id', 'sub_marca_id', 'proveedores',
     ],
     ficha: [
         'composicion', 'ancho_cm', 'gramaje', 'peso_por_metro', 'tipo_tejido',
@@ -121,7 +121,10 @@ function pestanaConError(campos) {
 const colorVacio = () => ({
     color_id: '',
     nombre: '',
+    // Cómo llama el proveedor a este color (dato de antes: ya no se escribe aquí).
     nombre_proveedor: '',
+    // El proveedor registrado que trae este color.
+    proveedor_id: '',
     // El metraje del rollo de este color (su "factor").
     metros_por_rollo: '',
     codigo: '',
@@ -129,15 +132,6 @@ const colorVacio = () => ({
 });
 
 const formatoMetros = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
-
-/** Un proveedor de la tela: la misma la puede traer más de uno. */
-const provVacio = () => ({
-    proveedor_id: '',
-    codigo_proveedor: '',
-    precio_referencia: '',
-    dias_entrega: '',
-    principal: false,
-});
 
 /** Cómo se compra el producto: "un saco que trae 50 kilos, a S/ 140". */
 const compraVacia = () => ({
@@ -188,7 +182,6 @@ export default function Productos() {
     const [avisosColores, setAvisosColores] = useState([]);
     const excelColoresRef = useRef(null);
     /** Proveedores que traen esta tela, cada uno con su código y su precio. */
-    const [provs, setProvs] = useState([]);
     /** Foto elegida en el formulario; se sube después de guardar el producto. */
     const [imagenFile, setImagenFile] = useState(null);
     const [errors, setErrors] = useState({});
@@ -291,7 +284,6 @@ export default function Productos() {
         setVentas([{ ...ventaVacia(), unidad_id: unidadMetro ? String(unidadMetro.id) : '' }]);
         setColores([]);
         setAvisosColores([]);
-        setProvs([]);
         setImagenFile(null);
         setErrors({});
         setTab('general');
@@ -380,27 +372,12 @@ export default function Productos() {
                 : [ventaVacia()],
         );
         setAvisosColores([]);
-        // Una tela tiene un solo proveedor: el principal (o el primero que tenga).
-        const provsGuardados = Array.isArray(prod.proveedores) ? prod.proveedores : [];
-        const provTela = provsGuardados.find((pv) => pv.principal) ?? provsGuardados[0];
-        setProvs(
-            provTela
-                ? [
-                      {
-                          proveedor_id: String(provTela.proveedor_id ?? ''),
-                          codigo_proveedor: provTela.codigo_proveedor ?? '',
-                          precio_referencia: provTela.precio_referencia != null ? String(provTela.precio_referencia) : '',
-                          dias_entrega: provTela.dias_entrega != null ? String(provTela.dias_entrega) : '',
-                          principal: true,
-                      },
-                  ]
-                : [],
-        );
         setColores(
             (Array.isArray(prod.colores) ? prod.colores : []).map((c) => ({
                 color_id: c.color_id ? String(c.color_id) : '',
                 nombre: c.nombre ?? '',
                 nombre_proveedor: c.nombre_proveedor ?? '',
+                proveedor_id: c.proveedor_id ? String(c.proveedor_id) : '',
                 metros_por_rollo: c.metros_por_rollo != null ? String(Number(c.metros_por_rollo)) : '',
                 codigo: c.codigo ?? '',
                 hex: c.hex ?? '#1f3a93',
@@ -417,6 +394,7 @@ export default function Productos() {
      */
     const elegirTipoTela = (tipoId, recien = null) => {
         const tipo = recien ?? tiposTela.find((t) => String(t.id) === String(tipoId));
+        if (tipoId) setErrors((prev) => ({ ...prev, familia_id: undefined, tipo_tela_id: undefined }));
         setForm((p) => {
             const familiaId = tipo ? familiaDe(tipo) || p.familia_id : p.familia_id;
             const familiaCodigo =
@@ -567,6 +545,11 @@ export default function Productos() {
         const next = {};
         // El código ya no se pide en el formulario: lo genera el servidor.
         if (!form.nombre.trim()) next.nombre = 'Ingrese el nombre';
+        // Un producto nuevo no se crea sin clasificarlo: la familia y su tipo de tela.
+        if (!editing) {
+            if (!form.familia_id) next.familia_id = 'Elige la familia';
+            else if (!form.tipo_tela_id) next.tipo_tela_id = 'Elige el tipo de tela';
+        }
         if (!compra.unidad_compra_id) next.compra_unidad = 'Indique en qué compra el producto';
         if (contenidoAutomatico) {
             // Lo que trae cada rollo sale del metraje de sus colores.
@@ -663,19 +646,12 @@ export default function Productos() {
                     nombre: c.nombre.trim(),
                     color_id: c.color_id || undefined,
                     nombre_proveedor: str(c.nombre_proveedor),
+                    // Vacío como null: así se puede quitar.
+                    proveedor_id: c.proveedor_id ? Number(c.proveedor_id) : null,
                     // Vacío como null: así se puede borrar.
                     metros_por_rollo: Number(c.metros_por_rollo) > 0 ? Number(c.metros_por_rollo) : null,
                     codigo: str(c.codigo),
                     hex: str(c.hex),
-                })),
-            proveedores: provs
-                .filter((pv) => pv.proveedor_id)
-                .map((pv) => ({
-                    proveedor_id: Number(pv.proveedor_id),
-                    codigo_proveedor: str(pv.codigo_proveedor),
-                    precio_referencia: num(pv.precio_referencia),
-                    dias_entrega: num(pv.dias_entrega),
-                    principal: Boolean(pv.principal),
                 })),
         };
 
@@ -749,25 +725,8 @@ export default function Productos() {
 
     // ---- Creación rápida de catálogos ----
     /**
-     * El proveedor de la tela: uno solo, de los registrados. Si ya lo tenía, se
-     * conservan sus datos (su código, su precio de referencia).
-     */
-    const elegirProveedor = (proveedorId) =>
-        setProvs((prev) =>
-            proveedorId
-                ? [
-                      {
-                          ...(prev.find((pv) => String(pv.proveedor_id) === String(proveedorId)) ?? provVacio()),
-                          proveedor_id: String(proveedorId),
-                          principal: true,
-                      },
-                  ]
-                : [],
-        );
-
-    /**
-     * La plantilla de colores (Código, Nombre, Nombre del proveedor, Metraje y
-     * el catálogo aparte). Al editar trae los colores guardados de la tela; si
+     * La plantilla de colores (Código, Nombre, Metraje, Proveedor y el catálogo
+     * y los proveedores aparte). Al editar trae los colores guardados de la tela; si
      * no, unas filas de ejemplo.
      */
     const descargarPlantillaColores = async () => {
@@ -820,7 +779,7 @@ export default function Productos() {
                     // Ya estaba: el Excel completa o corrige su proveedor y su metraje.
                     lista[i] = {
                         ...lista[i],
-                        ...(c.nombre_proveedor ? { nombre_proveedor: c.nombre_proveedor } : {}),
+                        ...(c.proveedor_id ? { proveedor_id: String(c.proveedor_id) } : {}),
                         ...(c.metros_por_rollo ? { metros_por_rollo: String(c.metros_por_rollo) } : {}),
                     };
                     continue;
@@ -830,15 +789,13 @@ export default function Productos() {
                     nombre: c.nombre,
                     codigo: c.codigo ?? '',
                     hex: c.hex || '#1f3a93',
-                    nombre_proveedor: c.nombre_proveedor ?? '',
+                    proveedor_id: c.proveedor_id ? String(c.proveedor_id) : '',
                     metros_por_rollo: c.metros_por_rollo ? String(c.metros_por_rollo) : '',
                 });
                 agregados++;
             }
             setColores(lista);
             setAvisosColores(data.advertencias ?? []);
-            // El proveedor de la tela, si el Excel lo trae (uno de los registrados).
-            if (data.proveedor?.id) elegirProveedor(String(data.proveedor.id));
 
             // Los nuevos del catálogo, para que el selector los tenga.
             if ((data.nuevos ?? []).length) {
@@ -1225,14 +1182,16 @@ export default function Productos() {
                                 <SearchSelect
                                     label="Familia"
                                     value={form.familia_id}
-                                    onChange={(v) =>
+                                    onChange={(v) => {
+                                        setErrors((prev) => ({ ...prev, familia_id: undefined }));
                                         setForm((p) => {
                                             const tipoActual = tiposTela.find((t) => String(t.id) === String(p.tipo_tela_id));
                                             // Otra familia: el tipo elegido ya no corresponde.
                                             const sigue = tipoActual && familiaDe(tipoActual) === String(v ?? '');
                                             return { ...p, familia_id: v ?? '', tipo_tela_id: sigue ? p.tipo_tela_id : '' };
-                                        })
-                                    }
+                                        });
+                                    }}
+                                    error={errors.familia_id}
                                     placeholder="Seleccionar familia"
                                     emptyText="Sin coincidencias"
                                     options={familias.map((f) => ({ value: String(f.id), label: `${f.codigo} — ${f.nombre}` }))}
@@ -1249,6 +1208,7 @@ export default function Productos() {
                                     label="Tipo de tela"
                                     value={form.tipo_tela_id}
                                     onChange={(v) => elegirTipoTela(v)}
+                                    error={errors.tipo_tela_id}
                                     placeholder="Seleccionar tipo de tela"
                                     emptyText="Sin coincidencias"
                                     options={tiposDe(form.familia_id).map((t) => ({
@@ -1297,27 +1257,6 @@ export default function Productos() {
                                 />
                             </FieldWithAdd>
                         </div>
-                    </section>
-
-                    {/* El proveedor de la tela: uno solo, de los registrados.
-                        También queda elegido al subir el Excel de colores. */}
-                    <section>
-                        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
-                            Proveedor
-                        </h3>
-                        <div className="max-w-md">
-                            <SearchSelect
-                                value={provs[0]?.proveedor_id ?? ''}
-                                onChange={(v) => elegirProveedor(v ?? '')}
-                                placeholder="Elegir proveedor…"
-                                emptyText="Sin coincidencias"
-                                options={proveedores.map((op) => ({ value: String(op.id), label: op.nombre }))}
-                            />
-                        </div>
-                        <p className="mt-1 text-xs text-warm-400">
-                            Uno de tus proveedores registrados. Si el Excel de colores trae la columna
-                            Proveedor, queda elegido al subirlo.
-                        </p>
                     </section>
 
                 </div>
@@ -1568,11 +1507,11 @@ export default function Productos() {
                             orden de compra (KET-001-26-000001).
                         </p>
                         <p className="mb-3 text-xs text-warm-400">
-                            Para cargar muchos de una vez, sube un Excel con Código, Nombre, Nombre del
-                            proveedor, Metraje (m) y Proveedor (descarga la plantilla: trae el catálogo de colores
-                            y tus proveedores; el proveedor queda elegido para la tela). Lo que
-                            no esté en el catálogo se crea. El metraje del rollo de cada color se pone aquí
-                            y también se ve en la tabla de la tela, en Compra y venta.
+                            Para cargar muchos de una vez, sube un Excel con Código, Nombre, Metraje (m) y
+                            Proveedor (descarga la plantilla: trae el catálogo de colores y tus proveedores;
+                            cada color queda con el proveedor de su fila). Lo que no esté en el catálogo se
+                            crea. El metraje del rollo de cada color se pone aquí y también se ve en la
+                            tabla de la tela, en Compra y venta.
                         </p>
                         {avisosColores.length > 0 && (
                             <Alert variant="warning" className="mb-3">
@@ -1658,26 +1597,22 @@ export default function Productos() {
                                         >
                                             <PlusCircle className="h-5 w-5" />
                                         </button>
-                                        {/* El proveedor nombra los colores a su
-                                            manera ("Verde oscuro (Ha Qing)") y la
-                                            tienda a la suya ("ANTIQUE"). Con los dos
-                                            se puede cruzar el packing list del
-                                            siguiente contenedor. */}
+                                        {/* El proveedor que trae este color: uno de los registrados. */}
                                         <div className="flex w-full items-end gap-2">
                                             <div className="min-w-0 flex-1">
-                                                <Input
-                                                    label="Nombre del proveedor"
-                                                    placeholder="Verde oscuro (Ha Qing)"
-                                                    value={c.nombre_proveedor}
-                                                    onChange={(e) =>
+                                                <SearchSelect
+                                                    label="Proveedor"
+                                                    value={c.proveedor_id}
+                                                    onChange={(v) =>
                                                         setColores((prev) =>
                                                             prev.map((x, j) =>
-                                                                j === i
-                                                                    ? { ...x, nombre_proveedor: e.target.value }
-                                                                    : x,
+                                                                j === i ? { ...x, proveedor_id: v ?? '' } : x,
                                                             ),
                                                         )
                                                     }
+                                                    placeholder="Elegir proveedor…"
+                                                    emptyText="Sin coincidencias"
+                                                    options={proveedores.map((op) => ({ value: String(op.id), label: op.nombre }))}
                                                 />
                                             </div>
                                             {/* El metraje del rollo de este color (su factor). Es el
@@ -2714,7 +2649,7 @@ function ColoresProductoModal({ producto, onClose, verRollos }) {
             nombre: c.nombre,
             codigo: c.codigo,
             hex: c.hex,
-            proveedor: c.nombre_proveedor,
+            proveedor: c.proveedor?.nombre ?? c.nombre_proveedor,
             metraje: Number(c.metros_por_rollo) || 0,
         })),
         ...Object.values(stock ?? {})

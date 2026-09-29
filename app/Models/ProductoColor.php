@@ -17,6 +17,8 @@ class ProductoColor extends Model
         'color_id',
         'nombre',
         'nombre_proveedor',
+        // El proveedor registrado que trae este color.
+        'proveedor_id',
         // El metraje del rollo de este color (su "factor"): la tela es una
         // sola y cada color es su rollo, como la talla de un polo.
         'metros_por_rollo',
@@ -40,6 +42,12 @@ class ProductoColor extends Model
     public function color()
     {
         return $this->belongsTo(Color::class);
+    }
+
+    /** El proveedor (de los registrados) que trae este color. */
+    public function proveedor()
+    {
+        return $this->belongsTo(Proveedor::class);
     }
 
     /** URL pública de la foto del color, o null si no tiene. */

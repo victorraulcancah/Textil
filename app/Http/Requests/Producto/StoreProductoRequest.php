@@ -47,8 +47,9 @@ class StoreProductoRequest extends FormRequest
             'proveedores.*.principal' => 'nullable|boolean',
             'categoria_id' => 'nullable|exists:categorias,id',
             'sub_categoria_id' => 'nullable|exists:categorias,id',
-            // Solo para telas: de ahí sale el código si no se escribe uno a mano.
-            'tipo_tela_id' => 'nullable|exists:tipos_tela,id',
+            // Todo producto se clasifica por familia y tipo de tela (la familia es la
+            // del tipo); de ahí sale también el código si no se escribe uno a mano.
+            'tipo_tela_id' => 'required|exists:tipos_tela,id',
             'unidad_medida_id' => 'required|exists:unidades_medida,id',
             'unidad_compra_id' => 'nullable|exists:unidades_medida,id',
             'unidad_base_id' => 'nullable|exists:unidades_medida,id',
@@ -105,6 +106,8 @@ class StoreProductoRequest extends FormRequest
             'colores.*.color_id' => 'nullable|exists:colores,id',
             // Como lo llama el proveedor, para poder cruzar su packing list.
             'colores.*.nombre_proveedor' => 'nullable|string|max:255',
+            // El proveedor registrado que trae este color.
+            'colores.*.proveedor_id' => 'nullable|exists:proveedores,id',
             // El metraje del rollo de ese color (su "factor").
             'colores.*.metros_por_rollo' => 'nullable|numeric|min:0.01|max:99999',
             'colores.*.codigo' => 'nullable|string|max:255',
@@ -125,6 +128,7 @@ class StoreProductoRequest extends FormRequest
             'codigo.required' => 'El código del producto es obligatorio',
             'codigo.unique' => 'El código ya está registrado',
             'nombre.required' => 'El nombre del producto es obligatorio',
+            'tipo_tela_id.required' => 'Elige la familia y el tipo de tela del producto',
             'unidad_medida_id.required' => 'La unidad de medida es obligatoria',
             'presentaciones.*.nombre.required' => 'El nombre de la unidad derivada es obligatorio',
             'presentaciones.*.factor_conversion.required' => 'El factor es obligatorio',

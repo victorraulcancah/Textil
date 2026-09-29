@@ -311,6 +311,7 @@ class CompraController extends Controller
             $compra->detalles()->create([
                 'producto_presentacion_id' => $d['producto_presentacion_id'],
                 'producto_color_id' => $d['producto_color_id'] ?? null,
+                'color_code' => $d['color_code'] ?? null,
                 'rollos' => $d['rollos'] ?? null,
                 'cantidad' => $cantidad,
                 'costo_unitario' => $costo,

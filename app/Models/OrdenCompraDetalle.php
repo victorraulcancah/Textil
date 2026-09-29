@@ -13,6 +13,8 @@ class OrdenCompraDetalle extends Model
         // Color pedido, cuando la tela se maneja por color (opcional: hay
         // insumos que no llevan color).
         'producto_color_id',
+        // Lo que se escribe en la orden/compra como código del color (el del proveedor, el del envío…): texto libre.
+        'color_code',
         'cantidad',
         // Rollos pedidos de ese color; informativo, no mueve stock. La
         // recepción sigue creando los rollos reales con sus propios metrajes.

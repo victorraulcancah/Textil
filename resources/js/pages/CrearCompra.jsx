@@ -170,6 +170,7 @@ export default function CrearCompra() {
                         producto_id: String(d.presentacion?.producto_id ?? d.presentacion?.producto?.id ?? ''),
                         producto_presentacion_id: String(d.producto_presentacion_id),
                         producto_color_id: d.producto_color_id ? String(d.producto_color_id) : '',
+                        color_code: d.color_code ?? '',
                         rollos: d.rollos != null ? String(d.rollos) : '',
                         cantidad: String(d.cantidad),
                         costo_unitario: String(d.costo_unitario),
@@ -225,6 +226,7 @@ export default function CrearCompra() {
                     producto_id: String(d.presentacion?.producto_id ?? d.presentacion?.producto?.id ?? ''),
                     producto_presentacion_id: String(d.producto_presentacion_id),
                     producto_color_id: d.producto_color_id ? String(d.producto_color_id) : '',
+                    color_code: d.color_code ?? '',
                     rollos: d.rollos != null ? String(d.rollos) : '',
                     cantidad: String(d.cantidad),
                     costo_unitario: String(d.precio_unitario),
@@ -609,6 +611,7 @@ export default function CrearCompra() {
             detalles: items.map((it) => ({
                 producto_presentacion_id: it.producto_presentacion_id,
                 producto_color_id: it.producto_color_id || null,
+                color_code: it.color_code?.trim() || null,
                 rollos: it.rollos !== '' ? Number(it.rollos) : null,
                 cantidad: it.cantidad,
                 costo_unitario: it.costo_unitario || 0,
@@ -795,6 +798,7 @@ export default function CrearCompra() {
                                         <th className="px-3 py-2.5 text-center">#</th>
                                         <th className="px-3 py-2.5">Código</th>
                                         <th className="px-3 py-2.5">Producto</th>
+                                        <th className="px-3 py-2.5">Color code</th>
                                         <th className="px-3 py-2.5">Color</th>
                                         <th className="px-3 py-2.5">Unidad</th>
                                         <th className="px-3 py-2.5 text-right">Rollos</th>
@@ -807,7 +811,7 @@ export default function CrearCompra() {
                                 <tbody className="divide-y divide-gray-100">
                                     {items.length === 0 && (
                                         <tr>
-                                            <td colSpan={10} className="px-3 py-10 text-center text-sm text-warm-500">
+                                            <td colSpan={11} className="px-3 py-10 text-center text-sm text-warm-500">
                                                 Busca un producto arriba para agregarlo a la compra
                                             </td>
                                         </tr>
@@ -825,6 +829,15 @@ export default function CrearCompra() {
                                                 <td className="px-3 py-2 text-center text-warm-500">{i + 1}</td>
                                                 <td className="px-3 py-2 font-medium text-warm-900">{producto?.codigo ?? '—'}</td>
                                                 <td className="px-3 py-2 font-semibold text-warm-900">{producto?.nombre ?? '—'}</td>
+                                                <td className="px-3 py-2">
+                                                    <Input
+                                                        value={it.color_code ?? ''}
+                                                        onChange={(e) => setItem(i, { color_code: e.target.value })}
+                                                        placeholder="Código"
+                                                        maxLength={50}
+                                                        aria-label="Color code"
+                                                    />
+                                                </td>
                                                 <td className="px-3 py-2 text-warm-600">{colorItem?.nombre ?? '—'}</td>
                                                 <td className="px-3 py-2">
                                                     <SearchSelect

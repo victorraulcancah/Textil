@@ -59,6 +59,7 @@ class StoreCompraRequest extends FormRequest
             // Igual que en la orden: color opcional (hay insumos sin color) y
             // rollos, solo informativo hasta que se recepcione de verdad.
             'detalles.*.producto_color_id' => 'nullable|exists:producto_colores,id',
+            'detalles.*.color_code' => 'nullable|string|max:50',
             'detalles.*.rollos' => 'nullable|integer|min:0',
             'detalles.*.cantidad' => 'required|numeric|min:0.01',
             'detalles.*.costo_unitario' => 'required|numeric|min:0',

@@ -5,6 +5,7 @@ namespace App\Pdf\Documentos;
 use App\Models\OrdenCompra;
 use App\Pdf\DocumentoPdf;
 use App\Pdf\MontoEnLetras;
+use App\Pdf\PlanillaTela;
 use App\Pdf\ProductoConColor;
 
 class OrdenCompraPdf implements DocumentoPdf
@@ -25,6 +26,7 @@ class OrdenCompraPdf implements DocumentoPdf
             'proveedor',
             'usuarioCrea:id,name',
             'detalles.presentacion.producto:id,codigo,nombre',
+            'detalles.presentacion.unidadBase:id,abreviatura',
             'detalles.color:id,codigo,nombre',
         ])->findOrFail($id);
 
@@ -52,6 +54,8 @@ class OrdenCompraPdf implements DocumentoPdf
             'orden' => $orden,
             'documento' => $orden->codigo,
             'filas' => $filas,
+            // La planilla (una tabla por tela, con su color code), en el A4.
+            'planilla' => PlanillaTela::deOrdenCompra($orden),
             'total' => $total,
             'moneda' => $moneda,
             'enLetras' => MontoEnLetras::convertir($total, $orden->moneda === 'USD' ? 'DÓLARES' : 'SOLES'),

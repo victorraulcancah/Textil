@@ -45,18 +45,8 @@
                 'Vencimiento' => optional($compra->fecha_vencimiento)->format('d/m/Y') ?: '—',
                 'Estado' => $estado,
             ]" />
-        <x-pdf.items
-            :columnas="[
-                ['label' => 'Ítem', 'key' => 'n', 'width' => '32px'],
-                ['label' => 'Código', 'key' => 'codigo', 'width' => '98px'],
-                ['label' => 'Cant.', 'key' => 'cantidad', 'align' => 'right', 'width' => '55px'],
-                ['label' => 'Unidad', 'key' => 'unidad', 'width' => '90px'],
-                ['label' => 'Descripción', 'key' => 'producto'],
-                ['label' => 'Costo', 'key' => 'precio', 'align' => 'right', 'width' => '72px'],
-                ['label' => 'Subtotal', 'key' => 'subtotal', 'align' => 'right', 'width' => '80px'],
-            ]"
-            :filas="$filas"
-            :minFilas="8" />
+        {{-- La planilla: una tabla por tela, con el color code que se escribió en la compra. --}}
+        <x-pdf.planilla :grupos="$planilla['grupos']" :totales="$planilla['totales']" :moneda="$moneda" :colorCode="true" />
         <x-pdf.cierre
             :observaciones="$compra->observaciones"
             :lineas="[

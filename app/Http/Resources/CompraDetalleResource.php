@@ -16,6 +16,7 @@ class CompraDetalleResource extends JsonResource
             'compra_id' => $this->compra_id,
             'producto_presentacion_id' => $this->producto_presentacion_id,
             'producto_color_id' => $this->producto_color_id,
+            'color_code' => $this->color_code,
             'rollos' => $this->rollos,
             'cantidad' => $this->cantidad,
             'costo_unitario' => $this->costo_unitario,

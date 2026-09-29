@@ -2,7 +2,9 @@
 
 namespace App\Pdf;
 
+use App\Models\Compra;
 use App\Models\NotaVenta;
+use App\Models\OrdenCompra;
 use App\Models\OrdenVenta;
 
 /**
@@ -57,6 +59,51 @@ class PlanillaTela
                 'total' => array_sum(array_column($grupos, 'total')),
             ],
         ];
+    }
+
+    public static function deOrdenCompra(OrdenCompra $orden): array
+    {
+        return self::deLineasDeCompra($orden->detalles, 'precio_unitario');
+    }
+
+    public static function deCompra(Compra $compra): array
+    {
+        return self::deLineasDeCompra($compra->detalles, 'costo_unitario');
+    }
+
+    /**
+     * Una orden de compra o una compra: cada color de una tela con sus rollos y
+     * su factor (los metros de cada rollo). Lo que no es tela va con su unidad.
+     * `color_code` es el código que se escribió en la línea.
+     */
+    private static function deLineasDeCompra($detalles, string $campoPrecio): array
+    {
+        $lineas = [];
+
+        foreach ($detalles as $d) {
+            $producto = $d->presentacion?->producto;
+            $esTela = $d->presentacion?->unidadBase && strtolower((string) $d->presentacion->unidadBase->abreviatura) === 'm';
+            $rollos = (int) ($d->rollos ?? 0);
+            $cantidad = (float) $d->cantidad;
+
+            $lineas[] = [
+                'grupo' => (string) ($producto?->id ?? 0),
+                'titulo' => self::titulo((bool) $esTela, $producto?->codigo, $producto?->nombre),
+                'rollos' => $rollos,
+                'fila' => [
+                    'item' => self::item($producto?->codigo, $d->color?->codigo),
+                    'color_code' => $d->color_code,
+                    'color' => $d->color?->nombre ?? '',
+                    'rollo' => $esTela ? ($rollos > 0 ? "{$rollos}R" : '') : ($d->presentacion?->nombre ?? ''),
+                    'factor' => $esTela && $rollos > 0 ? round($cantidad / $rollos, 2) : null,
+                    'metros' => $cantidad,
+                    'precio' => (float) $d->{$campoPrecio},
+                    'total' => (float) $d->subtotal,
+                ],
+            ];
+        }
+
+        return self::agrupar($lineas);
     }
 
     /** Una proforma: cada línea ya es un rollo (o un corte, o algo que no es tela). */

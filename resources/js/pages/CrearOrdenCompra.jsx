@@ -1,13 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, FileText, Package, Pencil, Plus, Ship, Trash2 } from 'lucide-react';
+import { ArrowLeft, ChevronRight, FileText, Package, Pencil, Plus, Ship, Trash2 } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import ColorSelect from '../components/ColorSelect';
 import ProductoPickerModal from '../components/ProductoPickerModal';
 import TelaCompraModal, { presentacionMetroDe } from '../components/TelaCompraModal';
-import { Button, Input, Modal, SearchSelect, Select, Spinner } from '../components/ui';
+import { Button, Input, Modal, SearchSelect, Select, Spinner, cn } from '../components/ui';
 
 const money = (n, moneda = 'PEN') =>
     new Intl.NumberFormat(moneda === 'USD' ? 'en-US' : 'es-PE', {
@@ -71,6 +71,8 @@ export default function CrearOrdenCompra() {
     const [panel, setPanel] = useState({ ...panelVacio });
     /** Productos ya agregados a la orden. */
     const [items, setItems] = useState([]);
+    /** Telas desplegadas en la tabla: { [id del producto]: true }. */
+    const [abiertas, setAbiertas] = useState({});
     /** Buscador avanzado de productos. */
     const [picker, setPicker] = useState({ open: false, query: '' });
     /** La tela cuya tabla de colores (rollos, factor, precio) se está llenando. */
@@ -128,6 +130,7 @@ export default function CrearOrdenCompra() {
                     producto_id: String(d.presentacion?.producto_id ?? d.presentacion?.producto?.id ?? ''),
                     producto_presentacion_id: String(d.producto_presentacion_id),
                     producto_color_id: d.producto_color_id ? String(d.producto_color_id) : '',
+                    color_code: d.color_code ?? '',
                     rollos: d.rollos != null ? String(d.rollos) : '',
                     cantidad: String(d.cantidad),
                     precio_unitario: String(d.precio_unitario),
@@ -375,6 +378,38 @@ export default function CrearOrdenCompra() {
         });
 
     const quitarItem = (i) => setItems((prev) => prev.filter((_, idx) => idx !== i));
+    /** Quita de una vez todos los colores de una tela. */
+    const quitarVarias = (indices) => setItems((prev) => prev.filter((_, j) => !indices.includes(j)));
+    /** Un solo precio por metro para todos los colores de una tela. */
+    const precioDeTela = (indices, valor) =>
+        setItems((prev) => prev.map((it, j) => (indices.includes(j) ? { ...it, precio_unitario: valor } : it)));
+    const alternar = (clave) => setAbiertas((prev) => ({ ...prev, [clave]: !prev[clave] }));
+
+    /**
+     * Lo que se ve en la tabla, como en el pedido: cada tela es una sola fila
+     * (sus colores se despliegan debajo); lo demás va línea por línea.
+     */
+    const filasTabla = useMemo(() => {
+        const filas = [];
+        const telas = new Map();
+
+        items.forEach((it, i) => {
+            const esTela = Boolean(presentacionMetroDe(productos.find((p) => String(p.id) === String(it.producto_id))));
+            if (!esTela) {
+                filas.push({ tipo: 'linea', clave: `l${i}`, it, i });
+                return;
+            }
+            const clave = String(it.producto_id);
+            if (!telas.has(clave)) {
+                const tela = { tipo: 'tela', clave, producto_id: it.producto_id, indices: [] };
+                telas.set(clave, tela);
+                filas.push(tela);
+            }
+            telas.get(clave).indices.push(i);
+        });
+
+        return filas;
+    }, [items, productos]);
 
     const total = items.reduce(
         (acc, it) => acc + (Number(it.cantidad) || 0) * (Number(it.precio_unitario) || 0),
@@ -415,6 +450,7 @@ export default function CrearOrdenCompra() {
             detalles: items.map((it) => ({
                 producto_presentacion_id: it.producto_presentacion_id,
                 producto_color_id: it.producto_color_id || null,
+                color_code: it.color_code?.trim() || null,
                 rollos: it.rollos !== '' ? Number(it.rollos) : null,
                 cantidad: it.cantidad,
                 precio_unitario: it.precio_unitario || 0,
@@ -683,6 +719,7 @@ export default function CrearOrdenCompra() {
                                         <th className="px-3 py-2.5 text-center">#</th>
                                         <th className="px-3 py-2.5">Código</th>
                                         <th className="px-3 py-2.5">Producto</th>
+                                        <th className="px-3 py-2.5">Color code</th>
                                         <th className="px-3 py-2.5">Color</th>
                                         <th className="px-3 py-2.5">Unidad</th>
                                         <th className="px-3 py-2.5 text-right">Rollos</th>
@@ -695,13 +732,171 @@ export default function CrearOrdenCompra() {
                                 <tbody className="divide-y divide-gray-100">
                                     {items.length === 0 && (
                                         <tr>
-                                            <td colSpan={10} className="px-3 py-10 text-center text-sm text-warm-500">
+                                            <td colSpan={11} className="px-3 py-10 text-center text-sm text-warm-500">
                                                 Busca un producto arriba para agregarlo a la orden
                                             </td>
                                         </tr>
                                     )}
 
-                                    {items.map((it, i) => {
+                                    {filasTabla.map((fila, n) => {
+                                        // Una tela: una fila y, al desplegarla, sus colores con los rollos.
+                                        if (fila.tipo === 'tela') {
+                                            const producto = productoDe(fila.producto_id);
+                                            const colores = fila.indices.map((i) => ({ it: items[i], i }));
+                                            const rollos = colores.reduce((suma, { it }) => suma + (Number(it.rollos) || 0), 0);
+                                            const metros = colores.reduce((suma, { it }) => suma + (Number(it.cantidad) || 0), 0);
+                                            const importe = colores.reduce(
+                                                (suma, { it }) => suma + (Number(it.cantidad) || 0) * (Number(it.precio_unitario) || 0),
+                                                0,
+                                            );
+                                            const precios = [...new Set(colores.map(({ it }) => String(it.precio_unitario)))];
+                                            const abierta = Boolean(abiertas[fila.clave]);
+                                            const colorDe = (it) => (producto?.colores ?? []).find((c) => String(c.id) === String(it.producto_color_id));
+
+                                            return (
+                                                <Fragment key={fila.clave}>
+                                                    <tr className="cursor-pointer transition hover:bg-gray-50" onClick={() => alternar(fila.clave)}>
+                                                        <td className="px-3 py-2 text-center text-warm-500">{n + 1}</td>
+                                                        <td className="px-3 py-2 font-medium text-warm-900">{producto?.codigo ?? '—'}</td>
+                                                        <td className="px-3 py-2">
+                                                            <span className="flex items-center gap-2">
+                                                                <button
+                                                                    type="button"
+                                                                    aria-expanded={abierta}
+                                                                    aria-label={abierta ? 'Ocultar colores' : 'Ver colores'}
+                                                                    className="rounded p-0.5 text-warm-500 hover:bg-gray-100"
+                                                                >
+                                                                    <ChevronRight className={cn('h-4 w-4 transition-transform duration-300', abierta && 'rotate-90')} />
+                                                                </button>
+                                                                <span className="font-semibold text-warm-900">{producto?.nombre ?? '—'}</span>
+                                                                <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-warm-700">
+                                                                    {colores.length} color{colores.length === 1 ? '' : 'es'}
+                                                                </span>
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-3 py-2 text-warm-600">—</td>
+                                                        <td className="px-3 py-2 text-warm-600">—</td>
+                                                        <td className="px-3 py-2 text-warm-700">Rollo</td>
+                                                        <td className="px-3 py-2 text-right font-medium text-warm-900">{rollos}</td>
+                                                        <td className="px-3 py-2 text-right font-medium text-warm-900">{metros ? `${Math.round(metros * 100) / 100} m` : ''}</td>
+                                                        {/* Un precio por metro para toda la tela; cada color puede llevar el suyo. */}
+                                                        <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                                                            <Input
+                                                                type="number"
+                                                                min="0"
+                                                                step="any"
+                                                                value={precios.length === 1 ? precios[0] : ''}
+                                                                placeholder={precios.length === 1 ? undefined : 'varios'}
+                                                                onChange={(e) => precioDeTela(fila.indices, e.target.value)}
+                                                                aria-label={`Precio por metro de ${producto?.nombre}`}
+                                                                className="text-right"
+                                                            />
+                                                            <span className="mt-0.5 block text-right text-[11px] text-warm-500">por metro</span>
+                                                        </td>
+                                                        <td className="px-3 py-2 text-right font-semibold text-primary-600">{money(importe, form.moneda)}</td>
+                                                        <td className="px-3 py-2 text-center" onClick={(e) => e.stopPropagation()}>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => quitarVarias(fila.indices)}
+                                                                aria-label={`Quitar ${producto?.nombre}`}
+                                                                className="rounded-md p-1.5 text-red-600 transition hover:bg-red-50"
+                                                            >
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                    {/* Los colores se despliegan con una animación de altura. */}
+                                                    <tr className="border-b-0">
+                                                        <td colSpan={11} className="p-0">
+                                                            <div className={cn('grid transition-[grid-template-rows] duration-300 ease-out', abierta ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]')}>
+                                                                <div className="overflow-hidden">
+                                                                    <div className={cn('bg-gray-50/70 py-1 pl-14 pr-3 transition-opacity duration-300', abierta ? 'border-b border-gray-100 opacity-100' : 'opacity-0')}>
+                                                                        <div className="grid grid-cols-[8rem_1fr_6rem_6rem_7rem_7rem_7rem_2.5rem] items-center gap-3 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-warm-500">
+                                                                            <span>Color code</span>
+                                                                            <span>Color</span>
+                                                                            <span className="text-right">Rollos</span>
+                                                                            <span className="text-right">Factor (m)</span>
+                                                                            <span className="text-right">Metros</span>
+                                                                            <span className="text-right">Precio por metro</span>
+                                                                            <span className="text-right">Subtotal</span>
+                                                                            <span />
+                                                                        </div>
+                                                                        {colores.map(({ it, i }) => {
+                                                                            const color = colorDe(it);
+                                                                            const rollosIt = Number(it.rollos) || 0;
+                                                                            const factor = rollosIt > 0 ? Math.round(((Number(it.cantidad) || 0) / rollosIt) * 100) / 100 : 0;
+                                                                            return (
+                                                                                <div key={i} className="grid grid-cols-[8rem_1fr_6rem_6rem_7rem_7rem_7rem_2.5rem] items-center gap-3 px-2 py-1.5">
+                                                                                    <Input
+                                                                                        value={it.color_code ?? ''}
+                                                                                        onChange={(e) => setItem(i, { color_code: e.target.value })}
+                                                                                        placeholder="Código"
+                                                                                        maxLength={50}
+                                                                                        aria-label={`Color code de ${producto?.nombre} ${color?.nombre ?? ''}`}
+                                                                                        tabIndex={abierta ? 0 : -1}
+                                                                                    />
+                                                                                    <span className="inline-flex items-center gap-2 font-medium uppercase text-warm-800">
+                                                                                        <span className="h-3 w-3 shrink-0 rounded-full ring-1 ring-black/10" style={{ backgroundColor: color?.hex || '#9ca3af' }} />
+                                                                                        {color?.nombre ?? 'Sin color'}
+                                                                                    </span>
+                                                                                    <Input
+                                                                                        type="number"
+                                                                                        min="0"
+                                                                                        step="1"
+                                                                                        value={it.rollos}
+                                                                                        onChange={(e) => setItem(i, { rollos: e.target.value })}
+                                                                                        className="text-right"
+                                                                                        aria-label={`Rollos de ${producto?.nombre} ${color?.nombre ?? ''}`}
+                                                                                        tabIndex={abierta ? 0 : -1}
+                                                                                    />
+                                                                                    {/* El factor: los metros de cada rollo (metros ÷ rollos). */}
+                                                                                    <span className="text-right text-warm-700">{factor || '—'}</span>
+                                                                                    <Input
+                                                                                        type="number"
+                                                                                        min="0"
+                                                                                        step="any"
+                                                                                        value={it.cantidad}
+                                                                                        onChange={(e) => setItem(i, { cantidad: e.target.value })}
+                                                                                        className="text-right"
+                                                                                        aria-label={`Metros de ${producto?.nombre} ${color?.nombre ?? ''}`}
+                                                                                        tabIndex={abierta ? 0 : -1}
+                                                                                    />
+                                                                                    <Input
+                                                                                        type="number"
+                                                                                        min="0"
+                                                                                        step="any"
+                                                                                        value={it.precio_unitario}
+                                                                                        onChange={(e) => setItem(i, { precio_unitario: e.target.value })}
+                                                                                        className="text-right"
+                                                                                        aria-label={`Precio por metro de ${producto?.nombre} ${color?.nombre ?? ''}`}
+                                                                                        tabIndex={abierta ? 0 : -1}
+                                                                                    />
+                                                                                    <span className="text-right font-medium text-warm-900">
+                                                                                        {money((Number(it.cantidad) || 0) * (Number(it.precio_unitario) || 0), form.moneda)}
+                                                                                    </span>
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        aria-label={`Quitar ${color?.nombre ?? 'color'}`}
+                                                                                        onClick={() => quitarItem(i)}
+                                                                                        tabIndex={abierta ? 0 : -1}
+                                                                                        className="rounded-md p-1.5 text-red-600 transition hover:bg-red-50"
+                                                                                    >
+                                                                                        <Trash2 className="h-4 w-4" />
+                                                                                    </button>
+                                                                                </div>
+                                                                            );
+                                                                        })}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                </Fragment>
+                                            );
+                                        }
+
+                                        // Lo demás (hilos, cierres…): una línea por producto.
+                                        const { it, i } = fila;
                                         const producto = productoDe(it.producto_id);
                                         const subtotal = (Number(it.cantidad) || 0) * (Number(it.precio_unitario) || 0);
                                         const colorItem = (producto?.colores ?? []).find(
@@ -710,9 +905,18 @@ export default function CrearOrdenCompra() {
 
                                         return (
                                             <tr key={i}>
-                                                <td className="px-3 py-2 text-center text-warm-500">{i + 1}</td>
+                                                <td className="px-3 py-2 text-center text-warm-500">{n + 1}</td>
                                                 <td className="px-3 py-2 font-medium text-warm-900">{producto?.codigo ?? '—'}</td>
                                                 <td className="px-3 py-2 font-semibold text-warm-900">{producto?.nombre ?? '—'}</td>
+                                                <td className="px-3 py-2">
+                                                    <Input
+                                                        value={it.color_code ?? ''}
+                                                        onChange={(e) => setItem(i, { color_code: e.target.value })}
+                                                        placeholder="Código"
+                                                        maxLength={50}
+                                                        aria-label="Color code"
+                                                    />
+                                                </td>
                                                 <td className="px-3 py-2 text-warm-600">{colorItem?.nombre ?? '—'}</td>
                                                 <td className="px-3 py-2">
                                                     <SearchSelect

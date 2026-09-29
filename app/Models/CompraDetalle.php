@@ -12,6 +12,8 @@ class CompraDetalle extends Model
         'compra_id',
         'producto_presentacion_id',
         'producto_color_id',
+        // Lo que se escribe en la orden/compra como código del color (el del proveedor, el del envío…): texto libre.
+        'color_code',
         'cantidad',
         'rollos',
         'cantidad_finalizada',

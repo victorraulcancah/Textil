@@ -55,6 +55,7 @@ class UpdateCompraRequest extends FormRequest
             'detalles' => 'sometimes|required|array|min:1',
             'detalles.*.producto_presentacion_id' => 'required|exists:producto_presentaciones,id',
             'detalles.*.producto_color_id' => 'nullable|exists:producto_colores,id',
+            'detalles.*.color_code' => 'nullable|string|max:50',
             'detalles.*.rollos' => 'nullable|integer|min:0',
             'detalles.*.cantidad' => 'required|numeric|min:0.01',
             'detalles.*.costo_unitario' => 'required|numeric|min:0',

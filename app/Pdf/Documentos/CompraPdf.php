@@ -5,6 +5,7 @@ namespace App\Pdf\Documentos;
 use App\Models\Compra;
 use App\Pdf\DocumentoPdf;
 use App\Pdf\MontoEnLetras;
+use App\Pdf\PlanillaTela;
 use App\Pdf\ProductoConColor;
 
 class CompraPdf implements DocumentoPdf
@@ -26,6 +27,7 @@ class CompraPdf implements DocumentoPdf
             'ordenCompra:id,codigo',
             'usuario:id,name',
             'detalles.presentacion.producto:id,codigo,nombre',
+            'detalles.presentacion.unidadBase:id,abreviatura',
             'detalles.color:id,codigo,nombre',
         ])->findOrFail($id);
 
@@ -53,6 +55,8 @@ class CompraPdf implements DocumentoPdf
             'tipoDocLabel' => $tipoDoc[$compra->tipo_documento] ?? ucfirst((string) $compra->tipo_documento),
             'docProveedor' => $docProveedor !== '' ? $docProveedor : '—',
             'filas' => $filas,
+            // La planilla (una tabla por tela, con su color code), en el A4.
+            'planilla' => PlanillaTela::deCompra($compra),
             'total' => (float) $compra->total,
             // Los importes de la compra están en la moneda en que se pactó con
             // el proveedor; el tipo de cambio solo sirve para pasarla a soles

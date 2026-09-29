@@ -89,19 +89,16 @@
                             &nbsp;·&nbsp;<span class="et">Saldo actual:</span> <strong>{{ $e['metros'] }} m</strong>
                         @endif
                     </div>
-                    @if ($e['orden'] || $e['posicion'])
-                        <div class="linea">
-                            @if ($e['orden'])
-                                <span class="et">Orden:</span> {{ $e['orden'] }}
-                            @endif
-                            @if ($e['orden'] && $e['posicion'])
-                                &nbsp;·&nbsp;
-                            @endif
-                            @if ($e['posicion'])
-                                <span class="et">Rollo</span> {{ $e['posicion'] }} <span class="et">de esta tela y color</span>
-                            @endif
-                        </div>
-                    @endif
+                    <div class="linea">
+                        {{-- El último número del código es el del rollo: se dice aparte. --}}
+                        <span class="et">Rollo Nº</span> <strong>{{ $e['numero'] }}</strong>
+                        @if ($e['posicion'])
+                            &nbsp;·&nbsp;<span class="et">{{ $e['posicion'] }} de esta tela y color</span>
+                        @endif
+                        @if ($e['orden'])
+                            &nbsp;·&nbsp;<span class="et">Orden:</span> {{ $e['orden'] }}
+                        @endif
+                    </div>
                 </td>
                 @if ($e['qr'])
                     <td style="width: 88px; text-align: right;">

@@ -60,13 +60,26 @@ class EtiquetaRolloPdf implements DocumentoPdf
             // El neto es el que se pesó al llegar; si no se registró (rollos
             // viejos, o ingresos que no lo piden), no se imprime la línea.
             'peso_kg' => $rollo->peso_kg ? number_format((float) $rollo->peso_kg, 2) : null,
+            // El número del rollo dentro de su tela y color: es el final de su código.
+            'numero' => $rollo->numero,
             // La orden es todo el código del rollo menos su correlativo final:
             // así queda siempre igual a lo que dice el propio código impreso,
             // sin depender de que la recepción tenga la relación bien cargada.
-            'orden' => preg_replace('/-\d{4,6}$/', '', $rollo->codigo),
+            // Un rollo sin orden (cargado a mano o por un ajuste) solo repetiría
+            // el código del producto con su color: ahí no se imprime.
+            'orden' => $this->orden($rollo),
             'posicion' => $this->posicion($rollo),
             'ubicacion' => $rollo->ubicacionLegible(),
         ] + $this->etiquetas->codigos($rollo->codigo);
+    }
+
+    /** El código de la orden del rollo, o null si su código es el del producto con su color. */
+    private function orden(Rollo $rollo): ?string
+    {
+        $orden = preg_replace('/-\d{4,6}$/', '', $rollo->codigo);
+        $productoConColor = collect([$rollo->producto?->codigo, $rollo->color?->codigo])->filter()->implode('-');
+
+        return $orden === $productoConColor ? null : $orden;
     }
 
     /**

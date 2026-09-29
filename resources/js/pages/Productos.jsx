@@ -42,8 +42,8 @@ const emptyProducto = {
     nombre: '',
     nombre_tecnico: '',
     descripcion_ticket: '',
-    categoria_id: '',
-    sub_categoria_id: '',
+    // Familia de la tela (solo para elegir el tipo; lo que se guarda es el tipo).
+    familia_id: '',
     // Solo para telas: de ahí sale el código si se deja en blanco.
     tipo_tela_id: '',
     marca_id: '',
@@ -90,7 +90,7 @@ const TABS = [
 const PESTANA_DEL_CAMPO = {
     general: [
         'codigo', 'codigo_barras', 'nombre', 'descripcion_ticket', 'activo',
-        'categoria_id', 'sub_categoria_id', 'marca_id', 'sub_marca_id', 'proveedores',
+        'tipo_tela_id', 'marca_id', 'sub_marca_id', 'proveedores',
     ],
     ficha: [
         'composicion', 'ancho_cm', 'gramaje', 'peso_por_metro', 'tipo_tejido',
@@ -162,7 +162,7 @@ export default function Productos() {
      */
     const [consulta, setConsulta] = useState(null);
     const [productos, setProductos] = useState([]);
-    const [categorias, setCategorias] = useState([]);
+    const [familias, setFamilias] = useState([]);
     const [marcas, setMarcas] = useState([]);
     const [proveedores, setProveedores] = useState([]);
     const [subMarcas, setSubMarcas] = useState([]);
@@ -201,7 +201,7 @@ export default function Productos() {
     const [quick, setQuick] = useState(null); // { tipo }
 
     const [filterEstado, setFilterEstado] = useState('');
-    const [filterCategoria, setFilterCategoria] = useState('');
+    const [filterFamilia, setFilterFamilia] = useState('');
     const [filterMarca, setFilterMarca] = useState('');
     const [filterTipoTela, setFilterTipoTela] = useState('');
     const [activeFilters, setActiveFilters] = useState({});
@@ -210,9 +210,9 @@ export default function Productos() {
         setLoading(true);
         setError(null);
         try {
-            const [prodsRes, catRes, marRes, subRes, uniRes, provRes, colRes, tipRes] = await Promise.all([
+            const [prodsRes, famRes, marRes, subRes, uniRes, provRes, colRes, tipRes] = await Promise.all([
                 api.get('/productos'),
-                api.get('/categorias'),
+                api.get('/familias-tela'),
                 api.get('/marcas'),
                 api.get('/sub-marcas'),
                 api.get('/unidades-medida'),
@@ -221,7 +221,7 @@ export default function Productos() {
                 api.get('/tipos-tela'),
             ]);
             setProductos(asList(prodsRes));
-            setCategorias(asList(catRes));
+            setFamilias(asList(famRes));
             setMarcas(asList(marRes));
             setSubMarcas(asList(subRes));
             setUnidades(asList(uniRes));
@@ -258,9 +258,10 @@ export default function Productos() {
     }, [form.ancho_cm, form.gramaje, modalOpen]);
 
     // ---- Catálogos derivados ----
-    const categoriasRaiz = categorias.filter((c) => !c.categoria_padre_id);
-    const subCategoriasDe = (padreId) =>
-        categorias.filter((c) => String(c.categoria_padre_id ?? '') === String(padreId));
+    /** La familia de un tipo de tela. */
+    const familiaDe = (t) => String(t?.familia?.id ?? t?.familia_tela_id ?? '');
+    /** Los tipos de una familia; sin familia elegida, todos. */
+    const tiposDe = (familiaId) => tiposTela.filter((t) => !familiaId || familiaDe(t) === String(familiaId));
     const subMarcasDe = (marcaId) =>
         subMarcas.filter((s) => String(s.marca_id) === String(marcaId));
 
@@ -314,8 +315,7 @@ export default function Productos() {
             nombre: prod.nombre ?? '',
             nombre_tecnico: prod.nombre_tecnico ?? '',
             descripcion_ticket: prod.descripcion_ticket ?? '',
-            categoria_id: relId('categoria_id', 'categoria'),
-            sub_categoria_id: relId('sub_categoria_id', 'sub_categoria'),
+            familia_id: prod.tipo_tela?.familia?.id ? String(prod.tipo_tela.familia.id) : '',
             tipo_tela_id: relId('tipo_tela_id', 'tipo_tela'),
             marca_id: relId('marca_id', 'marca'),
             sub_marca_id: relId('sub_marca_id', 'sub_marca'),
@@ -409,6 +409,26 @@ export default function Productos() {
         setImagenFile(null);
         setErrors({});
         setModalOpen(true);
+    };
+
+    /**
+     * Elegir el tipo de tela: fija su familia y, si no se escribió un código a
+     * mano, muestra el que va a salir (01-familia-tipo).
+     */
+    const elegirTipoTela = (tipoId, recien = null) => {
+        const tipo = recien ?? tiposTela.find((t) => String(t.id) === String(tipoId));
+        setForm((p) => {
+            const familiaId = tipo ? familiaDe(tipo) || p.familia_id : p.familia_id;
+            const familiaCodigo =
+                tipo?.familia?.codigo ?? familias.find((f) => String(f.id) === String(familiaId))?.codigo ?? '00';
+
+            return {
+                ...p,
+                tipo_tela_id: tipoId ?? '',
+                familia_id: familiaId,
+                codigo: !p.codigo.trim() && tipo ? `01-${familiaCodigo}-${tipo.codigo}` : p.codigo,
+            };
+        });
     };
 
     const setField = (field) => (e) => {
@@ -615,8 +635,6 @@ export default function Productos() {
             activo: form.activo,
             codigo_barras: str(form.codigo_barras),
             descripcion_ticket: str(form.descripcion_ticket),
-            categoria_id: form.categoria_id || undefined,
-            sub_categoria_id: form.sub_categoria_id || undefined,
             tipo_tela_id: form.tipo_tela_id || undefined,
             marca_id: form.marca_id || undefined,
             sub_marca_id: form.sub_marca_id || undefined,
@@ -848,9 +866,8 @@ export default function Productos() {
         await load();
         if (tipo === 'marca') setForm((p) => ({ ...p, marca_id: String(nuevo.id), sub_marca_id: '' }));
         if (tipo === 'submarca') setForm((p) => ({ ...p, sub_marca_id: String(nuevo.id) }));
-        if (tipo === 'categoria')
-            setForm((p) => ({ ...p, categoria_id: String(nuevo.id), sub_categoria_id: '' }));
-        if (tipo === 'subcategoria') setForm((p) => ({ ...p, sub_categoria_id: String(nuevo.id) }));
+        if (tipo === 'familia') setForm((p) => ({ ...p, familia_id: String(nuevo.id), tipo_tela_id: '' }));
+        if (tipo === 'tipo') elegirTipoTela(String(nuevo.id), nuevo);
         // Unidad: no autoselecciona base; el usuario decide dónde usarla.
         if (tipo === 'color' && quickInfo?.rowIndex != null) {
             setColores((prev) =>
@@ -897,16 +914,15 @@ export default function Productos() {
             ),
         },
         {
-            key: 'categoria',
-            label: 'Categoría',
+            key: 'tipo_tela',
+            label: 'Tipo de tela',
             render: (row) => {
-                const cat = relName(row, 'categoria');
-                const sub = relName(row, 'sub_categoria');
-                if (!cat) return <span className="text-gray-400">—</span>;
+                const tipo = row.tipo_tela;
+                if (!tipo) return <span className="text-gray-400">—</span>;
                 return (
                     <span className="text-sm">
-                        {cat}
-                        {sub && <span className="text-gray-400"> · {sub}</span>}
+                        {tipo.nombre}
+                        {tipo.familia && <span className="text-gray-400"> · {tipo.familia.nombre}</span>}
                     </span>
                 );
             },
@@ -1022,13 +1038,13 @@ export default function Productos() {
     const applyFilters = () =>
         setActiveFilters({
             ...(filterEstado ? { estado: filterEstado } : {}),
-            ...(filterCategoria ? { categoria: filterCategoria } : {}),
+            ...(filterFamilia ? { familia: filterFamilia } : {}),
             ...(filterMarca ? { marca: filterMarca } : {}),
             ...(filterTipoTela ? { tipoTela: filterTipoTela } : {}),
         });
     const clearFilters = () => {
         setFilterEstado('');
-        setFilterCategoria('');
+        setFilterFamilia('');
         setFilterMarca('');
         setFilterTipoTela('');
         setActiveFilters({});
@@ -1036,7 +1052,7 @@ export default function Productos() {
     const filteredProductos = productos.filter((p) => {
         if (activeFilters.estado === 'activos' && p.activo === false) return false;
         if (activeFilters.estado === 'inactivos' && p.activo !== false) return false;
-        if (activeFilters.categoria && String(p.categoria?.id) !== String(activeFilters.categoria)) return false;
+        if (activeFilters.familia && String(p.tipo_tela?.familia?.id) !== String(activeFilters.familia)) return false;
         if (activeFilters.marca && String(p.marca?.id) !== String(activeFilters.marca)) return false;
         if (activeFilters.tipoTela && String(p.tipo_tela_id) !== String(activeFilters.tipoTela)) return false;
         return true;
@@ -1057,12 +1073,15 @@ export default function Productos() {
                 className="w-44"
             />
             <SearchSelect
-                label="Categoría"
-                value={filterCategoria}
-                onChange={(v) => setFilterCategoria(v ?? '')}
+                label="Familia"
+                value={filterFamilia}
+                onChange={(v) => {
+                    setFilterFamilia(v ?? '');
+                    setFilterTipoTela('');
+                }}
                 placeholder="Todas"
                 emptyText="Sin coincidencias"
-                options={categoriasRaiz.map((c) => ({ value: String(c.id), label: c.nombre }))}
+                options={familias.map((f) => ({ value: String(f.id), label: f.nombre }))}
                 className="w-52"
             />
             <SearchSelect
@@ -1080,7 +1099,7 @@ export default function Productos() {
                 onChange={(v) => setFilterTipoTela(v ?? '')}
                 placeholder="Todos"
                 emptyText="Sin coincidencias"
-                options={tiposTela.map((t) => ({ value: String(t.id), label: t.nombre }))}
+                options={tiposDe(filterFamilia).map((t) => ({ value: String(t.id), label: t.nombre }))}
                 className="w-52"
             />
         </div>
@@ -1169,35 +1188,6 @@ export default function Productos() {
                                 onChange={setField('codigo')}
                                 error={errors.codigo}
                             />
-                            <div>
-                                <SearchSelect
-                                    label="Tipo de tela (opcional)"
-                                    value={form.tipo_tela_id}
-                                    onChange={(tipoId) => {
-                                        const tipo = tiposTela.find((t) => String(t.id) === tipoId);
-                                        setForm((p) => ({
-                                            ...p,
-                                            tipo_tela_id: tipoId ?? '',
-                                            // Si no se escribió un código a mano,
-                                            // se muestra el que va a salir: familia + tipo.
-                                            codigo:
-                                                !p.codigo.trim() && tipo
-                                                    ? `01-${tipo.familia?.codigo ?? '00'}-${tipo.codigo}`
-                                                    : p.codigo,
-                                        }));
-                                    }}
-                                    placeholder="Sin asignar"
-                                    emptyText="Sin coincidencias"
-                                    options={tiposTela.map((t) => ({
-                                        value: String(t.id),
-                                        label: `01-${t.familia?.codigo ?? '00'}-${t.codigo} — ${t.nombre} (${t.familia?.nombre ?? ''})`,
-                                    }))}
-                                />
-                                <p className="mt-1 text-xs text-warm-400">
-                                    Si lo eliges, el código de tela sale de aquí. Se administra en Catálogo
-                                    → Familias y tipos de tela.
-                                </p>
-                            </div>
                             <div className="sm:col-span-2">
                                 <Input
                                     label="Código de barras"
@@ -1229,44 +1219,48 @@ export default function Productos() {
                             Clasificación
                         </h3>
                         <div className="grid gap-4 sm:grid-cols-2">
-                            <FieldWithAdd onAdd={() => setQuick({ tipo: 'categoria' })}>
+                            {/* La tela se clasifica por familia y tipo (Catálogo → Familias y
+                                tipos de tela): de ahí sale también su código 01-familia-tipo. */}
+                            <FieldWithAdd onAdd={() => setQuick({ tipo: 'familia' })}>
                                 <SearchSelect
-                                    label="Categoría"
-                                    value={form.categoria_id}
+                                    label="Familia"
+                                    value={form.familia_id}
                                     onChange={(v) =>
-                                        setForm((p) => ({
-                                            ...p,
-                                            categoria_id: v ?? '',
-                                            sub_categoria_id: '',
-                                        }))
+                                        setForm((p) => {
+                                            const tipoActual = tiposTela.find((t) => String(t.id) === String(p.tipo_tela_id));
+                                            // Otra familia: el tipo elegido ya no corresponde.
+                                            const sigue = tipoActual && familiaDe(tipoActual) === String(v ?? '');
+                                            return { ...p, familia_id: v ?? '', tipo_tela_id: sigue ? p.tipo_tela_id : '' };
+                                        })
                                     }
-                                    placeholder="Seleccionar categoría"
+                                    placeholder="Seleccionar familia"
                                     emptyText="Sin coincidencias"
-                                    options={categoriasRaiz.map((c) => ({
-                                        value: String(c.id),
-                                        label: c.nombre,
-                                    }))}
+                                    options={familias.map((f) => ({ value: String(f.id), label: `${f.codigo} — ${f.nombre}` }))}
                                 />
                             </FieldWithAdd>
                             <FieldWithAdd
                                 onAdd={() =>
-                                    form.categoria_id
-                                        ? setQuick({ tipo: 'subcategoria' })
-                                        : toast.error('Elige una categoría primero.')
+                                    form.familia_id
+                                        ? setQuick({ tipo: 'tipo' })
+                                        : toast.error('Elige una familia primero.')
                                 }
                             >
                                 <SearchSelect
-                                    label="Subcategoría"
-                                    value={form.sub_categoria_id}
-                                    onChange={(v) => setForm((p) => ({ ...p, sub_categoria_id: v ?? '' }))}
-                                    placeholder="Seleccionar subcategoría"
+                                    label="Tipo de tela"
+                                    value={form.tipo_tela_id}
+                                    onChange={(v) => elegirTipoTela(v)}
+                                    placeholder="Seleccionar tipo de tela"
                                     emptyText="Sin coincidencias"
-                                    options={subCategoriasDe(form.categoria_id).map((c) => ({
-                                        value: String(c.id),
-                                        label: c.nombre,
+                                    options={tiposDe(form.familia_id).map((t) => ({
+                                        value: String(t.id),
+                                        label: `01-${t.familia?.codigo ?? '00'}-${t.codigo} — ${t.nombre}`,
                                     }))}
                                 />
                             </FieldWithAdd>
+                            <p className="-mt-2 text-xs text-warm-400 sm:col-span-2">
+                                Al elegir el tipo, el código de tela sale de aquí (01-familia-tipo). Se administra en
+                                Catálogo → Familias y tipos de tela.
+                            </p>
                             <FieldWithAdd onAdd={() => setQuick({ tipo: 'marca' })}>
                                 <SearchSelect
                                     label="Marca"
@@ -2133,9 +2127,9 @@ export default function Productos() {
                 onClose={() => setQuick(null)}
                 onCreated={handleQuickCreated}
                 marcaId={form.marca_id}
-                categoriaId={form.categoria_id}
+                familiaId={form.familia_id}
                 marcas={marcas}
-                categoriasRaiz={categoriasRaiz}
+                familias={familias}
             />
 
             <Modal
@@ -2177,8 +2171,8 @@ export default function Productos() {
                                 ['Cód. barras', detalle.codigo_barras],
                                 ['Marca', detalle.marca?.nombre],
                                 ['Sub-marca', detalle.sub_marca?.nombre],
-                                ['Categoría', detalle.categoria?.nombre],
-                                ['Sub-categoría', detalle.sub_categoria?.nombre],
+                                ['Familia', detalle.tipo_tela?.familia?.nombre],
+                                ['Tipo de tela', detalle.tipo_tela?.nombre],
                                 ['Unidad base', detalle.unidad_medida?.nombre],
                                 ['Precio base', detalle.precio_base != null ? `S/ ${Number(detalle.precio_base).toFixed(2)}` : null],
                                 ['Stock mín.', detalle.stock_minimo],
@@ -2857,7 +2851,7 @@ function FieldWithAdd({ children, onAdd }) {
 }
 
 // Mini-modal de creación rápida de catálogos.
-function QuickCreateModal({ quick, onClose, onCreated, marcaId, categoriaId, marcas, categoriasRaiz }) {
+function QuickCreateModal({ quick, onClose, onCreated, marcaId, familiaId, marcas, familias }) {
     const toast = useToast();
     const [values, setValues] = useState({});
     const [saving, setSaving] = useState(false);
@@ -2878,24 +2872,20 @@ function QuickCreateModal({ quick, onClose, onCreated, marcaId, categoriaId, mar
                     build: (v) => ({ marca_id: marcaId, nombre: v.nombre, activo: true }),
                     fields: [{ key: 'nombre', label: 'Nombre de submarca', required: true }],
                 };
-            case 'categoria':
+            // El código (2 dígitos la familia, 3 el tipo) lo genera el servidor.
+            case 'familia':
                 return {
-                    title: 'Nueva categoría',
-                    endpoint: '/categorias',
-                    build: (v) => ({ nombre: v.nombre, nivel: 1, activo: true }),
-                    fields: [{ key: 'nombre', label: 'Nombre de categoría', required: true }],
+                    title: 'Nueva familia',
+                    endpoint: '/familias-tela',
+                    build: (v) => ({ nombre: v.nombre, activo: true }),
+                    fields: [{ key: 'nombre', label: 'Nombre de la familia (ej: Poliéster)', required: true }],
                 };
-            case 'subcategoria':
+            case 'tipo':
                 return {
-                    title: 'Nueva subcategoría',
-                    endpoint: '/categorias',
-                    build: (v) => ({
-                        nombre: v.nombre,
-                        categoria_padre_id: categoriaId,
-                        nivel: 2,
-                        activo: true,
-                    }),
-                    fields: [{ key: 'nombre', label: 'Nombre de subcategoría', required: true }],
+                    title: 'Nuevo tipo de tela',
+                    endpoint: '/tipos-tela',
+                    build: (v) => ({ familia_tela_id: familiaId, nombre: v.nombre, activo: true }),
+                    fields: [{ key: 'nombre', label: 'Nombre del tipo (ej: Trenza)', required: true }],
                 };
             case 'color':
                 return {
@@ -2926,7 +2916,7 @@ function QuickCreateModal({ quick, onClose, onCreated, marcaId, categoriaId, mar
             default:
                 return null;
         }
-    }, [quick, marcaId, categoriaId]);
+    }, [quick, marcaId, familiaId]);
 
     useEffect(() => {
         setValues({});
@@ -2974,12 +2964,10 @@ function QuickCreateModal({ quick, onClose, onCreated, marcaId, categoriaId, mar
                         Marca: <strong>{marcas.find((m) => String(m.id) === String(marcaId))?.nombre}</strong>
                     </p>
                 )}
-                {quick.tipo === 'subcategoria' && (
+                {quick.tipo === 'tipo' && (
                     <p className="text-xs text-gray-500">
-                        Categoría:{' '}
-                        <strong>
-                            {categoriasRaiz.find((c) => String(c.id) === String(categoriaId))?.nombre}
-                        </strong>
+                        Familia:{' '}
+                        <strong>{familias.find((f) => String(f.id) === String(familiaId))?.nombre}</strong>
                     </p>
                 )}
                 {cfg.fields.map((f) => (

@@ -31,8 +31,8 @@ const filtrosVacios = {
     texto: '',
     tipoTejido: '',
     color: '',
-    categoria: '',
-    subCategoria: '',
+    familia: '',
+    tipoTela: '',
     marca: '',
     subMarca: '',
     stockEstado: '',
@@ -180,19 +180,29 @@ export default function ProductoPickerModal({
 
     const setFiltro = (patch) => setFiltros((prev) => ({ ...prev, ...patch }));
 
-    const categoriaOptions = useMemo(() => opcionesDe(productos, 'categoria'), [productos]);
+    /** La tela se clasifica por familia y tipo (Catálogo → Familias y tipos de tela). */
+    const familiaOptions = useMemo(() => {
+        const mapa = new Map();
+        productos.forEach((p) => {
+            const f = p.tipo_tela?.familia;
+            if (f?.id != null) mapa.set(String(f.id), f.nombre);
+        });
+        return [...mapa.entries()]
+            .map(([value, label]) => ({ value, label }))
+            .sort((a, b) => a.label.localeCompare(b.label, 'es'));
+    }, [productos]);
     const marcaOptions = useMemo(() => opcionesDe(productos, 'marca'), [productos]);
 
-    // Sub-categoría y sub-marca se acotan a lo elegido en su filtro padre.
-    const subCategoriaOptions = useMemo(
+    // El tipo de tela y la sub-marca se acotan a lo elegido en su filtro padre.
+    const tipoTelaOptions = useMemo(
         () =>
             opcionesDe(
-                filtros.categoria
-                    ? productos.filter((p) => String(p.categoria?.id) === filtros.categoria)
+                filtros.familia
+                    ? productos.filter((p) => String(p.tipo_tela?.familia?.id) === filtros.familia)
                     : productos,
-                'sub_categoria',
+                'tipo_tela',
             ),
-        [productos, filtros.categoria],
+        [productos, filtros.familia],
     );
 
     const subMarcaOptions = useMemo(
@@ -362,8 +372,8 @@ export default function ProductoPickerModal({
             if (filtros.color && !(p.colores ?? []).some((c) => normalize(c.nombre) === filtros.color)) {
                 return false;
             }
-            if (filtros.categoria && String(p.categoria?.id) !== filtros.categoria) return false;
-            if (filtros.subCategoria && String(p.sub_categoria?.id) !== filtros.subCategoria) return false;
+            if (filtros.familia && String(p.tipo_tela?.familia?.id) !== filtros.familia) return false;
+            if (filtros.tipoTela && String(p.tipo_tela?.id) !== filtros.tipoTela) return false;
             if (filtros.marca && String(p.marca?.id) !== filtros.marca) return false;
             if (filtros.subMarca && String(p.sub_marca?.id) !== filtros.subMarca) return false;
 
@@ -393,8 +403,8 @@ export default function ProductoPickerModal({
                     p.tipo_tejido,
                     p.marca?.nombre,
                     p.sub_marca?.nombre,
-                    p.categoria?.nombre,
-                    p.sub_categoria?.nombre,
+                    p.tipo_tela?.nombre,
+                    p.tipo_tela?.familia?.nombre,
                     // Escribir "azul" también encuentra las telas que vienen en azul.
                     ...(p.colores ?? []).map((c) => c.nombre),
                 ]
@@ -685,7 +695,7 @@ export default function ProductoPickerModal({
                         options={tipoTejidoOptions}
                         // Textos cortos: en el móvil van dos filtros por fila y
                         // "Todos los tipos de tela" se cortaba en "Todos los…".
-                        placeholder="Tipo de tela"
+                        placeholder="Tejido"
                         emptyText="Sin coincidencias"
                     />
                     <SearchSelect
@@ -699,18 +709,18 @@ export default function ProductoPickerModal({
 
                 <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                     <SearchSelect
-                        value={filtros.categoria}
-                        // Cambiar de categoría invalida la sub-categoría elegida.
-                        onChange={(v) => setFiltro({ categoria: v, subCategoria: '' })}
-                        options={categoriaOptions}
-                        placeholder="Categoría"
+                        value={filtros.familia}
+                        // Cambiar de familia invalida el tipo de tela elegido.
+                        onChange={(v) => setFiltro({ familia: v, tipoTela: '' })}
+                        options={familiaOptions}
+                        placeholder="Familia"
                         emptyText="Sin coincidencias"
                     />
                     <SearchSelect
-                        value={filtros.subCategoria}
-                        onChange={(v) => setFiltro({ subCategoria: v })}
-                        options={subCategoriaOptions}
-                        placeholder="Sub-categoría"
+                        value={filtros.tipoTela}
+                        onChange={(v) => setFiltro({ tipoTela: v })}
+                        options={tipoTelaOptions}
+                        placeholder="Tipo de tela"
                         emptyText="Sin coincidencias"
                     />
                     <SearchSelect
@@ -827,7 +837,7 @@ export default function ProductoPickerModal({
                                             Código: {producto.codigo ?? '—'}
                                             {producto.tipo_tejido && ` · Tejido ${normalize(producto.tipo_tejido)}`}
                                             {producto.marca?.nombre && ` · ${producto.marca.nombre}`}
-                                            {producto.categoria?.nombre && ` · ${producto.categoria.nombre}`}
+                                            {producto.tipo_tela?.nombre && ` · ${producto.tipo_tela.nombre}`}
                                         </p>
                                         <div className="mt-1 flex flex-wrap items-center gap-2">
                                             <span className="text-sm font-semibold text-primary-600">
@@ -909,7 +919,7 @@ export default function ProductoPickerModal({
                                         Código: {producto.codigo ?? '—'}
                                         {producto.tipo_tejido && ` · Tejido ${normalize(producto.tipo_tejido)}`}
                                         {producto.marca?.nombre && ` · ${producto.marca.nombre}`}
-                                        {producto.categoria?.nombre && ` · ${producto.categoria.nombre}`}
+                                        {producto.tipo_tela?.nombre && ` · ${producto.tipo_tela.nombre}`}
                                     </p>
                                     <div className="mt-1 flex flex-wrap items-center gap-2">
                                         {/* Con desglose por almacén, este total sobra. */}

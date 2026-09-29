@@ -59,7 +59,7 @@ class ProductoController extends Controller
 
         // Con su lista de precios: pedidos y ventas toman de ahí el precio
         // según el tipo de precio del cliente y la cantidad.
-        $productos = Producto::with(['marca', 'subMarca', 'proveedores:id,nombre', 'categoria', 'subCategoria', 'unidadMedida', 'presentaciones.unidadBase', 'presentaciones.precios.tipoPrecio:id,principal,activo', 'colores'])
+        $productos = Producto::with(['marca', 'subMarca', 'proveedores:id,nombre', 'categoria', 'subCategoria', 'tipoTela.familia', 'unidadMedida', 'presentaciones.unidadBase', 'presentaciones.precios.tipoPrecio:id,principal,activo', 'colores'])
             ->latest('id')
             ->paginate($perPage);
         return ProductoResource::collection($productos);

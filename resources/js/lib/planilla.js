@@ -196,3 +196,36 @@ export function gruposDePedido(detalles = []) {
 
     return agrupar(lineas);
 }
+
+/**
+ * Una orden de compra o una compra: cada color de una tela con sus rollos y su
+ * factor (los metros de cada rollo), y el código de color que se escribió en la
+ * línea. `campoPrecio` es "precio_unitario" (orden) o "costo_unitario" (compra).
+ */
+export function gruposDeCompra(detalles = [], campoPrecio = 'precio_unitario') {
+    return agrupar(
+        detalles.map((d) => {
+            const producto = d.presentacion?.producto;
+            const rollos = Number(d.rollos) || 0;
+            const cantidad = Number(d.cantidad) || 0;
+            const esTela = rollos > 0 || Boolean(d.color) || (d.presentacion?.unidad_base?.abreviatura ?? '').toLowerCase() === 'm';
+
+            return {
+                grupo: String(d.presentacion?.producto_id ?? producto?.id ?? producto?.codigo ?? 'sin'),
+                titulo: tituloDe(esTela, producto?.codigo, producto?.nombre),
+                rollos,
+                fila: {
+                    item: codigoItem(producto?.codigo, d.color?.codigo),
+                    color_code: d.color_code ?? '',
+                    color: d.color?.nombre ?? '',
+                    hex: d.color?.hex ?? null,
+                    rollo: esTela ? (rollos > 0 ? `${rollos}R` : '') : (d.presentacion?.nombre ?? ''),
+                    factor: esTela && rollos > 0 ? redondear(cantidad / rollos) : null,
+                    metros: cantidad,
+                    precio: Number(d[campoPrecio]) || 0,
+                    total: Number(d.subtotal) || redondear(cantidad * (Number(d[campoPrecio]) || 0)),
+                },
+            };
+        }),
+    );
+}

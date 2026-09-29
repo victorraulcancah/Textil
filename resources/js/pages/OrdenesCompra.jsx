@@ -1,3 +1,5 @@
+import PlanillaTela from '../components/PlanillaTela';
+import { gruposDeCompra } from '../lib/planilla';
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Ban, CheckCircle2, FileDown, Pencil, Printer, Send, ShoppingCart, Trash2 } from 'lucide-react';
@@ -367,59 +369,19 @@ export default function OrdenesCompra() {
                         </span>
                     )}
                 </div>
-                <div className="overflow-auto" style={{ height: '30vh' }}>
-                    <table className="w-full min-w-[900px] text-sm">
-                        <thead className="sticky top-0 z-10">
-                            <tr className="bg-primary-600 text-left text-xs font-semibold uppercase tracking-wide text-white">
-                                <th className="w-12 px-3 py-1.5 text-center">#</th>
-                                <th className="w-28 px-3 py-1.5">Código</th>
-                                <th className="px-3 py-1.5">Producto</th>
-                                <th className="w-28 px-3 py-1.5">Color</th>
-                                <th className="w-32 px-3 py-1.5">Marca</th>
-                                <th className="w-32 px-3 py-1.5">Unidad</th>
-                                <th className="w-24 px-3 py-1.5 text-right">Cant.</th>
-                                <th className="w-28 px-3 py-1.5 text-right">P. Unit.</th>
-                                <th className="w-32 px-3 py-1.5 text-right">Subtotal</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                            {(seleccionada?.detalles ?? []).length === 0 && (
-                                <tr>
-                                    <td colSpan={9} className="px-3 py-10 text-center text-sm text-warm-500">
-                                        {seleccionada ? 'Esta orden no tiene productos.' : 'Selecciona una orden arriba para ver su detalle.'}
-                                    </td>
-                                </tr>
-                            )}
-                            {(seleccionada?.detalles ?? []).map((d, i) => {
-                                const producto = d.presentacion?.producto;
-                                const codigo = [producto?.codigo, d.color?.codigo].filter(Boolean).join('-');
-                                const subtotal = (Number(d.cantidad) || 0) * (Number(d.precio_unitario) || 0);
-                                return (
-                                    <tr key={d.id}>
-                                        <td className="px-3 py-2 text-center text-warm-500">{i + 1}</td>
-                                        <td className="px-3 py-2 text-warm-500">{codigo || '—'}</td>
-                                        <td className="px-3 py-2 font-semibold text-warm-900">{producto?.nombre ?? '—'}</td>
-                                        <td className="px-3 py-2 text-warm-500">{d.color?.nombre ?? '—'}</td>
-                                        <td className="px-3 py-2 text-warm-500">{producto?.marca?.nombre ?? '—'}</td>
-                                        <td className="px-3 py-2 text-warm-500">{d.presentacion?.nombre ?? '—'}</td>
-                                        <td className="px-3 py-2 text-right text-warm-900">{num(d.cantidad)}</td>
-                                        <td className="px-3 py-2 text-right text-warm-900">{money(d.precio_unitario, seleccionada.moneda)}</td>
-                                        <td className="px-3 py-2 text-right font-semibold text-primary-600">{money(subtotal, seleccionada.moneda)}</td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                        {(seleccionada?.detalles ?? []).length > 0 && (
-                            <tfoot>
-                                <tr className="border-t border-edge bg-gray-50">
-                                    <td colSpan={8} className="px-3 py-1.5 text-right text-xs font-bold uppercase tracking-wide text-primary-700">Total</td>
-                                    <td className="px-3 py-1.5 text-right text-base font-extrabold text-warm-900">
-                                        {money(seleccionada.detalles.reduce((s, d) => s + (Number(d.cantidad) || 0) * (Number(d.precio_unitario) || 0), 0), seleccionada.moneda)}
-                                    </td>
-                                </tr>
-                            </tfoot>
-                        )}
-                    </table>
+                {/* El mismo formato del pedido: una tabla por tela, con su color code, sub total y total. */}
+                <div className="max-h-[60vh] overflow-auto p-4">
+                    {(seleccionada?.detalles ?? []).length === 0 ? (
+                        <p className="px-3 py-10 text-center text-sm text-warm-500">
+                            {seleccionada ? 'Esta orden no tiene productos.' : 'Selecciona una orden arriba para ver su detalle.'}
+                        </p>
+                    ) : (
+                        <PlanillaTela
+                            grupos={gruposDeCompra(seleccionada.detalles, 'precio_unitario')}
+                            moneda={seleccionada.moneda}
+                            colorCode
+                        />
+                    )}
                 </div>
             </div>
 

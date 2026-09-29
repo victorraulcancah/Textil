@@ -15,9 +15,12 @@ const th = 'border border-gray-300 bg-primary-600 px-3 py-2 text-center text-xs 
 const td = 'border border-gray-300 px-3 py-1.5';
 
 /** Las mismas columnas en cada tela y en el TOTAL, para que los números caigan alineados. */
-const Columnas = ({ precios, accion }) => (
+const Columnas = ({ precios, accion, colorCode }) => (
     <colgroup>
-        {(precios ? [17, 17, 9, 11, 12, 17, 17] : [26, 24, 12, 16, 16]).map((ancho, i) => (
+        {(precios
+            ? colorCode ? [14, 11, 15, 8, 9, 10, 16, 17] : [17, 17, 9, 11, 12, 17, 17]
+            : colorCode ? [20, 16, 22, 14, 14, 14] : [26, 24, 12, 16, 16]
+        ).map((ancho, i) => (
             <col key={i} style={{ width: `${ancho}%` }} />
         ))}
         {accion && <col style={{ width: '48px' }} />}
@@ -38,17 +41,26 @@ const Columnas = ({ precios, accion }) => (
  *   pendiente — el TOTAL avisa que falta separar rollos.
  *   precios   — con las columnas de precio (por defecto); el almacén las oculta.
  *   accion    — (fila) => nodo: una columna más al final (p. ej. quitar un rollo).
+ *   colorCode — con la columna "Color code" (el que se escribe en la orden de compra y la compra).
  *   completa  — (fila) => bool: marca la fila como cubierta (verde).
  */
-export default function PlanillaTela({ grupos = [], moneda = 'PEN', pendiente = false, precios = true, accion = null, completa = null }) {
+export default function PlanillaTela({ grupos = [], moneda = 'PEN', pendiente = false, precios = true, accion = null, completa = null, colorCode = false }) {
     const totales = totalesDe(grupos);
     /** Telas plegadas: se ven abiertas y se pliegan con la flecha, como en el pedido. */
     const [plegadas, setPlegadas] = useState({});
     const alternar = (clave) => setPlegadas((prev) => ({ ...prev, [clave]: !prev[clave] }));
     const importe = (v) => cifra(v, (n) => money(n, moneda));
-    const titulos = precios
-        ? ['Ítem', 'Color', 'Rollo', 'Factor', 'Metros', 'Precio unitario', 'Precio total']
-        : ['Ítem', 'Color', 'Rollo', 'Factor', 'Metros'];
+    const titulos = [
+        'Ítem',
+        ...(colorCode ? ['Color code'] : []),
+        'Color',
+        'Rollo',
+        'Factor',
+        'Metros',
+        ...(precios ? ['Precio unitario', 'Precio total'] : []),
+    ];
+    // Columnas que ocupan "Sub total" y "Total" antes del rollo: Ítem [+ Color code] + Color.
+    const antes = colorCode ? 3 : 2;
 
     if (grupos.length === 0) {
         return <p className="px-3 py-8 text-center text-sm text-warm-500">Sin productos.</p>;
@@ -90,7 +102,7 @@ export default function PlanillaTela({ grupos = [], moneda = 'PEN', pendiente = 
                             <div className="overflow-hidden">
                                 <div className="overflow-x-auto p-2">
                                     <table className="w-full min-w-[560px] table-fixed border-collapse text-sm">
-                                        <Columnas precios={precios} accion={accion} />
+                                        <Columnas precios={precios} accion={accion} colorCode={colorCode} />
                                         <thead>
                                             <tr>
                                                 {titulos.map((t) => (
@@ -108,6 +120,7 @@ export default function PlanillaTela({ grupos = [], moneda = 'PEN', pendiente = 
                                                         {f.item}
                                                         {f.detalle && <span className="block text-[10px] text-warm-400">{f.detalle}</span>}
                                                     </td>
+                                                    {colorCode && <td className={`${td} text-center font-mono text-xs`}>{f.color_code ?? ''}</td>}
                                                     <td className={`${td} uppercase`}>
                                                         {f.color ? (
                                                             <span className="inline-flex items-center gap-1.5">
@@ -138,7 +151,7 @@ export default function PlanillaTela({ grupos = [], moneda = 'PEN', pendiente = 
                                         </tbody>
                                         <tfoot>
                                             <tr className="font-bold uppercase">
-                                                <td className={`${td} border-x-0`} colSpan={2}>
+                                                <td className={`${td} border-x-0`} colSpan={antes}>
                                                     Sub total
                                                 </td>
                                                 <td className={`${td} border-x-0 text-center`}>{g.rollos || ''}</td>
@@ -163,10 +176,10 @@ export default function PlanillaTela({ grupos = [], moneda = 'PEN', pendiente = 
 
             <div className="overflow-x-auto">
                 <table className="w-full min-w-[560px] table-fixed border-collapse text-sm">
-                    <Columnas precios={precios} accion={accion} />
+                    <Columnas precios={precios} accion={accion} colorCode={colorCode} />
                     <tbody>
                         <tr className="border-y-2 border-gray-400 font-bold uppercase">
-                            <td className="px-3 py-2" colSpan={2}>
+                            <td className="px-3 py-2" colSpan={antes}>
                                 Total{pendiente ? ' (parcial: falta separar rollos)' : ''}
                             </td>
                             <td className="px-3 py-2 text-center">{totales.rollos || ''}</td>

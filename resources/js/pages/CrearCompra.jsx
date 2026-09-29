@@ -7,6 +7,7 @@ import Layout from '../components/Layout';
 import MetodoCajaPicker from '../components/MetodoCajaPicker';
 import ColorSelect from '../components/ColorSelect';
 import ProductoPickerModal from '../components/ProductoPickerModal';
+import TelaCompraModal, { presentacionMetroDe } from '../components/TelaCompraModal';
 import { Button, Input, Modal, SearchSelect, Select, Spinner } from '../components/ui';
 
 const money = (n, moneda = 'PEN') =>
@@ -94,6 +95,8 @@ export default function CrearCompra() {
     const [items, setItems] = useState([]);
     /** Buscador avanzado de productos. */
     const [picker, setPicker] = useState({ open: false, query: '' });
+    /** La tela cuya tabla de colores (rollos, factor, precio) se está llenando. */
+    const [telaCompra, setTelaCompra] = useState(null);
 
     const [pagos, setPagos] = useState([emptyPago()]);
     /** Off = un solo método de pago (el caso normal). On = varios métodos. */
@@ -288,6 +291,14 @@ export default function CrearCompra() {
     const setPanelCampo = (patch) => setPanel((prev) => ({ ...prev, ...patch }));
 
     const elegirProducto = (productoId) => {
+        // Una tela se compra por color, en una tabla (rollos, factor, precio).
+        const producto = productoDe(productoId);
+        if (producto && presentacionMetroDe(producto)) {
+            setTelaCompra(producto);
+            limpiarPanel();
+            return;
+        }
+
         const unidades = unidadesDe(productoId);
         const presentacionId = unidades.length === 1 ? unidades[0].value : '';
         setPanel({
@@ -313,6 +324,49 @@ export default function CrearCompra() {
 
     const limpiarPanel = () => setPanel({ ...panelVacio });
 
+    /** Suma un color de una tela a las líneas: si ya estaba, se le suman rollos y metros. */
+    const sumarTela = (lista, { producto, presentacion, color, rollos, cantidad, precio }) => {
+        const next = [...lista];
+        const i = next.findIndex(
+            (it) =>
+                String(it.producto_presentacion_id) === String(presentacion.id) &&
+                String(it.producto_color_id || '') === String(color?.id ?? ''),
+        );
+
+        if (i !== -1) {
+            next[i] = {
+                ...next[i],
+                rollos: String((Number(next[i].rollos) || 0) + rollos),
+                cantidad: String(Math.round(((Number(next[i].cantidad) || 0) + cantidad) * 100) / 100),
+                costo_unitario: String(precio),
+            };
+        } else {
+            next.push({
+                producto_id: String(producto.id),
+                producto_presentacion_id: String(presentacion.id),
+                producto_color_id: color ? String(color.id) : '',
+                rollos: String(rollos),
+                cantidad: String(cantidad),
+                costo_unitario: String(precio),
+            });
+        }
+
+        return next;
+    };
+
+    /** De la tabla de una tela: una línea por color con rollos. */
+    const agregarTela = ({ producto, presentacion, lineas }) => {
+        setItems((prev) =>
+            lineas.reduce(
+                (acc, l) =>
+                    sumarTela(acc, { producto, presentacion, color: l.color, rollos: l.rollos, cantidad: l.metros, precio: l.precio }),
+                prev,
+            ),
+        );
+        setTelaCompra(null);
+        toast.success(`${producto.nombre}: ${lineas.length} color${lineas.length === 1 ? '' : 'es'} agregado${lineas.length === 1 ? '' : 's'}.`);
+    };
+
     /**
      * Resultado del buscador avanzado: llegan los productos marcados con su unidad y
      * la cantidad escrita ahí mismo. Van directo a la tabla.
@@ -322,9 +376,15 @@ export default function CrearCompra() {
         if (utiles.length === 0) return;
 
         setItems((prev) => {
-            const next = [...prev];
+            let next = [...prev];
 
-            utiles.forEach(({ producto, presentacion, cantidad }) => {
+            utiles.forEach(({ producto, presentacion, cantidad, color, rollos, precio, compra }) => {
+                // Un color de una tela, de su tabla de compra.
+                if (compra) {
+                    next = sumarTela(next, { producto, presentacion, color, rollos, cantidad, precio });
+                    return;
+                }
+
                 // El buscador no elige color, así que solo se acumula sobre
                 // líneas que tampoco lo tengan.
                 const i = next.findIndex(
@@ -1308,10 +1368,22 @@ export default function CrearCompra() {
                 initialQuery={picker.query}
                 multiple
                 stockFilter
+                // Una tela se compra por color: rollos, factor y precio en una tabla.
+                porColor="compra"
+                moneda={form.moneda_origen || 'PEN'}
                 productos={productos}
                 stockPorProducto={stockPorProducto}
                 title="Buscar productos"
             />
+
+            {telaCompra && (
+                <TelaCompraModal
+                    producto={telaCompra}
+                    moneda={form.moneda_origen || 'PEN'}
+                    onClose={() => setTelaCompra(null)}
+                    onAgregar={agregarTela}
+                />
+            )}
         </Layout>
     );
 }

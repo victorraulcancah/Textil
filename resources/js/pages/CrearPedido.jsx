@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, ClipboardList, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, ClipboardList, Eraser, Plus, Trash2 } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
@@ -472,6 +472,12 @@ export default function CrearPedido() {
             ]);
         }
 
+        // Lo escrito se queda: para pedir otro color de la misma tela solo se
+        // cambia lo que difiere. Para empezar de cero está "Limpiar".
+    };
+
+    /** Vacía el renglón de arriba. */
+    const limpiar = () =>
         setNueva({
             producto_id: '',
             producto_presentacion_id: '',
@@ -481,7 +487,6 @@ export default function CrearPedido() {
             precio_unitario: '',
             precioManual: false,
         });
-    };
 
     /**
      * Alta en lote desde el buscador avanzado. Lo que ya está en el pedido no
@@ -806,10 +811,16 @@ export default function CrearPedido() {
                             </p>
                         )}
 
-                        <Button onClick={agregar} disabled={!puedeAgregar}>
-                            <Plus className="h-4 w-4" />
-                            Agregar producto
-                        </Button>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <Button onClick={agregar} disabled={!puedeAgregar}>
+                                <Plus className="h-4 w-4" />
+                                Agregar producto
+                            </Button>
+                            <Button type="button" variant="secondary" onClick={limpiar}>
+                                <Eraser className="h-4 w-4" />
+                                Limpiar
+                            </Button>
+                        </div>
                     </div>
 
                     {/* Líneas del pedido */}

@@ -3,6 +3,7 @@ import { Package, PackageSearch, Plus, RotateCcw, Search, Warehouse, X } from 'l
 import api, { asList } from '../lib/api';
 import { tipoUnidad } from '../lib/unidades';
 import { Button, Modal, SearchSelect, Select, Spinner, cn } from './ui';
+import TelaCompraModal from './TelaCompraModal';
 
 /** Minúsculas y sin tildes, para que "nunez" encuentre "Nuñez". */
 const normalize = (texto) =>
@@ -113,8 +114,15 @@ export default function ProductoPickerModal({
      * sus colores y se marca cuántos rollos de cada uno. Entrega
      * { producto, presentacion (Metro), color, cantidad (rollos), porRollos: true }.
      * Solo en modo múltiple; el resto de productos sigue igual.
+     *
+     * Con "compra", al elegir una tela se abre la tabla de compra por color
+     * (rollos, factor, metros, precio, total) y entrega cada color como
+     * { producto, presentacion (Metro), color, cantidad (metros), rollos, precio,
+     * porRollos: true, compra: true }, sin cerrar el buscador.
      */
     porColor = false,
+    /** La moneda de la compra, para rotular el total de la tabla de compra. */
+    moneda = 'PEN',
     title = 'Buscar producto',
 }) {
     const [filtros, setFiltros] = useState(filtrosVacios);
@@ -129,6 +137,9 @@ export default function ProductoPickerModal({
     /** La tela cuyos colores se están eligiendo (su propio modal) y lo escrito ahí, sin confirmar. */
     const [telaModal, setTelaModal] = useState(null);
     const [borrador, setBorrador] = useState({});
+    /** Compra: la tela cuya tabla de colores está abierta, y los rollos ya agregados de cada tela. */
+    const [telaCompra, setTelaCompra] = useState(null);
+    const [agregadas, setAgregadas] = useState({});
     const [productosPropios, setProductosPropios] = useState(null);
     const [cargando, setCargando] = useState(false);
     const inputRef = useRef(null);
@@ -161,6 +172,8 @@ export default function ProductoPickerModal({
         setRollosPorColor({});
         setTelaModal(null);
         setBorrador({});
+        setTelaCompra(null);
+        setAgregadas({});
         const t = setTimeout(() => inputRef.current?.focus(), 50);
         return () => clearTimeout(t);
     }, [open, initialQuery]);
@@ -589,12 +602,14 @@ export default function ProductoPickerModal({
             open={open}
             // Con el modal de colores encima, Escape solo cierra ese.
             onClose={() => {
-                if (!telaModal) onClose?.();
+                if (!telaModal && !telaCompra) onClose?.();
             }}
             title={title}
             description={
                 modoTela
-                    ? 'Elige una tela para marcar sus colores y cuántos rollos quieres de cada uno; cada rollo se cobra por sus metros reales.'
+                    ? porColor === 'compra'
+                        ? 'Elige una tela para poner los rollos, el factor y el precio de cada color; lo demás, con su unidad y cantidad.'
+                        : 'Elige una tela para marcar sus colores y cuántos rollos quieres de cada uno; cada rollo se cobra por sus metros reales.'
                     : 'Filtra por tipo de tela, color, categoría o marca; mira cuánto hay disponible en cada almacén y ajusta unidad y cantidad.'
             }
             size="3xl"
@@ -784,14 +799,18 @@ export default function ProductoPickerModal({
                             const metro = presentacionMetro(producto);
                             const lineas = coloresTela(producto);
                             const libres = lineas.reduce((suma, c) => suma + c.rollos, 0);
-                            const elegidos = Object.entries(rollosPorColor)
-                                .filter(([clave, v]) => clave.startsWith(`${producto.id}:`) && Number(v) > 0)
-                                .reduce((suma, [, v]) => suma + Number(v), 0);
+                            const enCompra = porColor === 'compra';
+                            const elegidos = enCompra
+                                ? Number(agregadas[producto.id]) || 0
+                                : Object.entries(rollosPorColor)
+                                      .filter(([clave, v]) => clave.startsWith(`${producto.id}:`) && Number(v) > 0)
+                                      .reduce((suma, [, v]) => suma + Number(v), 0);
+                            const abrir = () => (enCompra ? setTelaCompra(producto) : abrirTela(producto));
 
                             return (
                                 <div
                                     key={producto.id}
-                                    onClick={() => abrirTela(producto)}
+                                    onClick={abrir}
                                     className={cn(
                                         'flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-2 border-l-4 px-3 py-2.5 transition',
                                         elegidos > 0
@@ -812,16 +831,18 @@ export default function ProductoPickerModal({
                                         </p>
                                         <div className="mt-1 flex flex-wrap items-center gap-2">
                                             <span className="text-sm font-semibold text-primary-600">
-                                                {moneyEn(metro?.precio_venta, producto.moneda_venta || 'PEN')}
+                                                {enCompra
+                                                    ? moneyEn(metro?.precio_compra, producto.moneda_compra || moneda)
+                                                    : moneyEn(metro?.precio_venta, producto.moneda_venta || 'PEN')}
                                                 <span className="ml-1 text-[11px] font-normal text-warm-500">por metro</span>
                                             </span>
                                             <span className="text-[11px] text-warm-500">
                                                 {lineas.length} color{lineas.length === 1 ? '' : 'es'}
-                                                {conDesglose && ` · ${libres} rollo${libres === 1 ? '' : 's'} libre${libres === 1 ? '' : 's'}`}
+                                                {conDesglose && !enCompra && ` · ${libres} rollo${libres === 1 ? '' : 's'} libre${libres === 1 ? '' : 's'}`}
                                             </span>
                                             {elegidos > 0 && (
                                                 <span className="rounded bg-primary-100 px-1.5 py-0.5 text-[11px] font-semibold text-primary-700">
-                                                    {elegidos} rollo{elegidos === 1 ? '' : 's'} elegido{elegidos === 1 ? '' : 's'}
+                                                    {elegidos} rollo{elegidos === 1 ? '' : 's'} {enCompra ? 'agregado' : 'elegido'}{elegidos === 1 ? '' : 's'}
                                                 </span>
                                             )}
                                         </div>
@@ -832,10 +853,10 @@ export default function ProductoPickerModal({
                                         variant={elegidos > 0 ? 'secondary' : undefined}
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            abrirTela(producto);
+                                            abrir();
                                         }}
                                     >
-                                        {elegidos > 0 ? 'Cambiar' : 'Elegir colores'}
+                                        {enCompra ? (elegidos > 0 ? 'Agregar más' : 'Elegir colores') : elegidos > 0 ? 'Cambiar' : 'Elegir colores'}
                                     </Button>
                                 </div>
                             );
@@ -1118,6 +1139,32 @@ export default function ProductoPickerModal({
                 })}
             </ul>
         </Modal>
+
+        {/* Compra de una tela: la tabla por color, como la hoja del proveedor. */}
+        {telaCompra && (
+            <TelaCompraModal
+                producto={telaCompra}
+                moneda={moneda}
+                onClose={() => setTelaCompra(null)}
+                onAgregar={({ presentacion, lineas }) => {
+                    onSelect?.(
+                        lineas.map((l) => ({
+                            producto: telaCompra,
+                            presentacion,
+                            color: l.color,
+                            cantidad: l.metros,
+                            rollos: l.rollos,
+                            precio: l.precio,
+                            porRollos: true,
+                            compra: true,
+                        })),
+                    );
+                    const rollos = lineas.reduce((suma, l) => suma + l.rollos, 0);
+                    setAgregadas((prev) => ({ ...prev, [telaCompra.id]: (Number(prev[telaCompra.id]) || 0) + rollos }));
+                    setTelaCompra(null);
+                }}
+            />
+        )}
         </>
     );
 }

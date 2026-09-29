@@ -176,6 +176,18 @@ export default function Proveedores() {
 
     const columns = [
         {
+            // La numeración de los proveedores (1, 2, 3…), por orden de alta, aunque se filtre o se busque.
+            key: 'numero',
+            label: '#',
+            width: '56px',
+            searchable: false,
+            render: (row) => (
+                <span className="font-medium tabular-nums text-warm-500">
+                    {[...proveedores].sort((x, y) => x.id - y.id).findIndex((p) => p.id === row.id) + 1}
+                </span>
+            ),
+        },
+        {
             key: 'nombre',
             label: 'Proveedor',
             render: (row) => (

@@ -126,6 +126,9 @@ export default function ProductoPickerModal({
     const [cantidades, setCantidades] = useState({});
     /** Rollos escritos por color de una tela: { ['productoId:colorId']: '3' } */
     const [rollosPorColor, setRollosPorColor] = useState({});
+    /** La tela cuyos colores se están eligiendo (su propio modal) y lo escrito ahí, sin confirmar. */
+    const [telaModal, setTelaModal] = useState(null);
+    const [borrador, setBorrador] = useState({});
     const [productosPropios, setProductosPropios] = useState(null);
     const [cargando, setCargando] = useState(false);
     const inputRef = useRef(null);
@@ -156,6 +159,8 @@ export default function ProductoPickerModal({
         setMarcados({});
         setCantidades({});
         setRollosPorColor({});
+        setTelaModal(null);
+        setBorrador({});
         const t = setTimeout(() => inputRef.current?.focus(), 50);
         return () => clearTimeout(t);
     }, [open, initialQuery]);
@@ -254,7 +259,7 @@ export default function ProductoPickerModal({
      * otros pedidos ya pidieron y el almacén aún no asigna. Una tela sin
      * colores registrados se pide sin color.
      */
-    const coloresTela = (producto) => {
+    const coloresTela = (producto, todos = false) => {
         const propios = (producto.colores ?? []).filter((c) => c.activo !== false);
         const lista = propios.length ? propios : [{ id: null, nombre: 'Cualquier color', codigo: null, hex: null }];
         const filas = (stockPorAlmacen[String(producto.id)] ?? []).filter(
@@ -262,7 +267,7 @@ export default function ProductoPickerModal({
         );
 
         return lista
-            .filter((c) => !filtros.color || normalize(c.nombre) === filtros.color)
+            .filter((c) => todos || !filtros.color || normalize(c.nombre) === filtros.color)
             .map((c) => {
                 let rollos = 0;
                 let metros = 0;
@@ -281,11 +286,33 @@ export default function ProductoPickerModal({
             });
     };
 
-    /** Escribir los rollos de un color: enteros, y sin pasarse de los libres si no se puede comprometer tela que no hay. */
-    const setRollos = (producto, color, valor, libres) => {
+    /** Abre el modal de una tela con lo que ya se había marcado de ella. */
+    const abrirTela = (producto) => {
+        const propios = {};
+        Object.entries(rollosPorColor).forEach(([clave, v]) => {
+            if (clave.startsWith(`${producto.id}:`) && Number(v) > 0) propios[clave] = v;
+        });
+        setBorrador(propios);
+        setTelaModal(producto);
+    };
+
+    /** Rollos de un color, en el modal: enteros, y sin pasarse de los libres si no se puede comprometer tela que no hay. */
+    const setRollosBorrador = (color, valor, libres) => {
         let v = valor === '' ? '' : String(Math.max(0, Math.floor(Number(valor) || 0)));
         if (bloquearSinStock && v !== '' && Number(v) > libres) v = String(libres);
-        setRollosPorColor((prev) => ({ ...prev, [`${producto.id}:${color.id ?? 'sin'}`]: v }));
+        setBorrador((prev) => ({ ...prev, [`${telaModal.id}:${color.id ?? 'sin'}`]: v }));
+    };
+
+    /** Lo marcado de otras telas más lo del modal: el mapa completo de rollos por color. */
+    const conBorrador = () => {
+        const next = {};
+        Object.entries(rollosPorColor).forEach(([clave, v]) => {
+            if (!clave.startsWith(`${telaModal.id}:`)) next[clave] = v;
+        });
+        Object.entries(borrador).forEach(([clave, v]) => {
+            if (Number(v) > 0) next[clave] = v;
+        });
+        return next;
     };
 
     /**
@@ -387,9 +414,9 @@ export default function ProductoPickerModal({
     );
 
     /** Las telas marcadas por color: un renglón por cada color con rollos. */
-    const seleccionadosTela = useMemo(
-        () =>
-            Object.entries(rollosPorColor)
+    const telaDe = useCallback(
+        (mapa) =>
+            Object.entries(mapa)
                 .filter(([, v]) => Number(v) > 0)
                 .map(([clave, v]) => {
                     const [pid, cid] = clave.split(':');
@@ -405,8 +432,9 @@ export default function ProductoPickerModal({
                     };
                 })
                 .filter((x) => x.producto && x.presentacion),
-        [rollosPorColor, productos, presentacionMetro],
+        [productos, presentacionMetro],
     );
+    const seleccionadosTela = useMemo(() => telaDe(rollosPorColor), [telaDe, rollosPorColor]);
 
     /** Todo lo marcado, sea producto suelto o color de una tela. */
     const marcadosTodos = [
@@ -529,14 +557,44 @@ export default function ProductoPickerModal({
             .sort((a, b) => b.metros - a.metros);
     };
 
+    /** Lo escrito en el modal de colores. */
+    const telaPrecio = telaModal ? presentacionMetro(telaModal)?.precio_venta : null;
+    const lineasTela = telaModal ? coloresTela(telaModal, true) : [];
+    const rollosBorrador = Object.values(borrador).reduce((suma, v) => suma + (Number(v) > 0 ? Number(v) : 0), 0);
+    const coloresBorrador = Object.values(borrador).filter((v) => Number(v) > 0).length;
+    const otrosMarcados = telaModal
+        ? marcadosTodos.filter((x) => !(x.porRollos && String(x.producto.id) === String(telaModal.id))).length
+        : 0;
+
+    /** Deja lo del modal en la selección y vuelve a la lista. */
+    const aplicarTela = () => {
+        setRollosPorColor(conBorrador());
+        setTelaModal(null);
+    };
+
+    /** Deja lo del modal en la selección y agrega todo lo marcado. */
+    const agregarDesdeTela = () => {
+        const mapa = conBorrador();
+        setRollosPorColor(mapa);
+        setTelaModal(null);
+        const utiles = [...seleccionados, ...telaDe(mapa)].filter((x) => x.cantidad > 0).map(({ clave, ...resto }) => resto);
+        if (utiles.length === 0) return;
+        onSelect?.(utiles);
+        onClose?.();
+    };
+
     return (
+        <>
         <Modal
             open={open}
-            onClose={onClose}
+            // Con el modal de colores encima, Escape solo cierra ese.
+            onClose={() => {
+                if (!telaModal) onClose?.();
+            }}
             title={title}
             description={
                 modoTela
-                    ? 'Marca los colores de cada tela y cuántos rollos quieres de cada uno; cada rollo se cobra por sus metros reales.'
+                    ? 'Elige una tela para marcar sus colores y cuántos rollos quieres de cada uno; cada rollo se cobra por sus metros reales.'
                     : 'Filtra por tipo de tela, color, categoría o marca; mira cuánto hay disponible en cada almacén y ajusta unidad y cantidad.'
             }
             size="3xl"
@@ -721,87 +779,64 @@ export default function ProductoPickerModal({
             ) : (
                 <div className="divide-y divide-gray-100 overflow-hidden rounded-lg border border-edge">
                     {resultados.map((producto) => {
-                        // Una tela: sus colores, cada uno con los rollos que se quieren.
+                        // Una tela: una fila que abre su modal de colores y rollos.
                         if (esTela(producto)) {
                             const metro = presentacionMetro(producto);
                             const lineas = coloresTela(producto);
+                            const libres = lineas.reduce((suma, c) => suma + c.rollos, 0);
+                            const elegidos = Object.entries(rollosPorColor)
+                                .filter(([clave, v]) => clave.startsWith(`${producto.id}:`) && Number(v) > 0)
+                                .reduce((suma, [, v]) => suma + Number(v), 0);
 
                             return (
-                                <div key={producto.id} className="border-l-4 border-l-transparent px-3 py-2.5">
-                                    <div className="flex items-center gap-3">
-                                        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-gray-100 text-warm-500">
-                                            <Package className="h-4 w-4" />
-                                        </div>
-                                        <div className="min-w-0 flex-1">
-                                            <p className="truncate font-semibold text-warm-900">{producto.nombre}</p>
-                                            <p className="truncate text-xs text-warm-500">
-                                                Código: {producto.codigo ?? '—'}
-                                                {producto.tipo_tejido && ` · Tejido ${normalize(producto.tipo_tejido)}`}
-                                                {producto.marca?.nombre && ` · ${producto.marca.nombre}`}
-                                                {producto.categoria?.nombre && ` · ${producto.categoria.nombre}`}
-                                            </p>
-                                        </div>
-                                        <span className="shrink-0 text-sm font-semibold text-primary-600">
-                                            {moneyEn(metro?.precio_venta, producto.moneda_venta || 'PEN')}
-                                            <span className="ml-1 text-[11px] font-normal text-warm-500">por metro</span>
-                                        </span>
-                                    </div>
-
-                                    {lineas.length === 0 ? (
-                                        <p className="mt-2 text-xs text-warm-400">Ningún color coincide con el filtro.</p>
-                                    ) : (
-                                        <ul className="mt-2 grid gap-1.5 sm:grid-cols-2">
-                                            {lineas.map((c) => {
-                                                const valor = rollosPorColor[`${producto.id}:${c.id ?? 'sin'}`] ?? '';
-                                                const marcada = Number(valor) > 0;
-                                                const sinRollos = c.rollos <= 0;
-                                                // Se puede pedir tela que aún no llega; vender, no.
-                                                const bloqueada = bloquearSinStock && sinRollos;
-
-                                                return (
-                                                    <li
-                                                        key={c.id ?? 'sin'}
-                                                        className={cn(
-                                                            'flex items-center gap-2 rounded-lg px-2.5 py-1.5',
-                                                            marcada ? 'bg-primary-50 ring-1 ring-primary-200' : 'bg-gray-50',
-                                                            bloqueada && 'opacity-50',
-                                                        )}
-                                                    >
-                                                        <span
-                                                            className="h-3 w-3 shrink-0 rounded-full ring-1 ring-black/10"
-                                                            style={{ backgroundColor: c.hex || '#9ca3af' }}
-                                                        />
-                                                        <span className="min-w-0 flex-1">
-                                                            <span className="block truncate text-sm font-medium uppercase text-warm-900">
-                                                                {c.nombre}
-                                                            </span>
-                                                            <span className="block truncate text-[11px] text-warm-500">
-                                                                {c.codigo ? `${c.codigo} · ` : ''}
-                                                                {!conDesglose
-                                                                    ? ''
-                                                                    : sinRollos
-                                                                      ? 'Sin rollos libres'
-                                                                      : `${c.rollos} rollo${c.rollos === 1 ? '' : 's'} · ${numero(c.metros)} m`}
-                                                            </span>
-                                                        </span>
-                                                        <input
-                                                            type="number"
-                                                            min="0"
-                                                            step="1"
-                                                            inputMode="numeric"
-                                                            placeholder="0"
-                                                            disabled={bloqueada}
-                                                            value={valor}
-                                                            onChange={(e) => setRollos(producto, c, e.target.value, c.rollos)}
-                                                            aria-label={`Rollos de ${producto.nombre} ${c.nombre}`}
-                                                            className="w-16 shrink-0 rounded-md border-0 px-2 py-1.5 text-center text-sm text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-primary-600 disabled:bg-gray-100"
-                                                        />
-                                                        <span className="w-9 shrink-0 text-[11px] text-warm-500">rollos</span>
-                                                    </li>
-                                                );
-                                            })}
-                                        </ul>
+                                <div
+                                    key={producto.id}
+                                    onClick={() => abrirTela(producto)}
+                                    className={cn(
+                                        'flex cursor-pointer flex-wrap items-center gap-x-3 gap-y-2 border-l-4 px-3 py-2.5 transition',
+                                        elegidos > 0
+                                            ? 'border-l-primary-600 bg-primary-50/70'
+                                            : 'border-l-transparent hover:bg-primary-50/40',
                                     )}
+                                >
+                                    <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-gray-100 text-warm-500">
+                                        <Package className="h-4 w-4" />
+                                    </div>
+                                    <div className="min-w-0 flex-1 basis-40">
+                                        <p className="truncate font-semibold text-warm-900">{producto.nombre}</p>
+                                        <p className="truncate text-xs text-warm-500">
+                                            Código: {producto.codigo ?? '—'}
+                                            {producto.tipo_tejido && ` · Tejido ${normalize(producto.tipo_tejido)}`}
+                                            {producto.marca?.nombre && ` · ${producto.marca.nombre}`}
+                                            {producto.categoria?.nombre && ` · ${producto.categoria.nombre}`}
+                                        </p>
+                                        <div className="mt-1 flex flex-wrap items-center gap-2">
+                                            <span className="text-sm font-semibold text-primary-600">
+                                                {moneyEn(metro?.precio_venta, producto.moneda_venta || 'PEN')}
+                                                <span className="ml-1 text-[11px] font-normal text-warm-500">por metro</span>
+                                            </span>
+                                            <span className="text-[11px] text-warm-500">
+                                                {lineas.length} color{lineas.length === 1 ? '' : 'es'}
+                                                {conDesglose && ` · ${libres} rollo${libres === 1 ? '' : 's'} libre${libres === 1 ? '' : 's'}`}
+                                            </span>
+                                            {elegidos > 0 && (
+                                                <span className="rounded bg-primary-100 px-1.5 py-0.5 text-[11px] font-semibold text-primary-700">
+                                                    {elegidos} rollo{elegidos === 1 ? '' : 's'} elegido{elegidos === 1 ? '' : 's'}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <Button
+                                        size="sm"
+                                        type="button"
+                                        variant={elegidos > 0 ? 'secondary' : undefined}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            abrirTela(producto);
+                                        }}
+                                    >
+                                        {elegidos > 0 ? 'Cambiar' : 'Elegir colores'}
+                                    </Button>
                                 </div>
                             );
                         }
@@ -995,5 +1030,94 @@ export default function ProductoPickerModal({
                 </div>
             )}
         </Modal>
+
+        {/* Una tela: sus colores, cada uno con los rollos que se quieren. */}
+        <Modal
+            open={Boolean(telaModal)}
+            onClose={() => setTelaModal(null)}
+            title={telaModal?.nombre}
+            description={`Marca los colores y cuántos rollos quieres de cada uno. Cada rollo se cobra por sus metros reales${
+                telaPrecio ? ` a ${moneyEn(telaPrecio, telaModal?.moneda_venta || 'PEN')} por metro` : ''
+            }.`}
+            size="xl"
+            footer={
+                <>
+                    <span className="mr-auto text-xs text-warm-500">
+                        {coloresBorrador} color{coloresBorrador === 1 ? '' : 'es'} · {rollosBorrador} rollo
+                        {rollosBorrador === 1 ? '' : 's'}
+                    </span>
+                    <Button variant="secondary" onClick={() => setTelaModal(null)}>
+                        Cancelar
+                    </Button>
+                    <Button variant="secondary" onClick={aplicarTela}>
+                        Seguir eligiendo
+                    </Button>
+                    <Button onClick={agregarDesdeTela} disabled={rollosBorrador === 0 && otrosMarcados === 0}>
+                        <Plus className="h-4 w-4" />
+                        Agregar
+                    </Button>
+                </>
+            }
+        >
+            <ul className="grid gap-2 sm:grid-cols-2">
+                {lineasTela.map((c) => {
+                    const clave = `${telaModal.id}:${c.id ?? 'sin'}`;
+                    const valor = borrador[clave] ?? '';
+                    const marcada = Number(valor) > 0;
+                    const sinRollos = c.rollos <= 0;
+                    // Se puede pedir tela que aún no llega; vender, no.
+                    const bloqueada = bloquearSinStock && sinRollos;
+
+                    return (
+                        <li
+                            key={c.id ?? 'sin'}
+                            className={cn(
+                                'flex items-center gap-3 rounded-lg px-3 py-2',
+                                marcada ? 'bg-primary-50 ring-1 ring-primary-200' : 'bg-gray-50',
+                                bloqueada && 'opacity-50',
+                            )}
+                        >
+                            <input
+                                type="checkbox"
+                                checked={marcada}
+                                disabled={bloqueada}
+                                onChange={() => setRollosBorrador(c, marcada ? '' : '1', c.rollos)}
+                                aria-label={`Elegir ${c.nombre}`}
+                                className="h-4 w-4 shrink-0 cursor-pointer rounded accent-primary-600"
+                            />
+                            <span
+                                className="h-3.5 w-3.5 shrink-0 rounded-full ring-1 ring-black/10"
+                                style={{ backgroundColor: c.hex || '#9ca3af' }}
+                            />
+                            <span className="min-w-0 flex-1">
+                                <span className="block truncate text-sm font-medium uppercase text-warm-900">{c.nombre}</span>
+                                <span className="block truncate text-[11px] text-warm-500">
+                                    {c.codigo ? `${c.codigo} · ` : ''}
+                                    {!conDesglose
+                                        ? ''
+                                        : sinRollos
+                                          ? 'Sin rollos libres'
+                                          : `${c.rollos} rollo${c.rollos === 1 ? '' : 's'} · ${numero(c.metros)} m`}
+                                </span>
+                            </span>
+                            <input
+                                type="number"
+                                min="0"
+                                step="1"
+                                inputMode="numeric"
+                                placeholder="0"
+                                disabled={bloqueada}
+                                value={valor}
+                                onChange={(e) => setRollosBorrador(c, e.target.value, c.rollos)}
+                                aria-label={`Rollos de ${telaModal.nombre} ${c.nombre}`}
+                                className="w-16 shrink-0 rounded-md border-0 px-2 py-1.5 text-center text-sm text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-primary-600 disabled:bg-gray-100"
+                            />
+                            <span className="w-9 shrink-0 text-[11px] text-warm-500">rollos</span>
+                        </li>
+                    );
+                })}
+            </ul>
+        </Modal>
+        </>
     );
 }

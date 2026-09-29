@@ -31,22 +31,166 @@
             formato="ticket" />
         @if ($orden->observaciones)<div class="muted">Obs.: {{ $orden->observaciones }}</div>@endif
     @else
-        <x-pdf.encabezado :empresa="$empresa" titulo="ORDEN DE COMPRA" :numero="$documento" />
-        <x-pdf.meta
-            :items="[
-                'Proveedor' => $orden->proveedor?->nombre ?: '—',
-                'RUC' => $orden->proveedor?->ruc ?: '—',
-                'Dirección' => $orden->proveedor?->direccion ?: '—',
-                'Cond. pago' => $orden->condicion_pago ?: '—',
-                'F. emisión' => optional($orden->fecha_emision)->format('d/m/Y'),
-                'Entrega est.' => optional($orden->fecha_entrega_estimada)->format('d/m/Y') ?: '—',
-                'Solicita' => $orden->usuarioCrea?->name ?: '—',
-                'Estado' => $estado,
-            ]" />
-        @if ($datosExterior)
-            <div class="strong upper" style="margin: 8px 0 2px;">Datos de embarque</div>
-            <x-pdf.meta :items="$datosExterior" />
+        <x-pdf.encabezado :empresa="$empresa" :titulo="$ingles ? 'PURCHASE ORDER' : 'ORDEN DE COMPRA'" :numero="$documento" />
+        @if ($ingles)
+            {{-- Purchase Order: la cabecera va en inglés (shipper, consignee, embarque y ficha de la tela). --}}
+            @php
+                $azul = '#2f5597';
+                $cab = "background: {$azul}; color: #fff; font-weight: bold; text-align: center; text-transform: uppercase; font-size: 8px; padding: 3px 4px; border: 2px solid #fff;";
+                $val = 'text-align: center; font-size: 8.5px; padding: 3px 4px;';
+                $g = $ingles;
+            @endphp
+            <table style="width: 100%; border-collapse: collapse; table-layout: fixed;">
+                <tr>
+                    <td style="{{ $cab }}">Shipper / Seller</td>
+                    <td style="{{ $cab }}">Consignee / Buyer</td>
+                </tr>
+                <tr>
+                    <td style="vertical-align: top; padding: 4px 6px; font-size: 8.5px; line-height: 1.5;">
+                        <strong>{{ $g['shipper']['name'] }}</strong><br>
+                        <strong>ADDRESS:</strong> {{ $g['shipper']['address'] }}<br>
+                        <strong>TAX ID:</strong> {{ $g['shipper']['tax_id'] }}<br>
+                        <strong>TELEPHONE:</strong> {{ $g['shipper']['telephone'] }}
+                        @if ($g['shipper']['fax'])&nbsp;&nbsp;&nbsp;<strong>FAX:</strong> {{ $g['shipper']['fax'] }}@endif
+                    </td>
+                    <td style="vertical-align: top; padding: 4px 6px; font-size: 8.5px; line-height: 1.5;">
+                        <strong>{{ $g['consignee']['name'] }}</strong><br>
+                        <strong>ADDRESS:</strong> {{ $g['consignee']['address'] }}<br>
+                        <strong>RUC:</strong> {{ $g['consignee']['ruc'] }}<br>
+                        <strong>TELEPHONE:</strong> {{ $g['consignee']['telephone'] }}
+                    </td>
+                </tr>
+            </table>
+
+            <table style="width: 100%; border-collapse: collapse; table-layout: fixed;">
+                <tr>
+                    <td style="{{ $cab }}">Cargo type</td>
+                    <td style="{{ $cab }}">Container no.</td>
+                    <td style="{{ $cab }}">Shipment</td>
+                    <td style="{{ $cab }}">Country of origin</td>
+                    <td style="{{ $cab }}">Final destination</td>
+                    <td style="{{ $cab }}">Incoterms</td>
+                </tr>
+                <tr>
+                    <td style="{{ $val }}">{{ $g['cargo_type'] }}</td>
+                    <td style="{{ $val }}">{{ $g['container'] }}</td>
+                    <td style="{{ $val }}">{{ $g['shipment'] }}</td>
+                    <td style="{{ $val }}">{{ $g['origin'] }}</td>
+                    <td style="{{ $val }}">{{ $g['destination'] }}</td>
+                    <td style="{{ $val }}">{{ $g['incoterms'] }}</td>
+                </tr>
+            </table>
+
+            <table style="width: 100%; border-collapse: collapse; table-layout: fixed;">
+                <tr>
+                    <td style="{{ $cab }}">Port of departure</td>
+                    <td style="{{ $cab }}">Port of arrival</td>
+                </tr>
+                <tr>
+                    <td style="{{ $val }}">{{ $g['port_departure'] }}</td>
+                    <td style="{{ $val }}">{{ $g['port_arrival'] }}</td>
+                </tr>
+            </table>
+
+            {{-- La mercadería: una ficha por tela. --}}
+            @foreach ($g['bienes'] as $b)
+                <table style="width: 100%; border-collapse: collapse; table-layout: fixed;">
+                    <colgroup><col style="width: 50%"><col style="width: 25%"><col style="width: 25%"></colgroup>
+                    <tr>
+                        <td style="{{ $cab }}">Description of goods</td>
+                        <td style="{{ $cab }}">Agreed price</td>
+                        <td style="{{ $cab }}">Consider</td>
+                    </tr>
+                    <tr>
+                        <td style="vertical-align: top; padding: 4px 6px; font-size: 8.5px; line-height: 1.6;">
+                            <strong>Name:</strong> <strong>{{ $b['name'] }}</strong><br>
+                            <strong>Weight:</strong> {{ $b['weight'] }}<br>
+                            <strong>Width:</strong> {{ $b['width'] }}<br>
+                            <strong>Specification:</strong> {{ $b['specification'] }}
+                        </td>
+                        <td style="vertical-align: top; text-align: center; padding: 6px; font-size: 9px; border-left: 2px solid {{ $azul }}; border-right: 2px solid {{ $azul }};">
+                            <div style="margin-bottom: 10px;">{{ $b['price'] }}</div>
+                            <div style="font-size: 8px; text-align: left;">DATE OF AGREEMENT:</div>
+                            <div style="text-align: right;">{{ $g['date_of_agreement'] }}</div>
+                        </td>
+                        <td style="vertical-align: top; padding: 4px 6px; font-size: 8.5px; line-height: 1.6;">
+                            HS CODE : <span style="float: right;">{{ $b['hs_code'] }}</span><br>
+                            1 ROLL(MTS): <span style="float: right;">{{ $b['roll'] }}</span>
+                        </td>
+                    </tr>
+                </table>
+            @endforeach
+
+            {{-- Los ítems: una tabla por tela (ITEM 1, ITEM 2…) con rollos y metros, como la Purchase Order del cliente. --}}
+            @php
+                $num = fn ($v) => number_format((float) $v, 2);
+                $cel = 'border: 1px solid #999; padding: 3px 5px; text-align: center; font-size: 8.5px;';
+                $tit = "background: {$azul}; color: #fff; font-weight: bold; text-transform: uppercase; font-size: 8px; padding: 3px 4px; border: 1px solid #999; text-align: center;";
+            @endphp
+            @foreach ($g['items'] as $it)
+                <div class="strong" style="font-size: 9px; margin: 10px 0 2px 0;">{{ $it['title'] }}</div>
+                <table style="width: 100%; border-collapse: collapse; table-layout: fixed;">
+                    <colgroup>
+                        <col style="width: 22%"><col style="width: 20%"><col style="width: 28%"><col style="width: 12%"><col style="width: 18%">
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            @foreach (['Product code', 'Color code', 'Color', 'Rolls', 'Meter'] as $t)
+                                <th style="{{ $tit }}">{{ $t }}</th>
+                            @endforeach
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach ($it['rows'] as $r)
+                            <tr>
+                                <td style="{{ $cel }}">{{ $r['product_code'] }}</td>
+                                <td style="{{ $cel }}">{{ $r['color_code'] }}</td>
+                                <td style="{{ $cel }}">{{ $r['color'] }}</td>
+                                <td style="{{ $cel }}">{{ $r['rolls'] ?: '' }}</td>
+                                <td style="{{ $cel }}">{{ $num($r['meters']) }}</td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            @endforeach
+
+            <table style="width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 6px; border-top: 2px solid #666; border-bottom: 2px solid #666;">
+                <colgroup>
+                    <col style="width: 22%"><col style="width: 20%"><col style="width: 28%"><col style="width: 12%"><col style="width: 18%">
+                </colgroup>
+                <tr class="strong upper">
+                    <td colspan="3" style="padding: 4px 5px;">Total</td>
+                    <td style="padding: 4px 5px; text-align: center;">{{ number_format($g['total_rolls']) }}</td>
+                    <td style="padding: 4px 5px; text-align: center;">{{ $num($g['total_meters']) }}</td>
+                </tr>
+            </table>
+
+            <table style="width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 8.5px;">
+                <tr>
+                    <td style="width: 34%;"><strong>SHIPPING DATE:</strong> {{ $g['shipping_date'] }}</td>
+                    <td style="width: 33%;"><strong>PREPARED BY:</strong> {{ $g['prepared_by'] }}</td>
+                    <td style="width: 33%;"><strong>APPROVED BY:</strong> {{ $g['approved_by'] }}</td>
+                </tr>
+            </table>
+            <div style="margin-top: 8px; font-size: 8.5px;"><strong>NOTE:</strong> {{ $g['note'] }}</div>
+        @else
+            <x-pdf.meta
+                :items="[
+                    'Proveedor' => $orden->proveedor?->nombre ?: '—',
+                    'RUC' => $orden->proveedor?->ruc ?: '—',
+                    'Dirección' => $orden->proveedor?->direccion ?: '—',
+                    'Cond. pago' => $orden->condicion_pago ?: '—',
+                    'F. emisión' => optional($orden->fecha_emision)->format('d/m/Y'),
+                    'Entrega est.' => optional($orden->fecha_entrega_estimada)->format('d/m/Y') ?: '—',
+                    'Solicita' => $orden->usuarioCrea?->name ?: '—',
+                    'Estado' => $estado,
+                ]" />
+            @if ($datosExterior)
+                <div class="strong upper" style="margin: 8px 0 2px;">Datos de embarque</div>
+                <x-pdf.meta :items="$datosExterior" />
+            @endif
         @endif
+        @unless ($ingles)
         {{-- La planilla: una tabla por tela, con el color code que se escribió en la orden. --}}
         <x-pdf.planilla :grupos="$planilla['grupos']" :totales="$planilla['totales']" :moneda="$moneda" :colorCode="true" />
         <x-pdf.cierre
@@ -55,5 +199,6 @@
             :total="number_format($total, 2)"
             :moneda="$moneda"
             :enLetras="$enLetras" />
+        @endunless
     @endif
 @endsection

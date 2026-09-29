@@ -226,7 +226,8 @@ export default function CrearCompra() {
                     producto_id: String(d.presentacion?.producto_id ?? d.presentacion?.producto?.id ?? ''),
                     producto_presentacion_id: String(d.producto_presentacion_id),
                     producto_color_id: d.producto_color_id ? String(d.producto_color_id) : '',
-                    color_code: d.color_code ?? '',
+                    // El color code no viaja de la orden a la compra: se escribe en cada una.
+                    color_code: '',
                     rollos: d.rollos != null ? String(d.rollos) : '',
                     cantidad: String(d.cantidad),
                     costo_unitario: String(d.precio_unitario),

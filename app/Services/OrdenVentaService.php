@@ -36,10 +36,11 @@ use Illuminate\Support\Facades\DB;
  * almacén, lo decide el almacenero escaneándolos: cada escaneo asigna un rollo
  * a la línea que le corresponde y descuenta de lo que falta.
  *
- * La tela también se pide en rollos enteros —"3 rollos de Polinán negro"—.
- * Cada rollo trae su metraje real y se cobra por metro: el pedido nace con los
- * metros estimados al metraje promedio y, a medida que el almacén escanea,
- * se revaloriza con los metros de cada rollo. La nota lleva una fila por rollo.
+ * La tela también se pide en rollos enteros —"3 rollos de Polinán negro"— con
+ * su precio por metro. El vendedor no sabe cuánto mide cada rollo: el pedido
+ * nace sin metros ni importe y el almacén los define al separar. A medida que
+ * escanea, cada rollo se cobra por sus metros reales. La nota lleva una fila
+ * por rollo.
  */
 class OrdenVentaService
 {
@@ -629,9 +630,9 @@ class OrdenVentaService
     }
 
     /**
-     * Revaloriza una línea pedida en rollos con lo que el almacén ya asignó:
-     * cada rollo a sus metros reales (redondeado igual que en la nota) y lo
-     * que falta, al metraje estimado. Una línea por metros no cambia: el
+     * Valoriza una línea pedida en rollos con lo que el almacén ya asignó: cada
+     * rollo a sus metros reales (redondeado igual que en la nota). Lo que falta
+     * no se estima: se suma al escanearlo. Una línea por metros no cambia: el
      * cliente pidió esos metros a ese precio, salgan de uno o de varios rollos.
      */
     private function revalorizar(OrdenVentaDetalle $linea): void
@@ -643,15 +644,13 @@ class OrdenVentaService
         $linea->load('rollos', 'presentacion.unidadBase', 'presentacion.producto.presentaciones.unidadBase');
 
         $precio = $this->precioPorMetro($linea);
-        $asignados = (float) $linea->rollos->sum('metros');
-        $pendientes = $linea->metrosPendientes();
+        $metros = (float) $linea->rollos->sum('metros');
 
         $linea->update([
-            'cantidad' => round($linea->presentacion->desdeMetros($asignados + $pendientes), 2),
+            'cantidad' => round($linea->presentacion->desdeMetros($metros), 2),
+            'metros' => round($metros, 2),
             'subtotal' => round(
-                $linea->rollos->sum(fn ($r) => round((float) $r->metros * $precio, 2))
-                + round($pendientes * $precio, 2)
-                - (float) $linea->descuento,
+                $linea->rollos->sum(fn ($r) => round((float) $r->metros * $precio, 2)) - (float) $linea->descuento,
                 2,
             ),
         ]);
@@ -710,6 +709,14 @@ class OrdenVentaService
         $orden->load('detalles.presentacion.producto');
 
         foreach ($orden->detalles as $linea) {
+            // Lo pedido en rollos no reserva metros —no se sabe cuánto miden—:
+            // se comprueba que haya rollos libres y cada uno se aparta al escanearlo.
+            if ($linea->esPorRollos()) {
+                $this->exigirRollosLibres($orden, $linea);
+
+                continue;
+            }
+
             // Un pedido que vuelve de preparación ya trae su reserva.
             if ($linea->cantidad_reservada !== null) {
                 continue;
@@ -740,6 +747,51 @@ class OrdenVentaService
                 'reserva_almacen_id' => $stock->almacen_id,
                 'cantidad_reservada' => $linea->cantidad,
             ]);
+        }
+    }
+
+    /**
+     * Los rollos que se pueden prometer de una tela (y color): los disponibles
+     * menos los que otros pedidos ya pidieron y el almacén aún no asigna.
+     */
+    public function rollosLibres(int $productoId, ?int $colorId, ?int $excluirOrdenId = null): int
+    {
+        $disponibles = Rollo::where('producto_id', $productoId)
+            ->when($colorId, fn ($q) => $q->where('producto_color_id', $colorId))
+            ->where('estado', Rollo::DISPONIBLE)
+            ->where('metros_actual', '>', 0)
+            ->count();
+
+        $comprometidos = OrdenVentaDetalle::porAsignar()
+            ->whereHas('presentacion', fn ($q) => $q->where('producto_id', $productoId))
+            ->when($colorId, fn ($q) => $q->where('producto_color_id', $colorId))
+            ->when($excluirOrdenId, fn ($q) => $q->where('orden_venta_id', '!=', $excluirOrdenId))
+            ->with('rollos')
+            ->get()
+            ->sum(fn ($d) => $d->rollosPendientes());
+
+        return max(0, $disponibles - $comprometidos);
+    }
+
+    /** Al solicitar: que los rollos pedidos existan y no estén ya prometidos a otro pedido. */
+    private function exigirRollosLibres(OrdenVenta $orden, OrdenVentaDetalle $linea): void
+    {
+        $libres = $this->rollosLibres(
+            (int) $linea->presentacion->producto_id,
+            $linea->producto_color_id ? (int) $linea->producto_color_id : null,
+            $orden->id,
+        );
+
+        // Los que ya escaneó el almacén (un pedido que vuelve de preparación) cuentan.
+        $faltan = $linea->rollosPendientes();
+
+        if ($libres < $faltan) {
+            $tela = $linea->presentacion->producto?->nombre ?? 'la tela';
+            $color = $linea->color?->nombre;
+
+            throw new \DomainException(
+                "No hay rollos libres de {$tela}".($color ? " {$color}" : '').": pides {$faltan} y quedan {$libres}."
+            );
         }
     }
 
@@ -869,7 +921,7 @@ class OrdenVentaService
     {
         $orden->detalles()->delete();
 
-        $presentaciones = ProductoPresentacion::with('producto.presentaciones.unidadBase', 'producto.colores')
+        $presentaciones = ProductoPresentacion::with('producto.presentaciones.unidadBase')
             ->whereIn('id', collect($detalles)->pluck('producto_presentacion_id'))
             ->get()
             ->keyBy('id');
@@ -883,9 +935,9 @@ class OrdenVentaService
                 continue;
             }
 
-            // Una tela se puede pedir en rollos enteros: se cobra por metro, así
-            // que la línea va en su formato "Metro" con los metros estimados al
-            // metraje promedio; al escanear, se cobran los reales.
+            // Una tela se pide en rollos enteros y se cobra por metro: la línea
+            // va en su formato "Metro" con los rollos pedidos, sin metros ni
+            // importe. Cuánto mide cada rollo lo define el almacén al separar.
             $porRollos = ($linea['modo'] ?? OrdenVentaDetalle::MODO_METROS) === OrdenVentaDetalle::MODO_ROLLOS;
             $rollosPedidos = null;
             if ($porRollos) {
@@ -893,15 +945,10 @@ class OrdenVentaService
                 if (! $producto?->esTela()) {
                     throw new \DomainException("\"{$producto?->nombre}\" no se vende por rollos.");
                 }
-                $promedio = $producto->metrosPorRollo(isset($linea['producto_color_id']) ? (int) $linea['producto_color_id'] : null);
-                if (! $promedio) {
-                    throw new \DomainException(
-                        "Pon el metraje del rollo de cada color de \"{$producto->nombre}\" (en Productos → Compra y venta) para pedirlo por rollos."
-                    );
-                }
                 $presentacion = $producto->presentacionMetro();
                 $rollosPedidos = max(1, (int) ($linea['rollos_pedidos'] ?? 0));
-                $linea['cantidad'] = round($rollosPedidos * $promedio, 2);
+                $linea['cantidad'] = 0;
+                $linea['descuento'] = 0;
             }
 
             $cantidad = round((float) $linea['cantidad'], 2);

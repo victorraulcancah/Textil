@@ -15,9 +15,10 @@ use Illuminate\Database\Eloquent\Model;
  *   metros   → esa misma cantidad llevada a metros, que es como se mide la tela
  *              y como se comparan los rollos asignados
  *
- * Pedida en rollos enteros (modo "rollos"), la línea va en el formato Metro:
- * `metros` es la estimación al metraje promedio y `cantidad` pasa a los
- * metros reales a medida que se escanean los rollos.
+ * Pedida en rollos enteros (modo "rollos"), la línea va en el formato Metro y
+ * nace sin metros ni importe: el vendedor no sabe cuánto mide cada rollo, lo
+ * define el almacén al separarlo. `cantidad` y `subtotal` van creciendo con los
+ * metros reales de cada rollo que se escanea, al precio del metro.
  */
 class OrdenVentaDetalle extends Model
 {
@@ -114,16 +115,32 @@ class OrdenVentaDetalle extends Model
     }
 
     /**
-     * Los metros de la línea. Por rollos: los reales de lo ya asignado más la
-     * estimación de lo que falta. Por metros: lo pedido.
+     * Los metros de la línea. Por rollos: los reales de lo ya asignado (lo que
+     * falta no se estima: cada rollo trae su metraje y se sabe al escanearlo).
+     * Por metros: lo pedido.
      */
     public function metrosTotales(): float
     {
         if ($this->esPorRollos()) {
-            return round($this->metrosAsignados() + $this->metrosPendientes(), 2);
+            return $this->metrosAsignados();
         }
 
         return (float) $this->metros;
+    }
+
+    /**
+     * Las líneas por rollos de pedidos que el almacén todavía trabaja: lo que
+     * piden y aún no tiene rollo asignado. Sirve para no prometer dos veces los
+     * mismos rollos.
+     */
+    public function scopePorAsignar($query)
+    {
+        return $query->where('modo', self::MODO_ROLLOS)
+            ->whereHas('ordenVenta', fn ($q) => $q->whereIn('estado', [
+                OrdenVenta::SOLICITADO,
+                OrdenVenta::PREPARANDO,
+                OrdenVenta::SEPARADO,
+            ]));
     }
 
     /**
@@ -148,15 +165,14 @@ class OrdenVentaDetalle extends Model
     }
 
     /**
-     * Lo que falta por cubrir, en metros. Nunca negativo. En una línea por
-     * rollos es una estimación: los rollos que faltan, al metraje promedio.
+     * Lo que falta por cubrir, en metros. Nunca negativo. Una línea por rollos
+     * no tiene metros pendientes que contar: le faltan rollos (ver
+     * `rollosPendientes`) y cuánto miden se sabe recién al escanearlos.
      */
     public function metrosPendientes(): float
     {
         if ($this->esPorRollos()) {
-            $promedio = (int) $this->rollos_pedidos > 0 ? (float) $this->metros / (int) $this->rollos_pedidos : 0;
-
-            return round($this->rollosPendientes() * $promedio, 2);
+            return 0.0;
         }
 
         return max(0, round((float) $this->metros - $this->metrosAsignados(), 2));

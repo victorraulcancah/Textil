@@ -33,9 +33,9 @@ class OrdenVentaPdf implements DocumentoPdf
             'orden' => $orden,
             'documento' => $orden->documento,
             'filas' => $orden->detalles->map(function ($d, $i) {
-                // En rollos enteros, metros e importe son estimados (≈) hasta
-                // que el almacén escanea todos los rollos.
-                $estimado = $d->esPorRollos() && ! $d->estaCubierta() ? '≈ ' : '';
+                // En rollos enteros el metraje lo define el almacén al separar:
+                // hasta entonces, metros e importe quedan "por definir".
+                $porDefinir = $d->esPorRollos() && ! $d->estaCubierta();
 
                 return [
                     'n' => $i + 1,
@@ -45,15 +45,17 @@ class OrdenVentaPdf implements DocumentoPdf
                     'cantidad' => $d->esPorRollos()
                         ? $d->rollos_pedidos.((int) $d->rollos_pedidos === 1 ? ' rollo' : ' rollos')
                         : number_format((float) $d->cantidad, 2),
-                    'metros' => $estimado.number_format($d->metrosTotales(), 2),
+                    'metros' => $porDefinir ? 'Por definir' : number_format($d->metrosTotales(), 2),
                     // No se sabe el metraje real del rollo: no se imprime un
                     // precio que todavía es una estimación.
                     'precio' => $d->precio_oculto ? 'Por confirmar' : number_format((float) $d->precio_unitario, 2),
-                    'importe' => $d->precio_oculto ? '—' : $estimado.number_format((float) $d->subtotal, 2),
+                    'importe' => $d->precio_oculto ? '—' : ($porDefinir ? 'Por definir' : number_format((float) $d->subtotal, 2)),
                 ];
             })->all(),
             'rollos' => $this->rollos($orden),
             'total_metros' => number_format((float) $orden->detalles->sum(fn ($d) => $d->metrosTotales()), 2),
+            // Con rollos sin separar todavía, no hay total ni metros finales.
+            'porDefinir' => $orden->detalles->contains(fn ($d) => $d->esPorRollos() && ! $d->estaCubierta()),
         ];
     }
 

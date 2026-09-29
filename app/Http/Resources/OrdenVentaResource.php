@@ -73,8 +73,9 @@ class OrdenVentaResource extends JsonResource
             // Cuántos metros lleva cubiertos el almacén de los que se pidieron.
             'metros_asignados' => $this->whenLoaded('detalles', fn () => round($this->detalles->sum(fn ($d) => $d->metrosAsignados()), 2)),
             'total_rollos' => $this->whenLoaded('detalles', fn () => $this->detalles->sum(fn ($d) => $d->rollos->count())),
-            // De lo pedido en rollos enteros: cuántos se pidieron.
+            // De lo pedido en rollos enteros: cuántos se pidieron y cuántos ya asignó el almacén.
             'rollos_pedidos' => $this->whenLoaded('detalles', fn () => (int) $this->detalles->sum('rollos_pedidos')),
+            'rollos_asignados' => $this->whenLoaded('detalles', fn () => $this->detalles->filter->esPorRollos()->sum(fn ($d) => $d->rollosAsignados())),
             'completo' => $this->whenLoaded('detalles', fn () => $this->estaVerificada()),
 
             'detalles' => OrdenVentaDetalleResource::collection($detalles),

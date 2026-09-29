@@ -16,47 +16,18 @@ const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).
 
 const hoy = () => new Date().toISOString().slice(0, 10);
 
-const redondear = (n) => Math.round((Number(n) || 0) * 100) / 100;
-
-/** Pedir rollos enteros: cada uno se cobra por sus metros reales, al precio del metro. */
+/** Una tela se pide en rollos enteros y se cobra por metro: cuánto mide cada rollo lo define el almacén. */
 const ROLLOS = 'rollos';
 
 /** El formato "Metro" de una tela; sin él, el producto no se pide por rollos. */
 const presentacionMetroDe = (producto) =>
     (producto?.presentaciones ?? []).find((p) => p.activo !== false && tipoUnidad(p) === 'metro') ?? null;
 
-/**
- * El metraje del rollo, solo para estimar (0 si no se sabe). Va por color: el
- * de ese color; sin color (o si no lo tiene), el promedio de los colores de la
- * tela; y si ninguno lo tiene, el de la tela.
- */
-const metrajeDe = (producto, colorId) => {
-    const colores = producto?.colores ?? [];
-    const delColor = colorId ? colores.find((c) => String(c.id) === String(colorId)) : null;
-    if (Number(delColor?.metros_por_rollo) > 0) return Number(delColor.metros_por_rollo);
-
-    const conMetraje = colores.map((c) => Number(c.metros_por_rollo) || 0).filter((m) => m > 0);
-    if (conMetraje.length) {
-        return Math.round((conMetraje.reduce((s, m) => s + m, 0) / conMetraje.length) * 100) / 100;
-    }
-
-    return Number(producto?.metros_por_rollo) || 0;
-};
-
-/**
- * Las unidades en que se pide un producto. Una tela es un solo producto que
- * se pide por color: en rollos enteros (cada uno con su metraje real) o por
- * metro. Ya no hay formatos ("Rollo 50 m", "Yarda", "Retazo").
- */
-const unidadesDe = (producto) => {
-    const activas = (producto?.presentaciones ?? []).filter((p) => p.activo !== false);
-    const opciones = (lista) => lista.map((p) => ({ value: String(p.id), label: p.nombre }));
-    const metro = presentacionMetroDe(producto);
-
-    if (!metro) return opciones(activas);
-
-    return [{ value: ROLLOS, label: 'Rollo (metraje real)' }, ...opciones([metro])];
-};
+/** Las unidades en que se pide un producto que no es tela (una tela se pide siempre en rollos). */
+const unidadesDe = (producto) =>
+    (producto?.presentaciones ?? [])
+        .filter((p) => p.activo !== false)
+        .map((p) => ({ value: String(p.id), label: p.nombre }));
 
 /**
  * Alta y edición del pedido: lo que pide el cliente.
@@ -66,10 +37,10 @@ const unidadesDe = (producto) => {
  * qué almacén están. Eso lo resuelve el almacenero al preparar el pedido,
  * escaneando los rollos con los que lo cubre.
  *
- * Una tela también se pide en rollos enteros —"3 rollos de Polinán negro"—:
- * cada rollo trae su metraje y se cobra por metro, así que el importe es una
- * estimación (al metraje del rollo de ese color) hasta que el almacén escanea
- * los rollos.
+ * Una tela se pide por color y solo en rollos —"3 rollos de Polinán negro"— con
+ * su precio por metro. El vendedor no sabe cuánto mide cada rollo: eso lo
+ * define el almacén al separarlos, y ahí se cobra cada rollo por sus metros
+ * reales. Por eso el importe de esas líneas queda "por definir".
  *
  * Por lo mismo aquí no se elige almacén.
  */
@@ -121,9 +92,8 @@ export default function CrearPedido() {
         producto_id: '',
         producto_presentacion_id: '',
         producto_color_id: '',
-        // "rollos": la cantidad es de rollos enteros; "metros": del formato elegido.
-        modo: 'metros',
         descripcion: '',
+        // En una tela, los rollos; en lo demás, la cantidad de la unidad elegida.
         cantidad: '',
         precio_unitario: '',
         // Escrito a mano: ya no se reemplaza con el precio de lista.
@@ -234,10 +204,9 @@ export default function CrearPedido() {
         productos.find((p) => (p.presentaciones ?? []).some((pr) => String(pr.id) === String(presentacionId))) ??
         null;
 
-    // En rollos, la cantidad escrita son rollos: los metros se estiman al promedio.
-    const promedioNueva = metrajeDe(producto, nueva.producto_color_id);
-    const porRollosNueva = nueva.modo === ROLLOS;
-    const metrosNueva = porRollosNueva ? redondear((Number(nueva.cantidad) || 0) * promedioNueva) : Number(nueva.cantidad) || 0;
+    // Una tela se pide siempre en rollos, al precio del metro.
+    const metroNueva = presentacionMetroDe(producto);
+    const esTelaNueva = Boolean(metroNueva);
 
     /** En qué moneda se vende el producto de esa presentación. */
     const monedaDe = (pres) =>
@@ -255,7 +224,14 @@ export default function CrearPedido() {
             prev.map((l) =>
                 l.precio_manual
                     ? l
-                    : { ...l, precio_unitario: precioDeLista(presentacionDe(l.producto_presentacion_id), l.cantidad) },
+                    : {
+                          ...l,
+                          // En rollos no se sabe cuántos metros: rige el precio base.
+                          precio_unitario: precioDeLista(
+                              presentacionDe(l.producto_presentacion_id),
+                              l.modo === ROLLOS ? 1 : l.cantidad,
+                          ),
+                      },
             ),
         );
     }, [tipoPrecioId, cabecera.moneda, cabecera.tipo_cambio]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -321,18 +297,31 @@ export default function CrearPedido() {
         return base / factor;
     }, [producto, presentacion, stockPorProducto, existencias, nueva.producto_color_id]);
 
-    /** Los rollos libres de la tela (del color elegido, si hay uno), sumando todos los almacenes. */
+    /**
+     * Los rollos libres de la tela (del color elegido, si hay uno), sumando
+     * todos los almacenes y restando los que otros pedidos ya pidieron y el
+     * almacén aún no asigna.
+     */
     const rollosLibres = useMemo(() => {
         if (!producto) return 0;
-        let rollos = 0;
+        const porColor = new Map();
         for (const fila of existencias) {
             if (String(fila.producto?.id ?? fila.producto_id) !== String(producto.id)) continue;
             for (const c of fila.colores ?? []) {
-                if (nueva.producto_color_id && String(c.id) !== String(nueva.producto_color_id)) continue;
-                rollos += Number(c.rollos_disponibles ?? c.rollos) || 0;
+                const k = String(c.id ?? 'sin');
+                const previo = porColor.get(k) ?? { libres: 0, porAsignar: 0 };
+                previo.libres += Number(c.rollos_disponibles ?? c.rollos) || 0;
+                // El mismo número en cada almacén: se resta una sola vez.
+                previo.porAsignar = Math.max(previo.porAsignar, Number(c.rollos_por_asignar) || 0);
+                porColor.set(k, previo);
             }
         }
-        return rollos;
+        let total = 0;
+        for (const [k, v] of porColor) {
+            if (nueva.producto_color_id && k !== String(nueva.producto_color_id)) continue;
+            total += Math.max(0, v.libres - v.porAsignar);
+        }
+        return total;
     }, [producto, existencias, nueva.producto_color_id]);
 
     /**
@@ -348,15 +337,15 @@ export default function CrearPedido() {
     useEffect(() => {
         if (!producto) return;
 
-        // Se viene pidiendo en rollos y es una tela: rollos enteros, al precio del metro.
+        // Una tela se pide en rollos, al precio del metro.
         const metro = presentacionMetroDe(producto);
-        if (unidadPreferida === 'rollo' && metro) {
+        if (metro) {
             setNueva((prev) => ({
                 ...prev,
-                modo: ROLLOS,
                 producto_presentacion_id: String(metro.id),
-                precio_unitario: precioDeLista(metro, (Number(prev.cantidad) || 1) * (metrajeDe(producto) || 1)),
+                precio_unitario: precioDeLista(metro, 1),
                 precioManual: false,
+                // Otro producto, otro color: nunca se hereda de la línea anterior.
                 producto_color_id: '',
             }));
             return;
@@ -376,7 +365,6 @@ export default function CrearPedido() {
 
         setNueva((prev) => ({
             ...prev,
-            modo: 'metros',
             producto_presentacion_id: elegida ? String(elegida.id) : '',
             precio_unitario: elegida ? precioDeLista(elegida, prev.cantidad || 1) : '',
             precioManual: false,
@@ -386,20 +374,59 @@ export default function CrearPedido() {
     }, [producto]);
 
     // El precio sugerido sigue al formato, al cliente y a la cantidad (puede
-    // entrar en un precio por cantidad), mientras no se escriba uno a mano.
+    // entrar en un precio por cantidad), mientras no se escriba uno a mano. Una
+    // tela se pide en rollos: sus metros no se saben, así que rige el precio base.
     useEffect(() => {
         if (!presentacion) return;
         setNueva((prev) =>
-            prev.precioManual ? prev : { ...prev, precio_unitario: precioDeLista(presentacion, metrosNueva || 1) },
+            prev.precioManual
+                ? prev
+                : { ...prev, precio_unitario: precioDeLista(presentacion, esTelaNueva ? 1 : prev.cantidad || 1) },
         );
-    }, [presentacion?.id, tipoPrecioId, nueva.cantidad, nueva.modo]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [presentacion?.id, tipoPrecioId, nueva.cantidad]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const puedeAgregar =
         nueva.producto_presentacion_id &&
         Number(nueva.cantidad) > 0 &&
         Number(nueva.precio_unitario) >= 0 &&
-        // En rollos: rollos enteros, y hace falta el promedio para estimar.
-        (!porRollosNueva || (Number.isInteger(Number(nueva.cantidad)) && promedioNueva > 0));
+        // Una tela: rollos enteros y, si tiene colores, el color (cada rollo es de uno).
+        (!esTelaNueva ||
+            (Number.isInteger(Number(nueva.cantidad)) &&
+                (!(producto?.colores?.length > 0) || Boolean(nueva.producto_color_id))));
+
+    /** Suma rollos de un color de una tela a las líneas: si ya estaba pedido, se le suman. */
+    const conRollos = (lista, { producto: prod, metro, color, rollos, descripcion = '', precio = null, manual = false }) => {
+        const next = [...lista];
+        const j = next.findIndex(
+            (l) =>
+                l.modo === ROLLOS &&
+                String(l.producto_presentacion_id) === String(metro.id) &&
+                String(l.producto_color_id || '') === String(color?.id ?? ''),
+        );
+
+        if (j !== -1) {
+            next[j] = { ...next[j], rollos_pedidos: String((Number(next[j].rollos_pedidos) || 0) + rollos) };
+            return next;
+        }
+
+        next.push({
+            producto_presentacion_id: String(metro.id),
+            producto_color_id: color ? String(color.id) : '',
+            producto: prod.nombre,
+            color: color?.nombre ?? '',
+            modo: ROLLOS,
+            rollos_pedidos: String(rollos),
+            presentacion: 'Rollo',
+            descripcion,
+            // No se sabe cuánto mide cada rollo: el almacén lo define al separar.
+            cantidad: '0',
+            precio_unitario: precio ?? precioDeLista(metro, 1),
+            precio_oculto: false,
+            precio_manual: manual,
+        });
+
+        return next;
+    };
 
     const agregar = () => {
         if (!puedeAgregar) return;
@@ -408,35 +435,47 @@ export default function CrearPedido() {
             (c) => String(c.id) === String(nueva.producto_color_id),
         );
 
-        // La unidad de este ítem queda propuesta para el siguiente, aunque
-        // nadie haya tocado el selector (el metro por defecto, por ejemplo).
-        const tipo = porRollosNueva ? 'rollo' : tipoUnidad(presentacion);
-        if (tipo) setUnidadPreferida(tipo);
+        if (esTelaNueva) {
+            setLineas((prev) =>
+                conRollos(prev, {
+                    producto,
+                    metro: metroNueva,
+                    color: colorElegido ?? null,
+                    rollos: Number(nueva.cantidad),
+                    descripcion: nueva.descripcion.trim(),
+                    precio: nueva.precio_unitario,
+                    manual: Boolean(nueva.precioManual),
+                }),
+            );
+        } else {
+            // La unidad de este ítem queda propuesta para el siguiente, aunque
+            // nadie haya tocado el selector (el metro por defecto, por ejemplo).
+            const tipo = tipoUnidad(presentacion);
+            if (tipo) setUnidadPreferida(tipo);
 
-        setLineas((prev) => [
-            ...prev,
-            {
-                producto_presentacion_id: nueva.producto_presentacion_id,
-                producto_color_id: nueva.producto_color_id || '',
-                producto: producto?.nombre,
-                color: colorElegido?.nombre ?? '',
-                modo: porRollosNueva ? ROLLOS : 'metros',
-                rollos_pedidos: porRollosNueva ? String(Number(nueva.cantidad)) : '',
-                presentacion: porRollosNueva ? 'Rollo' : presentacion?.nombre,
-                descripcion: nueva.descripcion.trim(),
-                // En rollos, los metros estimados: el importe se ajusta al escanear.
-                cantidad: porRollosNueva ? String(metrosNueva) : nueva.cantidad,
-                precio_unitario: nueva.precio_unitario,
-                precio_oculto: false,
-                precio_manual: Boolean(nueva.precioManual),
-            },
-        ]);
+            setLineas((prev) => [
+                ...prev,
+                {
+                    producto_presentacion_id: nueva.producto_presentacion_id,
+                    producto_color_id: nueva.producto_color_id || '',
+                    producto: producto?.nombre,
+                    color: colorElegido?.nombre ?? '',
+                    modo: 'metros',
+                    rollos_pedidos: '',
+                    presentacion: presentacion?.nombre,
+                    descripcion: nueva.descripcion.trim(),
+                    cantidad: nueva.cantidad,
+                    precio_unitario: nueva.precio_unitario,
+                    precio_oculto: false,
+                    precio_manual: Boolean(nueva.precioManual),
+                },
+            ]);
+        }
 
         setNueva({
             producto_id: '',
             producto_presentacion_id: '',
             producto_color_id: '',
-            modo: 'metros',
             descripcion: '',
             cantidad: '',
             precio_unitario: '',
@@ -453,46 +492,16 @@ export default function CrearPedido() {
         if (!utiles.length) return;
 
         setLineas((prev) => {
-            const next = [...prev];
+            let next = [...prev];
 
-            utiles.forEach(({ producto, presentacion, cantidad, color }) => {
-                // El "Rollo" de una tela son rollos enteros con su metraje real,
-                // cobrados al precio del metro.
-                const metro = tipoUnidad(presentacion) === 'rollo' ? presentacionMetroDe(producto) : null;
-                if (metro) {
-                    const promedio = metrajeDe(producto, color?.id);
-                    const rollos = Math.max(1, Math.round(cantidad));
-                    const j = next.findIndex(
-                        (l) =>
-                            l.modo === ROLLOS &&
-                            String(l.producto_presentacion_id) === String(metro.id) &&
-                            String(l.producto_color_id || '') === String(color?.id ?? ''),
-                    );
-
-                    if (j !== -1) {
-                        const suma = (Number(next[j].rollos_pedidos) || 0) + rollos;
-                        next[j] = {
-                            ...next[j],
-                            rollos_pedidos: String(suma),
-                            cantidad: String(redondear(suma * promedio)),
-                            ...(next[j].precio_manual ? {} : { precio_unitario: precioDeLista(metro, suma * promedio) }),
-                        };
-                        return;
-                    }
-
-                    next.push({
-                        producto_presentacion_id: String(metro.id),
-                        producto_color_id: color ? String(color.id) : '',
-                        producto: producto.nombre,
-                        color: color?.nombre ?? '',
-                        modo: ROLLOS,
-                        rollos_pedidos: String(rollos),
-                        presentacion: 'Rollo',
-                        descripcion: '',
-                        cantidad: String(redondear(rollos * promedio)),
-                        precio_unitario: precioDeLista(metro, rollos * (promedio || 1)),
-                        precio_oculto: false,
-                        precio_manual: false,
+            utiles.forEach(({ producto, presentacion, cantidad, color, porRollos }) => {
+                // Una tela marcada por color: rollos enteros al precio del metro.
+                if (porRollos) {
+                    next = conRollos(next, {
+                        producto,
+                        metro: presentacion,
+                        color,
+                        rollos: Math.max(1, Math.round(cantidad)),
                     });
                     return;
                 }
@@ -538,7 +547,8 @@ export default function CrearPedido() {
         });
 
         // La unidad con la que se viene pidiendo queda propuesta para lo siguiente.
-        const tipo = tipoUnidad(utiles[utiles.length - 1].presentacion);
+        const ultimo = utiles.filter((u) => !u.porRollos).pop();
+        const tipo = ultimo ? tipoUnidad(ultimo.presentacion) : null;
         if (tipo) setUnidadPreferida(tipo);
 
         setPicker((prev) => ({ ...prev, open: false }));
@@ -550,7 +560,7 @@ export default function CrearPedido() {
     /**
      * Escribir el precio lo deja fijo. Cambiar la cantidad vuelve a buscar el
      * precio de lista (puede entrar en un precio por cantidad), salvo que el
-     * precio se haya escrito a mano.
+     * precio se haya escrito a mano. En rollos no hay metros que cambien el precio.
      */
     const cambiar = (i, campo, valor) =>
         setLineas((prev) =>
@@ -558,59 +568,24 @@ export default function CrearPedido() {
                 if (j !== i) return l;
                 const next = { ...l, [campo]: valor };
                 if (campo === 'precio_unitario') next.precio_manual = true;
-                if (campo === 'rollos_pedidos') {
-                    next.cantidad = String(
-                        redondear((Number(valor) || 0) * metrajeDe(productoDe(l.producto_presentacion_id), l.producto_color_id)),
-                    );
-                }
-                if ((campo === 'cantidad' || campo === 'rollos_pedidos') && !l.precio_manual) {
-                    next.precio_unitario = precioDeLista(presentacionDe(l.producto_presentacion_id), next.cantidad);
+                if (campo === 'cantidad' && !l.precio_manual) {
+                    next.precio_unitario = precioDeLista(presentacionDe(l.producto_presentacion_id), valor);
                 }
                 return next;
             }),
         );
 
-    /**
-     * Otra unidad para una línea ya agregada. Pasar a "Rollo" pide los rollos
-     * que den más o menos los mismos metros; volver a metros deja los metros
-     * estimados. Otra unidad, otro precio de lista.
-     */
+    /** Otra unidad para una línea que no es tela en rollos: otro formato, otro precio de lista. */
     const cambiarUnidad = (i, valor) =>
         setLineas((prev) =>
             prev.map((x, j) => {
-                if (j !== i) return x;
-                const prod = productoDe(x.producto_presentacion_id);
-
-                if (valor === ROLLOS) {
-                    const metro = presentacionMetroDe(prod);
-                    if (!metro || x.modo === ROLLOS) return x;
-                    const actual = presentacionDe(x.producto_presentacion_id);
-                    const metros =
-                        ((Number(x.cantidad) || 0) * (Number(actual?.factor_conversion) || 1)) /
-                        (Number(metro.factor_conversion) || 1);
-                    const promedio = metrajeDe(prod, x.producto_color_id);
-                    const rollos = promedio > 0 ? Math.max(1, Math.round(metros / promedio)) : 1;
-
-                    return {
-                        ...x,
-                        modo: ROLLOS,
-                        rollos_pedidos: String(rollos),
-                        producto_presentacion_id: String(metro.id),
-                        presentacion: 'Rollo',
-                        cantidad: String(redondear(rollos * promedio)),
-                        precio_unitario: precioDeLista(metro, rollos * (promedio || 1)),
-                        precio_manual: false,
-                        precio_oculto: false,
-                    };
-                }
-
-                if (valor === String(x.producto_presentacion_id) && x.modo !== ROLLOS) return x;
-                const elegida = (prod?.presentaciones ?? []).find((pr) => String(pr.id) === valor);
+                if (j !== i || valor === String(x.producto_presentacion_id)) return x;
+                const elegida = (productoDe(x.producto_presentacion_id)?.presentaciones ?? []).find(
+                    (pr) => String(pr.id) === valor,
+                );
 
                 return {
                     ...x,
-                    modo: 'metros',
-                    rollos_pedidos: '',
                     producto_presentacion_id: valor,
                     presentacion: elegida?.nombre ?? x.presentacion,
                     precio_unitario: elegida ? precioDeLista(elegida, x.cantidad) : x.precio_unitario,
@@ -622,12 +597,17 @@ export default function CrearPedido() {
     const quitar = (i) => setLineas((prev) => prev.filter((_, j) => j !== i));
     const hayRollos = lineas.some((l) => l.modo === ROLLOS);
 
+    /**
+     * Lo que ya se sabe cobrar. Una línea con precio por confirmar no suma, y
+     * los rollos tampoco: se cobran por sus metros reales cuando el almacén los separa.
+     */
     const total = useMemo(
         () =>
             lineas.reduce(
-                // Una línea con precio por confirmar no suma: no se sabe el
-                // metraje real del rollo todavía.
-                (s, l) => (l.precio_oculto ? s : s + (Number(l.cantidad) || 0) * (Number(l.precio_unitario) || 0)),
+                (s, l) =>
+                    l.precio_oculto || l.modo === ROLLOS
+                        ? s
+                        : s + (Number(l.cantidad) || 0) * (Number(l.precio_unitario) || 0),
                 0,
             ),
         [lineas],
@@ -655,7 +635,7 @@ export default function CrearPedido() {
                     producto_color_id: l.producto_color_id ? Number(l.producto_color_id) : null,
                     modo: l.modo === ROLLOS ? ROLLOS : 'metros',
                     rollos_pedidos: l.modo === ROLLOS ? Number(l.rollos_pedidos) || 0 : null,
-                    // En rollos los metros los estima el servidor con el promedio.
+                    // En rollos no hay metros: los define el almacén al separar.
                     cantidad: l.modo === ROLLOS ? null : Number(l.cantidad) || 0,
                     precio_unitario: Number(l.precio_unitario) || 0,
                     descripcion: l.descripcion || null,
@@ -764,55 +744,46 @@ export default function CrearPedido() {
                                 value={
                                     !producto
                                         ? ''
-                                        : porRollosNueva
-                                          ? `${num(rollosLibres)} rollo${rollosLibres === 1 ? '' : 's'} · ${num(stockEnUnidad)} m`
+                                        : esTelaNueva
+                                          ? `${num(rollosLibres)} rollo${rollosLibres === 1 ? '' : 's'}`
                                           : `${num(stockEnUnidad)} ${presentacion?.nombre ?? ''}`.trim()
                                 }
                                 readOnly
                                 disabled
                             />
-                            <SearchSelect
-                                label="Unidad"
-                                value={porRollosNueva ? ROLLOS : nueva.producto_presentacion_id}
-                                disabled={!producto}
-                                clearable={false}
-                                placeholder={producto ? 'Elegir…' : '—'}
-                                emptyText="Sin unidades"
-                                onChange={(id) => {
-                                    if (!id) return;
-                                    // Rollos enteros: la línea va en el formato Metro
-                                    // (así se cobra) y la cantidad pasa a ser de rollos.
-                                    if (id === ROLLOS) {
-                                        const metro = presentacionMetroDe(producto);
-                                        if (!metro) return;
-                                        setNueva((prev) => ({
-                                            ...prev,
-                                            modo: ROLLOS,
-                                            producto_presentacion_id: String(metro.id),
-                                            precioManual: false,
-                                        }));
-                                        setUnidadPreferida('rollo');
-                                        return;
-                                    }
-                                    const elegida = presentaciones.find((p) => String(p.id) === id);
-                                    // Se cambia esta línea nada más; la
-                                    // preferencia para las siguientes se
-                                    // actualiza al agregarla.
-                                    setNueva((prev) => ({ ...prev, modo: 'metros', producto_presentacion_id: id, precioManual: false }));
-                                    if (elegida) setUnidadPreferida(tipoUnidad(elegida));
-                                }}
-                                options={unidadesDe(producto)}
-                            />
+                            {/* Una tela se pide siempre en rollos; lo demás, en la unidad que se elija. */}
+                            {esTelaNueva ? (
+                                <Input label="Unidad" value="Rollo" readOnly disabled />
+                            ) : (
+                                <SearchSelect
+                                    label="Unidad"
+                                    value={nueva.producto_presentacion_id}
+                                    disabled={!producto}
+                                    clearable={false}
+                                    placeholder={producto ? 'Elegir…' : '—'}
+                                    emptyText="Sin unidades"
+                                    onChange={(id) => {
+                                        if (!id) return;
+                                        const elegida = presentaciones.find((p) => String(p.id) === id);
+                                        // Se cambia esta línea nada más; la
+                                        // preferencia para las siguientes se
+                                        // actualiza al agregarla.
+                                        setNueva((prev) => ({ ...prev, producto_presentacion_id: id, precioManual: false }));
+                                        if (elegida) setUnidadPreferida(tipoUnidad(elegida));
+                                    }}
+                                    options={unidadesDe(producto)}
+                                />
+                            )}
                             <Input
-                                label={porRollosNueva ? 'Rollos' : 'Cantidad'}
+                                label={esTelaNueva ? 'Rollos' : 'Cantidad'}
                                 type="number"
-                                step={porRollosNueva ? '1' : '0.01'}
+                                step={esTelaNueva ? '1' : '0.01'}
                                 min="0"
                                 value={nueva.cantidad}
                                 onChange={(e) => setNueva((prev) => ({ ...prev, cantidad: e.target.value }))}
                             />
                             <Input
-                                label={porRollosNueva ? 'Precio por metro' : 'Precio de venta'}
+                                label={esTelaNueva ? 'Precio por metro' : 'Precio de venta'}
                                 type="number"
                                 step="0.01"
                                 min="0"
@@ -824,22 +795,16 @@ export default function CrearPedido() {
                             />
                         </div>
 
-                        {/* En rollos: cuántos metros serían, a ojo. Cada rollo se
-                            cobra después por lo que mide de verdad. */}
-                        {porRollosNueva &&
-                            (promedioNueva > 0 ? (
-                                <p className="-mt-2 text-xs text-warm-500">
-                                    {Number(nueva.cantidad) > 0 ? `≈ ${num(metrosNueva)} m · ` : ''}
-                                    Rollo de ≈ {num(promedioNueva)} m
-                                    {nueva.producto_color_id ? '' : ' (promedio de sus colores)'}. Se cobran los metros
-                                    reales de cada rollo.
-                                </p>
-                            ) : (
-                                <p className="-mt-2 text-xs font-medium text-red-600">
-                                    Esta tela no tiene el metraje del rollo de sus colores: ponlo en Productos →
-                                    Compra y venta para pedirla por rollos.
-                                </p>
-                            ))}
+                        {/* Una tela: cuánto mide cada rollo no lo pone el vendedor. */}
+                        {esTelaNueva && (
+                            <p className="-mt-2 text-xs text-warm-500">
+                                {producto?.colores?.length > 0 && !nueva.producto_color_id
+                                    ? 'Elige el color de la tela. '
+                                    : ''}
+                                Se piden rollos enteros. Cuánto mide cada uno lo define el almacén al separarlo y se
+                                cobra por sus metros reales.
+                            </p>
+                        )}
 
                         <Button onClick={agregar} disabled={!puedeAgregar}>
                             <Plus className="h-4 w-4" />
@@ -870,15 +835,12 @@ export default function CrearPedido() {
                                 )}
 
                                 {lineas.map((l, i) => {
-                                    // Con Rollo no se sabe el metraje real hasta pesarlo: se
-                                    // ofrece marcar el precio como "por confirmar".
+                                    // Con un formato "Rollo" de metraje fijo (antiguo) no se sabe
+                                    // el metraje real: se ofrece marcar el precio como "por confirmar".
                                     const presentacionLinea = presentacionDe(l.producto_presentacion_id);
                                     const esRollo = tipoUnidad(presentacionLinea) === 'rollo';
-                                    // Rollos enteros: la cantidad son rollos y el importe, una estimación.
+                                    // Una tela en rollos: la cantidad son rollos y el importe, por definir.
                                     const porRollos = l.modo === ROLLOS;
-                                    const promedioLinea = porRollos
-                                        ? metrajeDe(productoDe(l.producto_presentacion_id), l.producto_color_id)
-                                        : 0;
 
                                     return (
                                     <tr key={i}>
@@ -899,39 +861,42 @@ export default function CrearPedido() {
                                             )}
                                         </td>
                                         <td className="px-3 py-2">
-                                            {(() => {
-                                                // La línea no guarda el producto: se deduce de su
-                                                // presentación, así funciona también al editar.
-                                                const opciones = unidadesDe(productoDe(l.producto_presentacion_id));
-                                                // Un pedido antiguo en un formato que ya no se ofrece
-                                                // (un "Rollo 50 m"): se sigue viendo el suyo.
-                                                if (
-                                                    !porRollos &&
-                                                    opciones.length > 0 &&
-                                                    !opciones.some((o) => o.value === String(l.producto_presentacion_id))
-                                                ) {
-                                                    opciones.push({
-                                                        value: String(l.producto_presentacion_id),
-                                                        label: l.presentacion ?? 'Formato',
-                                                    });
-                                                }
+                                            {porRollos ? (
+                                                <span className="text-warm-700">Rollo</span>
+                                            ) : (
+                                                (() => {
+                                                    // La línea no guarda el producto: se deduce de su
+                                                    // presentación, así funciona también al editar.
+                                                    const opciones = unidadesDe(productoDe(l.producto_presentacion_id));
+                                                    // Un pedido antiguo en un formato que ya no se ofrece:
+                                                    // se sigue viendo el suyo.
+                                                    if (
+                                                        opciones.length > 0 &&
+                                                        !opciones.some((o) => o.value === String(l.producto_presentacion_id))
+                                                    ) {
+                                                        opciones.push({
+                                                            value: String(l.producto_presentacion_id),
+                                                            label: l.presentacion ?? 'Formato',
+                                                        });
+                                                    }
 
-                                                if (opciones.length === 0) {
-                                                    return <span className="text-warm-600">{l.presentacion}</span>;
-                                                }
+                                                    if (opciones.length === 0) {
+                                                        return <span className="text-warm-600">{l.presentacion}</span>;
+                                                    }
 
-                                                return (
-                                                    <SearchSelect
-                                                        value={porRollos ? ROLLOS : String(l.producto_presentacion_id)}
-                                                        clearable={false}
-                                                        emptyText="Sin unidades"
-                                                        // Otra unidad, otro precio: se toma el de
-                                                        // venta de la nueva, igual que en la venta.
-                                                        onChange={(id) => id && cambiarUnidad(i, id)}
-                                                        options={opciones}
-                                                    />
-                                                );
-                                            })()}
+                                                    return (
+                                                        <SearchSelect
+                                                            value={String(l.producto_presentacion_id)}
+                                                            clearable={false}
+                                                            emptyText="Sin unidades"
+                                                            // Otra unidad, otro precio: se toma el de
+                                                            // venta de la nueva, igual que en la venta.
+                                                            onChange={(id) => id && cambiarUnidad(i, id)}
+                                                            options={opciones}
+                                                        />
+                                                    );
+                                                })()
+                                            )}
                                         </td>
                                         <td className="px-3 py-2 text-right">
                                             {porRollos ? (
@@ -945,15 +910,7 @@ export default function CrearPedido() {
                                                         className="w-24 text-right"
                                                         aria-label="Rollos"
                                                     />
-                                                    {promedioLinea > 0 ? (
-                                                        <span className="mt-0.5 block text-[11px] text-warm-500">
-                                                            rollos · ≈ {num(l.cantidad)} m
-                                                        </span>
-                                                    ) : (
-                                                        <span className="mt-0.5 block text-[11px] font-medium text-red-600">
-                                                            Sin metraje del rollo
-                                                        </span>
-                                                    )}
+                                                    <span className="mt-0.5 block text-[11px] text-warm-500">rollos</span>
                                                 </>
                                             ) : (
                                                 <Input
@@ -981,21 +938,30 @@ export default function CrearPedido() {
                                             {l.precio_oculto ? (
                                                 <span className="text-warm-400">—</span>
                                             ) : (
-                                                <Input
-                                                    type="number"
-                                                    step="0.01"
-                                                    min="0"
-                                                    value={l.precio_unitario}
-                                                    onChange={(e) => cambiar(i, 'precio_unitario', e.target.value)}
-                                                    className="w-28 text-right"
-                                                />
+                                                <>
+                                                    <Input
+                                                        type="number"
+                                                        step="0.01"
+                                                        min="0"
+                                                        value={l.precio_unitario}
+                                                        onChange={(e) => cambiar(i, 'precio_unitario', e.target.value)}
+                                                        className="w-28 text-right"
+                                                        aria-label={porRollos ? 'Precio por metro' : 'Precio de venta'}
+                                                    />
+                                                    {porRollos && (
+                                                        <span className="mt-0.5 block text-[11px] text-warm-500">por metro</span>
+                                                    )}
+                                                </>
                                             )}
                                         </td>
                                         <td className="px-3 py-2 text-right font-medium text-warm-900">
                                             {l.precio_oculto ? (
                                                 <span className="font-normal text-warm-400">Por confirmar</span>
+                                            ) : porRollos ? (
+                                                // Cada rollo se cobra por sus metros reales, al separarlo.
+                                                <span className="font-normal text-warm-500">Por definir</span>
                                             ) : (
-                                                `${porRollos ? '≈ ' : ''}${money((Number(l.cantidad) || 0) * (Number(l.precio_unitario) || 0), cabecera.moneda)}`
+                                                money((Number(l.cantidad) || 0) * (Number(l.precio_unitario) || 0), cabecera.moneda)
                                             )}
                                         </td>
                                         <td className="px-3 py-2 text-center">
@@ -1099,17 +1065,19 @@ export default function CrearPedido() {
                             <span className="text-xs font-semibold uppercase tracking-wide text-warm-500">
                                 Total del pedido
                             </span>
-                            <span className="text-2xl font-bold text-primary-600">{money(total, cabecera.moneda)}</span>
+                            <span className="text-2xl font-bold text-primary-600">
+                                {hayRollos && total === 0 ? 'Por definir' : money(total, cabecera.moneda)}
+                            </span>
                         </div>
-                        {cabecera.moneda !== 'PEN' && Number(cabecera.tipo_cambio) > 0 && (
+                        {cabecera.moneda !== 'PEN' && Number(cabecera.tipo_cambio) > 0 && total > 0 && (
                             <p className="mt-1 text-right text-xs text-warm-500">
                                 ≈ {money(total * Number(cabecera.tipo_cambio), 'PEN')} al T.C. {cabecera.tipo_cambio}
                             </p>
                         )}
                         {hayRollos && (
                             <p className="mt-2 text-xs text-warm-500">
-                                Los rollos se cobran por sus metros reales: el total se ajusta cuando el almacén
-                                los escanea.
+                                Los rollos se cobran por sus metros reales: su importe se define cuando el almacén
+                                los separa{total > 0 ? ' y se suma a este total' : ''}.
                             </p>
                         )}
                     </section>
@@ -1134,6 +1102,8 @@ export default function CrearPedido() {
                 onSelect={agregarDesdePicker}
                 initialQuery={picker.query}
                 multiple
+                // Una tela se elige por color y solo en rollos.
+                porColor
                 productos={productos}
                 stockPorProducto={stockPorProducto}
                 unidadPreferida={unidadPreferida}

@@ -166,14 +166,31 @@ export default function Pedidos() {
             label: 'Metros',
             align: 'right',
             searchable: false,
-            render: (row) => `${num(row.total_metros)} m`,
+            // Lo pedido en rollos no tiene metros hasta que el almacén los separa.
+            render: (row) =>
+                row.rollos_pedidos > 0 ? (
+                    <>
+                        {rollosTexto(row.rollos_pedidos)}
+                        {row.total_metros > 0 && (
+                            <span className="block text-xs text-warm-400">{num(row.total_metros)} m</span>
+                        )}
+                    </>
+                ) : (
+                    `${num(row.total_metros)} m`
+                ),
         },
         {
             key: 'total',
             label: 'Total',
             align: 'right',
             searchable: false,
-            render: (row) => money(row.total, row.moneda),
+            // Con rollos sin separar todavía, el total no está definido.
+            render: (row) =>
+                row.rollos_pedidos > 0 && !row.completo ? (
+                    <span className="text-warm-500">Por definir</span>
+                ) : (
+                    money(row.total, row.moneda)
+                ),
         },
         {
             key: 'estado',
@@ -183,7 +200,9 @@ export default function Pedidos() {
                     <Badge variant={COLOR_ESTADO[row.estado] ?? 'gray'}>{row.estado_label}</Badge>
                     {row.estado === 'preparando' && (
                         <span className="text-xs text-warm-500">
-                            {num(row.metros_asignados)}/{num(row.total_metros)} m cubiertos
+                            {row.rollos_pedidos > 0
+                                ? `${num(row.rollos_asignados)}/${num(row.rollos_pedidos)} rollos`
+                                : `${num(row.metros_asignados)}/${num(row.total_metros)} m cubiertos`}
                         </span>
                     )}
                 </span>
@@ -423,13 +442,23 @@ export default function Pedidos() {
                                 subtitulo={d.modo === 'rollos' ? 'Rollos enteros' : d.presentacion}
                                 campos={[
                                     d.modo === 'rollos'
-                                        ? { label: 'Cant.', value: `${rollosTexto(d.rollos_pedidos)} (${d.cubierta ? '' : '≈ '}${num(d.metros_totales ?? d.cantidad)} m)` }
+                                        ? { label: 'Cant.', value: rollosTexto(d.rollos_pedidos) }
                                         : { label: 'Cant.', value: `${num(d.cantidad)} (${num(d.metros)} m)` },
                                     d.modo === 'rollos'
                                         ? { label: 'Cubierto', value: `${num(d.rollos_asignados)}/${num(d.rollos_pedidos)} rollos · ${num(d.metros_asignados)} m` }
                                         : { label: 'Cubierto', value: `${num(d.metros_asignados)} m` },
-                                    { label: 'P. unit.', value: d.precio_oculto ? 'Por confirmar' : money(d.precio_unitario, detalle.moneda) },
-                                    { label: 'Importe', value: d.precio_oculto ? '—' : money(d.subtotal, detalle.moneda), valueClassName: 'text-primary-600' },
+                                    { label: 'P. unit.', value: d.precio_oculto ? 'Por confirmar' : `${money(d.precio_unitario, detalle.moneda)}${d.modo === 'rollos' ? ' por metro' : ''}` },
+                                    {
+                                        label: 'Importe',
+                                        value: d.precio_oculto
+                                            ? '—'
+                                            : d.modo === 'rollos' && !d.cubierta
+                                              ? d.rollos_asignados > 0
+                                                  ? `${money(d.subtotal, detalle.moneda)} (parcial)`
+                                                  : 'Por definir'
+                                              : money(d.subtotal, detalle.moneda),
+                                        valueClassName: 'text-primary-600',
+                                    },
                                 ]}
                             />
                         ))}
@@ -486,7 +515,8 @@ function DetallePedido({ pedido, procesando, onAccion, onFacturar, onPdf }) {
                     </h2>
                     <p className="text-xs text-warm-500">
                         {pedido.cliente ?? 'Cliente varios'} · {pedido.detalles?.length ?? 0} producto(s) ·{' '}
-                        {num(pedido.total_metros)} m · {money(pedido.total, pedido.moneda)}
+                        {pedido.rollos_pedidos > 0 ? rollosTexto(pedido.rollos_pedidos) : `${num(pedido.total_metros)} m`} ·{' '}
+                        {pedido.rollos_pedidos > 0 && !pedido.completo ? 'Total por definir' : money(pedido.total, pedido.moneda)}
                         {pedido.requerimiento_numero && ` · ${pedido.requerimiento_numero}`}
                     </p>
                 </div>
@@ -577,13 +607,14 @@ function DetallePedido({ pedido, procesando, onAccion, onFacturar, onPdf }) {
                                 </td>
                                 <td className="px-4 py-2 text-right">
                                     {d.modo === 'rollos' ? (
-                                        // Los metros son una estimación hasta que se escanean todos los rollos.
+                                        // Los metros los define el almacén al separar: solo los ya escaneados.
                                         <>
                                             {rollosTexto(d.rollos_pedidos)}
-                                            <span className="block text-xs text-warm-400">
-                                                {d.cubierta ? '' : '≈ '}
-                                                {num(d.metros_totales ?? d.cantidad)} m
-                                            </span>
+                                            {d.metros_asignados > 0 && (
+                                                <span className="block text-xs text-warm-400">
+                                                    {num(d.metros_asignados)} m
+                                                </span>
+                                            )}
                                         </>
                                     ) : (
                                         <>
@@ -643,9 +674,18 @@ function DetallePedido({ pedido, procesando, onAccion, onFacturar, onPdf }) {
                                 <td className="px-4 py-2 text-right font-medium">
                                     {d.precio_oculto ? (
                                         <span className="font-normal text-warm-400">—</span>
+                                    ) : d.modo === 'rollos' && !d.cubierta ? (
+                                        // Cada rollo se cobra por sus metros reales, al separarlo.
+                                        d.rollos_asignados > 0 ? (
+                                            <>
+                                                {money(d.subtotal, pedido.moneda)}
+                                                <span className="block text-xs font-normal text-warm-400">parcial</span>
+                                            </>
+                                        ) : (
+                                            <span className="font-normal text-warm-500">Por definir</span>
+                                        )
                                     ) : (
-                                        // Con rollos por escanear, el importe todavía es estimado.
-                                        `${d.modo === 'rollos' && !d.cubierta ? '≈ ' : ''}${money(d.subtotal, pedido.moneda)}`
+                                        money(d.subtotal, pedido.moneda)
                                     )}
                                 </td>
                             </tr>

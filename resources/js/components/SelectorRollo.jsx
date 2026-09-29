@@ -14,10 +14,11 @@ const metros = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 
  * Al editar una venta, el rollo que ya tenía puede no estar "disponible" (se
  * vendió entero, por ejemplo); se trae aparte para que siga apareciendo.
  *
- * `onChange(id, rollo)` entrega también el rollo (con sus metros), y
- * `excluir` deja fuera los que ya se eligieron en otras filas.
+ * `onChange(id, rollo)` entrega también el rollo (con sus metros),
+ * `excluir` deja fuera los que ya se eligieron en otras filas y `colorId`
+ * limita la lista a los rollos de ese color.
  */
-export default function SelectorRollo({ productoId, almacenId, value, onChange, excluir = [] }) {
+export default function SelectorRollo({ productoId, almacenId, colorId = '', value, onChange, excluir = [] }) {
     const [rollos, setRollos] = useState([]);
     const [cargando, setCargando] = useState(false);
 
@@ -33,7 +34,12 @@ export default function SelectorRollo({ productoId, almacenId, value, onChange, 
         (async () => {
             try {
                 const res = await api.get('/rollos', {
-                    params: { producto_id: productoId, almacen_id: almacenId, solo_disponibles: 1 },
+                    params: {
+                        producto_id: productoId,
+                        almacen_id: almacenId,
+                        solo_disponibles: 1,
+                        ...(colorId ? { producto_color_id: colorId } : {}),
+                    },
                 });
                 let lista = asList(res);
 
@@ -60,7 +66,7 @@ export default function SelectorRollo({ productoId, almacenId, value, onChange, 
         };
         // `value` solo importa en la primera carga (edición); no se recarga al elegir.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [productoId, almacenId]);
+    }, [productoId, almacenId, colorId]);
 
     if (cargando) return <span className="text-xs text-warm-400">Cargando…</span>;
 

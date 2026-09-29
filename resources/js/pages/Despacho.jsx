@@ -143,7 +143,11 @@ export default function Despacho() {
                     codigo: valor,
                 });
                 // Entero (se va tal cual) o corte (se saca un trozo al despachar).
-                const texto = `Rollo correcto · ${num(data.metros)} m ${data.entero ? 'entero' : 'de corte'} · ${num(data.verificados)}/${num(data.total)} m`;
+                const avanceTexto =
+                    data.rollos_pedidos > 0
+                        ? `${num(data.rollos_asignados)}/${num(data.rollos_pedidos)} rollos`
+                        : `${num(data.verificados)}/${num(data.total)} m`;
+                const texto = `Rollo correcto · ${num(data.metros)} m ${data.entero ? 'entero' : 'de corte'} · ${avanceTexto}`;
                 setUltimo({ ok: true, codigo: data.rollo.codigo, metros: data.metros, texto: 'Rollo correcto' });
                 await cargarDetalle(detalle.id);
 
@@ -260,12 +264,21 @@ export default function Despacho() {
     /** Todavía se pueden escanear rollos: solicitado o en plena preparación. */
     const escaneando = ['solicitado', 'preparando'].includes(detalle?.estado);
     const separado = detalle?.estado === 'separado';
-    // El avance se mide en metros cubiertos: el almacenero no sigue una lista
-    // de rollos, junta la cantidad que pidió el cliente.
+    // El avance: lo pedido en rollos se cuenta en rollos (cada uno trae su
+    // metraje, que se conoce al escanearlo); lo demás, en metros cubiertos.
     const lineas = detalle?.detalles ?? [];
-    const verificados = lineas.reduce((s, d) => s + Number(d.metros_asignados || 0), 0);
-    // En las líneas por rollos cuenta lo real de lo escaneado más lo estimado de lo que falta.
-    const total = lineas.reduce((s, d) => s + Number(d.metros_totales ?? d.metros ?? 0), 0);
+    const lineasRollos = lineas.filter((d) => d.modo === 'rollos');
+    const lineasMetros = lineas.filter((d) => d.modo !== 'rollos');
+    const rollosPedidos = lineasRollos.reduce((s, d) => s + Number(d.rollos_pedidos || 0), 0);
+    const rollosCubiertos = lineasRollos.reduce((s, d) => s + Number(d.rollos_asignados || 0), 0);
+    const verificados = lineasMetros.reduce((s, d) => s + Number(d.metros_asignados || 0), 0);
+    const total = lineasMetros.reduce((s, d) => s + Number(d.metros || 0), 0);
+    const avance = [
+        rollosPedidos > 0 ? `${num(rollosCubiertos)}/${num(rollosPedidos)} rollos` : null,
+        lineasMetros.length > 0 ? `${num(verificados)}/${num(total)} m` : null,
+    ]
+        .filter(Boolean)
+        .join(' · ');
     const completo = lineas.length > 0 && lineas.every((d) => d.cubierta);
 
     return (
@@ -347,13 +360,15 @@ export default function Despacho() {
                                                     <Badge variant="green">Separado</Badge>
                                                 ) : (
                                                     <Badge variant={p.completo ? 'green' : 'blue'}>
-                                                        {num(p.metros_asignados)}/{num(p.total_metros)} m
+                                                        {p.rollos_pedidos > 0
+                                                            ? `${num(p.rollos_asignados)}/${num(p.rollos_pedidos)} rollos`
+                                                            : `${num(p.metros_asignados)}/${num(p.total_metros)} m`}
                                                     </Badge>
                                                 )}
                                             </span>
                                             <span className="mt-0.5 block truncate text-xs text-warm-500">
-                                                {p.cliente ?? 'Cliente varios'} · {num(p.total_metros)} m
-                                                {p.rollos_pedidos > 0 ? ` · ${rollosTexto(p.rollos_pedidos)}` : ''}
+                                                {p.cliente ?? 'Cliente varios'} ·{' '}
+                                                {p.rollos_pedidos > 0 ? rollosTexto(p.rollos_pedidos) : `${num(p.total_metros)} m`}
                                             </span>
                                             {/* A quién le tocó, si el encargado ya lo repartió. */}
                                             {p.asignados?.length > 0 && (
@@ -384,7 +399,7 @@ export default function Despacho() {
                                         </h2>
                                         <p className="text-xs text-warm-500">
                                             {detalle.cliente ?? 'Cliente varios'} · {lineas.length} producto(s) ·{' '}
-                                            {num(total)} m
+                                            {rollosPedidos > 0 ? rollosTexto(rollosPedidos) : `${num(total)} m`}
                                         </p>
                                         {/* Quién tiene la tarea: lo reparte el encargado. */}
                                         {detalle.asignados?.length > 0 && (
@@ -496,9 +511,7 @@ export default function Despacho() {
                                         >
                                             <Camera className="h-4 w-4" />
                                         </Button>
-                                        <span className="text-sm font-medium text-warm-700">
-                                            {num(verificados)}/{num(total)} m
-                                        </span>
+                                        <span className="text-sm font-medium text-warm-700">{avance}</span>
                                     </div>
 
                                     {ultimo && (
@@ -644,7 +657,7 @@ export default function Despacho() {
                 abierto={camara}
                 onCerrar={() => setCamara(false)}
                 onLeer={verificar}
-                titulo={detalle ? `${detalle.requerimiento_numero ?? detalle.documento} · ${num(verificados)}/${num(total)} m` : 'Escanear rollo'}
+                titulo={detalle ? `${detalle.requerimiento_numero ?? detalle.documento} · ${avance}` : 'Escanear rollo'}
             />
 
             <PdfViewerModal

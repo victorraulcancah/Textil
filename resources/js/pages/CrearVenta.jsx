@@ -595,21 +595,21 @@ export default function CrearVenta() {
         setItems((prev) => {
             const next = [...prev];
 
-            utiles.forEach(({ producto, presentacion, cantidad }) => {
-                // El "Rollo" de una tela: una fila por rollo, cada uno con su
-                // metraje real al precio del metro (el rollo se elige en la fila).
-                const metro =
-                    tipoUnidad(presentacion) === "rollo" ? presentacionMetroDe(producto) : null;
-                if (metro) {
+            utiles.forEach(({ producto, presentacion, cantidad, color, porRollos }) => {
+                // Una tela marcada por color: una fila por rollo, cada uno con su
+                // metraje real al precio del metro (el rollo, de ese color, se
+                // elige o se escanea en la fila).
+                if (porRollos) {
                     for (let k = 0; k < Math.max(1, Math.round(cantidad)); k++) {
                         next.push({
                             producto_id: String(producto.id),
-                            producto_presentacion_id: String(metro.id),
+                            producto_presentacion_id: String(presentacion.id),
                             modo: ROLLOS,
+                            producto_color_id: color ? String(color.id) : "",
                             rollo_id: "",
                             cantidad: "",
                             precio_unitario: String(
-                                enMonedaVenta(precioPara(metro, tipoPrecioId, 1), producto.id),
+                                enMonedaVenta(precioPara(presentacion, tipoPrecioId, 1), producto.id),
                             ),
                             precio_manual: false,
                         });
@@ -836,12 +836,17 @@ export default function CrearVenta() {
                 return toast.error(`"${rollo.producto?.nombre ?? "Esa tela"}" no se vende por metro.`);
 
             const metros = Number(rollo.metros_actual);
-            const esperando = items.findIndex(
-                (it) =>
-                    it.modo === ROLLOS &&
-                    !it.rollo_id &&
-                    String(it.producto_id) === String(producto.id),
-            );
+            const espera = (it, conColor) =>
+                it.modo === ROLLOS &&
+                !it.rollo_id &&
+                String(it.producto_id) === String(producto.id) &&
+                (conColor
+                    ? String(it.producto_color_id ?? "") === String(rollo.producto_color_id ?? "")
+                    : !it.producto_color_id);
+            // Primero la fila que pidió el color de este rollo; si no, una sin color.
+            const esperando = items.some((it) => espera(it, true))
+                ? items.findIndex((it) => espera(it, true))
+                : items.findIndex((it) => espera(it, false));
 
             if (esperando !== -1) {
                 elegirRollo(esperando, String(rollo.id), rollo);
@@ -1440,6 +1445,13 @@ export default function CrearVenta() {
                                                 </td>
                                                 <td className="px-3 py-2 font-semibold text-warm-900">
                                                     {producto?.nombre ?? "—"}
+                                                    {it.producto_color_id && (
+                                                        <span className="ml-1.5 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium uppercase text-warm-700">
+                                                            {(producto?.colores ?? []).find(
+                                                                (c) => String(c.id) === String(it.producto_color_id),
+                                                            )?.nombre ?? ""}
+                                                        </span>
+                                                    )}
                                                 </td>
                                                 <td className="px-3 py-2">
                                                     <SearchSelect
@@ -1479,6 +1491,7 @@ export default function CrearVenta() {
                                                         almacenId={
                                                             form.almacen_id
                                                         }
+                                                        colorId={it.producto_color_id ?? ""}
                                                         value={it.rollo_id}
                                                         // Un rollo no puede estar en dos filas.
                                                         excluir={items
@@ -2003,6 +2016,8 @@ export default function CrearVenta() {
                 onSelect={agregarDesdePicker}
                 initialQuery={picker.query}
                 multiple
+                // Una tela se elige por color y en rollos (los rollos, de ese color, se eligen o escanean en la fila).
+                porColor
                 productos={productos}
                 stockPorProducto={stockDeTodos}
                 // Stock de cada almacén y por color, sin códigos de rollo.

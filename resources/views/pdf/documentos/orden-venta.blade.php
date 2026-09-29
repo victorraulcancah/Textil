@@ -42,14 +42,25 @@
 
     <table class="marco" style="margin: 6px 0 14px 0;">
         <tr>
-            <td class="strong upper" style="font-size: 9px;">Total de tela: {{ $total_metros }} m</td>
+            <td class="strong upper" style="font-size: 9px;">Total de tela: {{ $porDefinir ? 'por definir' : $total_metros.' m' }}</td>
         </tr>
     </table>
 
-    <x-pdf.totales
-        :lineas="['Subtotal' => number_format((float) $orden->subtotal, 2), 'Descuento' => (float) $orden->descuento_total > 0 ? number_format((float) $orden->descuento_total, 2) : null]"
-        :total="number_format((float) $orden->total, 2)"
-        :moneda="$orden->moneda === 'USD' ? '$' : 'S/'" />
+    @if ($porDefinir)
+        {{-- Los rollos se cobran por sus metros reales, que define el almacén al separar. --}}
+        <table class="marco" style="margin: 6px 0 14px 0;">
+            <tr>
+                <td class="strong upper" style="font-size: 9px;">
+                    Total: por definir · los rollos se cobran por sus metros reales cuando el almacén los separa
+                </td>
+            </tr>
+        </table>
+    @else
+        <x-pdf.totales
+            :lineas="['Subtotal' => number_format((float) $orden->subtotal, 2), 'Descuento' => (float) $orden->descuento_total > 0 ? number_format((float) $orden->descuento_total, 2) : null]"
+            :total="number_format((float) $orden->total, 2)"
+            :moneda="$orden->moneda === 'USD' ? '$' : 'S/'" />
+    @endif
 
     {{-- Qué rollos concretos cubrieron el pedido. Solo aparece si el almacén
          ya los asignó: mientras tanto no existen. --}}

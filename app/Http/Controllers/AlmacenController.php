@@ -95,10 +95,17 @@ class AlmacenController extends Controller
             ->get()
             ->groupBy(fn ($d) => $d->presentacion?->producto_id.'-'.$d->reserva_almacen_id.'-'.$d->producto_color_id);
         $pendientes = $reservadas->map(fn ($grupo) => $grupo->sum(fn ($d) => $d->metrosPendientes()));
-        // Y de lo pedido en rollos enteros, cuántos rollos faltan asignar.
-        $rollosPendientes = $reservadas->map(fn ($grupo) => $grupo->sum(fn ($d) => $d->esPorRollos() ? $d->rollosPendientes() : 0));
+        // Lo pedido en rollos enteros no reserva metros: cuántos rollos de cada
+        // color piden pedidos en curso y el almacén aún no asigna (de toda la
+        // empresa: todavía no se sabe de qué almacén saldrán).
+        $porAsignar = \App\Models\OrdenVentaDetalle::porAsignar()
+            ->whereNotNull('producto_color_id')
+            ->with(['presentacion:id,producto_id', 'rollos:id,orden_venta_detalle_id'])
+            ->get()
+            ->groupBy(fn ($d) => $d->presentacion?->producto_id.'-'.$d->producto_color_id)
+            ->map(fn ($grupo) => $grupo->sum(fn ($d) => $d->rollosPendientes()));
 
-        $filas->each(function ($fila) use ($porColor, $pendientes, $rollosPendientes) {
+        $filas->each(function ($fila) use ($porColor, $pendientes, $porAsignar) {
             $grupo = $porColor->get($fila->producto_id.'-'.$fila->almacen_id, collect());
 
             $fila->colores = $grupo
@@ -108,11 +115,10 @@ class AlmacenController extends Controller
                     'codigo' => $r->color?->codigo,
                     'hex' => $r->color?->hex,
                     'rollos' => (int) $r->rollos,
-                    'rollos_disponibles' => max(
-                        0,
-                        (int) $r->rollos_disponibles
-                            - (int) ($rollosPendientes[$fila->producto_id.'-'.$fila->almacen_id.'-'.$r->producto_color_id] ?? 0)
-                    ),
+                    'rollos_disponibles' => (int) $r->rollos_disponibles,
+                    // De este color, lo que otros pedidos piden y aún no tiene rollo
+                    // (el mismo número en cada almacén): a restar una sola vez.
+                    'rollos_por_asignar' => (int) ($porAsignar[$fila->producto_id.'-'.$r->producto_color_id] ?? 0),
                     'metros' => round((float) $r->metros, 2),
                     'metros_disponibles' => round(max(
                         0,

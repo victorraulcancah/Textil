@@ -64,6 +64,8 @@ class Rollo extends Model
         'usuario_recibe_id',
         'importacion_id',
         'cliente_id',
+        // La línea de ajuste de inventario (entrada) de la que nació.
+        'ajuste_detalle_id',
         'observaciones',
     ];
 

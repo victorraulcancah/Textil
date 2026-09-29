@@ -35,7 +35,9 @@ export const presentacionMetroDe = (producto) =>
  *
  * onAgregar({ producto, presentacion, lineas: [{ color, rollos, metros, precio }] }).
  */
-export default function TelaCompraModal({ producto, moneda = 'PEN', onClose, onAgregar }) {
+export default function TelaCompraModal({ producto, moneda = 'PEN', costo = false, onClose, onAgregar }) {
+    // En un ajuste de inventario el precio es el costo: sale del catálogo y no es obligatorio.
+    const nombrePrecio = costo ? 'Costo' : 'Precio de compra';
     const metro = presentacionMetroDe(producto);
     const colores = (producto?.colores ?? []).filter((c) => c.activo !== false);
     // Una tela sin colores registrados se compra igual, en una sola fila.
@@ -71,7 +73,7 @@ export default function TelaCompraModal({ producto, moneda = 'PEN', onClose, onA
     );
 
     const conRollos = calculo.filter((x) => x.rollos > 0);
-    const incompletas = conRollos.filter((x) => !(x.factor > 0) || !(x.precio > 0));
+    const incompletas = conRollos.filter((x) => !(x.factor > 0) || (!costo && !(x.precio > 0)));
     const totalRollos = conRollos.reduce((s, x) => s + x.rollos, 0);
     const totalMetros = conRollos.reduce((s, x) => s + x.metros, 0);
     const totalImporte = conRollos.reduce((s, x) => s + x.total, 0);
@@ -122,7 +124,7 @@ export default function TelaCompraModal({ producto, moneda = 'PEN', onClose, onA
                             {producto.nombre}
                         </span>
                         <label className="flex items-center gap-2 text-sm font-medium text-warm-700">
-                            Precio de compra por metro ({moneda})
+                            {nombrePrecio} por metro ({moneda})
                             <input
                                 type="number"
                                 min="0"
@@ -130,7 +132,7 @@ export default function TelaCompraModal({ producto, moneda = 'PEN', onClose, onA
                                 value={precioBase}
                                 onChange={(e) => setPrecioBase(e.target.value)}
                                 className={`${inputCls} w-28 bg-amber-50`}
-                                aria-label="Precio de compra por metro"
+                                aria-label={`${nombrePrecio} por metro`}
                             />
                         </label>
                     </div>
@@ -143,7 +145,7 @@ export default function TelaCompraModal({ producto, moneda = 'PEN', onClose, onA
                                     <th className="w-24 px-3 py-2 text-right">Rollos</th>
                                     <th className="w-24 px-3 py-2 text-right">Factor</th>
                                     <th className="w-24 px-3 py-2 text-right">Metros</th>
-                                    <th className="w-28 px-3 py-2 text-right">Precio de compra</th>
+                                    <th className="w-28 px-3 py-2 text-right">{nombrePrecio}</th>
                                     <th className="w-32 px-3 py-2 text-right">Total {nombreMoneda.toLowerCase()}</th>
                                 </tr>
                             </thead>
@@ -201,7 +203,7 @@ export default function TelaCompraModal({ producto, moneda = 'PEN', onClose, onA
                                                     placeholder={precioBase || '0'}
                                                     value={f.precio}
                                                     onChange={(e) => poner(x.c, 'precio', e.target.value)}
-                                                    aria-label={`Precio de compra de ${x.c.nombre}`}
+                                                    aria-label={`${nombrePrecio} de ${x.c.nombre}`}
                                                     className={inputCls}
                                                 />
                                             </td>
@@ -227,7 +229,7 @@ export default function TelaCompraModal({ producto, moneda = 'PEN', onClose, onA
 
                     {incompletas.length > 0 && (
                         <p className="mt-2 text-xs font-medium text-red-600">
-                            Falta el factor o el precio de: {incompletas.map((x) => x.c.nombre).join(', ')}.
+                            Falta el factor{costo ? '' : ' o el precio'} de: {incompletas.map((x) => x.c.nombre).join(', ')}.
                         </p>
                     )}
                 </>

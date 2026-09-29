@@ -88,6 +88,8 @@ class RolloController extends Controller
                     'producto_id' => $primera->producto_id,
                     'producto' => $primera->producto?->nombre,
                     'producto_codigo' => $primera->producto?->codigo,
+                    // El código del producto con color: familia-tipo-color (01-01-001-0001).
+                    'codigo_completo' => collect([$primera->producto?->codigo, $primera->color?->codigo])->filter()->implode('-'),
                     'producto_color_id' => $primera->producto_color_id,
                     'color' => $primera->color?->nombre,
                     'color_codigo' => $primera->color?->codigo,

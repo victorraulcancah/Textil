@@ -123,6 +123,8 @@ export default function ProductoPickerModal({
     porColor = false,
     /** La moneda de la compra, para rotular el total de la tabla de compra. */
     moneda = 'PEN',
+    /** Ajuste de inventario: la tabla por color pide el costo (del catálogo), no un precio de compra. */
+    costo = false,
     title = 'Buscar producto',
 }) {
     const [filtros, setFiltros] = useState(filtrosVacios);
@@ -1155,6 +1157,7 @@ export default function ProductoPickerModal({
             <TelaCompraModal
                 producto={telaCompra}
                 moneda={moneda}
+                costo={costo}
                 onClose={() => setTelaCompra(null)}
                 onAgregar={({ presentacion, lineas }) => {
                     onSelect?.(

@@ -10,18 +10,18 @@ class StoreProductoRequest extends FormRequest
     public function authorize(): bool { return true; }
 
     /**
-     * El formulario ya no pide código: si llega vacío, se genera uno. Si es
-     * una tela con tipo asignado, el código sale de su familia y tipo; si
-     * no, del correlativo genérico de siempre.
+     * El código no se escribe: sale de la familia y el tipo de tela (01-01-001)
+     * y, con el del color, forma el código de sus rollos (01-01-001-0001). Si
+     * no llega un tipo, la validación lo rechaza; el genérico solo evita que
+     * el error de código tape el del tipo.
      */
     protected function prepareForValidation(): void
     {
-        if (blank($this->input('codigo'))) {
-            $tipo = $this->filled('tipo_tela_id') ? TipoTela::find($this->input('tipo_tela_id')) : null;
-            $this->merge([
-                'codigo' => $tipo ? Producto::generarCodigoTela($tipo) : Producto::generarCodigo(),
-            ]);
-        }
+        $tipo = $this->filled('tipo_tela_id') ? TipoTela::with('familia')->find($this->input('tipo_tela_id')) : null;
+
+        $this->merge([
+            'codigo' => $tipo ? Producto::generarCodigoTela($tipo) : Producto::generarCodigo(),
+        ]);
     }
 
     public function rules(): array
@@ -126,7 +126,7 @@ class StoreProductoRequest extends FormRequest
     {
         return [
             'codigo.required' => 'El código del producto es obligatorio',
-            'codigo.unique' => 'El código ya está registrado',
+            'codigo.unique' => 'Ya hay un producto con este tipo de tela: su código (familia y tipo) ya está registrado. Elige otro tipo de tela.',
             'nombre.required' => 'El nombre del producto es obligatorio',
             'tipo_tela_id.required' => 'Elige la familia y el tipo de tela del producto',
             'unidad_medida_id.required' => 'La unidad de medida es obligatoria',

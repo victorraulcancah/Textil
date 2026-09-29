@@ -12,7 +12,6 @@ import Usuarios from './pages/Usuarios';
 import Empresa from './pages/Empresa';
 import Productos from './pages/Productos';
 import ListaPrecios from './pages/ListaPrecios';
-import Categorias from './pages/Categorias';
 import Colores from './pages/Colores';
 import TiposTela from './pages/TiposTela';
 import Marcas from './pages/Marcas';
@@ -25,6 +24,7 @@ import Movimientos from './pages/Movimientos';
 import Transferencias from './pages/Transferencias';
 import CrearTransferencia from './pages/CrearTransferencia';
 import Ajustes from './pages/Ajustes';
+import CrearAjuste from './pages/CrearAjuste';
 import TomasInventario from './pages/TomasInventario';
 import Prestamos from './pages/Prestamos';
 import Proveedores from './pages/Proveedores';
@@ -67,7 +67,6 @@ const routes = [
     { path: '/auditoria', element: <Auditoria /> },
     { path: '/productos', element: <Productos /> },
     { path: '/lista-precios', element: <ListaPrecios /> },
-    { path: '/categorias', element: <Categorias /> },
     { path: '/colores', element: <Colores /> },
     { path: '/tipos-tela', element: <TiposTela /> },
     { path: '/marcas', element: <Marcas /> },
@@ -83,6 +82,7 @@ const routes = [
     { path: '/transferencias/nueva', element: <CrearTransferencia /> },
     { path: '/transferencias/:id/editar', element: <CrearTransferencia /> },
     { path: '/ajustes', element: <Ajustes /> },
+    { path: '/ajustes/nuevo', element: <CrearAjuste /> },
     { path: '/tomas-inventario', element: <TomasInventario /> },
     { path: '/prestamos', element: <Prestamos /> },
     { path: '/proveedores', element: <Proveedores /> },

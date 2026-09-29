@@ -38,7 +38,6 @@ const money = (n, moneda = 'PEN') =>
 
 const emptyProducto = {
     codigo: '',
-    codigo_barras: '',
     nombre: '',
     nombre_tecnico: '',
     descripcion_ticket: '',
@@ -89,7 +88,7 @@ const TABS = [
  */
 const PESTANA_DEL_CAMPO = {
     general: [
-        'codigo', 'codigo_barras', 'nombre', 'descripcion_ticket', 'activo',
+        'codigo', 'nombre', 'descripcion_ticket', 'activo',
         'familia_id', 'tipo_tela_id', 'marca_id', 'sub_marca_id', 'proveedores',
     ],
     ficha: [
@@ -303,7 +302,6 @@ export default function Productos() {
         pesoAutoRef.current = pesoDeFicha !== '' && String(prod.peso_por_metro ?? '') === pesoDeFicha ? pesoDeFicha : '';
         setForm({
             codigo: prod.codigo ?? '',
-            codigo_barras: prod.codigo_barras ?? '',
             nombre: prod.nombre ?? '',
             nombre_tecnico: prod.nombre_tecnico ?? '',
             descripcion_ticket: prod.descripcion_ticket ?? '',
@@ -404,7 +402,8 @@ export default function Productos() {
                 ...p,
                 tipo_tela_id: tipoId ?? '',
                 familia_id: familiaId,
-                codigo: !p.codigo.trim() && tipo ? `01-${familiaCodigo}-${tipo.codigo}` : p.codigo,
+                // Producto nuevo: el código sale de la familia y el tipo. Al editar no cambia.
+                codigo: !editing && tipo ? `01-${familiaCodigo}-${tipo.codigo}` : p.codigo,
             };
         });
     };
@@ -616,7 +615,6 @@ export default function Productos() {
             unidad_base_id: calculo.baseId,
             unidad_compra_id: compra.unidad_compra_id || undefined,
             activo: form.activo,
-            codigo_barras: str(form.codigo_barras),
             descripcion_ticket: str(form.descripcion_ticket),
             tipo_tela_id: form.tipo_tela_id || undefined,
             marca_id: form.marca_id || undefined,
@@ -863,9 +861,6 @@ export default function Productos() {
                     </span>
                     <span className="min-w-0">
                         <span className="block truncate font-medium text-warm-900">{row.nombre}</span>
-                        {row.codigo_barras && (
-                            <span className="block truncate text-xs text-gray-500">{row.codigo_barras}</span>
-                        )}
                     </span>
                 </span>
             ),
@@ -1132,31 +1127,19 @@ export default function Productos() {
                                 error={errors.nombre}
                                 className="sm:col-span-2"
                             />
-                            {/* El código de tela dice qué tela es (01-01-001); al
-                                sumarle el código del color (-0074) queda el
-                                producto que se compra y se vende. Es la clave
-                                del cruce con el packing list del proveedor. Se
-                                deja escribir; si se deja vacío, el servidor
-                                genera uno. */}
-                            <Input
-                                label="Código de tela"
-                                placeholder="01-01-001"
-                                value={form.codigo}
-                                onChange={setField('codigo')}
-                                error={errors.codigo}
-                            />
-                            <div className="sm:col-span-2">
+                            {/* El código de tela (01-familia-tipo) sale solo al elegir la
+                                familia y el tipo: no se escribe. Al sumarle el código del
+                                color (-0001) queda el código del producto con color, el
+                                mismo del QR y del código de barras de sus rollos. */}
+                            <div>
                                 <Input
-                                    label="Código de barras"
-                                    placeholder="Opcional"
-                                    value={form.codigo_barras}
-                                    onChange={setField('codigo_barras')}
-                                    error={errors.codigo_barras}
+                                    label="Código de tela"
+                                    placeholder="Sale al elegir familia y tipo"
+                                    value={form.codigo}
+                                    error={errors.codigo}
+                                    readOnly
+                                    className="bg-gray-50 font-mono text-gray-600"
                                 />
-                                <p className="mt-1 text-xs text-warm-400">
-                                    Para leerlo con un lector de código de barras en el punto de venta.
-                                    Se escribe a mano; si no lo usas, déjalo vacío.
-                                </p>
                             </div>
                             <label className="flex items-end gap-2 pb-2 text-sm text-gray-700">
                                 <input
@@ -2103,7 +2086,6 @@ export default function Productos() {
                         <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
                             {[
                                 ['Código', detalle.codigo],
-                                ['Cód. barras', detalle.codigo_barras],
                                 ['Marca', detalle.marca?.nombre],
                                 ['Sub-marca', detalle.sub_marca?.nombre],
                                 ['Familia', detalle.tipo_tela?.familia?.nombre],

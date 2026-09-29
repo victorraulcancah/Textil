@@ -143,7 +143,11 @@ export default function StockPorRollo() {
                 </span>
             ),
         },
-        { key: 'producto_codigo', label: 'Código' },
+        {
+            key: 'codigo_completo',
+            label: 'Código',
+            render: (row) => <span className="font-mono text-xs">{row.codigo_completo}</span>,
+        },
         {
             key: 'color',
             label: 'Color',

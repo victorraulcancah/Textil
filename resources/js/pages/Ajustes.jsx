@@ -1,23 +1,22 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowDownLeft, ArrowUpRight, BadgeCheck, Edit, Lock, Plus, Printer, Scale, Trash2 } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowDownLeft, ArrowUpRight, BadgeCheck, Edit, Lock, Printer, Scale, Trash2 } from 'lucide-react';
 import api, { asList } from '../lib/api';
-import { opcionesAlmacen } from '../lib/almacenes';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
 import DetalleCard from '../components/ui/DetalleCard';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
-import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select, Tabs } from '../components/ui';
+import { Alert, Badge, Button, DataTable, Input, Modal, Select, Tabs } from '../components/ui';
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
 
 const money = (n) =>
     new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(n) || 0);
 
-const emptyForm = { almacen_id: '', proveedor_id: '', tipo: 'entrada', motivo: '', observaciones: '' };
+const emptyForm = { estado: 'pendiente', observaciones: '' };
 const emptyMotivoForm = { nombre: '', tipo: 'entrada', activo: true };
-const emptyDetalle = { producto_id: '', producto_presentacion_id: '', cantidad: '' };
 
 const estadoInfo = {
     pendiente: { label: 'Pendiente', variant: 'amber' },
@@ -32,11 +31,8 @@ const tipoInfo = {
 
 export default function Ajustes() {
     const toast = useToast();
+    const navigate = useNavigate();
     const [ajustes, setAjustes] = useState([]);
-    const [almacenes, setAlmacenes] = useState([]);
-    const [productos, setProductos] = useState([]);
-    const [existencias, setExistencias] = useState([]);
-    const [proveedores, setProveedores] = useState([]);
     /** Ajuste cuyo detalle se muestra en la segunda tabla. */
     const [seleccionado, setSeleccionado] = useState(null);
     const sheet = useSheet();
@@ -47,7 +43,6 @@ export default function Ajustes() {
     const [modalOpen, setModalOpen] = useState(false);
     const [editing, setEditing] = useState(null);
     const [form, setForm] = useState(emptyForm);
-    const [detalles, setDetalles] = useState([{ ...emptyDetalle }]);
     const [formErrors, setFormErrors] = useState({});
     const [saving, setSaving] = useState(false);
 
@@ -78,22 +73,14 @@ export default function Ajustes() {
         setLoading(true);
         setError(null);
         try {
-            const [ajustesRes, almRes, prodRes, existRes, motivosRes, provRes] = await Promise.all([
+            const [ajustesRes, motivosRes] = await Promise.all([
                 api.get('/ajustes'),
-                api.get('/almacenes'),
-                api.get('/productos', { params: { per_page: 500 } }),
-                api.get('/existencias'),
                 api.get('/motivos-movimiento?ambito=inventario'),
-                api.get('/proveedores'),
             ]);
             const listaAjustes = asList(ajustesRes);
             setAjustes(listaAjustes);
-            setProveedores(asList(provRes));
             // Se conserva la selección tras recargar.
             setSeleccionado((prev) => listaAjustes.find((a) => a.id === prev?.id) ?? listaAjustes[0] ?? null);
-            setAlmacenes(asList(almRes));
-            setProductos(asList(prodRes));
-            setExistencias(asList(existRes));
             setMotivos(asList(motivosRes));
         } catch {
             setError('No se pudieron cargar los ajustes.');
@@ -124,119 +111,9 @@ export default function Ajustes() {
         }
     }, [activeTab, loadMotivos]);
 
-    /** Motivos activos de inventario que aplican al tipo elegido. */
-    const motivosOptions = useMemo(
-        () =>
-            motivos
-                // Los del sistema (Recepción, Salida por venta) los genera el
-                // propio flujo de compras y ventas: no son motivos de ajuste.
-                .filter(
-                    (m) =>
-                        m.activo !== false &&
-                        m.tipo === form.tipo &&
-                        !m.categoria_gasto &&
-                        !m.es_sistema,
-                )
-                .map((m) => ({ value: m.nombre, label: m.nombre })),
-        [motivos, form.tipo],
-    );
-
-    /** Stock (en unidad base) de cada producto en el almacén elegido. */
-    const stockDelAlmacen = useMemo(() => {
-        if (!form.almacen_id) return null;
-        return existencias
-            .filter((e) => String(e.almacen_id ?? e.almacen?.id) === String(form.almacen_id))
-            .reduce((acc, e) => {
-                acc[String(e.producto_id)] = Number(e.stock_actual) || 0;
-                return acc;
-            }, {});
-    }, [existencias, form.almacen_id]);
-
-    /**
-     * Solo los productos que existen en el almacén elegido. En una salida además
-     * se exige stock disponible: no se puede restar de lo que no hay.
-     */
-    /** Productos presentes en el almacén elegido. */
-    const productosOptions = useMemo(() => {
-        if (!stockDelAlmacen) return [];
-
-        return productos
-            .filter((p) => {
-                // En una entrada vale cualquier producto del catálogo, aunque
-                // nunca haya estado en este almacén: justamente se está
-                // cargando por primera vez. En una salida sí se exige stock.
-                if (form.tipo !== 'salida') return p.activo !== false;
-
-                return (stockDelAlmacen[String(p.id)] ?? 0) > 0;
-            })
-            .map((p) => ({
-                value: String(p.id),
-                label: p.nombre,
-                keywords: `${p.codigo ?? ''} ${p.codigo_barras ?? ''}`,
-            }));
-    }, [productos, stockDelAlmacen, form.tipo]);
-
-    const productoDe = (productoId) =>
-        productos.find((p) => String(p.id) === String(productoId)) ?? null;
-
-    /**
-     * Unidades derivadas de un producto con su factor de conversión y cuánto hay
-     * disponible expresado en esa unidad. El stock se guarda en unidad base: sin
-     * convertir se leería "1000" donde en realidad hay 2 paquetes de 500g.
-     */
-    const unidadesDe = useCallback(
-        (productoId) => {
-            const p = productoDe(productoId);
-            if (!p) return [];
-
-            const stockBase = stockDelAlmacen?.[String(p.id)] ?? 0;
-            const abrev = p.unidad_medida?.abreviatura ?? '';
-
-            return (Array.isArray(p.presentaciones) ? p.presentaciones : [])
-                .filter((pres) => pres.activo !== false)
-                .map((pres) => {
-                    const factor = Number(pres.factor_conversion) || 1;
-                    return {
-                        value: String(pres.id),
-                        label: `${pres.nombre} (x${num(factor)} ${abrev})`,
-                        unidad: pres.nombre,
-                        factor,
-                        abrev,
-                        stockBase,
-                        disponible: Math.floor((stockBase / factor) * 100) / 100,
-                    };
-                });
-        },
-        [productos, stockDelAlmacen],
-    );
-
-    /** Unidad elegida en una línea, con su disponible ya convertido. */
-    const unidadDe = (detalle) =>
-        unidadesDe(detalle.producto_id).find(
-            (u) => String(u.value) === String(detalle.producto_presentacion_id),
-        ) ?? null;
-
-    const setDetalle = (index, patch) => {
-        setDetalles((prev) => prev.map((d, i) => (i === index ? { ...d, ...patch } : d)));
-    };
-    const addDetalle = () => setDetalles((prev) => [...prev, { ...emptyDetalle }]);
-    const removeDetalle = (index) =>
-        setDetalles((prev) => (prev.length === 1 ? prev : prev.filter((_, i) => i !== index)));
-
-    const openCreate = () => {
-        setEditing(null);
-        setForm(emptyForm);
-        setDetalles([{ ...emptyDetalle }]);
-        setFormErrors({});
-        setModalOpen(true);
-    };
-
     const openEdit = (ajuste) => {
         setEditing(ajuste);
         setForm({
-            almacen_id: String(ajuste.almacen_id ?? ajuste.almacen?.id ?? ''),
-            tipo: ajuste.tipo ?? 'entrada',
-            motivo: ajuste.motivo ?? '',
             estado: ajuste.estado ?? 'pendiente',
             observaciones: ajuste.observaciones ?? '',
         });
@@ -250,51 +127,11 @@ export default function Ajustes() {
         setFormErrors({});
 
         try {
-            if (editing) {
-                await api.put(`/ajustes/${editing.id}`, {
-                    estado: form.estado,
-                    observaciones: form.observaciones,
-                });
-                toast.success('Ajuste actualizado correctamente.');
-            } else {
-                const lineas = detalles.filter((d) => d.producto_presentacion_id && Number(d.cantidad) > 0);
-                if (lineas.length === 0) {
-                    setFormErrors((prev) => ({ ...prev, detalles: 'Agrega al menos un producto con cantidad.' }));
-                    setSaving(false);
-                    return;
-                }
-
-                // Se avisa antes de enviar: el backend rechazaría igual, pero el
-                // mensaje aquí señala la línea concreta.
-                if (form.tipo === 'salida') {
-                    const excedida = lineas.find((d) => {
-                        const op = unidadDe(d);
-                        return op && Number(d.cantidad) > op.disponible;
-                    });
-                    if (excedida) {
-                        const op = unidadDe(excedida);
-                        const nombre = productoDe(excedida.producto_id)?.nombre ?? 'El producto';
-                        setFormErrors((prev) => ({
-                            ...prev,
-                            detalles: `"${nombre} — ${op.unidad}" solo tiene ${num(op.disponible)} disponibles.`,
-                        }));
-                        setSaving(false);
-                        return;
-                    }
-                }
-                await api.post('/ajustes', {
-                    almacen_id: form.almacen_id,
-                    proveedor_id: form.proveedor_id || null,
-                    tipo: form.tipo,
-                    motivo: form.motivo,
-                    observaciones: form.observaciones,
-                    detalles: lineas.map((d) => ({
-                        producto_presentacion_id: d.producto_presentacion_id,
-                        cantidad: d.cantidad,
-                    })),
-                });
-                toast.success('Ajuste creado y stock actualizado.');
-            }
+            await api.put(`/ajustes/${editing.id}`, {
+                estado: form.estado,
+                observaciones: form.observaciones,
+            });
+            toast.success('Ajuste actualizado correctamente.');
             setModalOpen(false);
             await load();
         } catch (err) {
@@ -739,7 +576,7 @@ export default function Ajustes() {
                 }
                 actions={
                     activeTab === 'ajustes' ? (
-                        <CreateButton onClick={openCreate}>Nuevo ajuste</CreateButton>
+                        <CreateButton onClick={() => navigate('/ajustes/nuevo')}>Nuevo ajuste</CreateButton>
                     ) : (
                         <CreateButton onClick={openMotivoCreate}>Nuevo motivo</CreateButton>
                     )
@@ -853,6 +690,15 @@ export default function Ajustes() {
                                                 <td className="px-3 py-2 text-warm-500">{producto?.codigo ?? '—'}</td>
                                                 <td className="px-3 py-2 font-semibold text-warm-900">
                                                     {producto?.nombre ?? '—'}
+                                                    {d.color && (
+                                                        <span className="ml-2 text-xs font-normal uppercase text-warm-500">· {d.color.nombre}</span>
+                                                    )}
+                                                    {d.rollos ? (
+                                                        <span className="ml-2 text-xs font-normal text-warm-500">({d.rollos} rollos)</span>
+                                                    ) : null}
+                                                    {d.rollo && (
+                                                        <span className="ml-2 text-xs font-normal text-warm-500">(rollo {d.rollo.codigo})</span>
+                                                    )}
                                                 </td>
                                                 <td className="px-3 py-2 text-warm-500">
                                                     {producto?.marca?.nombre ?? '—'}
@@ -895,236 +741,36 @@ export default function Ajustes() {
                 </>
             )}
 
-            {/* Modal crear/editar ajuste */}
+            {/* Modal editar ajuste (crear es una vista aparte: /ajustes/nuevo) */}
             <Modal
                 open={modalOpen}
                 onClose={() => setModalOpen(false)}
-                title={editing ? 'Editar ajuste' : 'Nuevo ajuste'}
-                description={
-                    editing
-                        ? `Actualiza el estado del ajuste #${editing.id}`
-                        : 'Corrige el stock de un almacén: la cantidad se indica en la unidad del producto'
-                }
-                size={editing ? 'md' : '2xl'}
+                title="Editar ajuste"
+                description={editing ? `Actualiza el estado del ajuste #${editing.id}` : ''}
+                size="md"
                 footer={
                     <>
                         <Button variant="secondary" onClick={() => setModalOpen(false)}>
                             Cancelar
                         </Button>
                         <Button type="submit" form="ajuste-form" loading={saving}>
-                            {editing ? 'Guardar cambios' : 'Crear ajuste'}
+                            Guardar cambios
                         </Button>
                     </>
                 }
             >
                 <form id="ajuste-form" onSubmit={handleSubmit} className="space-y-4" noValidate>
-                    {editing ? (
-                        <Select
-                            label="Estado"
-                            name="estado"
-                            value={form.estado}
-                            onChange={(e) => setForm((prev) => ({ ...prev, estado: e.target.value }))}
-                            options={Object.entries(estadoInfo).map(([value, info]) => ({
-                                value,
-                                label: info.label,
-                            }))}
-                            error={formErrors.estado}
-                        />
-                    ) : (
-                        <>
-                            <SearchSelect
-                                label="Almacén"
-                                value={form.almacen_id}
-                                // Cambiar de almacén invalida los productos ya elegidos.
-                                onChange={(v) => {
-                                    setForm((prev) => ({ ...prev, almacen_id: v ?? '' }));
-                                    setDetalles([{ ...emptyDetalle }]);
-                                }}
-                                placeholder="Seleccione un almacén"
-                                emptyText="Sin coincidencias"
-                                options={opcionesAlmacen(almacenes, form.almacen_id)}
-                                error={formErrors.almacen_id}
-                            />
-                            <SearchSelect
-                                label="Proveedor (opcional)"
-                                value={form.proveedor_id}
-                                onChange={(v) => setForm((prev) => ({ ...prev, proveedor_id: v }))}
-                                options={proveedores.map((p) => ({ value: String(p.id), label: p.nombre }))}
-                                placeholder="Sin proveedor"
-                                emptyText="Sin coincidencias"
-                            />
-                            <Select
-                                label="Tipo"
-                                name="tipo"
-                                value={form.tipo}
-                                // El tipo cambia qué productos y motivos aplican.
-                                onChange={(e) => {
-                                    setForm((prev) => ({ ...prev, tipo: e.target.value, motivo: '' }));
-                                    setDetalles([{ ...emptyDetalle }]);
-                                }}
-                                options={[
-                                    { value: 'entrada', label: 'Entrada' },
-                                    { value: 'salida', label: 'Salida' },
-                                ]}
-                                error={formErrors.tipo}
-                            />
-                            <Select
-                                label="Motivo"
-                                name="motivo"
-                                value={form.motivo}
-                                onChange={(e) => {
-                                    setForm((prev) => ({ ...prev, motivo: e.target.value }));
-                                    if (formErrors.motivo) {
-                                        setFormErrors((prev) => ({ ...prev, motivo: undefined }));
-                                    }
-                                }}
-                                options={[{ value: '', label: 'Seleccione un motivo' }, ...motivosOptions]}
-                                error={formErrors.motivo}
-                            />
-
-                            <div>
-                                <div className="mb-2 flex items-center justify-between">
-                                    <span className="text-sm font-medium text-gray-700">
-                                        Productos ({form.tipo === 'salida' ? 'a restar' : 'a sumar'})
-                                    </span>
-                                    <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={addDetalle}
-                                        disabled={!form.almacen_id}
-                                    >
-                                        <Plus className="h-4 w-4" />
-                                        Agregar línea
-                                    </Button>
-                                </div>
-
-                                {!form.almacen_id ? (
-                                    <Alert variant="info">
-                                        Elige un almacén para ver sus productos disponibles.
-                                    </Alert>
-                                ) : productosOptions.length === 0 ? (
-                                    <Alert variant="warning">
-                                        {form.tipo === 'salida'
-                                            ? 'Este almacén no tiene productos con stock para restar.'
-                                            : 'Este almacén no tiene productos registrados.'}
-                                    </Alert>
-                                ) : (
-                                    <div className="overflow-x-auto rounded-lg border border-edge">
-                                        <table className="w-full min-w-[760px] text-sm">
-                                            <thead>
-                                                <tr className="bg-primary-600 text-left text-xs font-semibold uppercase tracking-wide text-white">
-                                                    <th className="px-3 py-2.5">Producto</th>
-                                                    <th className="w-48 px-3 py-2.5">Unidad derivada</th>
-                                                    <th className="w-32 px-3 py-2.5 text-right">Disponible</th>
-                                                    <th className="w-28 px-3 py-2.5 text-right">Cantidad</th>
-                                                    <th className="w-14 px-3 py-2.5" />
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-gray-100">
-                                                {detalles.map((d, index) => {
-                                                    const unidades = unidadesDe(d.producto_id);
-                                                    const op = unidadDe(d);
-                                                    // En una salida no se puede pedir más de lo que hay.
-                                                    const excede =
-                                                        form.tipo === 'salida' &&
-                                                        op &&
-                                                        Number(d.cantidad) > op.disponible;
-
-                                                    return (
-                                                        <tr key={index}>
-                                                            <td className="px-3 py-2">
-                                                                <SearchSelect
-                                                                    value={d.producto_id}
-                                                                    onChange={(v) => {
-                                                                        // Si solo hay una unidad, se elige sola.
-                                                                        const us = unidadesDe(v);
-                                                                        setDetalle(index, {
-                                                                            producto_id: v,
-                                                                            producto_presentacion_id:
-                                                                                us.length === 1 ? us[0].value : '',
-                                                                        });
-                                                                        if (formErrors.detalles) {
-                                                                            setFormErrors((prev) => ({
-                                                                                ...prev,
-                                                                                detalles: undefined,
-                                                                            }));
-                                                                        }
-                                                                    }}
-                                                                    options={productosOptions}
-                                                                    placeholder="Buscar producto…"
-                                                                    emptyText="Sin coincidencias"
-                                                                />
-                                                            </td>
-                                                            <td className="px-3 py-2">
-                                                                <SearchSelect
-                                                                    value={d.producto_presentacion_id}
-                                                                    disabled={!d.producto_id}
-                                                                    clearable={false}
-                                                                    placeholder={d.producto_id ? 'Elegir…' : '—'}
-                                                                    emptyText="Sin unidades"
-                                                                    onChange={(id) =>
-                                                                        id &&
-                                                                        setDetalle(index, {
-                                                                            producto_presentacion_id: id,
-                                                                        })
-                                                                    }
-                                                                    options={unidades}
-                                                                />
-                                                            </td>
-                                                            <td className="px-3 py-2 text-right">
-                                                                {op ? (
-                                                                    <div className="leading-tight">
-                                                                        <div className="font-semibold text-warm-900">
-                                                                            {num(op.disponible)} {op.unidad}
-                                                                        </div>
-                                                                        <div className="text-xs text-warm-500">
-                                                                            {num(op.stockBase)} {op.abrev}
-                                                                        </div>
-                                                                    </div>
-                                                                ) : (
-                                                                    <span className="text-warm-500">—</span>
-                                                                )}
-                                                            </td>
-                                                            <td className="px-3 py-2">
-                                                                <Input
-                                                                    type="number"
-                                                                    min="0"
-                                                                    step="any"
-                                                                    placeholder="0"
-                                                                    value={d.cantidad}
-                                                                    onChange={(e) =>
-                                                                        setDetalle(index, { cantidad: e.target.value })
-                                                                    }
-                                                                    error={excede ? 'Supera el stock' : undefined}
-                                                                    className="text-right"
-                                                                />
-                                                            </td>
-                                                            <td className="px-3 py-2 text-center">
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => removeDetalle(index)}
-                                                                    disabled={detalles.length === 1}
-                                                                    aria-label="Quitar"
-                                                                    className="rounded-md p-1.5 text-red-600 transition hover:bg-red-50 disabled:opacity-40"
-                                                                >
-                                                                    <Trash2 className="h-4 w-4" />
-                                                                </button>
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                )}
-
-                                {formErrors.detalles && (
-                                    <p className="mt-1 text-xs text-red-600">{formErrors.detalles}</p>
-                                )}
-                            </div>
-                        </>
-                    )}
+                    <Select
+                        label="Estado"
+                        name="estado"
+                        value={form.estado}
+                        onChange={(e) => setForm((prev) => ({ ...prev, estado: e.target.value }))}
+                        options={Object.entries(estadoInfo).map(([value, info]) => ({
+                            value,
+                            label: info.label,
+                        }))}
+                        error={formErrors.estado}
+                    />
                     <Input
                         label="Observaciones"
                         name="observaciones"

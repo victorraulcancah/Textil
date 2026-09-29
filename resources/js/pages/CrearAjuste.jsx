@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Scale, Trash2 } from 'lucide-react';
+import { ArrowLeft, ChevronRight, Plus, Scale, Trash2 } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { opcionesAlmacen } from '../lib/almacenes';
 import { useToast } from '../lib/toast';
@@ -9,7 +9,7 @@ import ColorSelect from '../components/ColorSelect';
 import ProductoPickerModal from '../components/ProductoPickerModal';
 import SelectorRollo from '../components/SelectorRollo';
 import TelaCompraModal, { presentacionMetroDe } from '../components/TelaCompraModal';
-import { Alert, Button, Input, SearchSelect, Select, Spinner } from '../components/ui';
+import { Alert, Button, Input, SearchSelect, Select, Spinner, cn } from '../components/ui';
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
 const money = (n) => new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(n) || 0);
@@ -29,9 +29,6 @@ const panelVacio = {
     rollo_max: 0,
     costo: '',
 };
-
-const inputCls =
-    'rounded-md border-0 px-2 py-1.5 text-right text-sm shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-primary-600';
 
 /**
  * Nuevo ajuste de inventario: vista aparte, no modal (igual que Pedido,
@@ -67,6 +64,8 @@ export default function CrearAjuste() {
     /** El buscador de productos y la tabla de colores de una tela (entrada). */
     const [picker, setPicker] = useState({ open: false, query: '' });
     const [telaEntrada, setTelaEntrada] = useState(null);
+    /** Telas desplegadas en la tabla: { [id del producto]: true }. */
+    const [abiertas, setAbiertas] = useState({});
 
     useEffect(() => {
         let vivo = true;
@@ -368,6 +367,38 @@ export default function CrearAjuste() {
         setPanel({ ...panelVacio });
     };
 
+    /** Quita de una vez todos los colores (o rollos) de una tela. */
+    const quitarVarias = (indices) => setItems((prev) => prev.filter((_, j) => !indices.includes(j)));
+    /** Un solo costo por metro para todos los colores de una tela. */
+    const costoDeTela = (indices, valor) =>
+        setItems((prev) => prev.map((it, j) => (indices.includes(j) ? { ...it, costo: valor } : it)));
+    const alternar = (clave) => setAbiertas((prev) => ({ ...prev, [clave]: !prev[clave] }));
+
+    /**
+     * Lo que se ve en la tabla, como en el pedido: cada tela es una sola fila
+     * (sus colores y rollos se despliegan debajo); lo demás va línea por línea.
+     */
+    const filasTabla = useMemo(() => {
+        const filas = [];
+        const telas = new Map();
+
+        items.forEach((it, i) => {
+            if (it.tipo === 'comun') {
+                filas.push({ tipo: 'linea', clave: `l${i}`, it, i });
+                return;
+            }
+            const clave = String(it.producto_id);
+            if (!telas.has(clave)) {
+                const tela = { tipo: 'tela', clave, producto_id: it.producto_id, indices: [] };
+                telas.set(clave, tela);
+                filas.push(tela);
+            }
+            telas.get(clave).indices.push(i);
+        });
+
+        return filas;
+    }, [items]);
+
     const setItem = (i, patch) => setItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
     const quitar = (i) => setItems((prev) => prev.filter((_, idx) => idx !== i));
 
@@ -611,7 +642,7 @@ export default function CrearAjuste() {
                             )}
                         </div>
 
-                        {/* Lo agregado */}
+                        {/* Lo agregado: una fila por tela, con sus colores desplegables (como el pedido). */}
                         <div className="rounded-xl border border-edge bg-white p-5 shadow-sm">
                             <h2 className="mb-3 text-sm font-semibold text-warm-900">Detalle del ajuste</h2>
                             <div className="overflow-x-auto rounded-lg border border-edge">
@@ -619,94 +650,192 @@ export default function CrearAjuste() {
                                     <thead>
                                         <tr className="bg-primary-600 text-left text-xs font-semibold uppercase tracking-wide text-white">
                                             <th className="px-3 py-2">Producto</th>
-                                            <th className="w-52 px-3 py-2">Detalle</th>
-                                            <th className="w-28 px-3 py-2 text-right">Cantidad</th>
-                                            <th className="w-28 px-3 py-2 text-right">Costo</th>
-                                            <th className="w-28 px-3 py-2 text-right">Total</th>
-                                            <th className="w-12 px-3 py-2" />
+                                            <th className="px-3 py-2">Presentación</th>
+                                            <th className="px-3 py-2 text-right">Cantidad</th>
+                                            <th className="px-3 py-2 text-right">Costo</th>
+                                            <th className="px-3 py-2 text-right">Total</th>
+                                            <th className="w-14 px-3 py-2 text-center">Acciones</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100">
                                         {items.length === 0 && (
                                             <tr>
-                                                <td colSpan={6} className="px-3 py-6 text-center text-warm-500">
-                                                    Agrega productos arriba
+                                                <td colSpan={6} className="px-3 py-10 text-center text-warm-400">
+                                                    Agrega productos con el buscador de arriba.
                                                 </td>
                                             </tr>
                                         )}
-                                        {items.map((it, i) => {
+
+                                        {filasTabla.map((fila) => {
+                                            // Una tela: una fila y, al desplegarla, sus colores con los rollos.
+                                            if (fila.tipo === 'tela') {
+                                                const lineas = fila.indices.map((i) => ({ it: items[i], i }));
+                                                const producto = productoDe(fila.producto_id);
+                                                const colores = new Set(lineas.map(({ it }) => it.color_id || 'x'));
+                                                const rollos = lineas.reduce((suma, { it }) => suma + (it.tipo === 'rollos' ? Number(it.rollos) || 0 : 1), 0);
+                                                const metros = lineas.reduce((suma, { it }) => suma + cantidadDe(it), 0);
+                                                const total = lineas.reduce((suma, { it }) => suma + totalDe(it), 0);
+                                                const costos = [...new Set(lineas.map(({ it }) => String(it.costo)))];
+                                                const abierta = Boolean(abiertas[fila.clave]);
+                                                const colorDe = (it) => (producto?.colores ?? []).find((c) => String(c.id) === String(it.color_id));
+
+                                                return (
+                                                    <Fragment key={fila.clave}>
+                                                        <tr className="cursor-pointer transition hover:bg-gray-50" onClick={() => alternar(fila.clave)}>
+                                                            <td className="px-3 py-2">
+                                                                <span className="flex items-center gap-2">
+                                                                    <button
+                                                                        type="button"
+                                                                        aria-expanded={abierta}
+                                                                        aria-label={abierta ? 'Ocultar colores' : 'Ver colores'}
+                                                                        className="rounded p-0.5 text-warm-500 hover:bg-gray-100"
+                                                                    >
+                                                                        <ChevronRight className={cn('h-4 w-4 transition-transform duration-300', abierta && 'rotate-90')} />
+                                                                    </button>
+                                                                    <span className="font-medium text-warm-900">{producto?.nombre ?? '—'}</span>
+                                                                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-warm-700">
+                                                                        {colores.size} color{colores.size === 1 ? '' : 'es'}
+                                                                    </span>
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-3 py-2 text-warm-700">Rollo</td>
+                                                            <td className="px-3 py-2 text-right font-medium text-warm-900">
+                                                                {rollos} rollo{rollos === 1 ? '' : 's'}
+                                                                <span className="block text-[11px] font-normal text-warm-500">{num(metros)} m</span>
+                                                            </td>
+                                                            {/* Un costo por metro para toda la tela; cada color puede llevar el suyo. */}
+                                                            <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
+                                                                <Input
+                                                                    type="number"
+                                                                    step="0.0001"
+                                                                    min="0"
+                                                                    value={costos.length === 1 ? costos[0] : ''}
+                                                                    placeholder={costos.length === 1 ? undefined : 'varios'}
+                                                                    onChange={(e) => costoDeTela(fila.indices, e.target.value)}
+                                                                    className="ml-auto w-28 text-right"
+                                                                    aria-label={`Costo por metro de ${producto?.nombre}`}
+                                                                />
+                                                                <span className="mt-0.5 block text-[11px] text-warm-500">por metro</span>
+                                                            </td>
+                                                            <td className="px-3 py-2 text-right font-semibold text-primary-600">{money(total)}</td>
+                                                            <td className="px-3 py-2 text-center" onClick={(e) => e.stopPropagation()}>
+                                                                <button
+                                                                    type="button"
+                                                                    aria-label={`Quitar ${producto?.nombre}`}
+                                                                    onClick={() => quitarVarias(fila.indices)}
+                                                                    className="rounded-md p-1.5 text-red-600 transition hover:bg-red-50"
+                                                                >
+                                                                    <Trash2 className="h-4 w-4" />
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                        {/* Los colores se despliegan con una animación de altura. */}
+                                                        <tr className="border-b-0">
+                                                            <td colSpan={6} className="p-0">
+                                                                <div className={cn('grid transition-[grid-template-rows] duration-300 ease-out', abierta ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]')}>
+                                                                    <div className="overflow-hidden">
+                                                                        <div className={cn('bg-gray-50/70 py-1 pl-10 pr-3 transition-opacity duration-300', abierta ? 'border-b border-gray-100 opacity-100' : 'opacity-0')}>
+                                                                            <div className="grid grid-cols-[1fr_5.5rem_7rem_6rem_7rem_2.5rem] items-center gap-3 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-warm-500">
+                                                                                <span>Color</span>
+                                                                                <span className="text-right">{esSalida ? 'Rollo' : 'Rollos'}</span>
+                                                                                <span className="text-right">{esSalida ? 'Metros a restar' : 'Metros por rollo'}</span>
+                                                                                <span className="text-right">Total (m)</span>
+                                                                                <span className="text-right">Costo por metro</span>
+                                                                                <span />
+                                                                            </div>
+                                                                            {lineas.map(({ it, i }) => {
+                                                                                const excede = it.tipo === 'rollo' && Number(it.metros) > it.rollo_max;
+                                                                                const color = colorDe(it);
+                                                                                return (
+                                                                                    <div key={i} className="grid grid-cols-[1fr_5.5rem_7rem_6rem_7rem_2.5rem] items-center gap-3 px-2 py-1.5">
+                                                                                        <span className="inline-flex items-center gap-2 font-medium uppercase text-warm-800">
+                                                                                            <span className="h-3 w-3 shrink-0 rounded-full ring-1 ring-black/10" style={{ backgroundColor: color?.hex || '#9ca3af' }} />
+                                                                                            {color?.nombre || 'Sin color'}
+                                                                                        </span>
+                                                                                        {it.tipo === 'rollos' ? (
+                                                                                            <Input
+                                                                                                type="number"
+                                                                                                step="1"
+                                                                                                min="1"
+                                                                                                value={it.rollos}
+                                                                                                onChange={(e) => setItem(i, { rollos: e.target.value })}
+                                                                                                className="text-right"
+                                                                                                aria-label={`Rollos de ${producto?.nombre} ${color?.nombre ?? ''}`}
+                                                                                                tabIndex={abierta ? 0 : -1}
+                                                                                            />
+                                                                                        ) : (
+                                                                                            <span className="truncate text-right text-xs text-warm-600" title={it.rollo_codigo}>
+                                                                                                {it.rollo_codigo}
+                                                                                            </span>
+                                                                                        )}
+                                                                                        <Input
+                                                                                            type="number"
+                                                                                            step="0.01"
+                                                                                            min="0"
+                                                                                            value={it.metros}
+                                                                                            onChange={(e) => setItem(i, { metros: e.target.value })}
+                                                                                            error={excede ? `Máx. ${num(it.rollo_max)}` : undefined}
+                                                                                            className="text-right"
+                                                                                            aria-label={it.tipo === 'rollos' ? 'Metros por rollo' : 'Metros a restar'}
+                                                                                            tabIndex={abierta ? 0 : -1}
+                                                                                        />
+                                                                                        <span className="text-right font-medium text-warm-900">{num(cantidadDe(it))} m</span>
+                                                                                        <Input
+                                                                                            type="number"
+                                                                                            step="0.0001"
+                                                                                            min="0"
+                                                                                            value={it.costo}
+                                                                                            onChange={(e) => setItem(i, { costo: e.target.value })}
+                                                                                            className="text-right"
+                                                                                            aria-label="Costo por metro"
+                                                                                            tabIndex={abierta ? 0 : -1}
+                                                                                        />
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            aria-label="Quitar"
+                                                                                            onClick={() => quitar(i)}
+                                                                                            tabIndex={abierta ? 0 : -1}
+                                                                                            className="rounded-md p-1.5 text-red-600 transition hover:bg-red-50"
+                                                                                        >
+                                                                                            <Trash2 className="h-4 w-4" />
+                                                                                        </button>
+                                                                                    </div>
+                                                                                );
+                                                                            })}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    </Fragment>
+                                                );
+                                            }
+
+                                            // Lo demás (hilos, cierres…): una línea por producto.
+                                            const { it, i } = fila;
                                             const p = productoDe(it.producto_id);
-                                            const color = (p?.colores ?? []).find((c) => String(c.id) === String(it.color_id));
-                                            const u = it.tipo === 'comun' ? unidadDe(it.producto_id, it.producto_presentacion_id) : null;
-                                            const excede =
-                                                (it.tipo === 'comun' && esSalida && u && Number(it.cantidad) > u.disponible) ||
-                                                (it.tipo === 'rollo' && Number(it.metros) > it.rollo_max);
+                                            const u = unidadDe(it.producto_id, it.producto_presentacion_id);
+                                            const excede = esSalida && u && Number(it.cantidad) > u.disponible;
 
                                             return (
-                                                <tr key={i}>
-                                                    <td className="px-3 py-2 font-medium text-warm-900">
-                                                        {p?.nombre ?? '—'}
-                                                        {color && (
-                                                            <span className="ml-2 inline-flex items-center gap-1 text-xs font-normal uppercase text-warm-500">
-                                                                <span className="h-2.5 w-2.5 rounded-full ring-1 ring-black/10" style={{ backgroundColor: color.hex || '#9ca3af' }} />
-                                                                {color.nombre}
-                                                            </span>
-                                                        )}
-                                                    </td>
-                                                    <td className="px-3 py-2 text-warm-600">
-                                                        {it.tipo === 'rollos' && (
-                                                            <span className="inline-flex items-center gap-1.5">
-                                                                <input
-                                                                    type="number"
-                                                                    min="1"
-                                                                    step="1"
-                                                                    value={it.rollos}
-                                                                    onChange={(e) => setItem(i, { rollos: e.target.value })}
-                                                                    aria-label="Rollos"
-                                                                    className={`w-16 ${inputCls}`}
-                                                                />
-                                                                rollos ×
-                                                                <input
-                                                                    type="number"
-                                                                    min="0"
-                                                                    step="0.01"
-                                                                    value={it.metros}
-                                                                    onChange={(e) => setItem(i, { metros: e.target.value })}
-                                                                    aria-label="Metros por rollo"
-                                                                    className={`w-20 ${inputCls}`}
-                                                                />
-                                                                m
-                                                            </span>
-                                                        )}
-                                                        {it.tipo === 'rollo' && (
-                                                            <span>
-                                                                Rollo {it.rollo_codigo}
-                                                                <span className="block text-xs text-warm-400">tiene {num(it.rollo_max)} m</span>
-                                                            </span>
-                                                        )}
-                                                        {it.tipo === 'comun' && (
-                                                            <span>
-                                                                {u?.unidad ?? '—'}
-                                                                {esSalida && u && <span className="block text-xs text-warm-400">disp. {num(u.disponible)}</span>}
-                                                            </span>
-                                                        )}
+                                                <tr key={fila.clave}>
+                                                    <td className="px-3 py-2 font-medium text-warm-900">{p?.nombre ?? '—'}</td>
+                                                    <td className="px-3 py-2 text-warm-700">
+                                                        {u?.unidad ?? '—'}
+                                                        {esSalida && u && <span className="block text-xs text-warm-400">disp. {num(u.disponible)}</span>}
                                                     </td>
                                                     <td className="px-3 py-2 text-right">
-                                                        {it.tipo === 'rollos' ? (
-                                                            <span className="font-semibold text-warm-900">{num(cantidadDe(it))} m</span>
-                                                        ) : (
-                                                            <Input
-                                                                type="number"
-                                                                min="0"
-                                                                step="any"
-                                                                value={it.tipo === 'rollo' ? it.metros : it.cantidad}
-                                                                onChange={(e) => setItem(i, it.tipo === 'rollo' ? { metros: e.target.value } : { cantidad: e.target.value })}
-                                                                error={excede ? 'Supera el stock' : undefined}
-                                                                className="text-right"
-                                                            />
-                                                        )}
+                                                        <Input
+                                                            type="number"
+                                                            min="0"
+                                                            step="any"
+                                                            value={it.cantidad}
+                                                            onChange={(e) => setItem(i, { cantidad: e.target.value })}
+                                                            error={excede ? 'Supera el stock' : undefined}
+                                                            className="ml-auto w-28 text-right"
+                                                        />
                                                     </td>
-                                                    <td className="px-3 py-2">
+                                                    <td className="px-3 py-2 text-right">
                                                         <Input
                                                             type="number"
                                                             min="0"
@@ -714,8 +843,8 @@ export default function CrearAjuste() {
                                                             placeholder="0"
                                                             value={it.costo}
                                                             onChange={(e) => setItem(i, { costo: e.target.value })}
-                                                            aria-label={it.tipo === 'comun' ? 'Costo' : 'Costo por metro'}
-                                                            className="text-right"
+                                                            aria-label="Costo"
+                                                            className="ml-auto w-28 text-right"
                                                         />
                                                     </td>
                                                     <td className="px-3 py-2 text-right font-semibold text-primary-600">{money(totalDe(it))}</td>

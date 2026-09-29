@@ -18,6 +18,10 @@ class CierreCaja extends Model
         'monto_sistema',
         'monto_contado',
         'diferencia',
+        // Los dólares se arquean aparte de los soles.
+        'monto_sistema_usd',
+        'monto_contado_usd',
+        'diferencia_usd',
         'fecha_cierre',
     ];
 
@@ -27,6 +31,9 @@ class CierreCaja extends Model
             'monto_sistema' => 'decimal:2',
             'monto_contado' => 'decimal:2',
             'diferencia' => 'decimal:2',
+            'monto_sistema_usd' => 'decimal:2',
+            'monto_contado_usd' => 'decimal:2',
+            'diferencia_usd' => 'decimal:2',
             'fecha_cierre' => 'datetime',
         ];
     }

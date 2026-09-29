@@ -38,6 +38,11 @@ return [
         // La bandeja de solicitudes de traslado: decide si el traslado sale
         // o no. Quien lo crea no necesariamente puede autorizarlo.
         'aprobar' => 'Aprobar / rechazar',
+        // Cuánto se le fía a un cliente lo decide quien aprueba el crédito,
+        // no cualquiera que edite sus datos.
+        'linea_credito' => 'Aprobar línea de crédito',
+        // Vender a crédito por encima de lo disponible de la línea.
+        'exceder_credito' => 'Autorizar exceso de crédito',
     ],
 
     // Las que tiene cualquier submódulo. "Imprimir" no está aquí: solo la
@@ -72,8 +77,10 @@ return [
                     'label' => 'Clientes',
                     'apis' => ['clientes'],
                     // Sin "ver todo", cada quien ve solo los clientes a su cargo.
-                    'acciones' => ['ver', 'ver_todo', 'crear', 'editar', 'eliminar'],
+                    'acciones' => ['ver', 'ver_todo', 'crear', 'editar', 'eliminar', 'linea_credito'],
                 ],
+                'categorias-comerciales' => ['label' => 'Categorías comerciales', 'apis' => ['categorias-comerciales']],
+                'actividades-comerciales' => ['label' => 'Actividades comerciales', 'apis' => ['actividades-comerciales']],
                 'pedidos' => [
                     'label' => 'Pedidos',
                     'apis' => ['ordenes-venta'],
@@ -85,6 +92,7 @@ return [
                     'label' => 'Notas de venta',
                     'apis' => ['notas-venta'],
                     'pdf' => ['nota-venta'],
+                    'acciones' => ['ver', 'crear', 'editar', 'eliminar', 'exceder_credito'],
                     // Facturar un pedido es crear una venta, no crear un pedido.
                     'patrones' => ['ordenes-venta/*/facturar' => 'crear'],
                 ],
@@ -220,6 +228,16 @@ return [
                 'cierres-caja' => ['label' => 'Cierres de caja', 'apis' => ['cierres-caja'], 'pdf' => ['cierre-caja']],
                 'motivos-movimiento' => ['label' => 'Motivos de movimiento', 'apis' => ['motivos-movimiento']],
                 'cuentas-por-cobrar' => ['label' => 'Cuentas por cobrar', 'apis' => ['cuentas-por-cobrar']],
+                'estado-cuenta' => [
+                    'label' => 'Estado de cuenta',
+                    'apis' => ['estado-cuenta'],
+                    'pdf' => ['estado-cuenta'],
+                    'acciones' => ['ver', 'exportar'],
+                    'patrones' => ['estado-cuenta/*/excel' => 'exportar'],
+                ],
+                // El del día para vender y cobrar se lee sin permiso (tipo-cambio);
+                // esta es la pantalla donde se pone el comercial.
+                'tipos-cambio' => ['label' => 'Tipo de cambio', 'apis' => ['tipos-cambio'], 'acciones' => ['ver', 'editar']],
                 'cuentas-por-pagar' => ['label' => 'Cuentas por pagar', 'apis' => ['cuentas-por-pagar']],
             ],
         ],

@@ -13,7 +13,12 @@ class CuentaPorCobrarPago extends Model
         'forma_pago',
         'cuenta_bancaria_id',
         'billetera_id',
+        // Lo que abona a la deuda, en la moneda de la deuda.
         'monto',
+        'moneda',
+        // Si pagó con soles una deuda en dólares: cuánto y a qué tipo de cambio.
+        'monto_pen',
+        'tipo_cambio',
         'movimiento_caja_id',
         'referencia',
         'fecha',
@@ -23,6 +28,8 @@ class CuentaPorCobrarPago extends Model
     {
         return [
             'monto' => 'decimal:2',
+            'monto_pen' => 'decimal:2',
+            'tipo_cambio' => 'decimal:4',
             'fecha' => 'date',
         ];
     }

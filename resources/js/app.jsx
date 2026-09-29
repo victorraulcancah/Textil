@@ -34,6 +34,7 @@ import Compras from './pages/Compras';
 import CrearCompra from './pages/CrearCompra';
 import RecepcionesCompra from './pages/RecepcionesCompra';
 import Clientes from './pages/Clientes';
+import CatalogoComercial from './pages/CatalogosComerciales';
 import NotasVenta from './pages/NotasVenta';
 import Pedidos from './pages/Pedidos';
 import CrearPedido from './pages/CrearPedido';
@@ -92,6 +93,9 @@ const routes = [
     { path: '/compras/:id/editar', element: <CrearCompra /> },
     { path: '/recepciones-compra', element: <RecepcionesCompra /> },
     { path: '/clientes', element: <Clientes /> },
+    // La misma pantalla para los dos: el key evita que una herede el estado de la otra.
+    { path: '/categorias-comerciales', element: <CatalogoComercial key="categorias" tipo="categorias" /> },
+    { path: '/actividades-comerciales', element: <CatalogoComercial key="actividades" tipo="actividades" /> },
     { path: '/pedidos', element: <Pedidos /> },
     { path: '/pedidos/nuevo', element: <CrearPedido /> },
     { path: '/pedidos/:id/editar', element: <CrearPedido /> },

@@ -22,6 +22,8 @@ class NotaVenta extends Model
         'vendedor_id',
         'fecha_emision',
         'moneda',
+        // SUNAT venta del día: lleva a soles una venta en dólares en los reportes.
+        'tipo_cambio',
         'tipo_pago',
         'subtotal',
         'descuento_total',
@@ -41,6 +43,7 @@ class NotaVenta extends Model
             'subtotal' => 'decimal:2',
             'descuento_total' => 'decimal:2',
             'total' => 'decimal:2',
+            'tipo_cambio' => 'decimal:4',
         ];
     }
 

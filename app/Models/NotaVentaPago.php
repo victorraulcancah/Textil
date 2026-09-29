@@ -14,7 +14,12 @@ class NotaVentaPago extends Model
         'forma_pago',
         'cuenta_bancaria_id',
         'billetera_id',
+        // Lo que abona a la venta, en la moneda de la venta.
         'monto',
+        'moneda',
+        // Si pagó con soles una venta en dólares: cuánto y a qué tipo de cambio.
+        'monto_pen',
+        'tipo_cambio',
         'fecha',
         'referencia',
     ];
@@ -23,6 +28,8 @@ class NotaVentaPago extends Model
     {
         return [
             'monto' => 'decimal:2',
+            'monto_pen' => 'decimal:2',
+            'tipo_cambio' => 'decimal:4',
             'fecha' => 'date',
         ];
     }

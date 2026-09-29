@@ -24,6 +24,8 @@ import {
     ClipboardCheck,
     ShoppingBag,
     Contact,
+    Tag,
+    Briefcase,
     ReceiptText,
     Store,
     Repeat,
@@ -56,6 +58,8 @@ export const navigation = [
         icon: ShoppingBag,
         children: [
             { label: 'Clientes', icon: Contact, to: '/clientes', permiso: 'ventas.clientes' },
+            { label: 'Categorías comerciales', icon: Tag, to: '/categorias-comerciales', permiso: 'ventas.categorias-comerciales' },
+            { label: 'Actividades comerciales', icon: Briefcase, to: '/actividades-comerciales', permiso: 'ventas.actividades-comerciales' },
             { label: 'Pedidos', icon: ClipboardList, to: '/pedidos', permiso: 'ventas.pedidos' },
             { label: 'Notas de Venta', icon: ReceiptText, to: '/notas-venta', permiso: 'ventas.notas-venta' },
         ],

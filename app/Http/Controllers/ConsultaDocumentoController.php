@@ -32,8 +32,6 @@ class ConsultaDocumentoController extends Controller
             'provincia' => $d['provincia'] ?? null,
             'distrito' => $d['distrito'] ?? null,
             'ubigeo' => $d['ubigeo'] ?? null,
-            // "Principal - 1410 - FABRICACION DE…"; muchas veces viene vacío.
-            'actividad' => $d['actEconomicas'][0] ?? null,
             'estado' => $d['estado'] ?? null,
             'condicion' => $d['condicion'] ?? null,
             'telefono' => $d['telefonos'][0] ?? null,

@@ -28,8 +28,8 @@ class Cliente extends Model
         'telefono',
         'email',
         'zona',
-        'actividad_comercial',
-        'categoria_comercial',
+        'actividad_comercial_id',
+        'categoria_comercial_id',
         'tipo_cliente',
         'ejecutivo_id',
         // A qué precio se le vende (Mayorista…). Sin uno, al principal.
@@ -57,6 +57,22 @@ class Cliente extends Model
     public function tipoPrecio()
     {
         return $this->belongsTo(TipoPrecio::class);
+    }
+
+    /** Cuánto se le fía; sin una, se le vende al contado. */
+    public function lineaCredito()
+    {
+        return $this->hasOne(LineaCredito::class);
+    }
+
+    public function categoriaComercial()
+    {
+        return $this->belongsTo(CategoriaComercial::class);
+    }
+
+    public function actividadComercial()
+    {
+        return $this->belongsTo(ActividadComercial::class);
     }
 
     /** La fiscal y las de entrega. */

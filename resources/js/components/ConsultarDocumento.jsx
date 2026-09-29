@@ -9,7 +9,7 @@ import { Spinner, cn } from './ui';
  * (/api/consulta/{tipo}/{numero}) y entrega el resultado normalizado a
  * `onResult` para que cada formulario rellene sus campos.
  *
- *   RUC → { ruc, razon_social, nombre_comercial, direccion, departamento, provincia, distrito, ubigeo, actividad, estado, condicion, telefono }
+ *   RUC → { ruc, razon_social, nombre_comercial, direccion, departamento, provincia, distrito, ubigeo, estado, condicion, telefono }
  *   DNI → { dni, nombres, apellido_paterno, apellido_materno, nombre_completo }
  */
 export default function ConsultarDocumento({ tipo = 'dni', numero, onResult, className }) {

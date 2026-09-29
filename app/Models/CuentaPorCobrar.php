@@ -16,7 +16,11 @@ class CuentaPorCobrar extends Model
     protected $fillable = [
         'nota_venta_id',
         'cliente_id',
+        // Cada cuota de una venta a crédito es su propia cuenta.
+        'numero_cuota',
+        'total_cuotas',
         'monto_total',
+        'moneda',
         'monto_pagado',
         'saldo',
         'fecha_vencimiento',
@@ -30,6 +34,8 @@ class CuentaPorCobrar extends Model
             'monto_pagado' => 'decimal:2',
             'saldo' => 'decimal:2',
             'fecha_vencimiento' => 'date',
+            'numero_cuota' => 'integer',
+            'total_cuotas' => 'integer',
         ];
     }
 

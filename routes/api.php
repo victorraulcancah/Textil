@@ -182,7 +182,13 @@ Route::middleware('auth:api')->group(function () {
     // Facturación
     // Antes del resource: si no, "tipos-precio" se tomaría como un {cliente}.
     Route::get('clientes/tipos-precio', [TipoPrecioController::class, 'opciones']);
+    Route::get('clientes/categorias-comerciales', [\App\Http\Controllers\CategoriaComercialController::class, 'opciones']);
+    Route::get('clientes/actividades-comerciales', [\App\Http\Controllers\ActividadComercialController::class, 'opciones']);
     Route::apiResource('clientes', ClienteController::class);
+    Route::apiResource('categorias-comerciales', \App\Http\Controllers\CategoriaComercialController::class)
+        ->except(['show'])->parameters(['categorias-comerciales' => 'categoriaComercial']);
+    Route::apiResource('actividades-comerciales', \App\Http\Controllers\ActividadComercialController::class)
+        ->except(['show'])->parameters(['actividades-comerciales' => 'actividadComercial']);
     Route::get('notas-venta', [NotaVentaController::class, 'index']);
     Route::post('notas-venta', [NotaVentaController::class, 'store']);
     Route::get('notas-venta/{notaVenta}', [NotaVentaController::class, 'show']);

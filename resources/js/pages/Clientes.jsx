@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Briefcase, Edit, IdCard, Mail, MapPin, Phone, Plus, Trash2, User } from 'lucide-react';
 import api, { asList } from '../lib/api';
+import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
 import { cargarUbigeos, esPeru, porCodigo, porNombres, quitarLugar } from '../lib/ubigeos';
+import CampoConAgregar from '../components/CampoConAgregar';
 import ConsultarDocumento from '../components/ConsultarDocumento';
 import Layout from '../components/Layout';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import SelectorUbigeo from '../components/SelectorUbigeo';
-import { Alert, Badge, Button, DataTable, Input, Modal, Select, SearchSelect, Tabs } from '../components/ui';
+import { Alert, Badge, Button, DataTable, Input, Modal, Select, SearchSelect, Tabs, cn } from '../components/ui';
+import { CATALOGOS_COMERCIALES } from './CatalogosComerciales';
 
 /** Con su código del catálogo 06 de SUNAT. */
 const TIPOS_DOCUMENTO = [
@@ -19,7 +22,7 @@ const TIPOS_DOCUMENTO = [
 ];
 
 const TIPOS_DIRECCION = [
-    { value: 'fiscal', label: 'Fiscal (principal)' },
+    { value: 'fiscal', label: 'Fiscal' },
     { value: 'entrega', label: 'Entrega' },
 ];
 
@@ -30,10 +33,12 @@ const TIPOS_CLIENTE = [
 ];
 
 let ultimaClave = 0;
-const nuevaDireccion = (tipo = 'entrega') => ({
+const nuevaDireccion = (tipo = 'entrega', predeterminada = false) => ({
     clave: ++ultimaClave, // solo para React; no se envía
     id: null,
     tipo,
+    // La que sale en la lista y en los documentos: una sola.
+    predeterminada,
     direccion: '',
     referencia: '',
     pais: 'PERÚ',
@@ -56,8 +61,8 @@ const emptyForm = {
     telefono: '',
     email: '',
     zona: '',
-    actividad_comercial: '',
-    categoria_comercial: '',
+    actividad_comercial_id: '',
+    categoria_comercial_id: '',
     tipo_cliente: 'TERCERO',
     ejecutivo_id: '',
     // A qué precio se le vende; vacío = al principal.
@@ -67,7 +72,22 @@ const emptyForm = {
 };
 
 /** En qué pestaña está cada campo, para llevar al usuario a su error. */
-const CAMPOS_COMERCIAL = ['zona', 'actividad_comercial', 'categoria_comercial', 'tipo_cliente', 'tipo_precio_id', 'ejecutivo_id'];
+const CAMPOS_COMERCIAL = [
+    'zona',
+    'actividad_comercial_id',
+    'categoria_comercial_id',
+    'tipo_cliente',
+    'tipo_precio_id',
+    'ejecutivo_id',
+];
+
+/** Las activas del catálogo, más la que ya tiene el cliente aunque se haya desactivado. */
+const opcionesDe = (lista, actual) => {
+    const opciones = lista.map((x) => ({ value: String(x.id), label: x.nombre }));
+    return actual && !opciones.some((o) => o.value === String(actual.id))
+        ? [...opciones, { value: String(actual.id), label: `${actual.nombre} (inactiva)` }]
+        : opciones;
+};
 const pestanaDe = (campo) =>
     campo.startsWith('direcciones') ? 'direcciones' : CAMPOS_COMERCIAL.includes(campo) ? 'comercial' : 'general';
 
@@ -81,16 +101,28 @@ function DireccionCard({ numero, direccion: d, ubigeos, errores, onCambiar, onQu
         );
 
     return (
-        <div className="rounded-lg border border-edge p-4">
+        <div className={cn('rounded-lg border p-4', d.predeterminada ? 'border-primary-300 bg-primary-50/40' : 'border-edge')}>
             <div className="mb-3 flex items-center justify-between gap-2">
                 <span className="inline-flex items-center gap-2 text-sm font-semibold text-warm-900">
                     <MapPin className="h-4 w-4 text-primary-600" />
                     Dirección {numero}
                 </span>
-                <button type="button" aria-label="Quitar dirección" onClick={onQuitar}
-                    className="rounded-md p-1.5 text-red-600 transition hover:bg-red-50 hover:text-red-700">
-                    <Trash2 className="h-4 w-4" />
-                </button>
+                <div className="flex items-center gap-2">
+                    <label className="flex cursor-pointer items-center gap-1.5 text-sm text-gray-700">
+                        <input
+                            type="radio"
+                            name="direccion-predeterminada"
+                            checked={d.predeterminada}
+                            onChange={() => onCambiar({ predeterminada: true })}
+                            className="h-4 w-4 accent-primary-600"
+                        />
+                        Predeterminada
+                    </label>
+                    <button type="button" aria-label="Quitar dirección" onClick={onQuitar}
+                        className="rounded-md p-1.5 text-red-600 transition hover:bg-red-50 hover:text-red-700">
+                        <Trash2 className="h-4 w-4" />
+                    </button>
+                </div>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
                 <Select label="Tipo" value={d.tipo} onChange={(e) => onCambiar({ tipo: e.target.value })} options={TIPOS_DIRECCION} />
@@ -125,11 +157,73 @@ function DireccionCard({ numero, direccion: d, ubigeos, errores, onCambiar, onQu
     );
 }
 
+/** El "+" de categoría o actividad: se crea en su catálogo y queda elegida. */
+function CrearEnCatalogo({ tipo, onClose, onCreada }) {
+    const cfg = CATALOGOS_COMERCIALES[tipo];
+    const toast = useToast();
+    const [nombre, setNombre] = useState('');
+    const [error, setError] = useState(null);
+    const [saving, setSaving] = useState(false);
+
+    const guardar = async (e) => {
+        e.preventDefault();
+        setSaving(true);
+        setError(null);
+        try {
+            const { data } = await api.post(cfg.endpoint, { nombre });
+            toast.success(`Se creó la ${cfg.singular}.`);
+            await onCreada(data);
+            onClose();
+        } catch (err) {
+            if (err.response?.status === 422) setError(err.response.data?.errors?.nombre?.[0] ?? 'Revisa el nombre.');
+            else toast.error(`No se pudo crear la ${cfg.singular}.`);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <Modal
+            open
+            onClose={onClose}
+            title={`Nueva ${cfg.singular}`}
+            size="sm"
+            footer={
+                <>
+                    <Button variant="secondary" onClick={onClose}>Cancelar</Button>
+                    <Button type="submit" form="crear-en-catalogo" loading={saving} disabled={!nombre.trim()}>
+                        Guardar
+                    </Button>
+                </>
+            }
+        >
+            <form id="crear-en-catalogo" onSubmit={guardar} noValidate>
+                <Input
+                    label="Nombre"
+                    placeholder={cfg.placeholder}
+                    value={nombre}
+                    onChange={(e) => {
+                        setNombre(e.target.value);
+                        setError(null);
+                    }}
+                    error={error}
+                    autoFocus
+                />
+            </form>
+        </Modal>
+    );
+}
+
 export default function Clientes() {
     const toast = useToast();
+    const { puede } = useAuth();
     const [clientes, setClientes] = useState([]);
     const [usuarios, setUsuarios] = useState([]);
     const [tiposPrecio, setTiposPrecio] = useState([]);
+    const [categorias, setCategorias] = useState([]);
+    const [actividades, setActividades] = useState([]);
+    // Qué catálogo se está creando desde el "+": 'categorias' | 'actividades'.
+    const [creando, setCreando] = useState(null);
     const [ubigeos, setUbigeos] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -151,14 +245,18 @@ export default function Clientes() {
         setLoading(true);
         setError(null);
         try {
-            const [clientesRes, usuariosRes, tiposRes] = await Promise.all([
+            const [clientesRes, usuariosRes, tiposRes, categoriasRes, actividadesRes] = await Promise.all([
                 api.get('/clientes'),
                 api.get('/usuarios-selector').catch(() => ({ data: [] })),
                 api.get('/clientes/tipos-precio').catch(() => ({ data: [] })),
+                api.get(CATALOGOS_COMERCIALES.categorias.opciones).catch(() => ({ data: [] })),
+                api.get(CATALOGOS_COMERCIALES.actividades.opciones).catch(() => ({ data: [] })),
             ]);
             setClientes(asList(clientesRes));
             setUsuarios(asList(usuariosRes));
             setTiposPrecio(asList(tiposRes));
+            setCategorias(asList(categoriasRes));
+            setActividades(asList(actividadesRes));
         } catch {
             setError('No se pudieron cargar los clientes.');
         } finally {
@@ -170,16 +268,23 @@ export default function Clientes() {
         load();
     }, [load]);
 
-    /** Lo ya escrito en otros clientes, para no tipear distinto la misma zona o categoría. */
-    const sugerencias = useMemo(() => {
-        const de = (campo) =>
-            [...new Set(clientes.map((c) => c[campo]).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
-        return {
-            zona: de('zona'),
-            actividad_comercial: de('actividad_comercial'),
-            categoria_comercial: de('categoria_comercial'),
-        };
-    }, [clientes]);
+    /** Las zonas ya escritas en otros clientes, para no tipear distinto la misma. */
+    const zonas = useMemo(
+        () => [...new Set(clientes.map((c) => c.zona).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es')),
+        [clientes],
+    );
+
+    /** Lo recién creado con el "+" entra a la lista y queda elegido. */
+    const alCrearEnCatalogo = async (tipo, nueva) => {
+        const opciones = asList(await api.get(CATALOGOS_COMERCIALES[tipo].opciones).catch(() => ({ data: [] })));
+        if (tipo === 'categorias') {
+            setCategorias(opciones);
+            field('categoria_comercial_id', String(nueva.id));
+        } else {
+            setActividades(opciones);
+            field('actividad_comercial_id', String(nueva.id));
+        }
+    };
 
     const prepararUbigeos = () => {
         cargarUbigeos()
@@ -189,7 +294,7 @@ export default function Clientes() {
 
     const openCreate = () => {
         setEditing(null);
-        setForm({ ...emptyForm, direcciones: [nuevaDireccion('fiscal')] });
+        setForm({ ...emptyForm, direcciones: [nuevaDireccion('fiscal', true)] });
         setFormErrors({});
         setTab('general');
         prepararUbigeos();
@@ -198,7 +303,7 @@ export default function Clientes() {
 
     const openEdit = (c) => {
         const direcciones = (c.direcciones ?? []).map((d) => ({
-            ...nuevaDireccion(d.tipo),
+            ...nuevaDireccion(d.tipo, Boolean(d.predeterminada)),
             id: d.id,
             direccion: d.direccion ?? '',
             referencia: d.referencia ?? '',
@@ -219,13 +324,13 @@ export default function Clientes() {
             telefono: c.telefono ?? '',
             email: c.email ?? '',
             zona: c.zona ?? '',
-            actividad_comercial: c.actividad_comercial ?? '',
-            categoria_comercial: c.categoria_comercial ?? '',
+            actividad_comercial_id: c.actividad_comercial_id ? String(c.actividad_comercial_id) : '',
+            categoria_comercial_id: c.categoria_comercial_id ? String(c.categoria_comercial_id) : '',
             tipo_cliente: c.tipo_cliente ?? 'TERCERO',
             ejecutivo_id: c.ejecutivo_id ? String(c.ejecutivo_id) : '',
             tipo_precio_id: c.tipo_precio_id ? String(c.tipo_precio_id) : '',
             activo: Boolean(c.activo),
-            direcciones: direcciones.length ? direcciones : [nuevaDireccion('fiscal')],
+            direcciones: direcciones.length ? direcciones : [nuevaDireccion('fiscal', true)],
         });
         setFormErrors({});
         setTab('general');
@@ -237,13 +342,19 @@ export default function Clientes() {
         e.preventDefault();
         // Las tarjetas vacías se van antes de enviar: así los errores de cada
         // dirección (direcciones.1.…) caen en la tarjeta que se ve.
-        const direcciones = form.direcciones.filter((d) => !vacia(d));
+        let direcciones = form.direcciones.filter((d) => !vacia(d));
+        // Si la predeterminada era una vacía, pasa a ser la primera que queda.
+        if (direcciones.length && !direcciones.some((d) => d.predeterminada)) {
+            direcciones = direcciones.map((d, i) => ({ ...d, predeterminada: i === 0 }));
+        }
         setForm((prev) => ({ ...prev, direcciones }));
         setSaving(true);
         setFormErrors({});
         const payload = {
             ...form,
             tipo_precio_id: form.tipo_precio_id || null,
+            categoria_comercial_id: form.categoria_comercial_id || null,
+            actividad_comercial_id: form.actividad_comercial_id || null,
             direcciones: direcciones.map(({ clave, ...d }) => ({ ...d, ubigeo: esPeru(d.pais) ? d.ubigeo : '' })),
         };
         try {
@@ -294,8 +405,12 @@ export default function Clientes() {
             ...prev,
             direcciones: prev.direcciones.map((d, j) => {
                 if (j === i) return { ...d, ...cambios };
+                let otra = d;
                 // Fiscal hay una sola: si otra pasa a fiscal, esta queda de entrega.
-                return cambios.tipo === 'fiscal' && d.tipo === 'fiscal' ? { ...d, tipo: 'entrega' } : d;
+                if (cambios.tipo === 'fiscal' && d.tipo === 'fiscal') otra = { ...otra, tipo: 'entrega' };
+                // Predeterminada también: marcar una desmarca las demás.
+                if (cambios.predeterminada && d.predeterminada) otra = { ...otra, predeterminada: false };
+                return otra;
             }),
         }));
         const claves = [...Object.keys(cambios).map((c) => `direcciones.${i}.${c}`), 'direcciones'];
@@ -309,12 +424,24 @@ export default function Clientes() {
             ...prev,
             direcciones: [
                 ...prev.direcciones,
-                nuevaDireccion(prev.direcciones.some((d) => d.tipo === 'fiscal') ? 'entrega' : 'fiscal'),
+                nuevaDireccion(
+                    prev.direcciones.some((d) => d.tipo === 'fiscal') ? 'entrega' : 'fiscal',
+                    !prev.direcciones.some((d) => d.predeterminada),
+                ),
             ],
         }));
 
     const quitarDireccion = (i) => {
-        setForm((prev) => ({ ...prev, direcciones: prev.direcciones.filter((_, j) => j !== i) }));
+        setForm((prev) => {
+            const quedan = prev.direcciones.filter((_, j) => j !== i);
+            // Sin la predeterminada, lo pasa a ser la primera que queda.
+            return {
+                ...prev,
+                direcciones: quedan.some((d) => d.predeterminada)
+                    ? quedan
+                    : quedan.map((d, j) => ({ ...d, predeterminada: j === 0 })),
+            };
+        });
         // Los números de las tarjetas se corren: sus errores ya no calzan.
         setFormErrors((prev) => Object.fromEntries(Object.entries(prev).filter(([k]) => !k.startsWith('direcciones'))));
     };
@@ -328,11 +455,10 @@ export default function Clientes() {
         );
     };
 
-    /** SUNAT: razón social, teléfono, actividad y la dirección fiscal con su ubigeo. */
+    /** SUNAT: razón social, teléfono y la dirección fiscal con su ubigeo. */
     const aplicarRuc = async (d) => {
         field('nombre', d.razon_social ?? '');
         if (d.telefono) field('telefono', d.telefono);
-        if (d.actividad) field('actividad_comercial', d.actividad.replace(/^\s*principal\s*-\s*/i, ''));
         if (!d.direccion || d.direccion.trim() === '-') return;
 
         let lista = [];
@@ -357,7 +483,10 @@ export default function Clientes() {
                 direcciones:
                     i >= 0
                         ? prev.direcciones.map((x, j) => (j === i ? { ...x, ...fiscal } : x))
-                        : [{ ...nuevaDireccion('fiscal'), ...fiscal }, ...prev.direcciones],
+                        : [
+                              { ...nuevaDireccion('fiscal', !prev.direcciones.some((x) => x.predeterminada)), ...fiscal },
+                              ...prev.direcciones,
+                          ],
             };
         });
     };
@@ -639,8 +768,8 @@ export default function Clientes() {
                         {tab === 'direcciones' && (
                             <div className="space-y-3">
                                 <p className="text-xs text-warm-500">
-                                    La fiscal es la principal: la que sale en los documentos. Agrega todas las de
-                                    entrega que necesites.
+                                    La predeterminada es la que sale en la lista y en los documentos. Fiscal solo
+                                    puede haber una; de entrega, todas las que necesites.
                                 </p>
                                 {formErrors.direcciones && <Alert variant="error">{formErrors.direcciones}</Alert>}
                                 {form.direcciones.length === 0 && (
@@ -677,23 +806,35 @@ export default function Clientes() {
                                         onChange={(e) => field('zona', e.target.value)}
                                         error={formErrors.zona}
                                     />
-                                    <Input
-                                        label="Categoría comercial"
-                                        placeholder="Ej. A, B, Mayorista"
-                                        list="sugerencias-categoria_comercial"
-                                        value={form.categoria_comercial}
-                                        onChange={(e) => field('categoria_comercial', e.target.value)}
-                                        error={formErrors.categoria_comercial}
-                                    />
+                                    <CampoConAgregar
+                                        titulo="Nueva categoría"
+                                        onAdd={puede('ventas.categorias-comerciales.crear') ? () => setCreando('categorias') : undefined}
+                                    >
+                                        <SearchSelect
+                                            label="Categoría comercial"
+                                            placeholder="Sin categoría"
+                                            emptyText="Sin coincidencias"
+                                            value={form.categoria_comercial_id}
+                                            onChange={(v) => field('categoria_comercial_id', v ?? '')}
+                                            options={opcionesDe(categorias, editing?.categoria_comercial)}
+                                            error={formErrors.categoria_comercial_id}
+                                        />
+                                    </CampoConAgregar>
                                 </div>
-                                <Input
-                                    label="Actividad comercial"
-                                    placeholder="Ej. Confección de prendas"
-                                    list="sugerencias-actividad_comercial"
-                                    value={form.actividad_comercial}
-                                    onChange={(e) => field('actividad_comercial', e.target.value)}
-                                    error={formErrors.actividad_comercial}
-                                />
+                                <CampoConAgregar
+                                    titulo="Nueva actividad"
+                                    onAdd={puede('ventas.actividades-comerciales.crear') ? () => setCreando('actividades') : undefined}
+                                >
+                                    <SearchSelect
+                                        label="Actividad comercial"
+                                        placeholder="Sin actividad"
+                                        emptyText="Sin coincidencias"
+                                        value={form.actividad_comercial_id}
+                                        onChange={(v) => field('actividad_comercial_id', v ?? '')}
+                                        options={opcionesDe(actividades, editing?.actividad_comercial)}
+                                        error={formErrors.actividad_comercial_id}
+                                    />
+                                </CampoConAgregar>
                                 <Select
                                     label="Tipo de cliente (PCGE)"
                                     value={form.tipo_cliente}
@@ -733,15 +874,21 @@ export default function Clientes() {
                         )}
                     </div>
 
-                    {Object.entries(sugerencias).map(([campo, valores]) => (
-                        <datalist key={campo} id={`sugerencias-${campo}`}>
-                            {valores.map((v) => (
-                                <option key={v} value={v} />
-                            ))}
-                        </datalist>
-                    ))}
+                    <datalist id="sugerencias-zona">
+                        {zonas.map((z) => (
+                            <option key={z} value={z} />
+                        ))}
+                    </datalist>
                 </form>
             </Modal>
+
+            {creando && (
+                <CrearEnCatalogo
+                    tipo={creando}
+                    onClose={() => setCreando(null)}
+                    onCreada={(nueva) => alCrearEnCatalogo(creando, nueva)}
+                />
+            )}
 
             <Modal
                 open={Boolean(deleteTarget)}

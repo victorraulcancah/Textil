@@ -12,7 +12,13 @@ use Illuminate\Validation\ValidationException;
 
 class ClienteController extends Controller
 {
-    private const RELACIONES = ['ejecutivo:id,name', 'tipoPrecio:id,nombre', 'direcciones'];
+    private const RELACIONES = [
+        'ejecutivo:id,name',
+        'tipoPrecio:id,nombre',
+        'categoriaComercial:id,nombre',
+        'actividadComercial:id,nombre',
+        'direcciones',
+    ];
 
     public function index(Request $request)
     {
@@ -96,8 +102,8 @@ class ClienteController extends Controller
             'telefono' => 'nullable|string|max:20',
             'email' => 'nullable|email|max:255',
             'zona' => 'nullable|string|max:100',
-            'actividad_comercial' => 'nullable|string|max:255',
-            'categoria_comercial' => 'nullable|string|max:100',
+            'actividad_comercial_id' => 'nullable|exists:actividades_comerciales,id',
+            'categoria_comercial_id' => 'nullable|exists:categorias_comerciales,id',
             'tipo_cliente' => ['sometimes', Rule::in(Cliente::TIPOS_CLIENTE)],
             'ejecutivo_id' => 'nullable|exists:users,id',
             // A qué precio se le vende; sin uno, al principal.

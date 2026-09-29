@@ -84,6 +84,8 @@ class OrdenVenta extends Model
         'fecha_entrega',
         'estado',
         'moneda',
+        // SUNAT venta del día, si el pedido es en dólares.
+        'tipo_cambio',
         'subtotal',
         'descuento_total',
         'total',
@@ -111,6 +113,7 @@ class OrdenVenta extends Model
             'subtotal' => 'decimal:2',
             'descuento_total' => 'decimal:2',
             'total' => 'decimal:2',
+            'tipo_cambio' => 'decimal:4',
         ];
     }
 

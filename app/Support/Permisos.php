@@ -196,6 +196,19 @@ class Permisos
         });
     }
 
+    /**
+     * ¿El usuario tiene este permiso? El administrador los tiene todos, igual
+     * que en el middleware, aunque su rol no los tenga asignados uno a uno.
+     */
+    public static function puede(?\App\Models\User $user, string $permiso): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        return $user->hasRole(config('permisos.super_admin')) || $user->can($permiso);
+    }
+
     /** Qué acción representa cada método HTTP. */
     private static function accionDe(string $metodo): string
     {

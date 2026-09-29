@@ -35,7 +35,7 @@ const totalesPorMoneda = (filas) =>
         .join(' · ');
 
 /**
- * Los documentos emitidos a un cliente: sus notas de venta (con lo que falta
+ * Los documentos emitidos a un cliente: sus proformas (con lo que falta
  * cobrar de cada una) y sus pedidos, con su PDF. Se abre con el clic derecho
  * en Clientes.
  */
@@ -88,7 +88,7 @@ export default function DocumentosClienteModal({ cliente, onClose }) {
                         value={tab}
                         onChange={setTab}
                         items={[
-                            { key: 'ventas', icon: ReceiptText, label: `Notas de venta (${datos.notas_venta.length})` },
+                            { key: 'ventas', icon: ReceiptText, label: `Proformas (${datos.notas_venta.length})` },
                             { key: 'pedidos', icon: ClipboardList, label: `Pedidos (${datos.pedidos.length})` },
                         ]}
                     />
@@ -157,7 +157,7 @@ export default function DocumentosClienteModal({ cliente, onClose }) {
                                     {datos.notas_venta.length === 0 && (
                                         <tr>
                                             <td colSpan={7} className="px-3 py-10 text-center text-warm-500">
-                                                Sin notas de venta en estas fechas.
+                                                Sin proformas en estas fechas.
                                             </td>
                                         </tr>
                                     )}
@@ -237,7 +237,7 @@ export default function DocumentosClienteModal({ cliente, onClose }) {
                 id={pdf?.id}
                 nombre={pdf?.nombre}
                 formatos={pdf?.formatos}
-                titulo={pdf?.tipo === 'orden-venta' ? 'Pedido' : 'Nota de venta'}
+                titulo={pdf?.tipo === 'orden-venta' ? 'Pedido' : 'Proforma'}
             />
         </Modal>
     );

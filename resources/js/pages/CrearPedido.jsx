@@ -492,7 +492,7 @@ export default function CrearPedido() {
 
     /**
      * Alta en lote desde el buscador avanzado. Lo que ya está en el pedido no
-     * se duplica: se le suma la cantidad, igual que en la nota de venta.
+     * se duplica: se le suma la cantidad, igual que en la proforma.
      */
     const agregarDesdePicker = (seleccionados) => {
         const utiles = seleccionados.filter((s) => s.presentacion && s.cantidad > 0);

@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\DB;
 /**
  * Reportes financieros (solo soles, sin IGV).
  *
- * Todas las ventas consideradas son notas de venta emitidas. El costo de cada
+ * Todas las ventas consideradas son proformas emitidas. El costo de cada
  * línea es el costo promedio del producto convertido a la presentación vendida
  * (factor_conversion).
  *

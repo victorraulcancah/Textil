@@ -25,7 +25,7 @@ use Illuminate\Support\Facades\DB;
  *     pero deja de estar disponible para otros clientes (100 m físicos,
  *     80 m disponibles).
  *   - Al despachar, la tela SALE: se cortan los rollos, se descuenta el
- *     almacén una sola vez y se libera la reserva. La nota de venta solo
+ *     almacén una sola vez y se libera la reserva. La proforma solo
  *     registra la venta y el cobro.
  *
  * El corte entre quién hace qué está en "solicitado": hasta ahí es del
@@ -482,7 +482,7 @@ class OrdenVentaService
     }
 
     /**
-     * Cierra el pedido: emite la nota de venta y registra el cobro.
+     * Cierra el pedido: emite la proforma y registra el cobro.
      *
      * La tela ya salió al despachar, así que aquí no se descuenta nada más:
      * solo los rollos que se fueron enteros quedan como vendidos y con dueño.
@@ -559,7 +559,7 @@ class OrdenVentaService
     }
 
     /**
-     * Traduce las líneas del pedido a líneas de nota de venta.
+     * Traduce las líneas del pedido a líneas de proforma.
      *
      * La nota se lleva la cantidad tal como se pidió, en la unidad de su
      * presentación: es lo que descuenta el stock y lo que ve el cliente.

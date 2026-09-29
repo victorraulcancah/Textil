@@ -19,7 +19,7 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Emitir, editar y anular notas de venta.
+ * Emitir, editar y anular proformas.
  *
  * Una venta toca tres cosas fuera de sí misma: descuenta stock, registra el
  * ingreso en caja y, si es al crédito, crea la cuenta por cobrar de cada
@@ -77,7 +77,7 @@ class NotaVentaService
     public function actualizar(NotaVenta $notaVenta, array $data): NotaVenta
     {
         if ($notaVenta->estado !== 'emitida') {
-            throw new \InvalidArgumentException('Solo se pueden editar notas de venta emitidas.');
+            throw new \InvalidArgumentException('Solo se pueden editar proformas emitidas.');
         }
 
         // La nota de un pedido es el reflejo de lo que se despachó: cambiarla
@@ -117,7 +117,7 @@ class NotaVentaService
     public function anular(NotaVenta $notaVenta, string $motivo): NotaVenta
     {
         if ($notaVenta->estado !== 'emitida') {
-            throw new \InvalidArgumentException('Solo se pueden anular notas de venta emitidas');
+            throw new \InvalidArgumentException('Solo se pueden anular proformas emitidas');
         }
 
         return DB::transaction(function () use ($notaVenta, $motivo) {
@@ -539,7 +539,7 @@ class NotaVentaService
     {
         return $nota->load([
             'cliente', 'almacen', 'vendedor',
-            'detalles.presentacion.producto.marca', 'detalles.rollo.color', 'pagos.metodoPago',
+            'detalles.presentacion.producto.marca', 'detalles.presentacion.unidadBase', 'detalles.presentacion.producto.presentaciones.unidadBase', 'detalles.rollo.color', 'pagos.metodoPago',
         ]);
     }
 }

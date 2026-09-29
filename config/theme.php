@@ -1,6 +1,6 @@
 <?php
 
-// Paleta de marca para los documentos PDF (facturas, guías, notas de venta, etc.).
+// Paleta de marca para los documentos PDF (facturas, guías, proformas, etc.).
 // dompdf no puede leer las variables CSS de resources/css/app.css, así que este
 // archivo es el espejo para ese lado. Al re-marcar la app para otra empresa,
 // edita este archivo con los MISMOS valores que el bloque @theme de app.css.

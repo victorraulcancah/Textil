@@ -194,7 +194,7 @@ class OrdenVentaController extends Controller
     }
 
     /**
-     * Emite la nota de venta del pedido despachado. Es el punto en el que por
+     * Emite la proforma del pedido despachado. Es el punto en el que por
      * fin se descuenta el stock y se cobra.
      */
     public function facturar(FacturarPedidoRequest $request, OrdenVenta $ordenesVenta)

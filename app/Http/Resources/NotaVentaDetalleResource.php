@@ -27,6 +27,9 @@ class NotaVentaDetalleResource extends JsonResource
             'precio_unitario' => $this->precio_unitario,
             'descuento' => $this->descuento,
             'subtotal' => $this->subtotal,
+            // La fila como se lee en la proforma (color, cantidad en m, U., precio).
+            'proforma' => $this->presentacion ? $this->filaProforma() : null,
+            'producto_id' => $this->presentacion?->producto_id,
             'producto_nombre' => $this->presentacion?->producto?->nombre,
             'producto_codigo' => $this->presentacion?->producto?->codigo,
             'presentacion' => ProductoPresentacionResource::make($this->whenLoaded('presentacion')),

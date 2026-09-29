@@ -23,7 +23,7 @@ const soportaPdfIncrustado = () => {
  * (A4 / ticket), imprimir y descargar. Reutilizable en ventas, compras, etc.
  *
  *   <PdfViewerModal open tipo="nota-venta" id={12} nombre="NV01-00000012"
- *       formatos={['a4','ticket']} titulo="Nota de venta" onClose={...} />
+ *       formatos={['a4','ticket']} titulo="Proforma" onClose={...} />
  *
  * Para impresiones que no cuelgan de un solo documento —las etiquetas de todos
  * los rollos de un color— se pasa `url` en lugar de tipo/id:

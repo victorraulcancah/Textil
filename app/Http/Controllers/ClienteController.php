@@ -116,7 +116,7 @@ class ClienteController extends Controller
     }
 
     /**
-     * Los documentos emitidos al cliente: sus notas de venta —con lo que
+     * Los documentos emitidos al cliente: sus proformas —con lo que
      * falta cobrar de cada una— y sus pedidos, de lo más reciente a lo más
      * antiguo. Sin fechas, todo.
      */

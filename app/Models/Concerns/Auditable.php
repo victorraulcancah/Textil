@@ -11,7 +11,7 @@ use App\Models\Auditoria;
  * Cada modelo puede afinar tres cosas:
  *
  *   protected array $auditarExcepto = ['stock_actual'];  // campos ruidosos
- *   protected string $auditarModulo = 'Nota de venta';   // nombre legible
+ *   protected string $auditarModulo = 'Proforma';   // nombre legible
  *   public function auditarDescripcion(): string { ... } // cómo se identifica
  */
 trait Auditable

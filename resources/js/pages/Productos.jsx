@@ -1979,7 +1979,7 @@ export default function Productos() {
                             );
                         })()}
 
-                        {/* La tela con todos sus colores, como en la nota de venta:
+                        {/* La tela con todos sus colores, como en la proforma:
                             cada color es su rollo, con su metraje (el factor) y lo que
                             vale al precio del metro. El metraje se pone aquí. */}
                         {vendePorMetro &&

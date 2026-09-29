@@ -1,4 +1,4 @@
-@props(['observaciones' => null, 'lineas' => [], 'total', 'moneda' => 'S/', 'enLetras' => null])
+@props(['observaciones' => null, 'lineas' => [], 'total', 'moneda' => 'S/', 'enLetras' => null, 'etiqueta' => 'Total'])
 
 @php
     // Solo A4. Bloque final: "SON: …" a todo el ancho y, debajo,
@@ -31,7 +31,7 @@
                     </tr>
                 @endforeach
                 <tr>
-                    <td class="lbl tot">Total</td>
+                    <td class="lbl tot">{{ $etiqueta }}</td>
                     <td class="right tot strong">{{ $moneda }} {{ $total }}</td>
                 </tr>
             </table>

@@ -63,7 +63,7 @@ export const navigation = [
             { label: 'Categorías comerciales', icon: Tag, to: '/categorias-comerciales', permiso: 'ventas.categorias-comerciales' },
             { label: 'Actividades comerciales', icon: Briefcase, to: '/actividades-comerciales', permiso: 'ventas.actividades-comerciales' },
             { label: 'Pedidos', icon: ClipboardList, to: '/pedidos', permiso: 'ventas.pedidos' },
-            { label: 'Notas de Venta', icon: ReceiptText, to: '/notas-venta', permiso: 'ventas.notas-venta' },
+            { label: 'Proformas', icon: ReceiptText, to: '/notas-venta', permiso: 'ventas.notas-venta' },
         ],
     },
     {

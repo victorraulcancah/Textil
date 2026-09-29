@@ -1,6 +1,6 @@
 @extends('pdf.layouts.' . $formato)
 
-@section('titulo', 'Nota de venta ' . $documento)
+@section('titulo', 'Proforma ' . $documento)
 
 @section('contenido')
     @php
@@ -12,7 +12,7 @@
 
     @if ($formato === 'ticket')
         {{-- === TICKET (80mm) === --}}
-        <x-pdf.titulo texto="NOTA DE VENTA" :numero="$documento" :estado="$anulada ? 'ANULADA' : null" formato="ticket" />
+        <x-pdf.titulo texto="PROFORMA" :numero="$documento" :estado="$anulada ? 'ANULADA' : null" formato="ticket" />
 
         <x-pdf.tercero titulo="Cliente" :nombre="$clienteNombre" :documento="$venta->cliente?->numero_documento" formato="ticket" />
 
@@ -25,13 +25,25 @@
             ]"
             formato="ticket" />
 
-        <x-pdf.items :filas="$filasTicket" formato="ticket" />
+        <table>
+            @foreach ($grupos as $g)
+                <tr><td colspan="2" class="strong upper">{{ $g['producto'] }}</td></tr>
+                @foreach ($g['filas'] as $f)
+                    <tr>
+                        <td class="muted">{{ $f['n'] }}. {{ $f['color'] !== '—' ? $f['color'].' · ' : '' }}{{ $f['cantidad'] }}{{ $f['u'] !== '' ? ' '.$f['u'] : '' }} x {{ $f['precio'] }}</td>
+                        <td class="right">{{ $f['subtotal'] }}</td>
+                    </tr>
+                @endforeach
+            @endforeach
+        </table>
+        <div class="sep"></div>
 
         <x-pdf.totales
             :lineas="['Subtotal' => number_format((float) $venta->subtotal, 2)]"
             :total="number_format((float) $venta->total, 2)"
             :moneda="$moneda"
             :enLetras="$enLetras"
+            etiqueta="TOTAL A PAGAR"
             formato="ticket" />
 
         @if (count($pagos))
@@ -48,7 +60,7 @@
         {{-- === A4 === --}}
         <x-pdf.encabezado
             :empresa="$empresa"
-            titulo="NOTA DE VENTA"
+            titulo="PROFORMA"
             :numero="$documento"
             :estado="$anulada ? 'ANULADA' : null" />
 
@@ -65,63 +77,36 @@
                 'Estado' => $anulada ? 'ANULADA' : 'EMITIDA',
             ]" />
 
-        {{-- La tela, por tela y rollo por rollo: cada rollo con su metraje real. --}}
-        @if (count($telas))
-            <table class="items" style="margin-bottom: 6px;">
-                <thead>
+        {{-- Rollo por rollo, agrupado por producto. U.: R = rollo entero; vacía = metros. --}}
+        <table class="items" style="margin-bottom: 6px;">
+            <thead>
+                <tr>
+                    <th width="36px" style="text-align:center;">Ítem</th>
+                    <th>Color</th>
+                    <th width="86px" style="text-align:right;">Cantidad (m)</th>
+                    <th width="34px" style="text-align:center;">U.</th>
+                    <th width="72px" style="text-align:right;">Precio</th>
+                    <th width="86px" style="text-align:right;">Subtotal</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach ($grupos as $g)
                     <tr>
-                        <th width="100px">Ítem</th>
-                        <th>Color</th>
-                        <th width="44px" style="text-align:right;">Rollo</th>
-                        <th width="60px" style="text-align:right;">Factor</th>
-                        <th width="66px" style="text-align:right;">Metros</th>
-                        <th width="62px" style="text-align:right;">P. Unit.</th>
-                        <th width="80px" style="text-align:right;">P. Total</th>
+                        <td colspan="6" class="strong upper" style="background: #dbe4f5;">Producto: {{ $g['producto'] }}</td>
                     </tr>
-                </thead>
-                <tbody>
-                    @foreach ($telas as $tela)
+                    @foreach ($g['filas'] as $f)
                         <tr>
-                            <td colspan="7" class="strong upper" style="background: #f5f5f4;">{{ $tela['producto'] }}</td>
-                        </tr>
-                        @foreach ($tela['filas'] as $f)
-                            <tr>
-                                <td>{{ $f['item'] }}</td>
-                                <td>{{ $f['color'] }}</td>
-                                <td class="right">{{ $f['rollo'] }}</td>
-                                <td class="right">{{ $f['factor'] }}</td>
-                                <td class="right">{{ $f['metros'] }}</td>
-                                <td class="right">{{ $f['precio'] }}</td>
-                                <td class="right">{{ $f['total'] }}</td>
-                            </tr>
-                        @endforeach
-                        <tr>
-                            <td colspan="2" class="strong" style="border-top: 1px solid {{ config('theme.edge') }};">Subtotal {{ $tela['producto'] }}</td>
-                            <td class="right strong" style="border-top: 1px solid {{ config('theme.edge') }};">{{ $tela['rollos'] }}</td>
-                            <td class="right muted" style="border-top: 1px solid {{ config('theme.edge') }};">{{ $tela['cortes'] }}</td>
-                            <td class="right strong" style="border-top: 1px solid {{ config('theme.edge') }};">{{ $tela['metros'] }}</td>
-                            <td style="border-top: 1px solid {{ config('theme.edge') }};"></td>
-                            <td class="right strong" style="border-top: 1px solid {{ config('theme.edge') }};">{{ $tela['total'] }}</td>
+                            <td class="center">{{ $f['n'] }}</td>
+                            <td>{{ $f['color'] }}</td>
+                            <td class="right">{{ $f['cantidad'] }}</td>
+                            <td class="center strong">{{ $f['u'] }}</td>
+                            <td class="right">{{ $venta->moneda === 'USD' ? '$' : 'S/' }} {{ $f['precio'] }}</td>
+                            <td class="right">{{ $venta->moneda === 'USD' ? '$' : 'S/' }} {{ $f['subtotal'] }}</td>
                         </tr>
                     @endforeach
-                </tbody>
-            </table>
-        @endif
-
-        @if (count($filas) || ! count($telas))
-        <x-pdf.items
-            :columnas="[
-                ['label' => 'Ítem', 'key' => 'n', 'width' => '32px'],
-                ['label' => 'Código', 'key' => 'codigo', 'width' => '72px'],
-                ['label' => 'Cant.', 'key' => 'cantidad', 'align' => 'right', 'width' => '55px'],
-                ['label' => 'Unidad', 'key' => 'unidad', 'width' => '90px'],
-                ['label' => 'Descripción', 'key' => 'producto'],
-                ['label' => 'P. Uni.', 'key' => 'precio', 'align' => 'right', 'width' => '72px'],
-                ['label' => 'Importe', 'key' => 'subtotal', 'align' => 'right', 'width' => '80px'],
-            ]"
-            :filas="$filas"
-            :minFilas="count($telas) ? 0 : 8" />
-        @endif
+                @endforeach
+            </tbody>
+        </table>
 
         <x-pdf.cierre
             :observaciones="$venta->observaciones"
@@ -131,7 +116,8 @@
             ]"
             :total="number_format((float) $venta->total, 2)"
             :moneda="$moneda"
-            :enLetras="$enLetras" />
+            :enLetras="$enLetras"
+            etiqueta="TOTAL A PAGAR" />
 
         @if ($pagoTxt)
             <div class="muted" style="margin-top: 4px;">Pago: {{ $pagoTxt }}</div>

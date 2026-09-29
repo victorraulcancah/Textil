@@ -48,4 +48,40 @@ class NotaVentaDetalle extends Model
     {
         return $this->belongsTo(Rollo::class);
     }
+
+    /**
+     * La fila tal como se lee en la proforma: un rollo, un renglón.
+     *
+     *   color    → el del rollo (null si no salió de un rollo)
+     *   cantidad → en metros si es tela (o se mide en metros); si no, en su unidad
+     *   u        → "R" rollo entero; vacía si son metros (un corte, o algo que se
+     *              mide en metros); y para lo demás, su unidad (cono, u…)
+     *   precio   → por esa cantidad: por metro en lo que va en metros
+     *
+     * @return array{color: ?string, cantidad: float, u: string, precio: float}
+     */
+    public function filaProforma(): array
+    {
+        $presentacion = $this->presentacion;
+        $enMetros = $this->rollo_id !== null
+            || strtolower((string) $presentacion?->unidadBase?->abreviatura) === 'm';
+
+        if ($enMetros && $presentacion) {
+            $metrosPorUnidad = $presentacion->aMetros(1);
+
+            return [
+                'color' => $this->rollo?->color?->nombre,
+                'cantidad' => $presentacion->aMetros((float) $this->cantidad),
+                'u' => $this->rollo_id !== null && $this->rollo_entero ? 'R' : '',
+                'precio' => round($metrosPorUnidad > 0 ? (float) $this->precio_unitario / $metrosPorUnidad : (float) $this->precio_unitario, 4),
+            ];
+        }
+
+        return [
+            'color' => $this->rollo?->color?->nombre,
+            'cantidad' => (float) $this->cantidad,
+            'u' => (string) ($presentacion?->unidadBase?->abreviatura ?: $presentacion?->nombre),
+            'precio' => (float) $this->precio_unitario,
+        ];
+    }
 }

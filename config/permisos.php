@@ -94,7 +94,7 @@ return [
                     'acciones' => ['ver', 'ver_todo', 'crear', 'editar', 'eliminar'],
                 ],
                 'notas-venta' => [
-                    'label' => 'Notas de venta',
+                    'label' => 'Proformas',
                     'apis' => ['notas-venta'],
                     'pdf' => ['nota-venta'],
                     'acciones' => ['ver', 'crear', 'editar', 'eliminar', 'exceder_credito'],

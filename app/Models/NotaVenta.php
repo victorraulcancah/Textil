@@ -10,7 +10,7 @@ class NotaVenta extends Model
     use Auditable;
 
     /** Nombre del módulo en la bitácora de auditoría. */
-    protected string $auditarModulo = 'Nota de venta';
+    protected string $auditarModulo = 'Proforma';
     protected $table = 'notas_venta';
 
     protected $fillable = [

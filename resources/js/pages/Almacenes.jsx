@@ -17,7 +17,7 @@ const emptyForm = {
     direccion: '',
     activo: true,
     // El almacén con el que se trabaja a diario: viene ya elegido al crear
-    // una nota de venta. Solo uno puede estarlo.
+    // una proforma. Solo uno puede estarlo.
     predeterminado: false,
 };
 
@@ -573,7 +573,7 @@ export default function Almacenes() {
                             <span>
                                 Almacén predeterminado
                                 <span className="ml-1 text-xs text-gray-400">
-                                    — viene ya elegido al crear una nota de venta
+                                    — viene ya elegido al crear una proforma
                                 </span>
                             </span>
                         </label>

@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Model;
  *
  * Al solicitarlo aparta el stock (sigue físico, pero ya no disponible para
  * otros); al despacharlo la tela sale de verdad: se cortan los rollos y se
- * descuenta el almacén una sola vez. La nota de venta solo cobra.
+ * descuenta el almacén una sola vez. La proforma solo cobra.
  */
 class OrdenVenta extends Model
 {

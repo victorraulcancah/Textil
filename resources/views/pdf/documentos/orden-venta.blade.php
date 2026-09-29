@@ -87,7 +87,7 @@
 
     <div class="muted" style="font-size: 8px; margin-top: 10px;">
         Este documento registra lo que pidió el cliente; no descuenta inventario ni
-        constituye comprobante de pago. La venta se formaliza con la nota de venta.
+        constituye comprobante de pago. La venta se formaliza con la proforma.
     </div>
 
     <x-pdf.firmas :firmas="['Vendedor', 'Cliente']" />

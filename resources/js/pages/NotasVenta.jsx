@@ -5,7 +5,7 @@ import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
-import DetalleCard from '../components/ui/DetalleCard';
+import DetalleProforma from '../components/DetalleProforma';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
 import { Alert, Badge, Button, DataTable, DateRangePicker, Input, Modal, SearchSelect, Select, Spinner } from '../components/ui';
@@ -17,17 +17,6 @@ const formaLabel = { efectivo: 'Efectivo', transferencia: 'Transferencia', tarje
 const money = (n, moneda = 'PEN') =>
     new Intl.NumberFormat('es-PE', { style: 'currency', currency: moneda || 'PEN' }).format(Number(n) || 0);
 
-const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
-
-/**
- * La tela de una fila que salió de un rollo: entero o corte, con su código y
- * color. null en lo que no sale de rollos.
- */
-const rolloDe = (d) => {
-    if (!d.rollo) return null;
-    const tipo = d.rollo_entero ? 'Rollo entero' : `Corte${d.metros_rollo ? ` de ${num(d.metros_rollo)} m` : ''}`;
-    return { tipo, detalle: [d.rollo.codigo, d.rollo.color].filter(Boolean).join(' · ') };
-};
 
 export default function NotasVenta() {
     const toast = useToast();
@@ -64,7 +53,7 @@ export default function NotasVenta() {
         try {
             setNotas(asList(await api.get('/notas-venta')));
         } catch {
-            setError('No se pudieron cargar las ventas.');
+            setError('No se pudieron cargar las proformas.');
         } finally {
             setLoading(false);
         }
@@ -82,7 +71,7 @@ export default function NotasVenta() {
             const res = await api.get(`/notas-venta/${row.id}`);
             setDetalle(res.data?.data ?? res.data);
         } catch {
-            toast.error('No se pudo cargar el detalle de la venta.');
+            toast.error('No se pudo cargar el detalle de la proforma.');
             setVerOpen(false);
         } finally {
             setDetalleLoading(false);
@@ -97,12 +86,12 @@ export default function NotasVenta() {
         setAnulando(true);
         try {
             await api.post(`/notas-venta/${anularTarget.id}/anular`, { motivo_anulacion: motivo });
-            toast.success('Venta anulada. Stock devuelto al almacén.');
+            toast.success('Proforma anulada. Stock devuelto al almacén.');
             setAnularTarget(null);
             setMotivo('');
             await load();
         } catch (err) {
-            toast.error(err.response?.data?.message ?? 'No se pudo anular la venta.');
+            toast.error(err.response?.data?.message ?? 'No se pudo anular la proforma.');
         } finally {
             setAnulando(false);
         }
@@ -181,7 +170,7 @@ export default function NotasVenta() {
                     {row.estado !== 'anulada' && (
                         <button
                             aria-label="Editar"
-                            title="Editar venta"
+                            title="Editar proforma"
                             onClick={() => navigate(`/notas-venta/${row.id}/editar`)}
                             className="rounded-md p-1.5 text-amber-600 transition hover:bg-amber-50 hover:text-amber-700"
                         >
@@ -191,7 +180,7 @@ export default function NotasVenta() {
                     {row.estado !== 'anulada' && (
                         <button
                             aria-label="Anular"
-                            title="Anular venta"
+                            title="Anular proforma"
                             onClick={() => { setAnularTarget(row); setMotivo(''); }}
                             className="rounded-md p-1.5 text-red-600 transition hover:bg-red-50 hover:text-red-700"
                         >
@@ -206,22 +195,14 @@ export default function NotasVenta() {
     const docNombre = (n) => `${n?.serie ?? ''}-${String(n?.numero ?? '').padStart(8, '0')}`;
 
     const detallesVenta = seleccionada?.detalles ?? [];
-    const totalesVenta = detallesVenta.reduce(
-        (acc, d) => ({
-            cantidad: acc.cantidad + (Number(d.cantidad) || 0),
-            descuento: acc.descuento + (Number(d.descuento) || 0),
-            subtotal: acc.subtotal + (Number(d.subtotal) || 0),
-        }),
-        { cantidad: 0, descuento: 0, subtotal: 0 },
-    );
 
     return (
         <Layout>
             <PageHeader
-                title="Notas de Venta"
-                description="Ventas emitidas a clientes"
+                title="Proformas"
+                description="Proformas emitidas a clientes"
                 actions={
-                    <CreateButton onClick={() => navigate('/notas-venta/nueva')}>Nueva venta</CreateButton>
+                    <CreateButton onClick={() => navigate('/notas-venta/nueva')}>Nueva proforma</CreateButton>
                 }
             />
 
@@ -242,7 +223,7 @@ export default function NotasVenta() {
                 loading={loading}
                 onRowClick={(row) => { setSeleccionada(row); sheet.abrir(); }}
                 rowClassName={(row) => (row.id === seleccionada?.id ? 'bg-primary-50' : undefined)}
-                searchPlaceholder="Buscar ventas..."
+                searchPlaceholder="Buscar proformas..."
                 filterable
                 filterCount={
                     (fEstado ? 1 : 0) +
@@ -348,43 +329,13 @@ export default function NotasVenta() {
                 subtitle={`${detallesVenta.length} ${detallesVenta.length === 1 ? 'producto' : 'productos'}`}
             >
                 {detallesVenta.length === 0 ? (
-                    <p className="py-6 text-center text-sm text-warm-500">Esta venta no tiene productos.</p>
+                    <p className="py-6 text-center text-sm text-warm-500">Esta proforma no tiene productos.</p>
                 ) : (
-                    <div className="space-y-3">
-                        {detallesVenta.map((d) => {
-                            const producto = d.presentacion?.producto;
-                            const conDescuento = Number(d.descuento) > 0;
-                            return (
-                                <DetalleCard
-                                    key={d.id}
-                                    titulo={producto?.nombre ?? d.producto_nombre ?? '—'}
-                                    subtitulo={[
-                                        producto?.codigo,
-                                        rolloDe(d) ? `${rolloDe(d).tipo} · ${rolloDe(d).detalle}` : d.presentacion?.nombre,
-                                        producto?.marca?.nombre,
-                                    ]
-                                        .filter(Boolean)
-                                        .join(' · ')}
-                                    campos={[
-                                        { label: 'Cant.', value: num(d.cantidad) },
-                                        { label: 'Precio', value: money(d.precio_unitario, seleccionada?.moneda) },
-                                        { label: 'Subtotal', value: money(d.subtotal, seleccionada?.moneda), valueClassName: 'text-primary-600' },
-                                        ...(conDescuento ? [{ label: 'Dscto.', value: money(d.descuento, seleccionada?.moneda) }] : []),
-                                    ]}
-                                />
-                            );
-                        })}
-                        <div className="flex items-center justify-between px-1 pt-1 text-sm">
-                            <span className="font-medium text-warm-500">Total</span>
-                            <span className="text-base font-bold text-warm-900">
-                                {money(detallesVenta.reduce((a, d) => a + Number(d.subtotal || 0), 0), seleccionada?.moneda)}
-                            </span>
-                        </div>
-                    </div>
+                    <DetalleProforma detalles={detallesVenta} moneda={seleccionada?.moneda} total={seleccionada?.total} />
                 )}
             </BottomSheet>
 
-            {/* Detalle de la venta seleccionada (escritorio) */}
+            {/* Detalle de la proforma seleccionada (escritorio) */}
             <div className="mt-6 hidden rounded-xl border border-edge bg-white shadow-sm md:block">
                 <div className="flex items-center justify-between border-b border-edge px-5 py-3">
                     <h2 className="text-sm font-semibold text-warm-900">
@@ -395,96 +346,27 @@ export default function NotasVenta() {
                     </span>
                 </div>
                 {/* Alto fijo: el detalle siempre ocupa lo mismo, haya 1 o 20 productos. */}
-                <div className="overflow-auto" style={{ height: '30vh' }}>
-                    <table className="w-full min-w-[820px] text-sm">
-                        <thead className="sticky top-0 z-10">
-                            <tr className="bg-primary-600 text-left text-xs font-semibold uppercase tracking-wide text-white">
-                                <th className="w-12 px-3 py-1.5 text-center">#</th>
-                                <th className="w-28 px-3 py-1.5">Código</th>
-                                <th className="px-3 py-1.5">Producto</th>
-                                <th className="w-32 px-3 py-1.5">Marca</th>
-                                <th className="w-28 px-3 py-1.5">Unidad</th>
-                                <th className="w-20 px-3 py-1.5 text-right">Cant.</th>
-                                <th className="w-24 px-3 py-1.5 text-right">Precio</th>
-                                <th className="w-24 px-3 py-1.5 text-right">Dscto.</th>
-                                <th className="w-28 px-3 py-1.5 text-right">Subtotal</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                            {detallesVenta.length === 0 && (
-                                <tr>
-                                    <td colSpan={9} className="px-3 py-10 text-center text-sm text-warm-500">
-                                        {seleccionada
-                                            ? 'Esta venta no tiene productos.'
-                                            : 'Selecciona una venta arriba para ver su detalle.'}
-                                    </td>
-                                </tr>
-                            )}
-
-                            {detallesVenta.map((d, i) => {
-                                const producto = d.presentacion?.producto;
-                                return (
-                                    <tr key={d.id}>
-                                        <td className="px-3 py-2 text-center text-warm-500">{i + 1}</td>
-                                        <td className="px-3 py-2 text-warm-500">{producto?.codigo ?? '—'}</td>
-                                        <td className="px-3 py-2 font-semibold text-warm-900">
-                                            {producto?.nombre ?? d.producto_nombre ?? '—'}
-                                        </td>
-                                        <td className="px-3 py-2 text-warm-500">{producto?.marca?.nombre ?? '—'}</td>
-                                        <td className="px-3 py-2 text-warm-500">
-                                            {rolloDe(d) ? (
-                                                // Tela de un rollo: entero o corte, y de cuál.
-                                                <>
-                                                    <span className={d.rollo_entero ? 'text-green-700' : 'text-amber-700'}>
-                                                        {rolloDe(d).tipo}
-                                                    </span>
-                                                    <span className="block text-xs text-warm-400">{rolloDe(d).detalle}</span>
-                                                </>
-                                            ) : (
-                                                (d.presentacion?.nombre ?? '—')
-                                            )}
-                                        </td>
-                                        <td className="px-3 py-2 text-right text-warm-900">{num(d.cantidad)}</td>
-                                        <td className="px-3 py-2 text-right text-warm-900">{money(d.precio_unitario, seleccionada?.moneda)}</td>
-                                        <td className="px-3 py-2 text-right text-warm-500">
-                                            {Number(d.descuento) > 0 ? money(d.descuento, seleccionada?.moneda) : '—'}
-                                        </td>
-                                        <td className="px-3 py-2 text-right font-semibold text-primary-600">
-                                            {money(d.subtotal, seleccionada?.moneda)}
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                        {detallesVenta.length > 0 && (
-                            <tfoot className="sticky bottom-0">
-                                <tr className="border-t-2 border-edge bg-gray-50 text-sm font-bold text-warm-900">
-                                    <td className="px-3 py-2" colSpan={5}>Total</td>
-                                    <td className="px-3 py-2 text-right">{num(totalesVenta.cantidad)}</td>
-                                    <td className="px-3 py-2" />
-                                    <td className="px-3 py-2 text-right">
-                                        {totalesVenta.descuento > 0 ? money(totalesVenta.descuento, seleccionada?.moneda) : '—'}
-                                    </td>
-                                    <td className="px-3 py-2 text-right text-primary-700">
-                                        {money(totalesVenta.subtotal, seleccionada?.moneda)}
-                                    </td>
-                                </tr>
-                            </tfoot>
-                        )}
-                    </table>
+                <div className="overflow-auto p-3" style={{ height: '30vh' }}>
+                    {detallesVenta.length === 0 ? (
+                        <p className="px-3 py-10 text-center text-sm text-warm-500">
+                            {seleccionada ? 'Esta proforma no tiene productos.' : 'Selecciona una proforma arriba para ver su detalle.'}
+                        </p>
+                    ) : (
+                        <DetalleProforma detalles={detallesVenta} moneda={seleccionada?.moneda} total={seleccionada?.total} />
+                    )}
                 </div>
             </div>
 
             <Modal
                 open={Boolean(anularTarget)}
                 onClose={() => setAnularTarget(null)}
-                title="Anular venta"
-                description={`Venta ${anularTarget?.serie}-${anularTarget?.numero}. El stock volverá al almacén.`}
+                title="Anular proforma"
+                description={`Proforma ${anularTarget?.serie}-${anularTarget?.numero}. El stock volverá al almacén.`}
                 size="sm"
                 footer={
                     <>
                         <Button variant="secondary" onClick={() => setAnularTarget(null)}>Cancelar</Button>
-                        <Button variant="danger" loading={anulando} onClick={handleAnular}>Anular venta</Button>
+                        <Button variant="danger" loading={anulando} onClick={handleAnular}>Anular proforma</Button>
                     </>
                 }
             >
@@ -499,7 +381,7 @@ export default function NotasVenta() {
             <Modal
                 open={verOpen}
                 onClose={() => setVerOpen(false)}
-                title={detalle ? `Venta ${detalle.serie}-${detalle.numero}` : 'Detalle de venta'}
+                title={detalle ? `Proforma ${detalle.serie}-${detalle.numero}` : 'Detalle de proforma'}
                 size="xl"
                 footer={<Button variant="secondary" onClick={() => setVerOpen(false)}>Cerrar</Button>}
             >
@@ -538,35 +420,7 @@ export default function NotasVenta() {
                         {/* Productos */}
                         <div>
                             <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-warm-500">Productos</h3>
-                            <div className="overflow-hidden rounded-xl border border-edge">
-                                <table className="w-full text-sm">
-                                    <thead>
-                                        <tr className="bg-gray-50 text-left text-xs uppercase tracking-wide text-warm-500">
-                                            <th className="px-3 py-2">Producto</th>
-                                            <th className="px-3 py-2 text-right">Cant.</th>
-                                            <th className="px-3 py-2 text-right">Precio</th>
-                                            <th className="px-3 py-2 text-right">Subtotal</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-100">
-                                        {(detalle.detalles ?? []).map((d) => (
-                                            <tr key={d.id}>
-                                                <td className="px-3 py-2">
-                                                    <span className="font-medium text-warm-900">{d.producto_nombre ?? 'Producto'}</span>
-                                                    {rolloDe(d) ? (
-                                                        <span className="text-warm-400"> · {rolloDe(d).tipo} · {rolloDe(d).detalle}</span>
-                                                    ) : (
-                                                        d.presentacion?.nombre && <span className="text-warm-400"> · {d.presentacion.nombre}</span>
-                                                    )}
-                                                </td>
-                                                <td className="px-3 py-2 text-right">{Number(d.cantidad)}</td>
-                                                <td className="px-3 py-2 text-right">{money(d.precio_unitario, detalle.moneda)}</td>
-                                                <td className="px-3 py-2 text-right font-medium text-warm-900">{money(d.subtotal, detalle.moneda)}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
+                            <DetalleProforma detalles={detalle.detalles ?? []} moneda={detalle.moneda} total={detalle.total} />
                         </div>
 
                         {/* Pagos + Total */}
@@ -621,7 +475,7 @@ export default function NotasVenta() {
                 tipo="nota-venta"
                 id={pdfTarget?.id}
                 nombre={pdfTarget ? docNombre(pdfTarget) : ''}
-                titulo="Nota de venta"
+                titulo="Proforma"
                 formatos={['a4', 'ticket']}
             />
         </Layout>

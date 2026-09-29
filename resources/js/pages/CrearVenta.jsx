@@ -1131,8 +1131,8 @@ export default function CrearVenta() {
 
             toast.success(
                 editando
-                    ? "Venta actualizada. Stock y caja recalculados."
-                    : "Venta registrada. Stock descontado del almacén.",
+                    ? "Proforma actualizada. Stock y caja recalculados."
+                    : "Proforma registrada. Stock descontado del almacén.",
             );
             navigate("/notas-venta");
         } catch (err) {
@@ -1174,10 +1174,10 @@ export default function CrearVenta() {
                     </span>
                     <div>
                         <h1 className="text-xl font-bold text-warm-900">
-                            {editando ? "Editar venta" : "Nueva venta"}
+                            {editando ? "Editar proforma" : "Nueva proforma"}
                         </h1>
                         <p className="text-sm text-warm-500">
-                            Nota de venta y registro del cobro. Al registrarla
+                            Proforma y registro del cobro. Al registrarla
                             se descuenta el stock.
                         </p>
                     </div>
@@ -1607,7 +1607,7 @@ export default function CrearVenta() {
                     <div className="rounded-xl border border-edge bg-white shadow-sm">
                         <div className="border-b border-edge px-5 py-3">
                             <h2 className="text-xs font-bold uppercase tracking-wide text-warm-500">
-                                Datos de la venta
+                                Datos de la proforma
                             </h2>
                         </div>
                         <div className="grid grid-cols-1 gap-4 p-5">
@@ -1980,7 +1980,7 @@ export default function CrearVenta() {
                             >
                                 {editando
                                     ? "Guardar cambios"
-                                    : "Registrar venta"}
+                                    : "Registrar proforma"}
                             </Button>
                             <Button
                                 variant="secondary"

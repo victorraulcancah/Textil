@@ -17,7 +17,7 @@ class NotaVentaController extends Controller
 
     public function index()
     {
-        $notas = NotaVenta::with(['cliente', 'almacen', 'vendedor', 'ordenVenta:id,serie,numero', 'detalles.presentacion.producto.marca', 'detalles.rollo.color', 'pagos.metodoPago'])
+        $notas = NotaVenta::with(['cliente', 'almacen', 'vendedor', 'ordenVenta:id,serie,numero', 'detalles.presentacion.producto.marca', 'detalles.presentacion.unidadBase', 'detalles.presentacion.producto.presentaciones.unidadBase', 'detalles.rollo.color', 'pagos.metodoPago'])
             ->orderBy('created_at', 'desc')
             ->paginate(15);
 
@@ -63,7 +63,7 @@ class NotaVentaController extends Controller
     public function show(NotaVenta $notaVenta)
     {
         return new NotaVentaResource(
-            $notaVenta->load(['cliente', 'almacen', 'vendedor', 'detalles.presentacion.producto.marca', 'detalles.rollo.color', 'pagos.metodoPago'])
+            $notaVenta->load(['cliente', 'almacen', 'vendedor', 'detalles.presentacion.producto.marca', 'detalles.presentacion.unidadBase', 'detalles.presentacion.producto.presentaciones.unidadBase', 'detalles.rollo.color', 'pagos.metodoPago'])
         );
     }
 
@@ -89,6 +89,6 @@ class NotaVentaController extends Controller
     public function destroy(NotaVenta $notaVenta)
     {
         $notaVenta->delete();
-        return response()->json(['message' => 'Nota de venta eliminada correctamente']);
+        return response()->json(['message' => 'Proforma eliminada correctamente']);
     }
 }

@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Dashboard inteligente del escritorio: KPIs, series para gráficos e insights.
- * Solo soles, sin IGV. Todas las ventas consideradas son notas de venta emitidas.
+ * Solo soles, sin IGV. Todas las ventas consideradas son proformas emitidas.
  */
 class DashboardController extends Controller
 {

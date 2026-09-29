@@ -5,7 +5,7 @@ namespace App\Http\Requests\OrdenVenta;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
- * Emitir la nota de venta de un pedido ya despachado.
+ * Emitir la proforma de un pedido ya despachado.
  *
  * Los rollos y los importes salen del pedido: aquí solo llega cómo paga el
  * cliente, igual que en una venta de mostrador.
@@ -50,8 +50,8 @@ class FacturarPedidoRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'pagos.required' => 'Indica cómo paga el cliente para emitir la nota de venta.',
-            'pagos.min' => 'Indica cómo paga el cliente para emitir la nota de venta.',
+            'pagos.required' => 'Indica cómo paga el cliente para emitir la proforma.',
+            'pagos.min' => 'Indica cómo paga el cliente para emitir la proforma.',
         ];
     }
 }

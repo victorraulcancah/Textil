@@ -60,7 +60,7 @@ const ESTADOS = [
  * Pedidos: el recorrido desde que se toma hasta que se despacha.
  *
  * Ninguna acción de aquí mueve stock. Los rollos quedan apartados para el
- * cliente y el inventario se descuenta recién al emitir la nota de venta.
+ * cliente y el inventario se descuenta recién al emitir la proforma.
  */
 export default function Pedidos() {
     const toast = useToast();
@@ -430,7 +430,7 @@ export default function Pedidos() {
                             {detalle.estado === 'despachado' && detalle.transiciones?.includes('facturado') && (
                                 <Button size="sm" onClick={() => setFacturar(detalle)}>
                                     <Receipt className="h-4 w-4" />
-                                    Emitir nota de venta
+                                    Emitir proforma
                                 </Button>
                             )}
                         </div>
@@ -480,7 +480,7 @@ export default function Pedidos() {
                 onClose={() => setFacturar(null)}
                 onFacturado={(nota) => {
                     setFacturar(null);
-                    toast.success(`Nota de venta ${nota.serie}-${nota.numero} emitida.`);
+                    toast.success(`Proforma ${nota.serie}-${nota.numero} emitida.`);
                     load();
                 }}
             />
@@ -553,7 +553,7 @@ function DetallePedido({ pedido, procesando, onAccion, onFacturar, onPdf }) {
                     {pedido.estado === 'despachado' && puede('facturado') && (
                         <Button size="sm" onClick={onFacturar}>
                             <Receipt className="h-4 w-4" />
-                            Emitir nota de venta
+                            Emitir proforma
                         </Button>
                     )}
                 </div>
@@ -746,7 +746,7 @@ function AnularModal({ pedido, onClose, onAnulado }) {
 }
 
 /**
- * Emitir la nota de venta del pedido despachado. La tela ya salió al
+ * Emitir la proforma del pedido despachado. La tela ya salió al
  * despachar; aquí se registra la venta y cómo paga el cliente.
  */
 // moneda "" = la del pedido; "PEN" = un pedido en dólares cobrado con soles.
@@ -936,7 +936,7 @@ function FacturarModal({ pedido, onClose, onFacturado }) {
             if (err.response?.data?.exceso_credito) {
                 setExceso({ message: err.response.data.message, detalle: err.response.data.exceso_credito });
             } else {
-                toast.error(err.response?.data?.message ?? 'No se pudo emitir la nota de venta.');
+                toast.error(err.response?.data?.message ?? 'No se pudo emitir la proforma.');
             }
         } finally {
             setGuardando(false);
@@ -947,12 +947,12 @@ function FacturarModal({ pedido, onClose, onFacturado }) {
         <Modal
             open={Boolean(pedido)}
             onClose={onClose}
-            title="Emitir nota de venta"
+            title="Emitir proforma"
             description={`${pedido?.documento ?? ''} · ${m(pedido?.total)}`}
             footer={
                 <>
                     <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-                    <Button loading={guardando} onClick={() => emitir()}>Emitir nota de venta</Button>
+                    <Button loading={guardando} onClick={() => emitir()}>Emitir proforma</Button>
                 </>
             }
         >

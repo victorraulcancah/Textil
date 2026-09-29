@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import {
     Download,
     Edit,
@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { calcularPresentaciones, describirContenido } from '../lib/unidades';
+import { DOC_LABEL, ORIGEN_LABEL } from '../lib/movimientos';
 import { useToast } from '../lib/toast';
 import { useAuth } from '../lib/auth';
 import Layout from '../components/Layout';
@@ -151,13 +152,15 @@ const ventaVacia = () => ({ unidad_id: '', margen: '25', precio_venta: '' });
 
 export default function Productos() {
     const toast = useToast();
-    const navigate = useNavigate();
     const { puede } = useAuth();
     /** Clic derecho sobre un producto: dónde se abrió el menú y de qué producto. */
     const [menu, setMenu] = useState(null);
     const cerrarMenu = useCallback(() => setMenu(null), []);
-    /** El producto cuyos colores (con su stock) se ven en el modal. */
-    const [coloresDe, setColoresDe] = useState(null);
+    /**
+     * Lo que se consulta desde el clic derecho, siempre en un modal (no se
+     * sale de Productos): { tipo: 'colores' | 'movimientos' | 'rollos' | 'precios', producto, colorId? }.
+     */
+    const [consulta, setConsulta] = useState(null);
     const [productos, setProductos] = useState([]);
     const [categorias, setCategorias] = useState([]);
     const [marcas, setMarcas] = useState([]);
@@ -377,14 +380,21 @@ export default function Productos() {
                 : [ventaVacia()],
         );
         setAvisosColores([]);
+        // Una tela tiene un solo proveedor: el principal (o el primero que tenga).
+        const provsGuardados = Array.isArray(prod.proveedores) ? prod.proveedores : [];
+        const provTela = provsGuardados.find((pv) => pv.principal) ?? provsGuardados[0];
         setProvs(
-            (Array.isArray(prod.proveedores) ? prod.proveedores : []).map((pv) => ({
-                proveedor_id: String(pv.proveedor_id ?? ''),
-                codigo_proveedor: pv.codigo_proveedor ?? '',
-                precio_referencia: pv.precio_referencia != null ? String(pv.precio_referencia) : '',
-                dias_entrega: pv.dias_entrega != null ? String(pv.dias_entrega) : '',
-                principal: Boolean(pv.principal),
-            })),
+            provTela
+                ? [
+                      {
+                          proveedor_id: String(provTela.proveedor_id ?? ''),
+                          codigo_proveedor: provTela.codigo_proveedor ?? '',
+                          precio_referencia: provTela.precio_referencia != null ? String(provTela.precio_referencia) : '',
+                          dias_entrega: provTela.dias_entrega != null ? String(provTela.dias_entrega) : '',
+                          principal: true,
+                      },
+                  ]
+                : [],
         );
         setColores(
             (Array.isArray(prod.colores) ? prod.colores : []).map((c) => ({
@@ -721,6 +731,23 @@ export default function Productos() {
 
     // ---- Creación rápida de catálogos ----
     /**
+     * El proveedor de la tela: uno solo, de los registrados. Si ya lo tenía, se
+     * conservan sus datos (su código, su precio de referencia).
+     */
+    const elegirProveedor = (proveedorId) =>
+        setProvs((prev) =>
+            proveedorId
+                ? [
+                      {
+                          ...(prev.find((pv) => String(pv.proveedor_id) === String(proveedorId)) ?? provVacio()),
+                          proveedor_id: String(proveedorId),
+                          principal: true,
+                      },
+                  ]
+                : [],
+        );
+
+    /**
      * La plantilla de colores (Código, Nombre, Nombre del proveedor, Metraje y
      * el catálogo aparte). Al editar trae los colores guardados de la tela; si
      * no, unas filas de ejemplo.
@@ -792,6 +819,8 @@ export default function Productos() {
             }
             setColores(lista);
             setAvisosColores(data.advertencias ?? []);
+            // El proveedor de la tela, si el Excel lo trae (uno de los registrados).
+            if (data.proveedor?.id) elegirProveedor(String(data.proveedor.id));
 
             // Los nuevos del catálogo, para que el selector los tenga.
             if ((data.nuevos ?? []).length) {
@@ -802,6 +831,7 @@ export default function Productos() {
             toast.success(
                 `${agregados} color${agregados === 1 ? '' : 'es'} agregado${agregados === 1 ? '' : 's'}` +
                     (nuevos ? ` · ${nuevos} nuevo${nuevos === 1 ? '' : 's'} en el catálogo` : '') +
+                    (data.proveedor?.nombre ? ` · proveedor ${data.proveedor.nombre}` : '') +
                     '. Se guardan con el producto.',
             );
         } catch (err) {
@@ -1275,123 +1305,25 @@ export default function Productos() {
                         </div>
                     </section>
 
-                    {/* Quiénes traen la tela. La misma se le puede comprar a
-                        varios, y cada uno la llama con su código y la cotiza a
-                        su precio: por eso es una lista y no un solo campo. */}
+                    {/* El proveedor de la tela: uno solo, de los registrados.
+                        También queda elegido al subir el Excel de colores. */}
                     <section>
-                        <div className="mb-2 flex items-center justify-between">
-                            <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-                                Proveedores
-                            </h3>
-                            <Button
-                                type="button"
-                                variant="secondary"
-                                size="sm"
-                                onClick={() => setProvs((prev) => [...prev, provVacio()])}
-                            >
-                                <Plus className="h-4 w-4" />
-                                Agregar proveedor
-                            </Button>
+                        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+                            Proveedor
+                        </h3>
+                        <div className="max-w-md">
+                            <SearchSelect
+                                value={provs[0]?.proveedor_id ?? ''}
+                                onChange={(v) => elegirProveedor(v ?? '')}
+                                placeholder="Elegir proveedor…"
+                                emptyText="Sin coincidencias"
+                                options={proveedores.map((op) => ({ value: String(op.id), label: op.nombre }))}
+                            />
                         </div>
-
-                        {provs.length === 0 ? (
-                            <p className="rounded-lg border border-dashed border-edge px-4 py-6 text-center text-sm text-warm-400">
-                                Sin proveedores asignados.
-                            </p>
-                        ) : (
-                            <div className="space-y-2">
-                                {provs.map((pv, i) => (
-                                    <div key={i} className="flex flex-wrap items-end gap-2 rounded-lg border border-edge p-2">
-                                        <SearchSelect
-                                            label="Proveedor"
-                                            className="min-w-[12rem] flex-1"
-                                            value={pv.proveedor_id}
-                                            onChange={(v) =>
-                                                setProvs((prev) =>
-                                                    prev.map((x, j) =>
-                                                        j === i ? { ...x, proveedor_id: v ?? '' } : x,
-                                                    ),
-                                                )
-                                            }
-                                            placeholder="Elegir proveedor…"
-                                            emptyText="Sin coincidencias"
-                                            options={proveedores
-                                                .filter(
-                                                    (op) =>
-                                                        String(op.id) === String(pv.proveedor_id) ||
-                                                        !provs.some((o) => String(o.proveedor_id) === String(op.id)),
-                                                )
-                                                .map((op) => ({ value: String(op.id), label: op.nombre }))}
-                                        />
-                                        <Input
-                                            label="Su código"
-                                            placeholder="A103"
-                                            className="w-32"
-                                            value={pv.codigo_proveedor}
-                                            onChange={(e) =>
-                                                setProvs((prev) =>
-                                                    prev.map((x, j) =>
-                                                        j === i ? { ...x, codigo_proveedor: e.target.value } : x,
-                                                    ),
-                                                )
-                                            }
-                                        />
-                                        <Input
-                                            label="Precio ref."
-                                            type="number"
-                                            step="0.0001"
-                                            placeholder="4.20"
-                                            className="w-28"
-                                            value={pv.precio_referencia}
-                                            onChange={(e) =>
-                                                setProvs((prev) =>
-                                                    prev.map((x, j) =>
-                                                        j === i ? { ...x, precio_referencia: e.target.value } : x,
-                                                    ),
-                                                )
-                                            }
-                                        />
-                                        <Input
-                                            label="Días entrega"
-                                            type="number"
-                                            placeholder="45"
-                                            className="w-28"
-                                            value={pv.dias_entrega}
-                                            onChange={(e) =>
-                                                setProvs((prev) =>
-                                                    prev.map((x, j) =>
-                                                        j === i ? { ...x, dias_entrega: e.target.value } : x,
-                                                    ),
-                                                )
-                                            }
-                                        />
-                                        {/* Solo uno es el habitual: marcar otro desmarca el anterior. */}
-                                        <label className="flex items-center gap-1.5 pb-2 text-sm text-gray-700">
-                                            <input
-                                                type="radio"
-                                                name="proveedor-principal"
-                                                checked={Boolean(pv.principal)}
-                                                onChange={() =>
-                                                    setProvs((prev) =>
-                                                        prev.map((x, j) => ({ ...x, principal: j === i })),
-                                                    )
-                                                }
-                                                className="h-4 w-4 accent-primary-600"
-                                            />
-                                            Principal
-                                        </label>
-                                        <button
-                                            type="button"
-                                            aria-label="Quitar proveedor"
-                                            onClick={() => setProvs((prev) => prev.filter((_, j) => j !== i))}
-                                            className="mb-1.5 rounded-md p-1.5 text-red-600 transition hover:bg-red-50"
-                                        >
-                                            <Trash2 className="h-4 w-4" />
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
+                        <p className="mt-1 text-xs text-warm-400">
+                            Uno de tus proveedores registrados. Si el Excel de colores trae la columna
+                            Proveedor, queda elegido al subirlo.
+                        </p>
                     </section>
 
                 </div>
@@ -1643,9 +1575,10 @@ export default function Productos() {
                         </p>
                         <p className="mb-3 text-xs text-warm-400">
                             Para cargar muchos de una vez, sube un Excel con Código, Nombre, Nombre del
-                            proveedor y Metraje (m) (descarga la plantilla: trae el catálogo de colores). Lo que
-                            no esté en el catálogo se crea. El metraje del rollo de cada color se ve y se
-                            corrige en Compra y venta.
+                            proveedor, Metraje (m) y Proveedor (descarga la plantilla: trae el catálogo de colores
+                            y tus proveedores; el proveedor queda elegido para la tela). Lo que
+                            no esté en el catálogo se crea. El metraje del rollo de cada color se pone aquí
+                            y también se ve en la tabla de la tela, en Compra y venta.
                         </p>
                         {avisosColores.length > 0 && (
                             <Alert variant="warning" className="mb-3">
@@ -1736,31 +1669,58 @@ export default function Productos() {
                                             tienda a la suya ("ANTIQUE"). Con los dos
                                             se puede cruzar el packing list del
                                             siguiente contenedor. */}
-                                        <Input
-                                            label="Nombre del proveedor"
-                                            placeholder="Verde oscuro (Ha Qing)"
-                                            className="min-w-[10rem] flex-1"
-                                            value={c.nombre_proveedor}
-                                            onChange={(e) =>
-                                                setColores((prev) =>
-                                                    prev.map((x, j) =>
-                                                        j === i
-                                                            ? { ...x, nombre_proveedor: e.target.value }
-                                                            : x,
-                                                    ),
-                                                )
-                                            }
-                                        />
-                                        <button
-                                            type="button"
-                                            aria-label="Quitar color"
-                                            onClick={() =>
-                                                setColores((prev) => prev.filter((_, j) => j !== i))
-                                            }
-                                            className="mb-px rounded-md p-2 text-danger-600 transition hover:bg-danger-50"
-                                        >
-                                            <Trash2 className="h-4 w-4" />
-                                        </button>
+                                        <div className="flex w-full items-end gap-2">
+                                            <div className="min-w-0 flex-1">
+                                                <Input
+                                                    label="Nombre del proveedor"
+                                                    placeholder="Verde oscuro (Ha Qing)"
+                                                    value={c.nombre_proveedor}
+                                                    onChange={(e) =>
+                                                        setColores((prev) =>
+                                                            prev.map((x, j) =>
+                                                                j === i
+                                                                    ? { ...x, nombre_proveedor: e.target.value }
+                                                                    : x,
+                                                            ),
+                                                        )
+                                                    }
+                                                />
+                                            </div>
+                                            {/* El metraje del rollo de este color (su factor). Es el
+                                                mismo de la tabla de la tela en Compra y venta. */}
+                                            {vendePorMetro && (
+                                                <div className="w-40 shrink-0">
+                                                    <Input
+                                                        label="Metraje del rollo (m)"
+                                                        type="number"
+                                                        step="0.01"
+                                                        min="0"
+                                                        placeholder="63"
+                                                        value={c.metros_por_rollo}
+                                                        onChange={(e) =>
+                                                            setColores((prev) =>
+                                                                prev.map((x, j) =>
+                                                                    j === i
+                                                                        ? { ...x, metros_por_rollo: e.target.value }
+                                                                        : x,
+                                                                ),
+                                                            )
+                                                        }
+                                                        className="text-right"
+                                                    />
+                                                </div>
+                                            )}
+                                            <button
+                                                type="button"
+                                                aria-label="Quitar color"
+                                                onClick={() =>
+                                                    setColores((prev) => prev.filter((_, j) => j !== i))
+                                                }
+                                                className="mb-px rounded-md p-2 text-danger-600 transition hover:bg-danger-50"
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </button>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
@@ -2267,47 +2227,434 @@ export default function Productos() {
                     { label: 'Ver detalle', icon: Eye, onClick: () => setDetalle(menu.producto) },
                     { label: 'Editar producto', icon: Edit, onClick: () => openEdit(menu.producto) },
                     '-',
-                    { label: 'Colores y stock', icon: Palette, onClick: () => setColoresDe(menu.producto) },
+                    {
+                        label: 'Colores y stock',
+                        icon: Palette,
+                        onClick: () => setConsulta({ tipo: 'colores', producto: menu.producto }),
+                    },
                     {
                         label: 'Movimientos (kardex)',
                         icon: History,
                         hidden: !puede('inventario.kardex'),
-                        onClick: () =>
-                            navigate(
-                                `/kardex?producto=${menu.producto.id}&nombre=${encodeURIComponent(menu.producto.nombre)}`,
-                            ),
+                        onClick: () => setConsulta({ tipo: 'movimientos', producto: menu.producto }),
                     },
                     {
                         label: 'Rollos en stock',
                         icon: Layers,
                         hidden: !puede('inventario.rollos'),
-                        onClick: () => navigate(`/stock-rollos?producto=${menu.producto.id}`),
+                        onClick: () => setConsulta({ tipo: 'rollos', producto: menu.producto }),
                     },
                     '-',
                     {
                         label: 'Lista de precios',
                         icon: Tag,
                         hidden: !puede('catalogo.lista-precios'),
-                        onClick: () => navigate(`/lista-precios?producto=${menu.producto.id}`),
+                        onClick: () => setConsulta({ tipo: 'precios', producto: menu.producto }),
                     },
                 ]}
             />
 
-            {coloresDe && (
+            {consulta?.tipo === 'colores' && (
                 <ColoresProductoModal
-                    producto={coloresDe}
-                    onClose={() => setColoresDe(null)}
+                    producto={consulta.producto}
+                    onClose={() => setConsulta(null)}
+                    // Los rollos de un color (o todos) en su propio modal.
                     verRollos={
                         puede('inventario.rollos')
-                            ? (colorId) =>
-                                  navigate(
-                                      `/stock-rollos?producto=${coloresDe.id}${colorId ? `&color=${colorId}` : ''}`,
-                                  )
+                            ? (colorId) => setConsulta({ tipo: 'rollos', producto: consulta.producto, colorId })
                             : null
                     }
                 />
             )}
+            {consulta?.tipo === 'movimientos' && (
+                <MovimientosProductoModal producto={consulta.producto} onClose={() => setConsulta(null)} />
+            )}
+            {consulta?.tipo === 'rollos' && (
+                <RollosProductoModal
+                    producto={consulta.producto}
+                    colorInicial={consulta.colorId}
+                    onClose={() => setConsulta(null)}
+                />
+            )}
+            {consulta?.tipo === 'precios' && (
+                <PreciosProductoModal producto={consulta.producto} onClose={() => setConsulta(null)} />
+            )}
         </Layout>
+    );
+}
+
+/** Las cantidades de stock de un producto: en metros si es tela; si no, en su unidad. */
+const unidadDeStock = (producto) => {
+    const metro = (producto?.presentaciones ?? []).find(
+        (p) => (p.unidad_base?.abreviatura ?? '').toLowerCase() === 'm',
+    );
+    const factor = Number(metro?.factor_conversion) || 0;
+    return factor > 0
+        ? { factor, abrev: 'm' }
+        : { factor: 1, abrev: producto?.unidad_medida?.abreviatura ?? '' };
+};
+
+/** "29/09/2026 14:05". */
+const fechaHora = (valor) =>
+    valor
+        ? new Date(valor).toLocaleString('es-PE', {
+              day: '2-digit',
+              month: '2-digit',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+          })
+        : '—';
+
+/** El kardex de un producto: sus entradas y salidas, de la más reciente a la más antigua. */
+function MovimientosProductoModal({ producto, onClose }) {
+    const [movs, setMovs] = useState(null);
+    const [tipo, setTipo] = useState('');
+    const [almacen, setAlmacen] = useState('');
+
+    useEffect(() => {
+        let vivo = true;
+        api.get('/movimientos', { params: { producto_id: producto.id } })
+            .then((res) => vivo && setMovs(asList(res)))
+            .catch(() => vivo && setMovs([]));
+        return () => {
+            vivo = false;
+        };
+    }, [producto.id]);
+
+    const { factor, abrev } = unidadDeStock(producto);
+    const cantidad = (v) => Math.abs(Number(v) || 0) / factor;
+    const almacenes = [
+        ...new Map((movs ?? []).filter((m) => m.almacen).map((m) => [String(m.almacen.id), m.almacen.nombre])).entries(),
+    ];
+    const visibles = (movs ?? []).filter(
+        (m) => (!tipo || m.tipo_movimiento === tipo) && (!almacen || String(m.almacen?.id) === almacen),
+    );
+    const suma = (t) => visibles.filter((m) => m.tipo_movimiento === t).reduce((s, m) => s + cantidad(m.cantidad), 0);
+
+    return (
+        <Modal
+            open
+            onClose={onClose}
+            title={`Movimientos de ${producto.nombre}`}
+            description="Entradas y salidas, de la más reciente a la más antigua"
+            size="3xl"
+            footer={
+                <Button variant="secondary" onClick={onClose}>
+                    Cerrar
+                </Button>
+            }
+        >
+            <div className="mb-3 flex flex-wrap items-end gap-3">
+                <Select
+                    label="Tipo"
+                    value={tipo}
+                    onChange={(e) => setTipo(e.target.value)}
+                    options={[
+                        { value: '', label: 'Todos' },
+                        { value: 'entrada', label: 'Entradas' },
+                        { value: 'salida', label: 'Salidas' },
+                    ]}
+                    className="w-40"
+                />
+                {almacenes.length > 1 && (
+                    <Select
+                        label="Almacén"
+                        value={almacen}
+                        onChange={(e) => setAlmacen(e.target.value)}
+                        options={[{ value: '', label: 'Todos' }, ...almacenes.map(([value, label]) => ({ value, label }))]}
+                        className="w-48"
+                    />
+                )}
+                <p className="ml-auto text-sm text-warm-600">
+                    Entradas <strong className="text-green-700">{formatoMetros(suma('entrada'))} {abrev}</strong> · Salidas{' '}
+                    <strong className="text-red-700">{formatoMetros(suma('salida'))} {abrev}</strong>
+                </p>
+            </div>
+            <div className="max-h-[60vh] overflow-auto rounded-lg border border-edge">
+                <table className="w-full min-w-[860px] text-sm">
+                    <thead className="sticky top-0 z-10">
+                        <tr className="bg-primary-600 text-left text-xs font-semibold uppercase tracking-wide text-white">
+                            <th className="px-3 py-2">Fecha</th>
+                            <th className="px-3 py-2">Movimiento</th>
+                            <th className="px-3 py-2">Documento</th>
+                            <th className="px-3 py-2">Almacén</th>
+                            <th className="px-3 py-2">Color</th>
+                            <th className="px-3 py-2 text-right">Entrada</th>
+                            <th className="px-3 py-2 text-right">Salida</th>
+                            <th className="px-3 py-2 text-right">Saldo</th>
+                            <th className="px-3 py-2">Usuario</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                        {movs === null && (
+                            <tr>
+                                <td colSpan={9} className="px-3 py-8 text-center text-sm text-warm-400">
+                                    Cargando…
+                                </td>
+                            </tr>
+                        )}
+                        {movs !== null && visibles.length === 0 && (
+                            <tr>
+                                <td colSpan={9} className="px-3 py-8 text-center text-sm text-warm-400">
+                                    Sin movimientos.
+                                </td>
+                            </tr>
+                        )}
+                        {visibles.map((m) => {
+                            const entra = m.tipo_movimiento === 'entrada';
+                            return (
+                                <tr key={m.id}>
+                                    <td className="whitespace-nowrap px-3 py-2 text-warm-700">{fechaHora(m.fecha)}</td>
+                                    <td className="px-3 py-2">
+                                        <Badge variant={entra ? 'green' : 'red'}>
+                                            {ORIGEN_LABEL[m.origen] ?? m.origen ?? (entra ? 'Entrada' : 'Salida')}
+                                        </Badge>
+                                    </td>
+                                    <td className="px-3 py-2 text-warm-600">
+                                        {m.documento_referencia_tipo
+                                            ? `${DOC_LABEL[m.documento_referencia_tipo] ?? m.documento_referencia_tipo}${m.documento_referencia_id ? ` #${m.documento_referencia_id}` : ''}`
+                                            : '—'}
+                                        {m.proveedor_nombre && (
+                                            <span className="block text-xs text-warm-400">{m.proveedor_nombre}</span>
+                                        )}
+                                    </td>
+                                    <td className="px-3 py-2 text-warm-600">{m.almacen?.nombre ?? '—'}</td>
+                                    <td className="px-3 py-2">
+                                        {m.color ? (
+                                            <span className="inline-flex items-center gap-1.5 text-warm-800">
+                                                <span
+                                                    className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-black/10"
+                                                    style={{ backgroundColor: m.color.hex || '#9ca3af' }}
+                                                />
+                                                {m.color.nombre}
+                                            </span>
+                                        ) : (
+                                            <span className="text-warm-400">—</span>
+                                        )}
+                                    </td>
+                                    <td className="px-3 py-2 text-right font-medium text-green-700">
+                                        {entra ? `${formatoMetros(cantidad(m.cantidad))} ${abrev}` : ''}
+                                    </td>
+                                    <td className="px-3 py-2 text-right font-medium text-red-700">
+                                        {entra ? '' : `${formatoMetros(cantidad(m.cantidad))} ${abrev}`}
+                                    </td>
+                                    <td className="px-3 py-2 text-right text-warm-900">
+                                        {m.saldo_stock != null ? `${formatoMetros(Number(m.saldo_stock) / factor)} ${abrev}` : '—'}
+                                    </td>
+                                    <td className="px-3 py-2 text-warm-600">{m.usuario?.name ?? '—'}</td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
+            {movs?.length >= 1000 && (
+                <p className="mt-2 text-xs text-warm-500">Se muestran los últimos 1000 movimientos.</p>
+            )}
+        </Modal>
+    );
+}
+
+/** Los rollos de una tela que tienen tela (de un color o de todos), con dónde están. */
+function RollosProductoModal({ producto, colorInicial, onClose }) {
+    const [rollos, setRollos] = useState(null);
+    const [color, setColor] = useState(colorInicial ? String(colorInicial) : '');
+    const [estado, setEstado] = useState('');
+
+    useEffect(() => {
+        let vivo = true;
+        api.get('/rollos', { params: { producto_id: producto.id } })
+            .then((res) => vivo && setRollos(asList(res).filter((r) => Number(r.metros_actual) > 0)))
+            .catch(() => vivo && setRollos([]));
+        return () => {
+            vivo = false;
+        };
+    }, [producto.id]);
+
+    const colores = [
+        ...new Map((rollos ?? []).map((r) => [String(r.producto_color_id ?? ''), r.color?.nombre ?? 'Sin color'])).entries(),
+    ];
+    const estados = [...new Map((rollos ?? []).map((r) => [r.estado, r.estado_label ?? r.estado])).entries()];
+    const visibles = (rollos ?? []).filter(
+        (r) => (!color || String(r.producto_color_id ?? '') === color) && (!estado || r.estado === estado),
+    );
+    const metros = visibles.reduce((s, r) => s + (Number(r.metros_actual) || 0), 0);
+
+    return (
+        <Modal
+            open
+            onClose={onClose}
+            title={`Rollos de ${producto.nombre}`}
+            description="Los rollos que tienen tela, con su metraje y dónde están"
+            size="3xl"
+            footer={
+                <Button variant="secondary" onClick={onClose}>
+                    Cerrar
+                </Button>
+            }
+        >
+            <div className="mb-3 flex flex-wrap items-end gap-3">
+                <Select
+                    label="Color"
+                    value={color}
+                    onChange={(e) => setColor(e.target.value)}
+                    options={[{ value: '', label: 'Todos' }, ...colores.map(([value, label]) => ({ value, label }))]}
+                    className="w-48"
+                />
+                <Select
+                    label="Estado"
+                    value={estado}
+                    onChange={(e) => setEstado(e.target.value)}
+                    options={[{ value: '', label: 'Todos' }, ...estados.map(([value, label]) => ({ value, label }))]}
+                    className="w-44"
+                />
+                <p className="ml-auto text-sm text-warm-600">
+                    <strong className="text-warm-900">{visibles.length}</strong> rollo{visibles.length === 1 ? '' : 's'} ·{' '}
+                    <strong className="text-warm-900">{formatoMetros(metros)} m</strong>
+                </p>
+            </div>
+            <div className="max-h-[60vh] overflow-auto rounded-lg border border-edge">
+                <table className="w-full min-w-[760px] text-sm">
+                    <thead className="sticky top-0 z-10">
+                        <tr className="bg-primary-600 text-left text-xs font-semibold uppercase tracking-wide text-white">
+                            <th className="px-3 py-2">Código</th>
+                            <th className="px-3 py-2">Color</th>
+                            <th className="px-3 py-2 text-right">Metros</th>
+                            <th className="px-3 py-2 text-right">Inicial</th>
+                            <th className="px-3 py-2">Almacén</th>
+                            <th className="px-3 py-2">Ubicación</th>
+                            <th className="px-3 py-2">Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                        {rollos === null && (
+                            <tr>
+                                <td colSpan={7} className="px-3 py-8 text-center text-sm text-warm-400">
+                                    Cargando…
+                                </td>
+                            </tr>
+                        )}
+                        {rollos !== null && visibles.length === 0 && (
+                            <tr>
+                                <td colSpan={7} className="px-3 py-8 text-center text-sm text-warm-400">
+                                    No hay rollos con tela.
+                                </td>
+                            </tr>
+                        )}
+                        {visibles.map((r) => (
+                            <tr key={r.id}>
+                                <td className="px-3 py-2 font-mono text-xs font-medium text-warm-900">{r.codigo}</td>
+                                <td className="px-3 py-2">
+                                    <span className="inline-flex items-center gap-1.5 text-warm-800">
+                                        <span
+                                            className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-black/10"
+                                            style={{ backgroundColor: r.color?.hex || '#9ca3af' }}
+                                        />
+                                        {r.color?.nombre ?? 'Sin color'}
+                                    </span>
+                                </td>
+                                <td className="px-3 py-2 text-right font-medium text-warm-900">
+                                    {formatoMetros(r.metros_actual)} m
+                                </td>
+                                <td className="px-3 py-2 text-right text-warm-500">{formatoMetros(r.metros_inicial)} m</td>
+                                <td className="px-3 py-2 text-warm-600">{r.almacen ?? '—'}</td>
+                                <td className="px-3 py-2 text-warm-600">{r.ubicacion || '—'}</td>
+                                <td className="px-3 py-2">
+                                    <Badge variant={r.estado === 'disponible' ? 'green' : 'amber'}>
+                                        {r.estado_label ?? r.estado}
+                                    </Badge>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </Modal>
+    );
+}
+
+/** Los precios de venta de un producto: por tipo de precio y desde qué cantidad. Solo lectura. */
+function PreciosProductoModal({ producto, onClose }) {
+    const [tipos, setTipos] = useState(null);
+
+    useEffect(() => {
+        let vivo = true;
+        api.get('/tipos-precio')
+            .then((res) => vivo && setTipos(asList(res)))
+            .catch(() => vivo && setTipos([]));
+        return () => {
+            vivo = false;
+        };
+    }, []);
+
+    const activas = (producto.presentaciones ?? []).filter((p) => p.activo !== false);
+    // Una tela se vende por metro: sus precios son los del metro.
+    const metro = activas.find((p) => (p.unidad_base?.abreviatura ?? '').toLowerCase() === 'm');
+    const presentaciones = metro ? [metro] : activas;
+    const principal = (tipos ?? []).find((t) => t.principal);
+    const nombreTipo = (id) => (tipos ?? []).find((t) => String(t.id) === String(id))?.nombre ?? 'Precio';
+    const m = (n) => money(n, producto.moneda_venta || 'PEN');
+
+    const filasDe = (p) =>
+        [
+            { clave: 'base', tipo: principal?.nombre ?? 'Principal', principal: true, desde: 1, precio: Number(p.precio_venta) || 0 },
+            ...(p.precios ?? [])
+                .filter((x) => !(x.principal && Number(x.desde) <= 1))
+                .map((x) => ({ clave: x.id, tipo: nombreTipo(x.tipo_precio_id), principal: x.principal, desde: Number(x.desde), precio: Number(x.precio) })),
+        ].sort((a, b) => Number(b.principal) - Number(a.principal) || a.tipo.localeCompare(b.tipo, 'es') || a.desde - b.desde);
+
+    return (
+        <Modal
+            open
+            onClose={onClose}
+            title={`Precios de ${producto.nombre}`}
+            description="Por tipo de precio y desde qué cantidad. Se cambian en Lista de precios."
+            size="lg"
+            footer={
+                <Button variant="secondary" onClick={onClose}>
+                    Cerrar
+                </Button>
+            }
+        >
+            {tipos === null ? (
+                <p className="py-6 text-center text-sm text-warm-400">Cargando…</p>
+            ) : presentaciones.length === 0 ? (
+                <p className="py-6 text-center text-sm text-warm-400">Este producto no tiene precios.</p>
+            ) : (
+                <div className="space-y-4">
+                    {presentaciones.map((p) => (
+                        <div key={p.id} className="overflow-hidden rounded-lg border border-edge">
+                            <table className="w-full text-sm">
+                                <thead>
+                                    <tr className="bg-primary-600 text-left text-xs font-semibold uppercase tracking-wide text-white">
+                                        <th className="px-3 py-2">Tipo de precio</th>
+                                        <th className="px-3 py-2 text-right">Desde</th>
+                                        <th className="px-3 py-2 text-right">Precio por {(p.nombre ?? '').toLowerCase()}</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {filasDe(p).map((f) => (
+                                        <tr key={f.clave}>
+                                            <td className="px-3 py-2 font-medium text-warm-900">
+                                                {f.tipo}
+                                                {f.principal && (
+                                                    <Badge variant="blue" className="ml-2">
+                                                        Principal
+                                                    </Badge>
+                                                )}
+                                            </td>
+                                            <td className="px-3 py-2 text-right text-warm-600">{formatoMetros(f.desde)}</td>
+                                            <td className="px-3 py-2 text-right font-semibold text-primary-600">{m(f.precio)}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </Modal>
     );
 }
 

@@ -4,10 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\MovimientoInventario;
 use App\Models\RecepcionCompra;
+use Illuminate\Http\Request;
 
 class MovimientoInventarioController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         $movimientos = MovimientoInventario::with([
             'producto:id,codigo,nombre,unidad_base_id',
@@ -19,6 +20,8 @@ class MovimientoInventarioController extends Controller
             // El color, cuando el movimiento nace de rollos concretos.
             'color:id,nombre,codigo,hex',
         ])
+            // Los de un solo producto (desde Productos, clic derecho).
+            ->when($request->filled('producto_id'), fn ($q) => $q->where('producto_id', $request->integer('producto_id')))
             ->latest('fecha')
             ->latest('id')
             ->limit(1000)

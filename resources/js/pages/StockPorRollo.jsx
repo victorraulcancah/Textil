@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import {
     Layers,
     MapPin,
@@ -73,11 +72,6 @@ export default function StockPorRollo() {
 
     const [pdf, setPdf] = useState(null);
 
-    // Desde Productos (clic derecho → Rollos): se abre en esa tela (y ese color).
-    const [searchParams] = useSearchParams();
-    const productoInicial = searchParams.get('producto');
-    const colorInicial = searchParams.get('color');
-
     /* ------------------------------ carga ------------------------------ */
 
     const load = useCallback(async () => {
@@ -92,25 +86,15 @@ export default function StockPorRollo() {
             setResumen(filas);
             setTotales(resumenRes.data?.totales ?? { rollos: 0, metros: 0, valor: 0 });
             setAlmacenes(asList(almacenesRes));
-            setSeleccion(
-                (prev) =>
-                    filas.find((f) => claveColor(f) === (prev && claveColor(prev))) ??
-                    (productoInicial
-                        ? filas.find(
-                              (f) =>
-                                  String(f.producto_id) === productoInicial &&
-                                  (!colorInicial || String(f.producto_color_id) === colorInicial),
-                          )
-                        : null) ??
-                    filas[0] ??
-                    null,
+            setSeleccion((prev) =>
+                filas.find((f) => claveColor(f) === (prev && claveColor(prev))) ?? filas[0] ?? null,
             );
         } catch {
             setError('No se pudieron cargar los rollos.');
         } finally {
             setLoading(false);
         }
-    }, [almacenId]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [almacenId]);
 
     useEffect(() => {
         load();

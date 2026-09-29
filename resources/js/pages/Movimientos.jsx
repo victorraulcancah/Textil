@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import { ArrowDownLeft, ArrowRightLeft, ArrowUpRight, Package } from 'lucide-react';
 import api, { asList } from '../lib/api';
+import { DOC_LABEL, ORIGEN_LABEL } from '../lib/movimientos';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import { Alert, Badge, Button, DataTable, DateRangePicker, Modal, SearchSelect, Select } from '../components/ui';
@@ -26,36 +26,6 @@ const money = (n) =>
     new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(n) || 0);
 
 const num = (n) => Number(n ?? 0).toLocaleString('es-PE', { maximumFractionDigits: 2 });
-
-const ORIGEN_LABEL = {
-    recepcion: 'Recepción',
-    recepcion_deshecha: 'Recepción deshecha',
-    // Histórico: antes las recepciones se registraban con origen "compra".
-    compra: 'Recepción',
-    venta: 'Venta',
-    nota_venta: 'Venta',
-    edicion_nota_venta: 'Venta corregida',
-    anulacion_nota_venta: 'Venta anulada',
-    despacho_pedido: 'Despacho de pedido',
-    anulacion_despacho: 'Despacho anulado',
-    ingreso_rollos: 'Ingreso de rollos',
-    devolucion: 'Devolución',
-    merma: 'Merma',
-    transferencia: 'Traslado',
-    ajuste_manual: 'Ajuste',
-    prestamo: 'Préstamo',
-    toma_inventario: 'Toma inventario',
-};
-
-const DOC_LABEL = {
-    recepcion_compra: 'Recepción',
-    ajuste_inventario: 'Ajuste',
-    transferencia: 'Traslado',
-    prestamo: 'Préstamo',
-    toma_inventario: 'Toma',
-    nota_venta: 'Venta',
-    orden_venta: 'Pedido',
-};
 
 export default function Movimientos() {
     const [movimientos, setMovimientos] = useState([]);
@@ -105,19 +75,6 @@ export default function Movimientos() {
     useEffect(() => {
         load();
     }, [load]);
-
-    // Desde Productos (clic derecho → Movimientos): se abre el historial de ese producto.
-    const [searchParams, setSearchParams] = useSearchParams();
-    useEffect(() => {
-        const id = searchParams.get('producto');
-        if (!id || loading) return;
-        const nombre =
-            searchParams.get('nombre') ??
-            movimientos.find((m) => String(m.producto_id) === id)?.producto?.nombre ??
-            '—';
-        setProductoModal({ id, nombre });
-        setSearchParams({}, { replace: true });
-    }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const applyFilters = () => {
         const next = {};

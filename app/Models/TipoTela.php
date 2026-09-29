@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 /**
  * Un tipo de tela dentro de una familia (ej: Trenza, dentro de Poliéster):
- * 3 dígitos, únicos dentro de su familia. El código completo de la tela es
+ * 2 dígitos (01), únicos dentro de su familia. El código completo de la tela es
  * "{familia}-{tipo}"; el color se agrega después.
  */
 class TipoTela extends Model
@@ -20,7 +20,7 @@ class TipoTela extends Model
         return ['activo' => 'boolean'];
     }
 
-    /** Siguiente código de 3 dígitos libre, dentro de una familia. */
+    /** Siguiente código de 2 dígitos libre, dentro de una familia. */
     public static function generarCodigo(int $familiaId): string
     {
         $ultimo = static::where('familia_tela_id', $familiaId)
@@ -30,7 +30,10 @@ class TipoTela extends Model
 
         do {
             $n++;
-            $codigo = str_pad((string) $n, 3, '0', STR_PAD_LEFT);
+            if ($n > 99) {
+                throw new \DomainException('Esa familia ya usó los 99 tipos de tela que caben en el código.');
+            }
+            $codigo = str_pad((string) $n, 2, '0', STR_PAD_LEFT);
         } while (static::where('familia_tela_id', $familiaId)->where('codigo', $codigo)->exists());
 
         return $codigo;

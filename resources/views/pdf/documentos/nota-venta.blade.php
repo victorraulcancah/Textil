@@ -77,36 +77,8 @@
                 'Estado' => $anulada ? 'ANULADA' : 'EMITIDA',
             ]" />
 
-        {{-- Rollo por rollo, agrupado por producto. U.: R = rollo entero; vacía = metros. --}}
-        <table class="items" style="margin-bottom: 6px;">
-            <thead>
-                <tr>
-                    <th width="36px" style="text-align:center;">Ítem</th>
-                    <th>Color</th>
-                    <th width="86px" style="text-align:right;">Cantidad (m)</th>
-                    <th width="34px" style="text-align:center;">U.</th>
-                    <th width="72px" style="text-align:right;">Precio</th>
-                    <th width="86px" style="text-align:right;">Subtotal</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach ($grupos as $g)
-                    <tr>
-                        <td colspan="6" class="strong upper" style="background: #dbe4f5;">Producto: {{ $g['producto'] }}</td>
-                    </tr>
-                    @foreach ($g['filas'] as $f)
-                        <tr>
-                            <td class="center">{{ $f['n'] }}</td>
-                            <td>{{ $f['color'] }}</td>
-                            <td class="right">{{ $f['cantidad'] }}</td>
-                            <td class="center strong">{{ $f['u'] }}</td>
-                            <td class="right">{{ $venta->moneda === 'USD' ? '$' : 'S/' }} {{ $f['precio'] }}</td>
-                            <td class="right">{{ $venta->moneda === 'USD' ? '$' : 'S/' }} {{ $f['subtotal'] }}</td>
-                        </tr>
-                    @endforeach
-                @endforeach
-            </tbody>
-        </table>
+        {{-- La planilla del cliente: una tabla por tela, rollo por rollo (1R = rollo entero). --}}
+        <x-pdf.planilla :grupos="$planilla['grupos']" :totales="$planilla['totales']" :moneda="$venta->moneda === 'USD' ? '$' : 'S/'" />
 
         <x-pdf.cierre
             :observaciones="$venta->observaciones"

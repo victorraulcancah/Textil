@@ -4,6 +4,7 @@ namespace App\Pdf\Documentos;
 
 use App\Models\OrdenVenta;
 use App\Pdf\DocumentoPdf;
+use App\Pdf\PlanillaTela;
 use App\Pdf\ProductoConColor;
 
 /**
@@ -53,6 +54,8 @@ class OrdenVentaPdf implements DocumentoPdf
                 ];
             })->all(),
             'rollos' => $this->rollos($orden),
+            // El formato de la planilla del cliente: una tabla por tela, rollo por rollo.
+            'planilla' => PlanillaTela::dePedido($orden),
             'total_metros' => number_format((float) $orden->detalles->sum(fn ($d) => $d->metrosTotales()), 2),
             // Con rollos sin separar todavía, no hay total ni metros finales.
             'porDefinir' => $orden->detalles->contains(fn ($d) => $d->esPorRollos() && ! $d->estaCubierta()),

@@ -82,7 +82,7 @@ class ProductoController extends Controller
         $hoja->setTitle('Colores');
         $hoja->fromArray(['Código', 'Nombre', 'Metraje (m)', 'Proveedor'], null, 'A1');
         $hoja->getStyle('A1:D1')->getFont()->setBold(true);
-        // El código como texto: si no, Excel se come los ceros (0074 → 74).
+        // El código como texto: si no, Excel se come los ceros (074 → 74).
         $hoja->getStyle('A2:A1000')->getNumberFormat()
             ->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_TEXT);
         foreach (['A' => 12, 'B' => 28, 'C' => 14, 'D' => 34] as $columna => $ancho) {
@@ -252,9 +252,9 @@ class ProductoController extends Controller
                     continue; // fila vacía
                 }
 
-                // Excel se come los ceros a la izquierda: 74 vuelve a ser 0074.
-                if (ctype_digit($codigo) && strlen($codigo) < 4) {
-                    $codigo = str_pad($codigo, 4, '0', STR_PAD_LEFT);
+                // Excel se come los ceros a la izquierda: 74 vuelve a ser 074.
+                if (ctype_digit($codigo) && strlen($codigo) < 3) {
+                    $codigo = str_pad($codigo, 3, '0', STR_PAD_LEFT);
                 }
 
                 $color = ($codigo !== '' ? $porCodigo->get($codigo) : null)
@@ -269,8 +269,8 @@ class ProductoController extends Controller
                         $advertencias[] = "Fila {$n}: \"{$nombre}\" no está en el catálogo y no tienes permiso para crear colores.";
                         continue;
                     }
-                    if ($codigo !== '' && mb_strlen($codigo) !== 4) {
-                        $advertencias[] = "Fila {$n}: el código \"{$codigo}\" no es válido (son 4 caracteres, ej. 0074); \"{$nombre}\" se crea con uno nuevo.";
+                    if ($codigo !== '' && mb_strlen($codigo) !== 3) {
+                        $advertencias[] = "Fila {$n}: el código \"{$codigo}\" no es válido (son 3 caracteres, ej. 074); \"{$nombre}\" se crea con uno nuevo.";
                         $codigo = '';
                     }
 

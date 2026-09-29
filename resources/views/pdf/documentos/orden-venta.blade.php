@@ -26,55 +26,19 @@
             'Almacén' => $orden->almacen?->nombre ?: 'Lo define el almacén',
         ]" />
 
-    <x-pdf.items
-        :columnas="[
-            ['label' => '#', 'key' => 'n', 'width' => '30px'],
-            ['label' => 'Código', 'key' => 'codigo', 'width' => '98px'],
-            ['label' => 'Producto', 'key' => 'producto'],
-            ['label' => 'Presentación', 'key' => 'presentacion', 'width' => '110px'],
-            ['label' => 'Cantidad', 'key' => 'cantidad', 'align' => 'right', 'width' => '70px'],
-            ['label' => 'Metros', 'key' => 'metros', 'align' => 'right', 'width' => '70px'],
-            ['label' => 'P. unit.', 'key' => 'precio', 'align' => 'right', 'width' => '70px'],
-            ['label' => 'Importe', 'key' => 'importe', 'align' => 'right', 'width' => '80px'],
-        ]"
-        :filas="$filas"
-        :minFilas="6" />
+    {{-- La planilla del cliente: una tabla por tela, rollo por rollo (1R = rollo entero). --}}
+    <x-pdf.planilla
+        :grupos="$planilla['grupos']"
+        :totales="$planilla['totales']"
+        :moneda="$orden->moneda === 'USD' ? '$' : 'S/'"
+        :pendiente="$porDefinir" />
 
-    <table class="marco" style="margin: 6px 0 14px 0;">
-        <tr>
-            <td class="strong upper" style="font-size: 9px;">Total de tela: {{ $porDefinir ? 'por definir' : $total_metros.' m' }}</td>
-        </tr>
-    </table>
-
-    @if ($porDefinir)
-        {{-- Los rollos se cobran por sus metros reales, que define el almacén al separar. --}}
-        <table class="marco" style="margin: 6px 0 14px 0;">
-            <tr>
-                <td class="strong upper" style="font-size: 9px;">
-                    Total: por definir · los rollos se cobran por sus metros reales cuando el almacén los separa
-                </td>
-            </tr>
-        </table>
-    @else
+    @unless ($porDefinir)
         <x-pdf.totales
             :lineas="['Subtotal' => number_format((float) $orden->subtotal, 2), 'Descuento' => (float) $orden->descuento_total > 0 ? number_format((float) $orden->descuento_total, 2) : null]"
             :total="number_format((float) $orden->total, 2)"
             :moneda="$orden->moneda === 'USD' ? '$' : 'S/'" />
-    @endif
-
-    {{-- Qué rollos concretos cubrieron el pedido. Solo aparece si el almacén
-         ya los asignó: mientras tanto no existen. --}}
-    @if (count($rollos))
-        <div class="strong upper" style="font-size: 8px; margin: 14px 0 4px 0;">Rollos entregados</div>
-        <x-pdf.items
-            :columnas="[
-                ['label' => 'Rollo', 'key' => 'codigo', 'width' => '135px'],
-                ['label' => 'Producto', 'key' => 'producto'],
-                ['label' => 'Color', 'key' => 'color', 'width' => '110px'],
-                ['label' => 'Metros', 'key' => 'metros', 'align' => 'right', 'width' => '80px'],
-            ]"
-            :filas="$rollos" />
-    @endif
+    @endunless
 
     @if ($orden->observaciones)
         <table class="marco" style="margin-top: 12px;">

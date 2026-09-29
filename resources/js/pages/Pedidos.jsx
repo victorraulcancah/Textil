@@ -1,3 +1,5 @@
+import PlanillaTela from '../components/PlanillaTela';
+import { gruposDePedido } from '../lib/planilla';
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -579,119 +581,13 @@ function DetallePedido({ pedido, procesando, onAccion, onFacturar, onPdf }) {
                 </div>
             )}
 
-            <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                    <thead>
-                        <tr className="bg-primary-600 text-left text-xs font-semibold uppercase tracking-wide text-white">
-                            <th className="px-4 py-2.5">Producto</th>
-                            <th className="px-4 py-2.5">Presentación</th>
-                            <th className="px-4 py-2.5 text-right">Cantidad</th>
-                            <th className="px-4 py-2.5">Cubierto por</th>
-                            <th className="px-4 py-2.5 text-right">P. unit.</th>
-                            <th className="px-4 py-2.5 text-right">Importe</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                        {(pedido.detalles ?? []).map((d) => (
-                            <tr key={d.id} className="align-top transition hover:bg-gray-50">
-                                <td className="px-4 py-2 font-medium text-warm-900">
-                                    {d.producto}
-                                    {d.descripcion && (
-                                        <span className="block text-xs font-normal text-warm-500">
-                                            {d.descripcion}
-                                        </span>
-                                    )}
-                                </td>
-                                <td className="px-4 py-2 text-warm-600">
-                                    {d.modo === 'rollos' ? 'Rollos enteros' : (d.presentacion ?? '—')}
-                                </td>
-                                <td className="px-4 py-2 text-right">
-                                    {d.modo === 'rollos' ? (
-                                        // Los metros los define el almacén al separar: solo los ya escaneados.
-                                        <>
-                                            {rollosTexto(d.rollos_pedidos)}
-                                            {d.metros_asignados > 0 && (
-                                                <span className="block text-xs text-warm-400">
-                                                    {num(d.metros_asignados)} m
-                                                </span>
-                                            )}
-                                        </>
-                                    ) : (
-                                        <>
-                                            {num(d.cantidad)}
-                                            <span className="block text-xs text-warm-400">{num(d.metros)} m</span>
-                                        </>
-                                    )}
-                                </td>
-                                {/* Los rollos que el almacén fue asignando a esta línea. */}
-                                <td className="px-4 py-2">
-                                    {d.rollos?.length ? (
-                                        <span className="space-y-0.5">
-                                            {d.rollos.map((r) => (
-                                                <span key={r.id} className="block text-xs">
-                                                    <span className="font-mono text-warm-900">{r.codigo}</span>
-                                                    <span className="text-warm-500"> · {num(r.metros)} m</span>
-                                                    {r.es_parcial && (
-                                                        <Badge variant="amber" className="ml-1">Se corta</Badge>
-                                                    )}
-                                                </span>
-                                            ))}
-                                            {!d.cubierta && (
-                                                <span className="block text-xs text-amber-600">
-                                                    Faltan{' '}
-                                                    {d.modo === 'rollos'
-                                                        ? rollosTexto(d.rollos_pendientes)
-                                                        : `${num(d.metros_pendientes)} m`}
-                                                </span>
-                                            )}
-                                        </span>
-                                    ) : d.metros_asignados > 0 ? (
-                                        // Sin acceso a los rollos (solo ventas): se ve cuánto
-                                        // lleva cubierto el almacén, no con qué rollos.
-                                        <span className="block text-xs">
-                                            <span className="text-warm-900">
-                                                {d.modo === 'rollos'
-                                                    ? `${num(d.rollos_asignados)} de ${rollosTexto(d.rollos_pedidos)} · ${num(d.metros_asignados)} m`
-                                                    : `${num(d.metros_asignados)} m cubiertos`}
-                                            </span>
-                                            {!d.cubierta && (
-                                                <span className="block text-amber-600">
-                                                    Faltan{' '}
-                                                    {d.modo === 'rollos'
-                                                        ? rollosTexto(d.rollos_pendientes)
-                                                        : `${num(d.metros_pendientes)} m`}
-                                                </span>
-                                            )}
-                                        </span>
-                                    ) : (
-                                        <span className="text-xs text-warm-400">Sin asignar</span>
-                                    )}
-                                </td>
-                                <td className="px-4 py-2 text-right">
-                                    {d.precio_oculto ? <span className="text-warm-400">Por confirmar</span> : money(d.precio_unitario, pedido.moneda)}
-                                    {d.modo === 'rollos' && <span className="block text-xs text-warm-400">por metro</span>}
-                                </td>
-                                <td className="px-4 py-2 text-right font-medium">
-                                    {d.precio_oculto ? (
-                                        <span className="font-normal text-warm-400">—</span>
-                                    ) : d.modo === 'rollos' && !d.cubierta ? (
-                                        // Cada rollo se cobra por sus metros reales, al separarlo.
-                                        d.rollos_asignados > 0 ? (
-                                            <>
-                                                {money(d.subtotal, pedido.moneda)}
-                                                <span className="block text-xs font-normal text-warm-400">parcial</span>
-                                            </>
-                                        ) : (
-                                            <span className="font-normal text-warm-500">Por definir</span>
-                                        )
-                                    ) : (
-                                        money(d.subtotal, pedido.moneda)
-                                    )}
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
+            {/* El formato de la planilla del cliente: una tabla por tela, rollo por rollo. */}
+            <div className="p-4">
+                <PlanillaTela
+                    grupos={gruposDePedido(pedido.detalles ?? [])}
+                    moneda={pedido.moneda}
+                    pendiente={(pedido.detalles ?? []).some((d) => d.modo === 'rollos' && !d.cubierta)}
+                />
             </div>
         </div>
     );

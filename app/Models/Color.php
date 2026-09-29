@@ -21,7 +21,7 @@ class Color extends Model
     }
 
     /**
-     * Siguiente código de 4 dígitos libre. Nunca se reutilizan códigos ya
+     * Siguiente código de 3 dígitos libre (001). Nunca se reutilizan códigos ya
      * usados, aunque el color se haya borrado —así lo pide el catálogo
      * original del cliente—, así que se busca el mayor y se avanza.
      */
@@ -32,7 +32,7 @@ class Color extends Model
 
         do {
             $n++;
-            $codigo = str_pad((string) $n, 4, '0', STR_PAD_LEFT);
+            $codigo = str_pad((string) $n, 3, '0', STR_PAD_LEFT);
         } while (static::where('codigo', $codigo)->exists());
 
         return $codigo;

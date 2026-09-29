@@ -5,6 +5,7 @@ namespace App\Pdf\Documentos;
 use App\Models\NotaVenta;
 use App\Pdf\DocumentoPdf;
 use App\Pdf\MontoEnLetras;
+use App\Pdf\PlanillaTela;
 
 class NotaVentaPdf implements DocumentoPdf
 {
@@ -73,6 +74,8 @@ class NotaVentaPdf implements DocumentoPdf
             'venta' => $venta,
             'documento' => $documento,
             'grupos' => $grupos,
+            // El formato de la planilla del cliente (A4): una tabla por tela, rollo por rollo.
+            'planilla' => PlanillaTela::deNota($venta),
             'pagos' => $pagos,
             'enLetras' => MontoEnLetras::convertir((float) $venta->total, $venta->moneda === 'USD' ? 'DÓLARES' : 'SOLES'),
             'moneda' => $venta->moneda === 'USD' ? '$' : 'S/',

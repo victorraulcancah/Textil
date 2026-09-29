@@ -10,8 +10,8 @@ class StoreProductoRequest extends FormRequest
     public function authorize(): bool { return true; }
 
     /**
-     * El código no se escribe: sale de la familia y el tipo de tela (01-001)
-     * y, con el del color, forma el código de sus rollos (01-001-0001). Si
+     * El código no se escribe: sale de la familia y el tipo de tela (01-01)
+     * y, con el del color, forma el código de sus rollos (01-01-001). Si
      * no llega un tipo, la validación lo rechaza; el genérico solo evita que
      * el error de código tape el del tipo.
      */

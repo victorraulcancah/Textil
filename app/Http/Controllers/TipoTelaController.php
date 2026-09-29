@@ -22,7 +22,7 @@ class TipoTelaController extends Controller
         $data = $request->validate([
             'familia_tela_id' => 'required|exists:familias_tela,id',
             'nombre' => 'required|string|max:150',
-            'codigo' => 'nullable|string|size:3',
+            'codigo' => 'nullable|string|size:2',
             'activo' => 'boolean',
         ]);
 

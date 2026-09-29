@@ -55,7 +55,7 @@ class ColorController extends Controller
         $data = $request->validate([
             'nombre' => 'required|string|max:100',
             // Si no se manda, se asigna el siguiente libre.
-            'codigo' => 'nullable|string|size:4|unique:colores,codigo',
+            'codigo' => 'nullable|string|size:3|unique:colores,codigo',
             'hex' => 'nullable|string|max:7',
             'activo' => 'boolean',
         ]);
@@ -82,7 +82,7 @@ class ColorController extends Controller
 
     /**
      * Carga masiva desde un Excel del cliente: una fila por color, con su
-     * nombre y —si lo trae— su propio código de 4 dígitos (para respetar la
+     * nombre y —si lo trae— su propio código de 3 dígitos (para respetar la
      * numeración que ya manejan en su catálogo original). Sin código, se le
      * asigna el siguiente libre, igual que al crear uno solo.
      *
@@ -130,13 +130,13 @@ class ColorController extends Controller
                 }
 
                 if ($codigo !== '') {
-                    // Excel se come los ceros a la izquierda: 74 vuelve a ser 0074.
-                    if (ctype_digit($codigo) && strlen($codigo) <= 4) {
-                        $codigo = str_pad($codigo, 4, '0', STR_PAD_LEFT);
+                    // Excel se come los ceros a la izquierda: 74 vuelve a ser 074.
+                    if (ctype_digit($codigo) && strlen($codigo) <= 3) {
+                        $codigo = str_pad($codigo, 3, '0', STR_PAD_LEFT);
                     }
 
-                    if (strlen($codigo) !== 4) {
-                        $advertencias[] = "Fila {$numeroFila}: el código \"{$codigo}\" no es válido (son 4 caracteres, ej. 0074), se omite \"{$nombre}\".";
+                    if (strlen($codigo) !== 3) {
+                        $advertencias[] = "Fila {$numeroFila}: el código \"{$codigo}\" no es válido (son 3 caracteres, ej. 074), se omite \"{$nombre}\".";
                         continue;
                     }
 

@@ -22,6 +22,9 @@ class OrdenVentaDetalleResource extends JsonResource
             'presentacion' => $this->whenLoaded('presentacion', fn () => $this->presentacion?->nombre),
             'producto' => $this->whenLoaded('presentacion', fn () => $this->presentacion?->producto?->nombre),
             'producto_codigo' => $this->whenLoaded('presentacion', fn () => $this->presentacion?->producto?->codigo),
+            // La clasificación de la tela: familia y tipo (TELA · GARBADINA).
+            'familia' => $this->whenLoaded('presentacion', fn () => $this->presentacion?->producto?->tipoTela?->familia?->nombre),
+            'tipo_tela' => $this->whenLoaded('presentacion', fn () => $this->presentacion?->producto?->tipoTela?->nombre),
 
             // Color pedido; null si esta línea no se pide por color.
             'producto_color_id' => $this->producto_color_id,
@@ -67,6 +70,10 @@ class OrdenVentaDetalleResource extends JsonResource
                     'rollo_id' => $r->rollo_id,
                     'codigo' => $r->rollo?->codigo,
                     'color' => $r->rollo?->color?->nombre,
+                    'color_codigo' => $r->rollo?->color?->codigo,
+                    'color_hex' => $r->rollo?->color?->hex,
+                    // El número del rollo dentro de su tela y color (el final de su código).
+                    'numero' => $r->rollo?->numero,
                     'metros' => (float) $r->metros,
                     // Lo que medía al tomarlo (el rollo baja recién al despachar).
                     'metros_rollo' => (float) ($r->metros_rollo ?? $r->rollo?->metros_actual ?? 0),

@@ -5,7 +5,7 @@ import { SearchSelect } from './ui';
  * El color de una línea (pedido, orden de compra, compra, traslado…): un select
  * con buscador, para escribir "cam" y llegar a Camello en vez de recorrer la
  * lista con el ratón. Las opciones son los colores que ya tiene la tela; se
- * encuentra también escribiendo su código (0074).
+ * encuentra también escribiendo su código (074).
  *
  * Si la tela solo tiene un color no hay nada que elegir: se toma solo, en el
  * momento, y no se ofrece limpiarlo.

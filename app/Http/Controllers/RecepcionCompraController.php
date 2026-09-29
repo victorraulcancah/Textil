@@ -574,7 +574,7 @@ class RecepcionCompraController extends Controller
      * Metros, Peso neto; "Envío" es opcional. "Producto" y "Color" van por su
      * código (el de `productos.codigo` y el del catálogo compartido de
      * colores); también se acepta el producto con su color en una sola
-     * columna (01-030-0074).
+     * columna (01-03-074).
      *
      * Lo que no se puede cargar se señala fila por fila —producto o color
      * desconocido, código repetido o ya existente— para corregir el Excel y
@@ -661,11 +661,11 @@ class RecepcionCompraController extends Controller
                 }
             }
 
-            // El producto puede venir con su color pegado: 01-030-0074.
+            // El producto puede venir con su color pegado: 01-03-074.
             $linea = $compra->detalles->first(
                 fn ($d) => $d->presentacion?->producto?->codigo === $codigoProducto
             );
-            if (! $linea && $codigoColor === '' && preg_match('/^(.+)-(\d{4})$/', $codigoProducto, $m)) {
+            if (! $linea && $codigoColor === '' && preg_match('/^(.+)-(\d{3})$/', $codigoProducto, $m)) {
                 $linea = $compra->detalles->first(
                     fn ($d) => $d->presentacion?->producto?->codigo === $m[1]
                 );
@@ -797,7 +797,7 @@ class RecepcionCompraController extends Controller
         foreach (['A' => 16, 'B' => 22, 'C' => 20, 'D' => 10, 'E' => 10, 'F' => 11, 'G' => 14] as $columna => $ancho) {
             $hoja->getColumnDimension($columna)->setWidth($ancho);
         }
-        // Códigos como texto: "0074" no debe quedar en 74, ni un código único en notación científica.
+        // Códigos como texto: "074" no debe quedar en 74, ni un código único en notación científica.
         $hoja->getStyle('A2:D1000')->getNumberFormat()->setFormatCode(\PhpOffice\PhpSpreadsheet\Style\NumberFormat::FORMAT_TEXT);
 
         // De qué orden es esta compra, como nota en la cabecera "Orden".
@@ -829,7 +829,7 @@ class RecepcionCompraController extends Controller
         $codigos->fromArray([
             ['Cómo llenar la hoja "Packing list"'],
             ['Una fila por rollo. Código único: el del rollo (se escanea al llegar). Metros: el metraje de fábrica.'],
-            ['Producto y Color: los códigos de esta hoja. También vale el producto con su color en una sola columna (01-030-0074).'],
+            ['Producto y Color: los códigos de esta hoja. También vale el producto con su color en una sola columna (01-03-074).'],
             ['Orden y Envío son opcionales. No cambies los títulos de las columnas.'],
         ], null, 'G1');
         $codigos->getStyle('G1')->getFont()->setBold(true);

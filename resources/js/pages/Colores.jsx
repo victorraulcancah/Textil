@@ -12,7 +12,7 @@ const emptyForm = { nombre: '', hex: '', activo: true };
 /**
  * El catálogo de colores compartido entre todas las telas: se crea una vez
  * acá y desde el producto solo se elige, en vez de escribirlo de nuevo cada
- * vez. El código de 4 dígitos lo asigna el sistema —nunca se reutiliza uno
+ * vez. El código de 3 dígitos lo asigna el sistema —nunca se reutiliza uno
  * ya usado, aunque el color se borre— así que no se pide al crear.
  */
 export default function Colores() {
@@ -338,7 +338,7 @@ export default function Colores() {
                 description={
                     editing
                         ? `Modifica "${editing.nombre}" (código ${editing.codigo})`
-                        : 'El código de 4 dígitos se asigna automáticamente'
+                        : 'El código de 3 dígitos se asigna automáticamente'
                 }
                 size="sm"
                 footer={

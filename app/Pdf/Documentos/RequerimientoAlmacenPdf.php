@@ -4,6 +4,7 @@ namespace App\Pdf\Documentos;
 
 use App\Models\OrdenVenta;
 use App\Pdf\DocumentoPdf;
+use App\Pdf\PlanillaTela;
 use App\Pdf\ProductoConColor;
 
 /**
@@ -61,6 +62,9 @@ class RequerimientoAlmacenPdf implements DocumentoPdf
             'orden' => $orden,
             'documento' => $orden->requerimiento_numero ?? $orden->documento,
             'filas' => $filas,
+            // La planilla del pedido (una tabla por tela, rollo por rollo), sin precios.
+            'planilla' => PlanillaTela::dePedido($orden),
+            'pendiente' => $orden->detalles->contains(fn ($d) => $d->esPorRollos() && ! $d->estaCubierta()),
             'total_lineas' => count($filas),
             'total_metros' => number_format((float) $orden->detalles->sum(fn ($d) => $d->metrosTotales()), 2),
         ];

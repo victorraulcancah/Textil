@@ -3,9 +3,11 @@ import { Camera, Check, ClipboardList, FileText, PackageCheck, ScanLine, Triangl
 import api, { asList } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
+import { gruposDePedido } from '../lib/planilla';
 import EscanerCamara from '../components/EscanerCamara';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
+import PlanillaTela from '../components/PlanillaTela';
 import PdfViewerModal from '../components/PdfViewerModal';
 import { Alert, Badge, Button, Modal, Spinner, cn } from '../components/ui';
 
@@ -543,110 +545,33 @@ export default function Despacho() {
                                     </div>
                                 )}
 
-                                {/* Lo que pidió el cliente y con qué se va
-                                    cubriendo. El almacenero no sigue una lista
-                                    de rollos: busca los metros que faltan. */}
-                                <ul className="divide-y divide-gray-100">
-                                    {(detalle.detalles ?? []).map((d) => (
-                                        <li key={d.id} className={cn('px-4 py-3', d.cubierta && 'bg-green-50/60')}>
-                                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                                                <span
-                                                    className={cn(
-                                                        'flex h-6 w-6 shrink-0 items-center justify-center rounded-full border',
-                                                        d.cubierta
-                                                            ? 'border-green-500 bg-green-500 text-white'
-                                                            : 'border-gray-300 text-transparent',
-                                                    )}
-                                                >
-                                                    <Check className="h-3.5 w-3.5" />
-                                                </span>
-                                                <span className="font-medium text-warm-900">{d.producto}</span>
-                                                {/* El color pedido: el almacenero debe bajar ese, no cualquiera. */}
-                                                {d.color && (
-                                                    <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-warm-700">
-                                                        <span
-                                                            className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-black/10"
-                                                            style={{ backgroundColor: d.color.hex || '#9ca3af' }}
-                                                        />
-                                                        {d.color.nombre}
-                                                    </span>
-                                                )}
-                                                <span className="text-warm-500">
-                                                    {d.modo === 'rollos' ? 'Rollos enteros' : d.presentacion}
-                                                </span>
-                                                {/* Por rollos se cuentan rollos, midan lo que midan;
-                                                    por metros, los metros que faltan. */}
-                                                <span className="ml-auto font-medium text-warm-900">
-                                                    {d.modo === 'rollos'
-                                                        ? `${num(d.rollos_asignados)} / ${rollosTexto(d.rollos_pedidos)} · ${num(d.metros_asignados)} m`
-                                                        : `${num(d.metros_asignados)} / ${num(d.metros)} m`}
-                                                </span>
-                                                {!d.cubierta && (
-                                                    <Badge variant="amber">
-                                                        Faltan{' '}
-                                                        {d.modo === 'rollos'
-                                                            ? rollosTexto(d.rollos_pendientes)
-                                                            : `${num(d.metros_pendientes)} m`}
-                                                    </Badge>
-                                                )}
-                                            </div>
-
-                                            {d.descripcion && (
-                                                <p className="ml-9 mt-0.5 text-xs text-warm-500">{d.descripcion}</p>
-                                            )}
-
-                                            {d.rollos?.length > 0 && (
-                                                <ul className="ml-9 mt-1.5 space-y-1">
-                                                    {d.rollos.map((r) => (
-                                                        <li
-                                                            key={r.id}
-                                                            className="flex flex-wrap items-center gap-x-2 text-xs text-warm-600"
-                                                        >
-                                                            <span className="font-mono font-medium text-warm-900">
-                                                                {r.codigo}
-                                                            </span>
-                                                            <span>{r.color ?? '—'}</span>
-                                                            <span>{num(r.metros)} m</span>
-                                                            {r.es_parcial ? (
-                                                                <Badge variant="amber">Cortar</Badge>
-                                                            ) : (
-                                                                <Badge variant="green">Entero</Badge>
-                                                            )}
-                                                            {/* El corte: cuánto sale para este pedido y cuánto
-                                                                queda en el rollo. El rollo baja recién al despachar. */}
-                                                            {r.es_parcial && r.metros_rollo > r.metros && (
-                                                                <span className="text-warm-500">
-                                                                    · quedan {num(r.metros_rollo - r.metros)} m en el rollo
-                                                                </span>
-                                                            )}
-                                                            {/* Quién lo escaneó y cuándo: puede haber varios
-                                                                almaceneros preparando el mismo pedido a la vez. */}
-                                                            {r.escaneado_por && (
-                                                                <span className="text-warm-400">
-                                                                    · {r.escaneado_por}
-                                                                    {r.escaneado_at
-                                                                        ? ` ${new Date(r.escaneado_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}`
-                                                                        : ''}
-                                                                </span>
-                                                            )}
-                                                            {escaneando && (
-                                                                <button
-                                                                    type="button"
-                                                                    aria-label={`Quitar ${r.codigo}`}
-                                                                    title="Quitar este rollo del pedido"
-                                                                    onClick={() => quitarRollo(r.rollo_id)}
-                                                                    className="rounded p-0.5 text-red-600 transition hover:bg-red-50"
-                                                                >
-                                                                    <X className="h-3.5 w-3.5" />
-                                                                </button>
-                                                            )}
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            )}
-                                        </li>
-                                    ))}
-                                </ul>
+                                {/* Lo que pidió el cliente y con qué se va cubriendo, en el mismo
+                                    formato del pedido (una tabla por tela, rollo por rollo) pero sin
+                                    precios: el almacenero busca los metros que faltan. */}
+                                <div className="p-4">
+                                    <PlanillaTela
+                                        grupos={gruposDePedido(detalle.detalles ?? [])}
+                                        precios={false}
+                                        pendiente={!completo}
+                                        completa={(f) => Boolean(f.hecho)}
+                                        accion={
+                                            escaneando
+                                                ? (f) =>
+                                                      f.rolloId ? (
+                                                          <button
+                                                              type="button"
+                                                              aria-label={`Quitar ${f.detalle ?? 'rollo'}`}
+                                                              title="Quitar este rollo del pedido"
+                                                              onClick={() => quitarRollo(f.rolloId)}
+                                                              className="rounded p-0.5 text-red-600 transition hover:bg-red-50"
+                                                          >
+                                                              <X className="h-3.5 w-3.5" />
+                                                          </button>
+                                                      ) : null
+                                                : null
+                                        }
+                                    />
+                                </div>
                             </>
                         )}
                     </section>

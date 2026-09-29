@@ -46,6 +46,10 @@ const emptyForm = {
     activo: true,
 };
 
+/** El tipo de documento de un proveedor nacional; los anteriores al tipo se reconocen por el largo (8 = DNI). */
+const documentoDe = (p) =>
+    p.tipo === 'extranjero' ? 'TAX' : (p.tipo_documento ?? (p.ruc ? (p.ruc.length === 8 ? 'DNI' : 'RUC') : 'SIN'));
+
 export default function Proveedores() {
     const toast = useToast();
     const [proveedores, setProveedores] = useState([]);
@@ -63,6 +67,9 @@ export default function Proveedores() {
 
     const [filterTipo, setFilterTipo] = useState('');
     const [filterEstado, setFilterEstado] = useState('');
+    const [filterPais, setFilterPais] = useState('');
+    const [filterDocumento, setFilterDocumento] = useState('');
+    const [filterCorto, setFilterCorto] = useState('');
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -292,12 +299,16 @@ export default function Proveedores() {
                     if (filterTipo && p.tipo !== filterTipo) return false;
                     if (filterEstado === 'activos' && !p.activo) return false;
                     if (filterEstado === 'inactivos' && p.activo) return false;
+                    if (filterPais && (p.pais ?? '') !== filterPais) return false;
+                    if (filterDocumento && documentoDe(p) !== filterDocumento) return false;
+                    if (filterCorto === 'con' && !p.codigo_corto) return false;
+                    if (filterCorto === 'sin' && p.codigo_corto) return false;
                     return true;
                 })}
                 loading={loading}
                 searchPlaceholder="Buscar proveedores..."
                 filterable
-                filterCount={(filterTipo ? 1 : 0) + (filterEstado ? 1 : 0)}
+                filterCount={[filterTipo, filterEstado, filterPais, filterDocumento, filterCorto].filter(Boolean).length}
                 filters={
                     <div className="space-y-2">
                         <Select
@@ -320,11 +331,51 @@ export default function Proveedores() {
                                 { value: 'inactivos', label: 'Solo inactivos' },
                             ]}
                         />
-                        {(filterTipo || filterEstado) && (
+                        {/* Con qué documento se identifica: RUC, DNI, carné de extranjería, sin documento o Tax ID (extranjeros). */}
+                        <Select
+                            label="Tipo de documento"
+                            value={filterDocumento}
+                            onChange={(e) => setFilterDocumento(e.target.value)}
+                            options={[
+                                { value: '', label: 'Todos' },
+                                { value: 'RUC', label: 'RUC' },
+                                { value: 'DNI', label: 'DNI' },
+                                { value: 'CE', label: 'Carné de extranjería' },
+                                { value: 'SIN', label: 'Sin documento' },
+                                { value: 'TAX', label: 'Tax ID (extranjero)' },
+                            ]}
+                        />
+                        {/* De dónde es: solo los países que ya tienen algún proveedor. */}
+                        <Select
+                            label="País"
+                            value={filterPais}
+                            onChange={(e) => setFilterPais(e.target.value)}
+                            options={[
+                                { value: '', label: 'Todos' },
+                                ...[...new Set(proveedores.map((p) => p.pais).filter(Boolean))]
+                                    .sort((a, b) => a.localeCompare(b, 'es'))
+                                    .map((pais) => ({ value: pais, label: pais })),
+                            ]}
+                        />
+                        {/* El código corto arma la numeración de sus órdenes de compra (KET-001-26). */}
+                        <Select
+                            label="Código corto"
+                            value={filterCorto}
+                            onChange={(e) => setFilterCorto(e.target.value)}
+                            options={[
+                                { value: '', label: 'Todos' },
+                                { value: 'con', label: 'Con código corto' },
+                                { value: 'sin', label: 'Sin código corto' },
+                            ]}
+                        />
+                        {(filterTipo || filterEstado || filterPais || filterDocumento || filterCorto) && (
                             <button
                                 onClick={() => {
                                     setFilterTipo('');
                                     setFilterEstado('');
+                                    setFilterPais('');
+                                    setFilterDocumento('');
+                                    setFilterCorto('');
                                 }}
                                 className="text-xs font-medium text-red-600 hover:text-red-700"
                             >
@@ -424,7 +475,15 @@ export default function Proveedores() {
                             onChange={(e) => field('nombre', e.target.value)}
                             error={formErrors.nombre}
                         />
-                        <Input label="Código" value={form.codigo} onChange={(e) => field('codigo', e.target.value)} error={formErrors.codigo} />
+                        {/* El código lo pone el sistema: EXT-1, EXT-2… para extranjeros y NC-1, NC-2… para nacionales. */}
+                        <Input
+                            label="Código"
+                            value={editing ? form.codigo : ''}
+                            placeholder={form.tipo === 'extranjero' ? 'Se genera: EXT-1, EXT-2…' : 'Se genera: NC-1, NC-2…'}
+                            readOnly
+                            className="bg-gray-50 font-mono text-gray-600"
+                            error={formErrors.codigo}
+                        />
                         <div>
                             <Input
                                 label="Código corto (3 letras)"

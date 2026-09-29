@@ -62,7 +62,8 @@ class ProveedorController extends Controller
             // De esto depende qué campos pide el formulario: uno nacional se
             // identifica por RUC, uno extranjero por Tax ID.
             'tipo' => 'nullable|in:nacional,extranjero',
-            'codigo' => "required|string|max:50|unique:proveedores,codigo{$excepto}",
+            // El código lo genera el sistema (EXT-1 extranjero, NC-1 nacional): no se escribe.
+            'codigo' => "nullable|string|max:50|unique:proveedores,codigo{$excepto}",
             // Solo para armar el código de sus órdenes de compra (KET-001-26);
             // opcional porque no todos los proveedores emiten esa numeración.
             'codigo_corto' => "nullable|string|size:3|alpha_num|unique:proveedores,codigo_corto{$excepto}",
@@ -88,6 +89,7 @@ class ProveedorController extends Controller
     public function store(Request $request)
     {
         $data = $this->normalizar($request->validate($this->reglas(), $this->mensajes()));
+        $data['codigo'] = Proveedor::generarCodigo($data['tipo'] ?? 'nacional');
 
         return response()->json(Proveedor::create($data), 201);
     }
@@ -100,6 +102,14 @@ class ProveedorController extends Controller
     public function update(Request $request, Proveedor $proveedore)
     {
         $data = $this->normalizar($request->validate($this->reglas($proveedore->id), $this->mensajes()));
+
+        // El código no se escribe. Si cambia de tipo y el suyo era de los automáticos,
+        // pasa al de su tipo nuevo (NC-3 → EXT-1); uno anterior a esto se respeta.
+        $data['codigo'] = $proveedore->codigo;
+        $tipoNuevo = $data['tipo'] ?? $proveedore->tipo ?? 'nacional';
+        if ($tipoNuevo !== ($proveedore->tipo ?? 'nacional') && preg_match('/^(EXT|NC)-\d+$/', (string) $proveedore->codigo)) {
+            $data['codigo'] = Proveedor::generarCodigo($tipoNuevo);
+        }
 
         $proveedore->update($data);
         return response()->json($proveedore);

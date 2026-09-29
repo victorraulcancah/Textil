@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Briefcase, CreditCard, Edit, IdCard, Mail, MapPin, Phone, Plus, Trash2, User } from 'lucide-react';
+import { Briefcase, CreditCard, Edit, FileSearch, IdCard, Mail, MapPin, Phone, Plus, Trash2, User } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
-import { money } from '../lib/moneda';
 import { cargarUbigeos, esPeru, porCodigo, porNombres, quitarLugar } from '../lib/ubigeos';
 import CampoConAgregar from '../components/CampoConAgregar';
 import ConsultarDocumento from '../components/ConsultarDocumento';
 import Layout from '../components/Layout';
-import LineaCreditoModal, { lineaDesdeApi, lineaParaApi } from '../components/LineaCreditoModal';
+import LineaCreditoCampos, { lineaDesdeApi, lineaParaApi, lineaVacia } from '../components/LineaCredito';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import SelectorUbigeo from '../components/SelectorUbigeo';
 import { Alert, Badge, Button, DataTable, Input, Modal, Select, SearchSelect, Tabs, cn } from '../components/ui';
@@ -71,16 +70,8 @@ const emptyForm = {
     tipo_precio_id: '',
     activo: true,
     direcciones: [],
-    // En un cliente nuevo la línea se guarda al crearlo; en uno existente, en su ventana.
+    // Sin línea, compra al contado. Se guarda junto con el cliente.
     linea_credito: null,
-};
-
-/** Una línea en una frase: "Crédito a 30 días · S/ 20,000.00". */
-const resumenLinea = (l) => {
-    if (!l) return 'Sin línea de crédito: compra al contado.';
-    if (l.condicion_venta !== 'credito') return 'Compra al contado.';
-    const texto = `Crédito a ${Number(l.dias_credito) || 0} días · ${money(l.limite, l.moneda)}`;
-    return l.activa ? texto : `${texto} · suspendida`;
 };
 
 /** En qué pestaña está cada campo, para llevar al usuario a su error. */
@@ -100,8 +91,11 @@ const opcionesDe = (lista, actual) => {
         ? [...opciones, { value: String(actual.id), label: `${actual.nombre} (inactiva)` }]
         : opciones;
 };
-const pestanaDe = (campo) =>
-    campo.startsWith('direcciones') ? 'direcciones' : CAMPOS_COMERCIAL.includes(campo) ? 'comercial' : 'general';
+const pestanaDe = (campo) => {
+    if (campo.startsWith('direcciones')) return 'direcciones';
+    if (campo.startsWith('linea_credito')) return 'credito';
+    return CAMPOS_COMERCIAL.includes(campo) ? 'comercial' : 'general';
+};
 
 function DireccionCard({ numero, direccion: d, ubigeos, errores, onCambiar, onQuitar }) {
     // Pasar de Perú al extranjero (o al revés) cambia cómo se escribe el lugar.
@@ -236,7 +230,10 @@ export default function Clientes() {
     const [actividades, setActividades] = useState([]);
     // Qué catálogo se está creando desde el "+": 'categorias' | 'actividades'.
     const [creando, setCreando] = useState(null);
-    const [lineaOpen, setLineaOpen] = useState(false);
+    /** Lo que debe el cliente hoy (por moneda) y el tipo de cambio, para calcular lo disponible. */
+    const [resumenCredito, setResumenCredito] = useState(null);
+    /** Se quitó la línea que tenía: al guardar se borra. */
+    const [lineaQuitada, setLineaQuitada] = useState(false);
     const [ubigeos, setUbigeos] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -309,6 +306,8 @@ export default function Clientes() {
         setEditing(null);
         setForm({ ...emptyForm, direcciones: [nuevaDireccion('fiscal', true)] });
         setFormErrors({});
+        setResumenCredito(null);
+        setLineaQuitada(false);
         setTab('general');
         prepararUbigeos();
         setModalOpen(true);
@@ -347,6 +346,12 @@ export default function Clientes() {
             linea_credito: lineaDesdeApi(c.linea_credito),
         });
         setFormErrors({});
+        setLineaQuitada(false);
+        setResumenCredito(null);
+        // Lo que debe hoy, para que la pestaña muestre lo disponible.
+        api.get(`/clientes/${c.id}/credito`)
+            .then(({ data }) => setResumenCredito(data.resumen))
+            .catch(() => setResumenCredito(null));
         setTab('general');
         prepararUbigeos();
         setModalOpen(true);
@@ -365,11 +370,17 @@ export default function Clientes() {
         setSaving(true);
         setFormErrors({});
         const { linea_credito: linea, ...resto } = form;
+        // La línea viaja con el cliente, solo si quien guarda puede aprobar crédito.
+        const lineaPayload = !puede('ventas.clientes.linea_credito')
+            ? {}
+            : linea
+              ? { linea_credito: lineaParaApi(linea) }
+              : lineaQuitada
+                ? { linea_credito: null }
+                : {};
         const payload = {
             ...resto,
-            // La línea de un cliente nuevo viaja con él; la de uno existente se
-            // guarda en su propia ventana.
-            ...(!editing && linea && puede('ventas.clientes.linea_credito') ? { linea_credito: lineaParaApi(linea) } : {}),
+            ...lineaPayload,
             tipo_precio_id: form.tipo_precio_id || null,
             categoria_comercial_id: form.categoria_comercial_id || null,
             actividad_comercial_id: form.actividad_comercial_id || null,
@@ -436,6 +447,18 @@ export default function Clientes() {
             setFormErrors((prev) => ({ ...prev, ...Object.fromEntries(claves.map((k) => [k, undefined])) }));
         }
     };
+
+    const cambiarLinea = (nombre, valor) => {
+        setForm((prev) => ({ ...prev, linea_credito: { ...prev.linea_credito, [nombre]: valor } }));
+        const clave = `linea_credito.${nombre}`;
+        if (formErrors[clave]) setFormErrors((prev) => ({ ...prev, [clave]: undefined }));
+    };
+
+    const erroresLinea = Object.fromEntries(
+        Object.entries(formErrors)
+            .filter(([k, v]) => v && k.startsWith('linea_credito.'))
+            .map(([k, v]) => [k.slice('linea_credito.'.length), v]),
+    );
 
     const agregarDireccion = () =>
         setForm((prev) => ({
@@ -726,6 +749,7 @@ export default function Clientes() {
                                 label: <>Direcciones{llenas > 0 && ` (${llenas})`}{marcaError('direcciones')}</>,
                             },
                             { key: 'comercial', icon: Briefcase, label: <>Comercial{marcaError('comercial')}</> },
+                            { key: 'credito', icon: CreditCard, label: <>Línea de crédito{marcaError('credito')}</> },
                         ]}
                     />
 
@@ -888,14 +912,66 @@ export default function Clientes() {
                                     Quien tenga a cargo este cliente. Sin "Ver de todos" en Clientes, cada vendedor solo ve
                                     los suyos.
                                 </p>
-                                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-edge bg-gray-50 px-3 py-2.5">
-                                    <div className="min-w-0">
-                                        <p className="text-sm font-medium text-warm-900">Línea de crédito</p>
-                                        <p className="text-xs text-warm-500">{resumenLinea(form.linea_credito)}</p>
+                            </div>
+                        )}
+
+                        {tab === 'credito' && (
+                            <div className="space-y-3">
+                                {form.linea_credito ? (
+                                    <LineaCreditoCampos
+                                        linea={form.linea_credito}
+                                        onCambiar={cambiarLinea}
+                                        resumen={resumenCredito}
+                                        soloLectura={!puede('ventas.clientes.linea_credito')}
+                                        errores={erroresLinea}
+                                        tipoPrecio={form.tipo_precio_id}
+                                        onTipoPrecio={(v) => field('tipo_precio_id', v)}
+                                        tiposPrecio={tiposPrecio}
+                                        puedeEditarPrecio={puede(editing ? 'ventas.clientes.editar' : 'ventas.clientes.crear')}
+                                    />
+                                ) : (
+                                    <div className="rounded-lg border border-dashed border-edge p-6 text-center">
+                                        <p className="text-sm text-warm-600">
+                                            {lineaQuitada
+                                                ? 'Se quitará la línea de crédito al guardar: el cliente comprará al contado.'
+                                                : 'Este cliente no tiene línea de crédito: compra al contado.'}
+                                        </p>
+                                        {puede('ventas.clientes.linea_credito') && (
+                                            <Button
+                                                type="button"
+                                                variant="secondary"
+                                                className="mt-3"
+                                                onClick={() => field('linea_credito', lineaVacia())}
+                                            >
+                                                <Plus className="h-4 w-4" /> Crear línea de crédito
+                                            </Button>
+                                        )}
                                     </div>
-                                    <Button type="button" variant="secondary" onClick={() => setLineaOpen(true)}>
-                                        <CreditCard className="h-4 w-4" /> Línea de crédito
-                                    </Button>
+                                )}
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    {form.linea_credito && puede('ventas.clientes.linea_credito') ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setLineaQuitada(Boolean(editing?.linea_credito));
+                                                field('linea_credito', null);
+                                            }}
+                                            className="text-xs font-semibold text-red-600 hover:text-red-700"
+                                        >
+                                            Quitar línea de crédito
+                                        </button>
+                                    ) : (
+                                        <span />
+                                    )}
+                                    {editing && puede('tesoreria.estado-cuenta') && (
+                                        <button
+                                            type="button"
+                                            onClick={() => window.open(`/estado-cuenta?cliente=${editing.id}`, '_blank', 'noopener')}
+                                            className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary-700 hover:underline"
+                                        >
+                                            <FileSearch className="h-3.5 w-3.5" /> Ver estado de cuenta
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         )}
@@ -908,27 +984,6 @@ export default function Clientes() {
                     </datalist>
                 </form>
             </Modal>
-
-            <LineaCreditoModal
-                open={lineaOpen}
-                onClose={() => setLineaOpen(false)}
-                cliente={editing}
-                valor={form.linea_credito}
-                tipoPrecioId={form.tipo_precio_id}
-                tiposPrecio={tiposPrecio}
-                onAplicar={({ linea, tipo_precio_id }) =>
-                    setForm((prev) => ({ ...prev, linea_credito: linea, tipo_precio_id }))
-                }
-                onGuardado={(c) => {
-                    setEditing(c);
-                    setForm((prev) => ({
-                        ...prev,
-                        linea_credito: lineaDesdeApi(c.linea_credito),
-                        tipo_precio_id: c.tipo_precio_id ? String(c.tipo_precio_id) : '',
-                    }));
-                    load();
-                }}
-            />
 
             {creando && (
                 <CrearEnCatalogo

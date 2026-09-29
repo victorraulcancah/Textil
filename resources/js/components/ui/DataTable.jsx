@@ -213,6 +213,8 @@ export default function DataTable({
     loading = false,
     emptyMessage = 'No hay registros para mostrar',
     onRowClick = null,
+    /** (row, evento) => void — clic derecho sobre la fila (en celular, el toque largo). */
+    onRowContextMenu = null,
     /** (row) => string — clases extra por fila, p. ej. para marcar la seleccionada. */
     rowClassName = null,
     maxHeight = '60vh',
@@ -769,6 +771,7 @@ export default function DataTable({
                                             <tr
                                                 key={row[keyField] ?? index}
                                                 onClick={onRowClick ? () => onRowClick(row) : undefined}
+                                                onContextMenu={onRowContextMenu ? (e) => onRowContextMenu(row, e) : undefined}
                                                 className={cn(
                                                     'transition',
                                                     onRowClick ? 'cursor-pointer hover:bg-primary-50/50' : 'hover:bg-gray-50',
@@ -829,6 +832,7 @@ export default function DataTable({
                                     onClick={
                                         onRowClick ? () => onRowClick(row) : undefined
                                     }
+                                    onContextMenu={onRowContextMenu ? (e) => onRowContextMenu(row, e) : undefined}
                                     className={cn(
                                         'rounded-xl border border-edge bg-white p-4 shadow-sm transition-colors',
                                         onRowClick && 'cursor-pointer active:bg-primary-50/50',

@@ -48,7 +48,6 @@ import CierresCaja from './pages/CierresCaja';
 import MotivosMovimiento from './pages/MotivosMovimiento';
 import CuentasPorCobrar from './pages/CuentasPorCobrar';
 import EstadoCuenta from './pages/EstadoCuenta';
-import TiposCambio from './pages/TiposCambio';
 import CuentasPorPagar from './pages/CuentasPorPagar';
 import Utilidades from './pages/Utilidades';
 import Ganancias from './pages/Ganancias';
@@ -113,7 +112,6 @@ const routes = [
     { path: '/motivos-movimiento', element: <MotivosMovimiento /> },
     { path: '/cuentas-por-cobrar', element: <CuentasPorCobrar /> },
     { path: '/estado-cuenta', element: <EstadoCuenta /> },
-    { path: '/tipos-cambio', element: <TiposCambio /> },
     { path: '/cuentas-por-pagar', element: <CuentasPorPagar /> },
     { path: '/reportes/utilidades', element: <Utilidades /> },
     { path: '/reportes/ganancias', element: <Ganancias /> },

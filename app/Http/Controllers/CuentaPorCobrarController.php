@@ -6,6 +6,7 @@ use App\Models\AperturaCaja;
 use App\Models\CuentaPorCobrar;
 use App\Models\CuentaPorCobrarPago;
 use App\Models\MovimientoCaja;
+use App\Services\TipoCambioService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -96,6 +97,11 @@ class CuentaPorCobrarController extends Controller
                     'movimiento_caja_id' => $mov?->id,
                     'fecha' => $fecha,
                 ]);
+
+                // Cobrado con soles: ese tipo de cambio queda como el comercial del día.
+                if ($abono['monto_pen'] !== null) {
+                    app(TipoCambioService::class)->recordarComercial($abono['tipo_cambio'], $fecha);
+                }
             }
             $this->recalcular($cuenta);
         });
@@ -154,6 +160,10 @@ class CuentaPorCobrarController extends Controller
                     'numero_operacion' => $data['referencia'] ?? null,
                     'fecha' => $data['fecha'] ?? $pago->fecha,
                 ]);
+            }
+
+            if ($abono['monto_pen'] !== null) {
+                app(TipoCambioService::class)->recordarComercial($abono['tipo_cambio'], $data['fecha'] ?? $pago->fecha?->toDateString());
             }
 
             $this->recalcular($cuenta);

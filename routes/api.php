@@ -70,12 +70,9 @@ Route::middleware('auth:api')->group(function () {
     // Distritos del Perú (catálogo fijo) para departamento → provincia → distrito
     Route::get('ubigeos', [\App\Http\Controllers\UbigeoController::class, 'index']);
 
-    // Tipo de cambio. El del día lo leen ventas y cobros (sin permiso); la
-    // pantalla donde se pone el comercial es "tipos-cambio".
+    // Tipo de cambio del día para vender y cobrar (sin permiso): el de SUNAT
+    // se trae solo la primera vez que se pide en el día.
     Route::get('tipo-cambio', [\App\Http\Controllers\TipoCambioController::class, 'dia']);
-    Route::get('tipos-cambio', [\App\Http\Controllers\TipoCambioController::class, 'index']);
-    Route::put('tipos-cambio', [\App\Http\Controllers\TipoCambioController::class, 'guardar']);
-    Route::post('tipos-cambio/sunat', [\App\Http\Controllers\TipoCambioController::class, 'sunat']);
 
     // Estado de cuenta de un cliente: pantalla, Excel (y el PDF va por /pdf).
     Route::get('estado-cuenta', [\App\Http\Controllers\EstadoCuentaController::class, 'index']);
@@ -201,6 +198,9 @@ Route::middleware('auth:api')->group(function () {
     Route::apiResource('clientes', ClienteController::class);
     // La línea de crédito en uso: lo aprobado, lo que debe y lo disponible.
     Route::get('clientes/{cliente}/credito', [ClienteController::class, 'credito']);
+    // Clic derecho en un cliente: sus documentos emitidos y su estadística de ventas.
+    Route::get('clientes/{cliente}/documentos', [ClienteController::class, 'documentos']);
+    Route::get('clientes/{cliente}/estadistica', [ClienteController::class, 'estadistica']);
     Route::apiResource('categorias-comerciales', \App\Http\Controllers\CategoriaComercialController::class)
         ->except(['show'])->parameters(['categorias-comerciales' => 'categoriaComercial']);
     Route::apiResource('actividades-comerciales', \App\Http\Controllers\ActividadComercialController::class)

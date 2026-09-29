@@ -1,13 +1,31 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Briefcase, CreditCard, Edit, FileSearch, IdCard, Mail, MapPin, Phone, Plus, Trash2, User } from 'lucide-react';
+import {
+    BarChart3,
+    Briefcase,
+    CreditCard,
+    Edit,
+    FileSearch,
+    FileText,
+    IdCard,
+    Mail,
+    MapPin,
+    Phone,
+    Plus,
+    Trash2,
+    User,
+} from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
 import { cargarUbigeos, esPeru, porCodigo, porNombres, quitarLugar } from '../lib/ubigeos';
 import CampoConAgregar from '../components/CampoConAgregar';
 import ConsultarDocumento from '../components/ConsultarDocumento';
+import DocumentosClienteModal from '../components/DocumentosClienteModal';
+import EstadisticaClienteModal from '../components/EstadisticaClienteModal';
+import EstadoCuentaDetalle from '../components/EstadoCuentaDetalle';
 import Layout from '../components/Layout';
 import LineaCreditoCampos, { lineaDesdeApi, lineaParaApi, lineaVacia } from '../components/LineaCredito';
+import MenuContextual from '../components/MenuContextual';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import SelectorUbigeo from '../components/SelectorUbigeo';
 import { Alert, Badge, Button, DataTable, Input, Modal, Select, SearchSelect, Tabs, cn } from '../components/ui';
@@ -234,6 +252,11 @@ export default function Clientes() {
     const [resumenCredito, setResumenCredito] = useState(null);
     /** Se quitó la línea que tenía: al guardar se borra. */
     const [lineaQuitada, setLineaQuitada] = useState(false);
+    /** Clic derecho sobre un cliente: dónde abrir el menú y de quién. */
+    const [menu, setMenu] = useState(null);
+    /** Lo que se abrió desde ese menú: { tipo: 'estado' | 'documentos' | 'estadistica', cliente }. */
+    const [consulta, setConsulta] = useState(null);
+    const cerrarMenu = useCallback(() => setMenu(null), []);
     const [ubigeos, setUbigeos] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -658,7 +681,7 @@ export default function Clientes() {
         <Layout>
             <PageHeader
                 title="Clientes"
-                description="Administra tus clientes"
+                description="Administra tus clientes. Clic derecho sobre uno para ver su estado de cuenta, documentos y estadística."
                 actions={<CreateButton onClick={openCreate}>Crear cliente</CreateButton>}
             />
 
@@ -666,6 +689,10 @@ export default function Clientes() {
 
             <DataTable
                 columns={columns}
+                onRowContextMenu={(row, e) => {
+                    e.preventDefault();
+                    setMenu({ x: e.clientX, y: e.clientY, cliente: row });
+                }}
                 rows={clientes.filter(
                     (c) =>
                         (!fTipoDoc || c.tipo_documento === fTipoDoc) &&
@@ -984,6 +1011,51 @@ export default function Clientes() {
                     </datalist>
                 </form>
             </Modal>
+
+            <MenuContextual
+                menu={menu}
+                onClose={cerrarMenu}
+                titulo={menu?.cliente?.nombre}
+                items={[
+                    { label: 'Ver datos del cliente', icon: User, onClick: () => openEdit(menu.cliente) },
+                    '-',
+                    {
+                        label: 'Estado de cuenta',
+                        icon: FileSearch,
+                        hidden: !puede('tesoreria.estado-cuenta'),
+                        onClick: () => setConsulta({ tipo: 'estado', cliente: menu.cliente }),
+                    },
+                    {
+                        label: 'Ver documentos emitidos',
+                        icon: FileText,
+                        onClick: () => setConsulta({ tipo: 'documentos', cliente: menu.cliente }),
+                    },
+                    '-',
+                    {
+                        label: 'Estadística de ventas',
+                        icon: BarChart3,
+                        onClick: () => setConsulta({ tipo: 'estadistica', cliente: menu.cliente }),
+                    },
+                ]}
+            />
+
+            {consulta?.tipo === 'estado' && (
+                <Modal
+                    open
+                    onClose={() => setConsulta(null)}
+                    title="Estado de cuenta"
+                    description={consulta.cliente.nombre}
+                    size="3xl"
+                >
+                    <EstadoCuentaDetalle clienteId={consulta.cliente.id} />
+                </Modal>
+            )}
+            {consulta?.tipo === 'documentos' && (
+                <DocumentosClienteModal cliente={consulta.cliente} onClose={() => setConsulta(null)} />
+            )}
+            {consulta?.tipo === 'estadistica' && (
+                <EstadisticaClienteModal cliente={consulta.cliente} onClose={() => setConsulta(null)} />
+            )}
 
             {creando && (
                 <CrearEnCatalogo

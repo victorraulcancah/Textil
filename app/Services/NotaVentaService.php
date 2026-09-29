@@ -164,6 +164,13 @@ class NotaVentaService
         $cobros = array_map(fn ($pago) => $this->cobroDe($pago, $nota->moneda), $data['pagos']);
         $nota->pagos()->createMany($cobros);
 
+        // Cobrada con soles: ese tipo de cambio queda como el comercial del día.
+        foreach ($cobros as $cobro) {
+            if ($cobro['monto_pen'] !== null) {
+                $this->tiposCambio->recordarComercial((float) $cobro['tipo_cambio'], $cobro['fecha'] ?? null);
+            }
+        }
+
         $nota->load(['detalles.presentacion.producto', 'detalles.rollo', 'almacen']);
 
         // La venta que viene de un pedido ya cortó sus rollos y descontó el

@@ -9,15 +9,17 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
 /**
- * El tipo de cambio para vender y cobrar.
+ * El tipo de cambio para vender y cobrar. No tiene pantalla: se resuelve en
+ * el momento en que se vende o se cobra.
  *
- * El de SUNAT se trae solo, una vez al día, del archivo público que SUNAT
- * publica con el de hoy ("dd/mm/aaaa|compra|venta|"). Cada día queda guardado:
- * así se arma el historial y, para una fecha sin publicación (fin de semana,
+ * El de SUNAT se trae solo la primera vez que se necesita en el día, del
+ * archivo público que SUNAT publica con el de hoy ("dd/mm/aaaa|compra|venta|").
+ * Cada día queda guardado y, para una fecha sin publicación (fin de semana,
  * feriado, un día que SUNAT no respondió), vale el último anterior.
  *
- * El comercial lo pone la empresa a mano; es el que se propone para cobrar
- * en soles una deuda en dólares.
+ * El comercial se escribe al cobrar en soles algo que es en dólares. El
+ * último con que se cobró queda guardado y se propone en los cobros que
+ * siguen ese día; mientras no haya uno, se propone el de SUNAT.
  */
 class TipoCambioService
 {
@@ -27,8 +29,8 @@ class TipoCambioService
     private const ESPERA_TRAS_FALLO_MIN = 15;
 
     /**
-     * Lo que vale para una fecha: el SUNAT (venta y compra) y el comercial,
-     * cada uno con el día del que sale.
+     * Lo que vale para una fecha: el SUNAT (venta y compra, con el día del que
+     * sale) y el comercial de ese mismo día, si ya se cobró con uno.
      *
      * @return array{fecha: string, venta: ?float, compra: ?float, fecha_venta: ?string, comercial: ?float, fecha_comercial: ?string}
      */
@@ -41,7 +43,8 @@ class TipoCambioService
         }
 
         $sunat = TipoCambio::where('fecha', '<=', $fecha)->whereNotNull('venta')->orderByDesc('fecha')->first();
-        $comercial = TipoCambio::where('fecha', '<=', $fecha)->whereNotNull('comercial')->orderByDesc('fecha')->first();
+        // El comercial cambia de un día a otro: el de ayer no se propone hoy.
+        $comercial = TipoCambio::where('fecha', $fecha)->whereNotNull('comercial')->first();
 
         return [
             'fecha' => $fecha,
@@ -60,21 +63,42 @@ class TipoCambioService
     }
 
     /**
-     * Trae el de hoy de SUNAT si todavía no está. Con `$forzar` lo vuelve a
-     * pedir aunque ya esté o aunque acabe de fallar (botón "Traer de SUNAT").
-     * Devuelve si quedó el de hoy.
+     * Se cobró en soles con este tipo de cambio: queda como el comercial de
+     * ese día, y es el que se propone en los cobros que siguen.
      */
-    public function traerDeSunat(bool $forzar = false): bool
+    public function recordarComercial(float $tipoCambio, ?string $fecha = null): void
+    {
+        if ($tipoCambio <= 0) {
+            return;
+        }
+
+        $fecha = $fecha ? Carbon::parse($fecha)->toDateString() : today()->toDateString();
+
+        // Lo deja el cobro, no una persona editando: no va a la auditoría.
+        TipoCambio::withoutEvents(function () use ($fecha, $tipoCambio) {
+            try {
+                TipoCambio::updateOrCreate(['fecha' => $fecha], ['comercial' => round($tipoCambio, 4)]);
+            } catch (QueryException) {
+                // Otro cobro lo guardó al mismo tiempo: ya está.
+            }
+        });
+    }
+
+    /**
+     * Trae el de hoy de SUNAT si todavía no está. Si SUNAT no responde, no se
+     * vuelve a intentar en cada pedido sino pasado un rato; mientras tanto el
+     * tipo de cambio se escribe en la venta o el cobro. Devuelve si quedó el
+     * de hoy.
+     */
+    public function traerDeSunat(): bool
     {
         $hoy = today()->toDateString();
 
-        if (! $forzar) {
-            if (TipoCambio::where('fecha', $hoy)->whereNotNull('venta')->exists()) {
-                return true;
-            }
-            if (Cache::has('tipo_cambio.sunat_fallo')) {
-                return false;
-            }
+        if (TipoCambio::where('fecha', $hoy)->whereNotNull('venta')->exists()) {
+            return true;
+        }
+        if (Cache::has('tipo_cambio.sunat_fallo')) {
+            return false;
         }
 
         $publicado = $this->consultarSunat();

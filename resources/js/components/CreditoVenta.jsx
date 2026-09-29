@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { CalendarClock, Trash2 } from 'lucide-react';
 import api from '../lib/api';
 import { convertir, money, redondear } from '../lib/moneda';
+import { EstadoCreditoDetalle } from './EstadoCredito';
 import { Alert, Input, Spinner } from './ui';
 
 /** "2026-09-29" sin pasar por UTC (a la noche, toISOString ya es mañana). */
@@ -91,8 +92,21 @@ export default function CreditoVenta({ clienteId, total, moneda, tipoCambio, fec
     const suma = redondear(cuotas.reduce((acc, c) => acc + (Number(c.monto) || 0), 0));
     const descuadre = Math.abs(suma - redondear(total)) > 0.01 * Math.max(cuotas.length, 1);
 
+    const estado = credito?.estado;
+
     return (
         <div className="space-y-3">
+            {/* Cómo está pagando: 🟢 🟡 🔴 ⚫, calculado al momento. */}
+            {estado && <EstadoCreditoDetalle estado={estado} />}
+            {estado?.codigo === 'bloqueado' && (
+                <Alert variant="error">Crédito bloqueado: a este cliente solo se le vende al contado.</Alert>
+            )}
+            {estado?.codigo === 'restringido' && estado.cuotas_vencidas > 0 && estado.dias_atraso > estado.dias_gracia && (
+                <Alert variant="warning">
+                    Tiene atrasos importantes: la venta a crédito necesita la autorización de quien tenga "Autorizar
+                    exceso de crédito".
+                </Alert>
+            )}
             {credito && (
                 <div className="grid grid-cols-3 gap-2 rounded-lg bg-gray-50 p-2.5 text-center">
                     <div>

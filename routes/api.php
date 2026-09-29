@@ -198,6 +198,9 @@ Route::middleware('auth:api')->group(function () {
     Route::apiResource('clientes', ClienteController::class);
     // La línea de crédito en uso: lo aprobado, lo que debe y lo disponible.
     Route::get('clientes/{cliente}/credito', [ClienteController::class, 'credito']);
+    // ⚫ Bloquear / desbloquear el crédito (permiso "Aprobar línea de crédito").
+    Route::post('clientes/{cliente}/bloquear-credito', [ClienteController::class, 'bloquearCredito']);
+    Route::post('clientes/{cliente}/desbloquear-credito', [ClienteController::class, 'desbloquearCredito']);
     // Clic derecho en un cliente: sus documentos emitidos y su estadística de ventas.
     Route::get('clientes/{cliente}/documentos', [ClienteController::class, 'documentos']);
     Route::get('clientes/{cliente}/estadistica', [ClienteController::class, 'estadistica']);

@@ -74,12 +74,12 @@ class EstadoCuentaPdf implements DocumentoPdf
             'documento' => $cliente->codigo ?: (string) $cliente->id,
             'desde' => $fecha($estado['desde']),
             'hasta' => $fecha($estado['hasta']),
-            'linea' => $r['tiene_linea'] ? [
+            'linea' => ['Estado crediticio' => $r['estado']['etiqueta'] ?? null] + ($r['tiene_linea'] ? [
                 'Línea aprobada' => "{$simbolo} ".$n($r['limite_total']),
                 'Deuda pendiente' => "{$simbolo} ".$n($r['deuda']),
                 'Disponible' => "{$simbolo} ".$n(max($r['disponible'], 0)),
                 'Condición' => $r['condicion_venta'] === 'credito' ? "Crédito a {$r['dias_credito']} días" : 'Contado',
-            ] : null,
+            ] : []),
             'monedas' => $monedas,
             'cuotas' => $cuotas,
         ];

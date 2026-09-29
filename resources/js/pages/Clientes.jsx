@@ -7,6 +7,8 @@ import {
     FileSearch,
     FileText,
     IdCard,
+    Lock,
+    LockOpen,
     Mail,
     MapPin,
     Phone,
@@ -22,6 +24,7 @@ import CampoConAgregar from '../components/CampoConAgregar';
 import ConsultarDocumento from '../components/ConsultarDocumento';
 import DocumentosClienteModal from '../components/DocumentosClienteModal';
 import EstadisticaClienteModal from '../components/EstadisticaClienteModal';
+import EstadoCredito, { ESTADOS_CREDITO, EstadoCreditoDetalle } from '../components/EstadoCredito';
 import EstadoCuentaDetalle from '../components/EstadoCuentaDetalle';
 import Layout from '../components/Layout';
 import LineaCreditoCampos, { lineaDesdeApi, lineaParaApi, lineaVacia } from '../components/LineaCredito';
@@ -257,12 +260,17 @@ export default function Clientes() {
     /** Lo que se abrió desde ese menú: { tipo: 'estado' | 'documentos' | 'estadistica', cliente }. */
     const [consulta, setConsulta] = useState(null);
     const cerrarMenu = useCallback(() => setMenu(null), []);
+    /** ⚫ Bloquear el crédito: pide el motivo. */
+    const [bloqueando, setBloqueando] = useState(false);
+    const [motivoBloqueo, setMotivoBloqueo] = useState('');
+    const [guardandoBloqueo, setGuardandoBloqueo] = useState(false);
     const [ubigeos, setUbigeos] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [fTipoDoc, setFTipoDoc] = useState('');
     const [fEstado, setFEstado] = useState('');
     const [fEjecutivo, setFEjecutivo] = useState('');
+    const [fCredito, setFCredito] = useState('');
 
     const [modalOpen, setModalOpen] = useState(false);
     const [editing, setEditing] = useState(null);
@@ -471,6 +479,38 @@ export default function Clientes() {
         }
     };
 
+    const bloquearCredito = async () => {
+        if (!motivoBloqueo.trim()) return toast.error('Escribe por qué se bloquea el crédito.');
+        setGuardandoBloqueo(true);
+        try {
+            const { data } = await api.post(`/clientes/${editing.id}/bloquear-credito`, { motivo: motivoBloqueo.trim() });
+            setResumenCredito(data.resumen);
+            setBloqueando(false);
+            setMotivoBloqueo('');
+            toast.success('Crédito bloqueado: solo se le venderá al contado.');
+            load();
+        } catch (err) {
+            toast.error(err.response?.data?.message ?? 'No se pudo bloquear el crédito.');
+        } finally {
+            setGuardandoBloqueo(false);
+        }
+    };
+
+    const desbloquearCredito = async () => {
+        if (!window.confirm(`¿Desbloquear el crédito de ${editing.nombre}?`)) return;
+        setGuardandoBloqueo(true);
+        try {
+            const { data } = await api.post(`/clientes/${editing.id}/desbloquear-credito`);
+            setResumenCredito(data.resumen);
+            toast.success('Crédito desbloqueado.');
+            load();
+        } catch (err) {
+            toast.error(err.response?.data?.message ?? 'No se pudo desbloquear el crédito.');
+        } finally {
+            setGuardandoBloqueo(false);
+        }
+    };
+
     const cambiarLinea = (nombre, valor) => {
         setForm((prev) => ({ ...prev, linea_credito: { ...prev.linea_credito, [nombre]: valor } }));
         const clave = `linea_credito.${nombre}`;
@@ -654,6 +694,12 @@ export default function Clientes() {
             render: (row) => row.tipo_precio?.nombre ?? <span className="text-gray-400">Principal</span>,
         },
         {
+            key: 'estado_credito',
+            label: 'Crédito',
+            getSearchValue: (row) => row.estado_credito?.etiqueta,
+            render: (row) => <EstadoCredito estado={row.estado_credito} />,
+        },
+        {
             key: 'activo',
             label: 'Estado',
             render: (row) => (row.activo ? <Badge variant="green">Activo</Badge> : <Badge variant="red">Inactivo</Badge>),
@@ -697,12 +743,13 @@ export default function Clientes() {
                     (c) =>
                         (!fTipoDoc || c.tipo_documento === fTipoDoc) &&
                         (!fEstado || (fEstado === 'activo' ? c.activo : !c.activo)) &&
-                        (!fEjecutivo || String(c.ejecutivo_id) === String(fEjecutivo)),
+                        (!fEjecutivo || String(c.ejecutivo_id) === String(fEjecutivo)) &&
+                        (!fCredito || c.estado_credito?.codigo === fCredito),
                 )}
                 loading={loading}
                 searchPlaceholder="Buscar clientes..."
                 filterable
-                filterCount={(fTipoDoc ? 1 : 0) + (fEstado ? 1 : 0) + (fEjecutivo ? 1 : 0)}
+                filterCount={(fTipoDoc ? 1 : 0) + (fEstado ? 1 : 0) + (fEjecutivo ? 1 : 0) + (fCredito ? 1 : 0)}
                 filters={
                     <div className="space-y-2">
                         <Select
@@ -736,12 +783,19 @@ export default function Clientes() {
                             emptyText="Sin coincidencias"
                             options={usuarios.map((u) => ({ value: String(u.id), label: u.name }))}
                         />
-                        {(fTipoDoc || fEstado || fEjecutivo) && (
+                        <Select
+                            label="Estado crediticio"
+                            value={fCredito}
+                            onChange={(e) => setFCredito(e.target.value)}
+                            options={[{ value: '', label: 'Todos' }, ...ESTADOS_CREDITO]}
+                        />
+                        {(fTipoDoc || fEstado || fEjecutivo || fCredito) && (
                             <button
                                 onClick={() => {
                                     setFTipoDoc('');
                                     setFEstado('');
                                     setFEjecutivo('');
+                                    setFCredito('');
                                 }}
                                 className="text-xs font-medium text-red-600 hover:text-red-700"
                             >
@@ -944,6 +998,20 @@ export default function Clientes() {
 
                         {tab === 'credito' && (
                             <div className="space-y-3">
+                                {editing && resumenCredito?.estado && (
+                                    <EstadoCreditoDetalle estado={resumenCredito.estado}>
+                                        {puede('ventas.clientes.linea_credito') &&
+                                            (resumenCredito.estado.codigo === 'bloqueado' ? (
+                                                <Button type="button" variant="secondary" size="sm" loading={guardandoBloqueo} onClick={desbloquearCredito}>
+                                                    <LockOpen className="h-4 w-4" /> Desbloquear
+                                                </Button>
+                                            ) : (
+                                                <Button type="button" variant="secondary" size="sm" onClick={() => setBloqueando(true)}>
+                                                    <Lock className="h-4 w-4" /> Bloquear crédito
+                                                </Button>
+                                            ))}
+                                    </EstadoCreditoDetalle>
+                                )}
                                 {form.linea_credito ? (
                                     <LineaCreditoCampos
                                         linea={form.linea_credito}
@@ -1010,6 +1078,38 @@ export default function Clientes() {
                         ))}
                     </datalist>
                 </form>
+            </Modal>
+
+            <Modal
+                open={bloqueando}
+                onClose={() => setBloqueando(false)}
+                title="Bloquear crédito"
+                description={editing?.nombre}
+                size="sm"
+                footer={
+                    <>
+                        <Button variant="secondary" onClick={() => setBloqueando(false)}>Cancelar</Button>
+                        <Button variant="danger" loading={guardandoBloqueo} onClick={bloquearCredito}>
+                            <Lock className="h-4 w-4" /> Bloquear
+                        </Button>
+                    </>
+                }
+            >
+                <div className="space-y-3">
+                    <Alert variant="warning">
+                        Mientras esté bloqueado nadie le vende a crédito, ni con autorización. Al contado, sí.
+                    </Alert>
+                    <div>
+                        <label className="mb-1 block text-sm font-medium text-gray-700">Motivo</label>
+                        <textarea
+                            rows={3}
+                            value={motivoBloqueo}
+                            onChange={(e) => setMotivoBloqueo(e.target.value)}
+                            placeholder="Ej. cheque rebotado, deuda en cobranza judicial…"
+                            className="block w-full resize-none rounded-md border-0 p-3 text-sm text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-primary-600"
+                        />
+                    </div>
+                </div>
             </Modal>
 
             <MenuContextual

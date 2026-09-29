@@ -132,7 +132,7 @@ export default function LineaCreditoCampos({
                     </p>
                 </div>
                 <div>
-                    <p className="text-[11px] uppercase tracking-wide text-warm-500">Estado</p>
+                    <p className="text-[11px] uppercase tracking-wide text-warm-500">Situación de la línea</p>
                     <p className="text-sm font-medium text-warm-900">
                         {resumen?.impedimento && resumen?.tiene_linea
                             ? resumen.impedimento

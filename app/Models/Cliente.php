@@ -31,6 +31,11 @@ class Cliente extends Model
         'actividad_comercial_id',
         'categoria_comercial_id',
         'tipo_cliente',
+        // Bloqueo de crédito (⚫), puesto a mano por quien aprueba crédito.
+        'credito_bloqueado',
+        'credito_bloqueo_motivo',
+        'credito_bloqueado_por',
+        'credito_bloqueado_en',
         'ejecutivo_id',
         // A qué precio se le vende (Mayorista…). Sin uno, al principal.
         'tipo_precio_id',
@@ -45,7 +50,15 @@ class Cliente extends Model
     {
         return [
             'activo' => 'boolean',
+            'credito_bloqueado' => 'boolean',
+            'credito_bloqueado_en' => 'datetime',
         ];
+    }
+
+    /** Quién le bloqueó el crédito. */
+    public function bloqueadoPor()
+    {
+        return $this->belongsTo(User::class, 'credito_bloqueado_por');
     }
 
     /** El vendedor a cargo de este cliente. Sin uno, solo lo ve quien tenga "ver todo". */

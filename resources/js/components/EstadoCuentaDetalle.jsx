@@ -4,6 +4,7 @@ import api from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { money } from '../lib/moneda';
 import { useToast } from '../lib/toast';
+import { EstadoCreditoDetalle } from './EstadoCredito';
 import PdfViewerModal from './PdfViewerModal';
 import { Alert, Badge, Button, Input, Spinner } from './ui';
 
@@ -133,6 +134,8 @@ export default function EstadoCuentaDetalle({ clienteId }) {
 
             {estado && !cargando && (
                 <>
+                    {/* Cómo está pagando: 🟢 🟡 🔴 ⚫, calculado al momento. */}
+                    <EstadoCreditoDetalle estado={r?.estado} />
                     {r?.tiene_linea ? (
                         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                             <Tarjeta

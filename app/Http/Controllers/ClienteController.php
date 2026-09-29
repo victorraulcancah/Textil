@@ -27,9 +27,11 @@ class ClienteController extends Controller
         'direcciones',
         // Condición de venta y días de crédito: la venta los necesita.
         'lineaCredito',
+        // Quién le bloqueó el crédito, si está bloqueado.
+        'bloqueadoPor:id,name',
     ];
 
-    public function index(Request $request)
+    public function index(Request $request, CreditoService $credito)
     {
         $query = Cliente::with(self::RELACIONES)->where('activo', true);
 
@@ -40,7 +42,14 @@ class ClienteController extends Controller
             $query->where('ejecutivo_id', $request->user()->id);
         }
 
-        return response()->json($query->latest('id')->get());
+        // De la A a la Z por nombre o razón social.
+        $clientes = $query->orderBy('nombre')->orderBy('id')->get();
+
+        // El estado crediticio de cada uno (🟢 🟡 🔴 ⚫), calculado al momento.
+        $estados = $credito->estados($clientes);
+        $clientes->each(fn (Cliente $c) => $c->setAttribute('estado_credito', $estados[$c->id] ?? null));
+
+        return response()->json($clientes);
     }
 
     public function store(Request $request)
@@ -250,6 +259,40 @@ class ClienteController extends Controller
             'productos' => $productos,
             'credito' => $credito->resumen($cliente),
         ]);
+    }
+
+    /**
+     * ⚫ Bloquea el crédito del cliente: nadie le vende a crédito, ni con
+     * autorización, hasta que se desbloquee. Queda el motivo, quién y cuándo.
+     */
+    public function bloquearCredito(Request $request, Cliente $cliente, CreditoService $credito)
+    {
+        $data = $request->validate(
+            ['motivo' => 'required|string|max:500'],
+            ['motivo.required' => 'Escribe por qué se bloquea el crédito.'],
+        );
+
+        $cliente->update([
+            'credito_bloqueado' => true,
+            'credito_bloqueo_motivo' => $data['motivo'],
+            'credito_bloqueado_por' => $request->user()->id,
+            'credito_bloqueado_en' => now(),
+        ]);
+
+        return response()->json(['resumen' => $credito->resumen($cliente->fresh())]);
+    }
+
+    /** Quita el bloqueo: el estado vuelve a calcularse solo con sus cuotas y su línea. */
+    public function desbloquearCredito(Cliente $cliente, CreditoService $credito)
+    {
+        $cliente->update([
+            'credito_bloqueado' => false,
+            'credito_bloqueo_motivo' => null,
+            'credito_bloqueado_por' => null,
+            'credito_bloqueado_en' => null,
+        ]);
+
+        return response()->json(['resumen' => $credito->resumen($cliente->fresh())]);
     }
 
     public function destroy(Cliente $cliente)

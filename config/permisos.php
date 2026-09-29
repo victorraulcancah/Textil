@@ -78,6 +78,11 @@ return [
                     'apis' => ['clientes'],
                     // Sin "ver todo", cada quien ve solo los clientes a su cargo.
                     'acciones' => ['ver', 'ver_todo', 'crear', 'editar', 'eliminar', 'linea_credito'],
+                    // El bloqueo de crédito (⚫) lo pone y lo quita quien aprueba la línea.
+                    'patrones' => [
+                        'clientes/*/bloquear-credito' => 'linea_credito',
+                        'clientes/*/desbloquear-credito' => 'linea_credito',
+                    ],
                 ],
                 'categorias-comerciales' => ['label' => 'Categorías comerciales', 'apis' => ['categorias-comerciales']],
                 'actividades-comerciales' => ['label' => 'Actividades comerciales', 'apis' => ['actividades-comerciales']],

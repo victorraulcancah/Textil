@@ -122,25 +122,6 @@ class OrdenCompraPdf implements DocumentoPdf
             ->values()
             ->all();
 
-        // "ITEM 1": una tabla por tela con su código de producto, su color code y sus rollos y metros.
-        $porTela = $orden->detalles->groupBy(fn ($d) => $d->presentacion?->producto?->id)->values();
-        $items = $porTela->map(function ($lineas, $i) use ($porTela, $mayus) {
-            $producto = $lineas->first()->presentacion?->producto;
-
-            return [
-                'title' => 'ITEM '.($i + 1).($porTela->count() > 1 ? ' - '.$mayus($producto?->nombre_tecnico ?: $producto?->nombre) : ''),
-                'rows' => $lineas->map(fn ($d) => [
-                    'product_code' => collect([$producto?->codigo, $d->color?->codigo])->filter()->implode('-'),
-                    'color_code' => $d->color_code ?: '',
-                    'color' => $mayus($d->color?->nombre),
-                    'rolls' => (int) $d->rollos,
-                    'meters' => (float) $d->cantidad,
-                ])->all(),
-                'rolls' => (int) $lineas->sum('rollos'),
-                'meters' => (float) $lineas->sum('cantidad'),
-            ];
-        })->all();
-
         return [
             'shipper' => [
                 'name' => $mayus($proveedor?->nombre),
@@ -165,9 +146,6 @@ class OrdenCompraPdf implements DocumentoPdf
             'port_arrival' => $mayus($orden->puerto_destino) ?: '—',
             'date_of_agreement' => optional($orden->fecha_emision)->format('d/m/Y') ?: '—',
             'bienes' => $bienes,
-            'items' => $items,
-            'total_rolls' => (int) $orden->detalles->sum('rollos'),
-            'total_meters' => (float) $orden->detalles->sum('cantidad'),
             'shipping_date' => optional($orden->fecha_embarque_estimada)->format('d/m/Y') ?: '—',
             'prepared_by' => $orden->elaborado_por ?: '',
             'approved_by' => $orden->aprobado_por ?: '',

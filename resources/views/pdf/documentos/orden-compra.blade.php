@@ -121,49 +121,8 @@
                 </table>
             @endforeach
 
-            {{-- Los ítems: una tabla por tela (ITEM 1, ITEM 2…) con rollos y metros, como la Purchase Order del cliente. --}}
-            @php
-                $num = fn ($v) => number_format((float) $v, 2);
-                $cel = 'border: 1px solid #999; padding: 3px 5px; text-align: center; font-size: 8.5px;';
-                $tit = "background: {$azul}; color: #fff; font-weight: bold; text-transform: uppercase; font-size: 8px; padding: 3px 4px; border: 1px solid #999; text-align: center;";
-            @endphp
-            @foreach ($g['items'] as $it)
-                <div class="strong" style="font-size: 9px; margin: 10px 0 2px 0;">{{ $it['title'] }}</div>
-                <table style="width: 100%; border-collapse: collapse; table-layout: fixed;">
-                    <colgroup>
-                        <col style="width: 22%"><col style="width: 20%"><col style="width: 28%"><col style="width: 12%"><col style="width: 18%">
-                    </colgroup>
-                    <thead>
-                        <tr>
-                            @foreach (['Product code', 'Color code', 'Color', 'Rolls', 'Meter'] as $t)
-                                <th style="{{ $tit }}">{{ $t }}</th>
-                            @endforeach
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach ($it['rows'] as $r)
-                            <tr>
-                                <td style="{{ $cel }}">{{ $r['product_code'] }}</td>
-                                <td style="{{ $cel }}">{{ $r['color_code'] }}</td>
-                                <td style="{{ $cel }}">{{ $r['color'] }}</td>
-                                <td style="{{ $cel }}">{{ $r['rolls'] ?: '' }}</td>
-                                <td style="{{ $cel }}">{{ $num($r['meters']) }}</td>
-                            </tr>
-                        @endforeach
-                    </tbody>
-                </table>
-            @endforeach
-
-            <table style="width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 6px; border-top: 2px solid #666; border-bottom: 2px solid #666;">
-                <colgroup>
-                    <col style="width: 22%"><col style="width: 20%"><col style="width: 28%"><col style="width: 12%"><col style="width: 18%">
-                </colgroup>
-                <tr class="strong upper">
-                    <td colspan="3" style="padding: 4px 5px;">Total</td>
-                    <td style="padding: 4px 5px; text-align: center;">{{ number_format($g['total_rolls']) }}</td>
-                    <td style="padding: 4px 5px; text-align: center;">{{ $num($g['total_meters']) }}</td>
-                </tr>
-            </table>
+            {{-- Los ítems, con el mismo formato de tabla del pedido: una por tela, con su color code, sub total y total. --}}
+            <x-pdf.planilla :grupos="$planilla['grupos']" :totales="$planilla['totales']" :colorCode="true" :precios="false" />
 
             <table style="width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 8.5px;">
                 <tr>

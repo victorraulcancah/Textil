@@ -8,7 +8,7 @@ import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select, Ta
 
 /**
  * Familias de tela (poliéster, algodón...) y sus tipos (Trenza, Polinan...).
- * El código de una tela sale de aquí: "01-{familia}-{tipo}". Antes cada
+ * El código de una tela sale de aquí: "{familia}-{tipo}". Antes cada
  * producto escribía su código a mano; ahora se arma solo al elegir el tipo.
  */
 export default function TiposTela() {
@@ -212,7 +212,7 @@ export default function TiposTela() {
         {
             key: 'codigo_completo',
             label: 'Código',
-            render: (row) => <Badge variant="blue">01-{row.familia?.codigo}-{row.codigo}</Badge>,
+            render: (row) => <Badge variant="blue">{row.familia?.codigo}-{row.codigo}</Badge>,
         },
         {
             key: 'nombre',
@@ -251,7 +251,7 @@ export default function TiposTela() {
         <Layout>
             <PageHeader
                 title="Familias y tipos de tela"
-                description='El código de una tela sale de aquí: "01-familia-tipo"'
+                description='El código de una tela sale de aquí: "familia-tipo"'
                 actions={
                     <CreateButton onClick={openCreate}>
                         {tab === 'familias' ? 'Crear familia' : 'Crear tipo de tela'}

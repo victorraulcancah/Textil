@@ -31,6 +31,8 @@ export default function Existencias() {
 
     /** Unidad elegida por fila para expresar su stock: { [id de la fila]: nombre }. */
     const [unidadPorFila, setUnidadPorFila] = useState({});
+    /** Color elegido por fila en su lista: { [id de la fila]: id del color ('' = todos) }. */
+    const [colorPorFila, setColorPorFila] = useState({});
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -83,7 +85,8 @@ export default function Existencias() {
         const { stock, minimo, maximo } = stockInfo(row);
         // El semáforo se decide con los valores base (así están los mínimos);
         // lo que cambia es solo cómo se muestra la cantidad.
-        const texto = num(stock / factorDeFila(row));
+        // Con un color elegido en su lista, la cantidad es la de ese color.
+        const texto = num(stockDeFila(row) / factorDeFila(row));
 
         if (stock <= 0) return <Badge variant="red">{texto}</Badge>;
         if (minimo > 0 && stock <= minimo) return <Badge variant="amber">{texto}</Badge>;
@@ -182,40 +185,38 @@ export default function Existencias() {
         },
         {
             // Sale de los rollos: el stock del producto no distingue colores.
-            // Lo que no va por rollos (mercería) queda en "—".
+            // Es una lista, como "Ver en": al elegir un color, la fila muestra el
+            // stock de ese color. Lo que no va por rollos (mercería) queda en "—".
             key: 'color',
             label: 'Color',
-            width: '220px',
-            getSearchValue: (row) => (row.colores ?? []).map((c) => c.nombre).join(' '),
+            width: '230px',
+            searchable: false,
             render: (row) => {
                 const colores = row.colores ?? [];
                 if (colores.length === 0) return <span className="text-gray-400">—</span>;
 
                 return (
-                    <div className="flex flex-col gap-0.5">
-                        {colores.map((c) => (
-                            <span
-                                key={c.id ?? 'sin-color'}
-                                className="inline-flex items-center gap-1.5 text-xs text-warm-800"
-                                title={`${c.rollos} rollo(s)`}
-                            >
-                                <span
-                                    className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-black/10"
-                                    style={{ backgroundColor: c.hex || '#9ca3af' }}
-                                />
-                                <span className="truncate">{c.nombre}</span>
-                                <span className="ml-auto font-medium tabular-nums text-warm-900">
-                                    {new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(c.metros)} m
-                                </span>
-                            </span>
-                        ))}
+                    <div className="flex flex-col gap-1">
+                        <select
+                            value={colorPorFila[row.id] ?? ''}
+                            onChange={(e) => setColorPorFila((prev) => ({ ...prev, [row.id]: e.target.value }))}
+                            onClick={(e) => e.stopPropagation()}
+                            className="h-8 w-full rounded-md border border-gray-300 bg-white px-2 text-xs"
+                        >
+                            <option value="">Todos los colores ({colores.length})</option>
+                            {colores.map((c) => (
+                                <option key={c.id ?? 'x'} value={String(c.id ?? 'x')}>
+                                    {c.nombre} — {num(c.metros)} m · {c.rollos} rollo{c.rollos === 1 ? '' : 's'}
+                                </option>
+                            ))}
+                        </select>
                         {row.descuadre_rollos ? (
                             <span
-                                className="mt-0.5 w-fit rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700"
+                                className="w-fit rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700"
                                 title="El stock del producto y la suma de sus rollos no coinciden: algo movió uno sin el otro (una venta sin rollo, un ajuste)."
                             >
                                 Descuadre: {row.descuadre_rollos > 0 ? '+' : ''}
-                                {new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(row.descuadre_rollos)} m
+                                {num(row.descuadre_rollos)} m
                             </span>
                         ) : null}
                     </div>
@@ -302,7 +303,7 @@ export default function Existencias() {
             align: 'right',
             searchable: false,
             render: (row) => (
-                <span className="text-warm-500">{num(Number(row.stock_reservado ?? 0) / factorDeFila(row))}</span>
+                <span className="text-warm-500">{num(reservadoDeFila(row) / factorDeFila(row))}</span>
             ),
         },
         {
@@ -313,7 +314,7 @@ export default function Existencias() {
             searchable: false,
             render: (row) => (
                 <span className="font-medium text-warm-900">
-                    {num(Number(row.stock_disponible ?? 0) / factorDeFila(row))}
+                    {num(disponibleDeFila(row) / factorDeFila(row))}
                 </span>
             ),
         },
@@ -353,7 +354,7 @@ export default function Existencias() {
             searchable: false,
             render: (row) => (
                 <span className="font-semibold text-primary-600">
-                    {money(Number(row.stock_actual ?? 0) * Number(row.costo_promedio ?? 0))}
+                    {money(stockDeFila(row) * Number(row.costo_promedio ?? 0))}
                 </span>
             ),
         },
@@ -378,6 +379,35 @@ export default function Existencias() {
     ];
 
     const visibles = rowsFor(tab === 'todos' ? null : Number(tab));
+
+    /** Cuántas unidades base es un metro (la tela guarda el stock en su unidad base). */
+    const basePorMetro = (row) => {
+        const metro = (row.producto?.presentaciones ?? []).find(
+            (p) => (p.unidad_base?.abreviatura ?? '').toLowerCase() === 'm',
+        );
+        return Number(metro?.factor_conversion) > 0 ? Number(metro.factor_conversion) : 1;
+    };
+
+    /** El color elegido en la lista de la fila, o null si se ven todos. */
+    const colorDeFila = (row) => {
+        const id = colorPorFila[row.id];
+        if (id === undefined || id === '') return null;
+        return (row.colores ?? []).find((c) => String(c.id ?? 'x') === id) ?? null;
+    };
+
+    /** El stock que muestra la fila (en unidad base): el del color elegido o el total. */
+    const stockDeFila = (row) => {
+        const c = colorDeFila(row);
+        return c ? Number(c.metros) * basePorMetro(row) : Number(row.stock_actual ?? 0);
+    };
+    const disponibleDeFila = (row) => {
+        const c = colorDeFila(row);
+        return c ? Number(c.metros_disponibles) * basePorMetro(row) : Number(row.stock_disponible ?? 0);
+    };
+    const reservadoDeFila = (row) => {
+        const c = colorDeFila(row);
+        return c ? Math.max(0, Number(c.metros) - Number(c.metros_disponibles)) * basePorMetro(row) : Number(row.stock_reservado ?? 0);
+    };
 
     const resumen = visibles.reduce(
         (acc, row) => {

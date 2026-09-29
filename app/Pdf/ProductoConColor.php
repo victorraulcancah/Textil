@@ -10,11 +10,11 @@ use App\Models\ProductoColor;
  *
  * La tela sola no dice qué se pidió: "Polinan" puede ser negro o camello. Lo
  * que se compra, se recibe y se despacha es la tela más su color, y su código
- * es el de la tela seguido del código del color: 01-01-001-0074.
+ * es el de la tela seguido del código del color: 01-001-0074.
  */
 class ProductoConColor
 {
-    /** "01-01-001-0074", o solo el código de la tela si la línea no lleva color. */
+    /** "01-001-0074", o solo el código de la tela si la línea no lleva color. */
     public static function codigo(?Producto $producto, ?ProductoColor $color): string
     {
         $codigo = $producto?->codigo;

@@ -162,7 +162,7 @@ export default function Productos() {
     const [unidades, setUnidades] = useState([]);
     /** Catálogo compartido de colores: se crea una vez y toda tela lo elige de aquí. */
     const [coloresCatalogo, setColoresCatalogo] = useState([]);
-    /** Familia + tipo de tela: de ahí sale el código "01-familia-tipo". */
+    /** Familia + tipo de tela: de ahí sale el código "familia-tipo". */
     const [tiposTela, setTiposTela] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -388,7 +388,7 @@ export default function Productos() {
 
     /**
      * Elegir el tipo de tela: fija su familia y, si no se escribió un código a
-     * mano, muestra el que va a salir (01-familia-tipo).
+     * mano, muestra el que va a salir (familia-tipo).
      */
     const elegirTipoTela = (tipoId, recien = null) => {
         const tipo = recien ?? tiposTela.find((t) => String(t.id) === String(tipoId));
@@ -403,7 +403,7 @@ export default function Productos() {
                 tipo_tela_id: tipoId ?? '',
                 familia_id: familiaId,
                 // Producto nuevo: el código sale de la familia y el tipo. Al editar no cambia.
-                codigo: !editing && tipo ? `01-${familiaCodigo}-${tipo.codigo}` : p.codigo,
+                codigo: !editing && tipo ? `${familiaCodigo}-${tipo.codigo}` : p.codigo,
             };
         });
     };
@@ -1127,7 +1127,7 @@ export default function Productos() {
                                 error={errors.nombre}
                                 className="sm:col-span-2"
                             />
-                            {/* El código de tela (01-familia-tipo) sale solo al elegir la
+                            {/* El código de tela (familia-tipo) sale solo al elegir la
                                 familia y el tipo: no se escribe. Al sumarle el código del
                                 color (-0001) queda el código del producto con color, el
                                 mismo del QR y del código de barras de sus rollos. */}
@@ -1160,7 +1160,7 @@ export default function Productos() {
                         </h3>
                         <div className="grid gap-4 sm:grid-cols-2">
                             {/* La tela se clasifica por familia y tipo (Catálogo → Familias y
-                                tipos de tela): de ahí sale también su código 01-familia-tipo. */}
+                                tipos de tela): de ahí sale también su código familia-tipo. */}
                             <FieldWithAdd onAdd={() => setQuick({ tipo: 'familia' })}>
                                 <SearchSelect
                                     label="Familia"
@@ -1196,12 +1196,12 @@ export default function Productos() {
                                     emptyText="Sin coincidencias"
                                     options={tiposDe(form.familia_id).map((t) => ({
                                         value: String(t.id),
-                                        label: `01-${t.familia?.codigo ?? '00'}-${t.codigo} — ${t.nombre}`,
+                                        label: `${t.familia?.codigo ?? '00'}-${t.codigo} — ${t.nombre}`,
                                     }))}
                                 />
                             </FieldWithAdd>
                             <p className="-mt-2 text-xs text-warm-400 sm:col-span-2">
-                                Al elegir el tipo, el código de tela sale de aquí (01-familia-tipo). Se administra en
+                                Al elegir el tipo, el código de tela sale de aquí (familia-tipo). Se administra en
                                 Catálogo → Familias y tipos de tela.
                             </p>
                             <FieldWithAdd onAdd={() => setQuick({ tipo: 'marca' })}>
@@ -1485,8 +1485,8 @@ export default function Productos() {
                         </div>
                         <p className="mb-3 text-xs text-warm-400">
                             En qué colores existe esta tela. El código del color se suma al de la
-                            tela y forma el producto con color: tela 01-01-001 + color 0074 →
-                            01-01-001-0074. Cada rollo lleva su propio código único, el de la
+                            tela y forma el producto con color: tela 01-001 + color 0074 →
+                            01-001-0074. Cada rollo lleva su propio código único, el de la
                             orden de compra (KET-001-26-000001).
                         </p>
                         <p className="mb-3 text-xs text-warm-400">

@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 /**
  * Un tipo de tela dentro de una familia (ej: Trenza, dentro de Poliéster):
  * 3 dígitos, únicos dentro de su familia. El código completo de la tela es
- * "01-{familia}-{tipo}"; el color se agrega después.
+ * "{familia}-{tipo}"; el color se agrega después.
  */
 class TipoTela extends Model
 {
@@ -36,10 +36,10 @@ class TipoTela extends Model
         return $codigo;
     }
 
-    /** El código completo de tela: "01-{familia}-{tipo}". */
+    /** El código completo de tela: "{familia}-{tipo}". */
     public function codigoCompleto(): string
     {
-        return '01-'.$this->familia->codigo.'-'.$this->codigo;
+        return $this->familia->codigo.'-'.$this->codigo;
     }
 
     public function familia()

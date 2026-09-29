@@ -574,7 +574,7 @@ class RecepcionCompraController extends Controller
      * Metros, Peso neto; "Envío" es opcional. "Producto" y "Color" van por su
      * código (el de `productos.codigo` y el del catálogo compartido de
      * colores); también se acepta el producto con su color en una sola
-     * columna (01-01-030-0074).
+     * columna (01-030-0074).
      *
      * Lo que no se puede cargar se señala fila por fila —producto o color
      * desconocido, código repetido o ya existente— para corregir el Excel y
@@ -661,7 +661,7 @@ class RecepcionCompraController extends Controller
                 }
             }
 
-            // El producto puede venir con su color pegado: 01-01-030-0074.
+            // El producto puede venir con su color pegado: 01-030-0074.
             $linea = $compra->detalles->first(
                 fn ($d) => $d->presentacion?->producto?->codigo === $codigoProducto
             );
@@ -829,7 +829,7 @@ class RecepcionCompraController extends Controller
         $codigos->fromArray([
             ['Cómo llenar la hoja "Packing list"'],
             ['Una fila por rollo. Código único: el del rollo (se escanea al llegar). Metros: el metraje de fábrica.'],
-            ['Producto y Color: los códigos de esta hoja. También vale el producto con su color en una sola columna (01-01-030-0074).'],
+            ['Producto y Color: los códigos de esta hoja. También vale el producto con su color en una sola columna (01-030-0074).'],
             ['Orden y Envío son opcionales. No cambies los títulos de las columnas.'],
         ], null, 'G1');
         $codigos->getStyle('G1')->getFont()->setBold(true);

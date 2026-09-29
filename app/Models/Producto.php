@@ -104,7 +104,7 @@ class Producto extends Model
     }
 
     /**
-     * El código de una tela sale de su tipo: "01-{familia}-{tipo}". A
+     * El código de una tela sale de su tipo: "{familia}-{tipo}". A
      * diferencia de generarCodigo(), no es un correlativo propio del
      * producto —el tipo de tela ya es único—, así que basta con leerlo.
      */

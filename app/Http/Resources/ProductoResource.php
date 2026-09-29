@@ -29,7 +29,7 @@ class ProductoResource extends JsonResource
             ])->values()),
             'categoria' => new CategoriaResource($this->whenLoaded('categoria')),
             'sub_categoria' => new CategoriaResource($this->whenLoaded('subCategoria')),
-            // Solo para telas: de ahí sale el código "01-familia-tipo".
+            // Solo para telas: de ahí sale el código "familia-tipo".
             'tipo_tela_id' => $this->tipo_tela_id,
             'tipo_tela' => $this->whenLoaded('tipoTela', fn () => [
                 'id' => $this->tipoTela->id,

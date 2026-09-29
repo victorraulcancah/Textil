@@ -37,8 +37,8 @@
     --color-field: #fafafa;
     --color-edge: #e0dad2;
 
-    /* Fondo gris de las vistas de la app */
-    --color-surface: #f1f5f9;
+    /* Fondo de las vistas de la app: blanco (antes un gris azulado) */
+    --color-surface: #ffffff;
 
     /* Colores de estado (éxito / error / advertencia / información) */
     --color-success-50: #f0fdf4;

@@ -11,6 +11,7 @@ import Roles from './pages/Roles';
 import Usuarios from './pages/Usuarios';
 import Empresa from './pages/Empresa';
 import Productos from './pages/Productos';
+import ListaPrecios from './pages/ListaPrecios';
 import Categorias from './pages/Categorias';
 import Colores from './pages/Colores';
 import TiposTela from './pages/TiposTela';
@@ -63,6 +64,7 @@ const routes = [
     { path: '/accesos', element: <Accesos /> },
     { path: '/auditoria', element: <Auditoria /> },
     { path: '/productos', element: <Productos /> },
+    { path: '/lista-precios', element: <ListaPrecios /> },
     { path: '/categorias', element: <Categorias /> },
     { path: '/colores', element: <Colores /> },
     { path: '/tipos-tela', element: <TiposTela /> },

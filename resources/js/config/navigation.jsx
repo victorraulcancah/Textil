@@ -12,6 +12,7 @@ import {
     Palette,
     Layers3,
     BadgeDollarSign,
+    CircleDollarSign,
     Ruler,
     ShoppingCart,
     Truck,
@@ -64,6 +65,7 @@ export const navigation = [
         icon: BookOpen,
         children: [
             { label: 'Productos', icon: Package, to: '/productos', permiso: 'catalogo.productos' },
+            { label: 'Lista de precios', icon: CircleDollarSign, to: '/lista-precios', permiso: 'catalogo.lista-precios' },
             { label: 'Categorías', icon: Tags, to: '/categorias', permiso: 'catalogo.categorias' },
             { label: 'Colores', icon: Palette, to: '/colores', permiso: 'catalogo.colores' },
             { label: 'Familias y tipos de tela', icon: Layers3, to: '/tipos-tela', permiso: 'catalogo.tipos-tela' },

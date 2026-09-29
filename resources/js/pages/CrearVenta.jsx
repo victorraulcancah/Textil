@@ -10,6 +10,7 @@ import {
     Wallet,
 } from "lucide-react";
 import api, { asList } from "../lib/api";
+import { precioPara } from "../lib/precios";
 import { opcionesAlmacen } from "../lib/almacenes";
 import { useToast } from "../lib/toast";
 import { useAuth } from "../lib/auth";
@@ -48,6 +49,8 @@ const panelVacio = {
     producto_presentacion_id: "",
     cantidad: "1",
     precio_unitario: "0",
+    // Escrito a mano: ya no se reemplaza con el precio de lista.
+    precioManual: false,
 };
 const emptyPago = () => ({
     tipo: "efectivo",
@@ -162,6 +165,8 @@ export default function CrearVenta() {
                         rollo_id: d.rollo_id ? String(d.rollo_id) : "",
                         cantidad: String(Number(d.cantidad) || 0),
                         precio_unitario: String(Number(d.precio_unitario) || 0),
+                        // Lo guardado no se recalcula solo.
+                        precio_manual: true,
                     })),
                 );
 
@@ -209,6 +214,51 @@ export default function CrearVenta() {
             ) ?? null,
         [productoDe],
     );
+
+    /** A qué tipo de precio se le vende a este cliente; sin cliente o sin tipo, al principal. */
+    const cliente =
+        clientes.find((c) => String(c.id) === String(form.cliente_id)) ?? null;
+    const tipoPrecioId = cliente?.tipo_precio_id ?? null;
+
+    /** El precio de lista: el del tipo de precio del cliente, según la cantidad. */
+    const precioDeLista = (productoId, presentacionId, cantidad) =>
+        String(
+            precioPara(
+                presentacionDe(productoId, presentacionId),
+                tipoPrecioId,
+                cantidad,
+            ),
+        );
+
+    // Otro cliente, otro tipo de precio: lo que no tiene precio a mano se recalcula.
+    useEffect(() => {
+        setItems((prev) =>
+            prev.map((it) =>
+                it.precio_manual
+                    ? it
+                    : {
+                          ...it,
+                          precio_unitario: precioDeLista(
+                              it.producto_id,
+                              it.producto_presentacion_id,
+                              it.cantidad,
+                          ),
+                      },
+            ),
+        );
+        setPanel((prev) =>
+            prev.precioManual || !prev.producto_presentacion_id
+                ? prev
+                : {
+                      ...prev,
+                      precio_unitario: precioDeLista(
+                          prev.producto_id,
+                          prev.producto_presentacion_id,
+                          prev.cantidad,
+                      ),
+                  },
+        );
+    }, [tipoPrecioId]); // eslint-disable-line react-hooks/exhaustive-deps
 
     /** Stock (en unidad base) de cada producto en el almacén elegido. */
     const stockDelAlmacen = useMemo(() => {
@@ -333,25 +383,21 @@ export default function CrearVenta() {
             producto_presentacion_id: presentacionId,
             cantidad: "1",
             precio_unitario: presentacionId
-                ? String(
-                      Number(
-                          presentacionDe(productoId, presentacionId)
-                              ?.precio_venta,
-                      ) || 0,
-                  )
+                ? precioDeLista(productoId, presentacionId, 1)
                 : "0",
+            precioManual: false,
         });
     };
 
     const elegirUnidad = (presentacionId) =>
         setPanelCampo({
             producto_presentacion_id: presentacionId,
-            precio_unitario: String(
-                Number(
-                    presentacionDe(panel.producto_id, presentacionId)
-                        ?.precio_venta,
-                ) || 0,
+            precio_unitario: precioDeLista(
+                panel.producto_id,
+                presentacionId,
+                panel.cantidad || 1,
             ),
+            precioManual: false,
         });
 
     const limpiarPanel = () => setPanel({ ...panelVacio });
@@ -375,11 +421,18 @@ export default function CrearVenta() {
                         String(presentacion.id),
                 );
                 if (i !== -1) {
+                    const total = (Number(next[i].cantidad) || 0) + cantidad;
                     next[i] = {
                         ...next[i],
-                        cantidad: String(
-                            (Number(next[i].cantidad) || 0) + cantidad,
-                        ),
+                        cantidad: String(total),
+                        // Más cantidad puede entrar en otro precio por cantidad.
+                        ...(next[i].precio_manual
+                            ? {}
+                            : {
+                                  precio_unitario: String(
+                                      precioPara(presentacion, tipoPrecioId, total),
+                                  ),
+                              }),
                     };
                 } else {
                     next.push({
@@ -387,8 +440,9 @@ export default function CrearVenta() {
                         producto_presentacion_id: String(presentacion.id),
                         cantidad: String(cantidad),
                         precio_unitario: String(
-                            Number(presentacion.precio_venta) || 0,
+                            precioPara(presentacion, tipoPrecioId, cantidad),
                         ),
+                        precio_manual: false,
                     });
                 }
             });
@@ -418,6 +472,7 @@ export default function CrearVenta() {
             producto_presentacion_id: panel.producto_presentacion_id,
             cantidad: panel.cantidad,
             precio_unitario: panel.precio_unitario || "0",
+            precio_manual: Boolean(panel.precioManual),
         };
 
         // Si ya existe la misma presentación, se acumula en vez de duplicar la línea.
@@ -439,7 +494,17 @@ export default function CrearVenta() {
                                   (Number(it.cantidad) || 0) +
                                       (Number(nuevo.cantidad) || 0),
                               ),
-                              precio_unitario: nuevo.precio_unitario,
+                              // Con la cantidad sumada puede entrar en otro
+                              // precio por cantidad, salvo que sea a mano.
+                              precio_unitario: nuevo.precio_manual
+                                  ? nuevo.precio_unitario
+                                  : precioDeLista(
+                                        it.producto_id,
+                                        it.producto_presentacion_id,
+                                        (Number(it.cantidad) || 0) +
+                                            (Number(nuevo.cantidad) || 0),
+                                    ),
+                              precio_manual: nuevo.precio_manual,
                           }
                         : it,
                 ),
@@ -456,16 +521,16 @@ export default function CrearVenta() {
             prev.map((it, idx) => (idx === i ? { ...it, ...patch } : it)),
         );
 
-    /** Cambiar la unidad de una fila trae el precio de venta de esa presentación. */
+    /** Cambiar la unidad de una fila trae su precio de lista. */
     const cambiarUnidadItem = (i, presentacionId) =>
         setItem(i, {
             producto_presentacion_id: presentacionId,
-            precio_unitario: String(
-                Number(
-                    presentacionDe(items[i].producto_id, presentacionId)
-                        ?.precio_venta,
-                ) || 0,
+            precio_unitario: precioDeLista(
+                items[i].producto_id,
+                presentacionId,
+                items[i].cantidad,
             ),
+            precio_manual: false,
         });
 
     const quitarItem = (i) =>
@@ -752,9 +817,22 @@ export default function CrearVenta() {
                                         step="any"
                                         value={panel.cantidad}
                                         onChange={(e) =>
-                                            setPanelCampo({
+                                            setPanel((prev) => ({
+                                                ...prev,
                                                 cantidad: e.target.value,
-                                            })
+                                                // Puede entrar en un precio por cantidad.
+                                                ...(prev.precioManual ||
+                                                !prev.producto_presentacion_id
+                                                    ? {}
+                                                    : {
+                                                          precio_unitario:
+                                                              precioDeLista(
+                                                                  prev.producto_id,
+                                                                  prev.producto_presentacion_id,
+                                                                  e.target.value,
+                                                              ),
+                                                      }),
+                                            }))
                                         }
                                         className="text-center"
                                     />
@@ -767,6 +845,7 @@ export default function CrearVenta() {
                                         onChange={(e) =>
                                             setPanelCampo({
                                                 precio_unitario: e.target.value,
+                                                precioManual: true,
                                             })
                                         }
                                         className="text-center"
@@ -933,6 +1012,17 @@ export default function CrearVenta() {
                                                                 cantidad:
                                                                     e.target
                                                                         .value,
+                                                                // Puede entrar en un precio por cantidad.
+                                                                ...(it.precio_manual
+                                                                    ? {}
+                                                                    : {
+                                                                          precio_unitario:
+                                                                              precioDeLista(
+                                                                                  it.producto_id,
+                                                                                  it.producto_presentacion_id,
+                                                                                  e.target.value,
+                                                                              ),
+                                                                      }),
                                                             })
                                                         }
                                                         aria-label="Cantidad"
@@ -957,6 +1047,7 @@ export default function CrearVenta() {
                                                                 precio_unitario:
                                                                     e.target
                                                                         .value,
+                                                                precio_manual: true,
                                                             })
                                                         }
                                                         aria-label="Precio unitario"
@@ -1026,6 +1117,11 @@ export default function CrearVenta() {
                                     placeholder={CLIENTE_GENERICO}
                                     emptyText="Sin coincidencias"
                                 />
+                                {cliente?.tipo_precio && (
+                                    <p className="mt-1 text-xs font-medium text-primary-700">
+                                        Se le vende a precio {cliente.tipo_precio.nombre}.
+                                    </p>
+                                )}
                                 {/* Sin cliente la venta va al genérico; a crédito no se puede. */}
                                 {!form.cliente_id && (
                                     <p

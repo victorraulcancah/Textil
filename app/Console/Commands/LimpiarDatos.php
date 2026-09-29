@@ -43,6 +43,11 @@ class LimpiarDatos extends Command
         'empresas',
     ];
 
+    /** Catálogos oficiales que trae el sistema: no son datos de prueba. */
+    private const CATALOGOS_FIJOS = [
+        'ubigeos',
+    ];
+
     /** Tablas del framework: no guardan datos del negocio. */
     private const DEL_FRAMEWORK = [
         'migrations',
@@ -67,7 +72,7 @@ class LimpiarDatos extends Command
         }
 
         $base = $conexion->getDatabaseName();
-        $conservar = array_merge(self::CONSERVAR, self::DEL_FRAMEWORK);
+        $conservar = array_merge(self::CONSERVAR, self::CATALOGOS_FIJOS, self::DEL_FRAMEWORK);
 
         $tablas = collect(DB::select(
             'SELECT table_name AS nombre FROM information_schema.tables
@@ -77,7 +82,7 @@ class LimpiarDatos extends Command
 
         $aBorrar = $tablas->reject(fn ($t) => in_array($t, $conservar, true))
             ->mapWithKeys(fn ($t) => [$t => DB::table($t)->count()]);
-        $conservadas = $tablas->filter(fn ($t) => in_array($t, self::CONSERVAR, true))
+        $conservadas = $tablas->filter(fn ($t) => in_array($t, [...self::CONSERVAR, ...self::CATALOGOS_FIJOS], true))
             ->mapWithKeys(fn ($t) => [$t => DB::table($t)->count()]);
 
         $this->newLine();
@@ -96,7 +101,7 @@ class LimpiarDatos extends Command
 
         $this->newLine();
         $this->line('  <fg=green;options=bold>Se CONSERVA</>: '.$conservadas->map(fn ($n, $t) => "{$t} ({$n})")->implode(', '));
-        $this->line('  Luego se vuelven a sembrar limpios: unidades de medida, métodos de pago, motivos de movimiento y de traslado.');
+        $this->line('  Luego se vuelven a sembrar limpios: unidades de medida, métodos de pago, motivos de movimiento y de traslado, y el tipo de precio principal.');
         $this->newLine();
 
         if ($this->option('simular')) {

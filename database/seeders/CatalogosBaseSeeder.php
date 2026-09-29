@@ -20,6 +20,7 @@ class CatalogosBaseSeeder extends Seeder
             MetodosPagoSeeder::class,
             MotivosMovimientoSeeder::class,
             MotivosTrasladoSeeder::class,
+            TiposPrecioSeeder::class,
         ]);
     }
 }

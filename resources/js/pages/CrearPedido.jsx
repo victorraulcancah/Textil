@@ -8,6 +8,7 @@ import Layout from '../components/Layout';
 import ColorSelect from '../components/ColorSelect';
 import ProductoPickerModal from '../components/ProductoPickerModal';
 import { tipoUnidad } from '../lib/unidades';
+import { precioPara } from '../lib/precios';
 import { Alert, Button, Input, SearchSelect, Spinner } from '../components/ui';
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
@@ -69,6 +70,8 @@ export default function CrearPedido() {
         descripcion: '',
         cantidad: '',
         precio_unitario: '',
+        // Escrito a mano: ya no se reemplaza con el precio de lista.
+        precioManual: false,
     });
 
     /* ------------------------------ carga ------------------------------ */
@@ -127,6 +130,8 @@ export default function CrearPedido() {
                             cantidad: String(d.cantidad),
                             precio_unitario: String(d.precio_unitario),
                             precio_oculto: Boolean(d.precio_oculto),
+                            // Lo guardado no se recalcula solo.
+                            precio_manual: true,
                         })),
                     );
                 }
@@ -154,6 +159,28 @@ export default function CrearPedido() {
         () => presentaciones.find((p) => String(p.id) === String(nueva.producto_presentacion_id)) ?? null,
         [presentaciones, nueva.producto_presentacion_id],
     );
+
+    /** A qué tipo de precio se le vende a este cliente; sin cliente o sin tipo, al principal. */
+    const cliente = clientes.find((c) => String(c.id) === String(cabecera.cliente_id)) ?? null;
+    const tipoPrecioId = cliente?.tipo_precio_id ?? null;
+
+    /** La presentación de una línea, para buscarle su precio. */
+    const presentacionDe = (id) =>
+        productos.flatMap((p) => p.presentaciones ?? []).find((pr) => String(pr.id) === String(id)) ?? null;
+
+    /** El precio de lista: el del tipo de precio del cliente, según la cantidad. */
+    const precioDeLista = (pres, cantidad) => String(precioPara(pres, tipoPrecioId, cantidad));
+
+    // Otro cliente, otro tipo de precio: las líneas sin precio a mano se recalculan.
+    useEffect(() => {
+        setLineas((prev) =>
+            prev.map((l) =>
+                l.precio_manual
+                    ? l
+                    : { ...l, precio_unitario: precioDeLista(presentacionDe(l.producto_presentacion_id), l.cantidad) },
+            ),
+        );
+    }, [tipoPrecioId]); // eslint-disable-line react-hooks/exhaustive-deps
 
     /**
      * El stock del producto, expresado en la unidad elegida. Con un color
@@ -215,20 +242,21 @@ export default function CrearPedido() {
         setNueva((prev) => ({
             ...prev,
             producto_presentacion_id: elegida ? String(elegida.id) : '',
-            precio_unitario: elegida?.precio_venta != null ? String(elegida.precio_venta) : '',
+            precio_unitario: elegida ? precioDeLista(elegida, prev.cantidad || 1) : '',
+            precioManual: false,
             // Otro producto, otro color: nunca se hereda de la línea anterior.
             producto_color_id: '',
         }));
     }, [producto]);
 
-    // Cambiar de formato cambia el precio sugerido.
+    // El precio sugerido sigue al formato, al cliente y a la cantidad (puede
+    // entrar en un precio por cantidad), mientras no se escriba uno a mano.
     useEffect(() => {
         if (!presentacion) return;
-        setNueva((prev) => ({
-            ...prev,
-            precio_unitario: presentacion.precio_venta != null ? String(presentacion.precio_venta) : prev.precio_unitario,
-        }));
-    }, [presentacion?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+        setNueva((prev) =>
+            prev.precioManual ? prev : { ...prev, precio_unitario: precioDeLista(presentacion, prev.cantidad || 1) },
+        );
+    }, [presentacion?.id, tipoPrecioId, nueva.cantidad]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const puedeAgregar =
         nueva.producto_presentacion_id && Number(nueva.cantidad) > 0 && Number(nueva.precio_unitario) >= 0;
@@ -257,6 +285,7 @@ export default function CrearPedido() {
                 cantidad: nueva.cantidad,
                 precio_unitario: nueva.precio_unitario,
                 precio_oculto: false,
+                precio_manual: Boolean(nueva.precioManual),
             },
         ]);
 
@@ -267,6 +296,7 @@ export default function CrearPedido() {
             descripcion: '',
             cantidad: '',
             precio_unitario: '',
+            precioManual: false,
         });
     };
 
@@ -291,9 +321,12 @@ export default function CrearPedido() {
                 );
 
                 if (i !== -1) {
+                    const total = (Number(next[i].cantidad) || 0) + cantidad;
                     next[i] = {
                         ...next[i],
-                        cantidad: String((Number(next[i].cantidad) || 0) + cantidad),
+                        cantidad: String(total),
+                        // Más cantidad puede entrar en otro precio por cantidad.
+                        ...(next[i].precio_manual ? {} : { precio_unitario: precioDeLista(presentacion, total) }),
                     };
                     return;
                 }
@@ -307,8 +340,9 @@ export default function CrearPedido() {
                     presentacion: presentacion.nombre,
                     descripcion: '',
                     cantidad: String(cantidad),
-                    precio_unitario: String(Number(presentacion.precio_venta) || 0),
+                    precio_unitario: precioDeLista(presentacion, cantidad),
                     precio_oculto: false,
+                    precio_manual: false,
                 });
             });
 
@@ -325,8 +359,23 @@ export default function CrearPedido() {
         );
     };
 
+    /**
+     * Escribir el precio lo deja fijo. Cambiar la cantidad vuelve a buscar el
+     * precio de lista (puede entrar en un precio por cantidad), salvo que el
+     * precio se haya escrito a mano.
+     */
     const cambiar = (i, campo, valor) =>
-        setLineas((prev) => prev.map((l, j) => (j === i ? { ...l, [campo]: valor } : l)));
+        setLineas((prev) =>
+            prev.map((l, j) => {
+                if (j !== i) return l;
+                const next = { ...l, [campo]: valor };
+                if (campo === 'precio_unitario') next.precio_manual = true;
+                if (campo === 'cantidad' && !l.precio_manual) {
+                    next.precio_unitario = precioDeLista(presentacionDe(l.producto_presentacion_id), valor);
+                }
+                return next;
+            }),
+        );
 
     const quitar = (i) => setLineas((prev) => prev.filter((_, j) => j !== i));
 
@@ -482,7 +531,7 @@ export default function CrearPedido() {
                                     // Se cambia esta línea nada más; la
                                     // preferencia para las siguientes se
                                     // actualiza al agregarla.
-                                    setNueva((prev) => ({ ...prev, producto_presentacion_id: id }));
+                                    setNueva((prev) => ({ ...prev, producto_presentacion_id: id, precioManual: false }));
                                     if (elegida) setUnidadPreferida(tipoUnidad(elegida));
                                 }}
                                 options={presentaciones.map((p) => ({ value: String(p.id), label: p.nombre }))}
@@ -503,7 +552,7 @@ export default function CrearPedido() {
                                 placeholder="0.00"
                                 value={nueva.precio_unitario}
                                 onChange={(e) =>
-                                    setNueva((prev) => ({ ...prev, precio_unitario: e.target.value }))
+                                    setNueva((prev) => ({ ...prev, precio_unitario: e.target.value, precioManual: true }))
                                 }
                             />
                         </div>
@@ -598,10 +647,11 @@ export default function CrearPedido() {
                                                                               ...x,
                                                                               producto_presentacion_id: id,
                                                                               presentacion: elegida?.nombre ?? x.presentacion,
-                                                                              precio_unitario:
-                                                                                  elegida?.precio_venta != null
-                                                                                      ? String(elegida.precio_venta)
-                                                                                      : x.precio_unitario,
+                                                                              // Otro formato, otro precio de lista.
+                                                                              precio_unitario: elegida
+                                                                                  ? precioDeLista(elegida, x.cantidad)
+                                                                                  : x.precio_unitario,
+                                                                              precio_manual: false,
                                                                           }
                                                                         : x,
                                                                 ),
@@ -692,6 +742,11 @@ export default function CrearPedido() {
                                     keywords: c.numero_documento,
                                 }))}
                             />
+                            {cliente?.tipo_precio && (
+                                <p className="-mt-2 text-xs font-medium text-primary-700">
+                                    Se le vende a precio {cliente.tipo_precio.nombre}.
+                                </p>
+                            )}
                             <Input
                                 label="Fecha"
                                 type="date"

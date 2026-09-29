@@ -95,6 +95,10 @@ return [
             'label' => 'Catálogo',
             'submodulos' => [
                 'productos' => ['label' => 'Productos', 'apis' => ['productos', 'presentaciones']],
+                // Los precios de cada producto por tipo (Minorista, Mayorista…)
+                // y por cantidad. Elegir el tipo de un cliente cuelga de
+                // "clientes/tipos-precio", que va con Clientes.
+                'lista-precios' => ['label' => 'Lista de precios', 'apis' => ['lista-precios', 'tipos-precio']],
                 'categorias' => ['label' => 'Categorías', 'apis' => ['categorias']],
                 'colores' => [
                     'label' => 'Colores',

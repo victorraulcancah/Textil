@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Edit, Eye, Package, Plus, PlusCircle, Save, Trash2 } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { calcularPresentaciones, describirContenido } from '../lib/unidades';
@@ -451,7 +452,7 @@ export default function Productos() {
                 .filter((v) => v.unidad_id)
                 .some((v) => !(Number(v.precio_venta) > 0));
             if (sinPrecio) {
-                next.tipo_cambio = `Compras en ${form.moneda_compra} y ventas en ${form.moneda_venta}: escribe el tipo de cambio o el precio de venta de cada formato`;
+                next.tipo_cambio = `Compras en ${form.moneda_compra} y ventas en ${form.moneda_venta}: escribe el tipo de cambio para sugerir el precio de los formatos nuevos`;
             }
         }
         setErrors(next);
@@ -1652,6 +1653,15 @@ export default function Productos() {
                                     <Plus className="h-4 w-4" />
                                     Agregar formato
                                 </Button>
+                                {/* Los precios ya no se ponen aquí: tienen su propia vista. */}
+                                {editing && (
+                                    <Link
+                                        to={`/lista-precios?producto=${editing.id}`}
+                                        className="inline-flex items-center gap-1 text-xs font-semibold text-primary-600 hover:text-primary-800"
+                                    >
+                                        Poner precios →
+                                    </Link>
+                                )}
                             </div>
                         </div>
                         {errors.ventas && (
@@ -1689,21 +1699,13 @@ export default function Productos() {
                                     <tr className="bg-primary-600 text-left text-xs text-white">
                                         <th className="px-2 py-2 font-medium">Vendo por</th>
                                         <th className="px-2 py-2 font-medium">Me cuesta ({form.moneda_compra})</th>
-                                        <th className="px-2 py-2 font-medium">% ganancia</th>
-                                        <th className="px-2 py-2 font-medium">Precio de venta ({form.moneda_venta})</th>
-                                        <th className="px-2 py-2 font-medium">Ganas</th>
+                                        <th className="px-2 py-2 font-medium">Precio principal ({form.moneda_venta})</th>
                                         <th className="w-10 px-2 py-2" />
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {ventas.map((v, i) => {
                                         const fila = filaDe(v.unidad_id);
-                                        // La ganancia se mide contra el costo en la moneda de venta;
-                                        // sin tipo de cambio no se puede calcular.
-                                        const ganancia =
-                                            fila && fila.costo_en_venta != null
-                                                ? fila.precio_venta - fila.costo_en_venta
-                                                : null;
                                         return (
                                             <tr key={i} className="border-t border-edge">
                                                 <td className="px-2 py-1.5">
@@ -1724,43 +1726,17 @@ export default function Productos() {
                                                         </span>
                                                     )}
                                                 </td>
+                                                {/* El precio se pone en la lista de precios. A un
+                                                    formato nuevo se le sugiere uno con el % de siempre. */}
                                                 <td className="px-2 py-1.5">
-                                                    <input
-                                                        type="number"
-                                                        step="any"
-                                                        className="h-8 w-20 rounded-md border border-gray-300 px-2 text-sm"
-                                                        value={v.margen}
-                                                        onChange={(e) =>
-                                                            setVentaField(i, 'margen', e.target.value)
-                                                        }
-                                                    />
-                                                </td>
-                                                <td className="px-2 py-1.5">
-                                                    <input
-                                                        type="number"
-                                                        step="any"
-                                                        min="0"
-                                                        className="h-8 w-28 rounded-md border border-gray-300 bg-emerald-50 px-2 text-sm font-medium"
-                                                        value={
-                                                            v.precio_venta !== ''
-                                                                ? v.precio_venta
-                                                                : fila && fila.costo_en_venta != null
-                                                                  ? conDecimales(fila.precio_venta)
-                                                                  : ''
-                                                        }
-                                                        onChange={(e) =>
-                                                            setVentaField(i, 'precio_venta', e.target.value)
-                                                        }
-                                                    />
-                                                </td>
-                                                <td className="px-2 py-1.5 text-warm-600">
-                                                    {fila && fila.precio_compra > 0 && ganancia != null ? (
-                                                        <span
-                                                            className={
-                                                                ganancia < 0 ? 'text-red-600' : 'text-green-700'
-                                                            }
-                                                        >
-                                                            {money(ganancia, form.moneda_venta)}
+                                                    {v.precio_venta !== '' ? (
+                                                        <span className="font-medium text-warm-900">
+                                                            {money(v.precio_venta, form.moneda_venta)}
+                                                        </span>
+                                                    ) : fila && fila.costo_en_venta != null ? (
+                                                        <span className="text-warm-500" title="Se guarda así; luego lo ajustas en la lista de precios">
+                                                            ≈ {money(fila.precio_venta, form.moneda_venta)}
+                                                            <span className="ml-1 text-xs">sugerido</span>
                                                         </span>
                                                     ) : (
                                                         '—'
@@ -1786,8 +1762,9 @@ export default function Productos() {
                         <p className="mt-2 text-xs text-warm-500">
                             La unidad en que compras se guarda siempre como formato, para poder
                             registrar la compra en ella.{' '}
-                            El costo de cada formato sale de tu precio de compra. El precio de venta se
-                            calcula con el % de ganancia; si escribes uno a mano, manda el tuyo.
+                            El costo de cada formato sale de tu precio de compra. Los precios de venta
+                            (Minorista, Mayorista, por cantidad, IGV) se ponen en la Lista de precios; a un
+                            formato nuevo se le sugiere uno con {ventaVacia().margen} % de ganancia.
                             {calculo.baseId && (
                                 <>
                                     {' '}El stock se contará en{' '}

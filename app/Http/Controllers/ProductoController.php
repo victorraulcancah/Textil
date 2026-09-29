@@ -11,6 +11,7 @@ use App\Models\ProductoLote;
 use App\Models\ProductoPresentacion;
 use App\Models\UnidadMedida;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
@@ -22,6 +23,7 @@ class ProductoController extends Controller
         'marca', 'subMarca', 'proveedores:id,nombre', 'categoria', 'subCategoria', 'unidadMedida',
         'unidadCompra', 'unidadBase', 'tipoTela.familia',
         'presentaciones.unidadBase', 'presentaciones.complementario',
+        'presentaciones.precios.tipoPrecio:id,principal,activo',
         'colores.color',
         'lotes',
     ];
@@ -46,7 +48,9 @@ class ProductoController extends Controller
     {
         $perPage = min(max((int) $request->input('per_page', 15), 1), 500);
 
-        $productos = Producto::with(['marca', 'subMarca', 'proveedores:id,nombre', 'categoria', 'subCategoria', 'unidadMedida', 'presentaciones.unidadBase', 'colores'])
+        // Con su lista de precios: pedidos y ventas toman de ahí el precio
+        // según el tipo de precio del cliente y la cantidad.
+        $productos = Producto::with(['marca', 'subMarca', 'proveedores:id,nombre', 'categoria', 'subCategoria', 'unidadMedida', 'presentaciones.unidadBase', 'presentaciones.precios.tipoPrecio:id,principal,activo', 'colores'])
             ->latest('id')
             ->paginate($perPage);
         return ProductoResource::collection($productos);
@@ -223,7 +227,9 @@ class ProductoController extends Controller
             $actual = $existentes->get($p['nombre']);
 
             if ($actual) {
-                $actual->update($datos);
+                // El precio se pone en la lista de precios, no aquí: el
+                // producto solo trae el sugerido para los formatos nuevos.
+                $actual->update(Arr::except($datos, ['precio_venta', 'margen']));
                 $conservadas[] = $actual->id;
             } else {
                 $nueva = ProductoPresentacion::create($datos + ['producto_id' => $producto->id]);
@@ -244,7 +250,7 @@ class ProductoController extends Controller
         }
 
         $this->asegurarPresentacionDeCompra($producto);
-        $this->refrescarPrecioBase($producto);
+        $producto->refrescarPrecioBase();
     }
 
     /**
@@ -292,23 +298,6 @@ class ProductoController extends Controller
             'cantidad_complementaria' => 0,
             'activo' => true,
         ]);
-    }
-
-    /**
-     * `precio_base` es una columna heredada de cuando un producto tenía un solo
-     * precio. Hoy los precios viven en las presentaciones, así que se mantiene
-     * al día con el precio de la unidad base (la de factor 1): es el que cuadra
-     * con el stock, que también se cuenta en esa unidad.
-     */
-    private function refrescarPrecioBase(Producto $producto): void
-    {
-        $base = $producto->presentaciones()
-            ->orderBy('factor_conversion')
-            ->first();
-
-        $producto->forceFill([
-            'precio_base' => $base ? round((float) $base->precio_venta / max((float) $base->factor_conversion, 1), 4) : 0,
-        ])->save();
     }
 
     /** ¿Algún documento apunta a esta presentación? */

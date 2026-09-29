@@ -58,6 +58,8 @@ class Producto extends Model
         // Tipo de cambio con el que se calcularon los precios cuando esas dos
         // monedas son distintas.
         'tipo_cambio',
+        // Su precio de venta ya incluye el IGV (18%).
+        'afecto_igv',
         'stock_minimo',
         'stock_maximo',
         'activo',
@@ -116,8 +118,24 @@ class Producto extends Model
             'factor_compra_base' => 'decimal:2',
             'stock_minimo' => 'decimal:2',
             'stock_maximo' => 'decimal:2',
+            'afecto_igv' => 'boolean',
             'activo' => 'boolean',
         ];
+    }
+
+    /**
+     * `precio_base` es una columna heredada de cuando un producto tenía un solo
+     * precio. Hoy los precios viven en las presentaciones, así que se mantiene
+     * al día con el precio de la unidad base (la de factor 1): es el que cuadra
+     * con el stock, que también se cuenta en esa unidad.
+     */
+    public function refrescarPrecioBase(): void
+    {
+        $base = $this->presentaciones()->orderBy('factor_conversion')->first();
+
+        $this->forceFill([
+            'precio_base' => $base ? round((float) $base->precio_venta / max((float) $base->factor_conversion, 1), 4) : 0,
+        ])->save();
     }
 
     public function marca() { return $this->belongsTo(Marca::class); }

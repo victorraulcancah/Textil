@@ -48,4 +48,10 @@ class ProductoPresentacion extends Model
     }
     public function unidadBase() { return $this->belongsTo(UnidadMedida::class, 'unidad_base_id'); }
     public function complementario() { return $this->belongsTo(Producto::class, 'producto_complementario_id'); }
+
+    /**
+     * Los precios de la lista: por tipo de precio y desde una cantidad. El
+     * principal "desde 1" no está aquí: es `precio_venta`.
+     */
+    public function precios() { return $this->hasMany(ProductoPrecio::class); }
 }

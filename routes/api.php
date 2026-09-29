@@ -34,6 +34,8 @@ use App\Http\Controllers\RolloController;
 use App\Http\Controllers\PdfController;
 use App\Http\Controllers\OrdenCompraController;
 use App\Http\Controllers\ProductoController;
+use App\Http\Controllers\ListaPrecioController;
+use App\Http\Controllers\TipoPrecioController;
 use App\Http\Controllers\ProductoPresentacionController;
 use App\Http\Controllers\ProveedorController;
 use App\Http\Controllers\PrestamoController;
@@ -65,6 +67,9 @@ Route::middleware('auth:api')->group(function () {
     Route::get('consulta/ruc/{ruc}', [\App\Http\Controllers\ConsultaDocumentoController::class, 'ruc']);
     Route::get('consulta/dni/{dni}', [\App\Http\Controllers\ConsultaDocumentoController::class, 'dni']);
 
+    // Distritos del Perú (catálogo fijo) para departamento → provincia → distrito
+    Route::get('ubigeos', [\App\Http\Controllers\UbigeoController::class, 'index']);
+
     // Dashboard / escritorio
     Route::get('dashboard', [DashboardController::class, 'index']);
     Route::get('alertas', [AlertaController::class, 'index']);
@@ -89,6 +94,9 @@ Route::middleware('auth:api')->group(function () {
     // Antes del apiResource: si no, {producto} capturaría "…/imagen".
     Route::post('productos/{producto}/imagen', [ProductoController::class, 'subirImagen']);
     Route::apiResource('productos', ProductoController::class);
+    // Lista de precios: tipos (Minorista, Mayorista…) y los precios de cada producto.
+    Route::apiResource('tipos-precio', TipoPrecioController::class)->except(['show'])->parameters(['tipos-precio' => 'tipoPrecio']);
+    Route::put('lista-precios/{producto}', [ListaPrecioController::class, 'update']);
     Route::apiResource('productos.presentaciones', ProductoPresentacionController::class)->shallow();
     Route::apiResource('unidades-medida', UnidadMedidaController::class);
 
@@ -172,6 +180,8 @@ Route::middleware('auth:api')->group(function () {
     Route::post('ordenes-venta/{ordenesVenta}/anular', [OrdenVentaController::class, 'anular']);
 
     // Facturación
+    // Antes del resource: si no, "tipos-precio" se tomaría como un {cliente}.
+    Route::get('clientes/tipos-precio', [TipoPrecioController::class, 'opciones']);
     Route::apiResource('clientes', ClienteController::class);
     Route::get('notas-venta', [NotaVentaController::class, 'index']);
     Route::post('notas-venta', [NotaVentaController::class, 'store']);

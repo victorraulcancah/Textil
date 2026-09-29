@@ -14,6 +14,10 @@ class NotaVentaPagoResource extends JsonResource
             'metodo_pago_id' => $this->metodo_pago_id,
             'forma_pago' => $this->forma_pago,
             'monto' => $this->monto,
+            'moneda' => $this->moneda,
+            // Cobrada con soles una venta en dólares: cuánto y a qué tipo de cambio.
+            'monto_pen' => $this->monto_pen,
+            'tipo_cambio' => $this->tipo_cambio,
             'fecha' => $this->fecha,
             'referencia' => $this->referencia,
             'metodo_pago' => $this->whenLoaded('metodoPago'),

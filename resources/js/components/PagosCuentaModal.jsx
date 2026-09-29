@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Check, Pencil, Plus, Trash2, Wallet, X } from 'lucide-react';
 import api, { asList } from '../lib/api';
+import { cargarTipoCambio } from '../lib/moneda';
 import { useToast } from '../lib/toast';
 import MetodoCajaPicker from './MetodoCajaPicker';
 import { Alert, Badge, Button, Input, Modal } from './ui';
@@ -48,6 +49,8 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo, onSaved 
     const [editId, setEditId] = useState(null);
     const [editForm, setEditForm] = useState(emptyLinea());
     const [saving, setSaving] = useState(false);
+    /** Al cobrar, el tipo de cambio comercial del día se propone para pagar en soles. */
+    const [tcComercial, setTcComercial] = useState(null);
 
     useEffect(() => {
         setState(cuenta);
@@ -66,7 +69,12 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo, onSaved 
                 /* ignore */
             }
         })();
-    }, [open]);
+        if (esCobrar) {
+            cargarTipoCambio()
+                .then((tc) => setTcComercial(tc?.comercial ?? tc?.venta ?? null))
+                .catch(() => setTcComercial(null));
+        }
+    }, [open, esCobrar]);
 
     const pagos = useMemo(() => (Array.isArray(state?.pagos) ? state.pagos : []), [state]);
     const nombre = esCobrar ? state?.cliente?.nombre : state?.proveedor?.nombre;
@@ -75,12 +83,12 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo, onSaved 
     const puedePagar = !anulada && saldo > 0.005;
 
     /**
-     * Una deuda con un proveedor en dólares se puede pagar con soles: el
-     * monto va en soles y se abona su equivalente al tipo de cambio del día.
-     * Solo al pagar: los cobros a clientes no cambian.
+     * Una deuda en dólares se puede pagar con soles: el monto va en soles y se
+     * abona su equivalente al tipo de cambio. Al cobrar a un cliente se
+     * propone el comercial del día; al pagar a un proveedor se escribe.
      */
     const monedaDeuda = state?.moneda || 'PEN';
-    const admiteSoles = !esCobrar && monedaDeuda !== 'PEN';
+    const admiteSoles = monedaDeuda !== 'PEN';
     const enSoles = (l) => admiteSoles && l.moneda === 'PEN';
     /** Lo que una línea abona a la deuda, en la moneda de la deuda. */
     const abonoDe = (l) => {
@@ -121,7 +129,15 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo, onSaved 
                             <button
                                 key={m}
                                 type="button"
-                                onClick={() => onChange({ moneda: m === monedaDeuda ? '' : 'PEN' })}
+                                onClick={() =>
+                                    onChange({
+                                        moneda: m === monedaDeuda ? '' : 'PEN',
+                                        // Al cobrar, se propone el comercial del día.
+                                        ...(m === 'PEN' && esCobrar && !l.tipoCambio && tcComercial
+                                            ? { tipoCambio: String(tcComercial) }
+                                            : {}),
+                                    })
+                                }
                                 className={`rounded-md px-3 py-1 text-xs font-semibold transition ${
                                     activa ? 'bg-white text-primary-700 shadow-sm' : 'text-warm-500 hover:text-warm-700'
                                 }`}
@@ -137,7 +153,7 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo, onSaved 
                             type="number"
                             min="0"
                             step="0.0001"
-                            placeholder="T.C. del día"
+                            placeholder={esCobrar ? 'T.C. comercial' : 'T.C. del día'}
                             value={l.tipoCambio}
                             onChange={(e) => onChange({ tipoCambio: e.target.value })}
                             className="w-32 text-right"
@@ -145,7 +161,7 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo, onSaved 
                         />
                         <span className="text-xs text-warm-500">
                             {Number(l.tipoCambio) > 0
-                                ? `= ${money(abonoDe(l), monedaDeuda)}`
+                                ? `= ${money(abonoDe(l), monedaDeuda)}${esCobrar ? ' (T.C. comercial)' : ''}`
                                 : 'Pon el tipo de cambio del día'}
                         </span>
                     </>
@@ -228,7 +244,16 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo, onSaved 
             onClose={onClose}
             size="xl"
             title={`Pagos — ${nombre ?? (esCobrar ? 'Cliente' : 'Proveedor')}`}
-            description={esCobrar ? 'Cobros del cliente' : 'Pagos al proveedor'}
+            description={
+                esCobrar
+                    ? [
+                          state?.nota_venta ? `${state.nota_venta.serie}-${state.nota_venta.numero}` : null,
+                          state?.total_cuotas > 1 ? `Cuota ${state.numero_cuota} de ${state.total_cuotas}` : null,
+                      ]
+                          .filter(Boolean)
+                          .join(' · ') || 'Cobros del cliente'
+                    : 'Pagos al proveedor'
+            }
             footer={<Button variant="secondary" onClick={onClose}>Cerrar</Button>}
         >
             <div className="mb-4 grid grid-cols-2 gap-3 rounded-xl border border-edge bg-gray-50 p-4 sm:grid-cols-4">

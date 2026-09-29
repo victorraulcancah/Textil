@@ -42,6 +42,7 @@ class OrdenVentaService
         protected RolloService $rollos,
         protected NotaVentaService $notasVenta,
         protected StockService $stock,
+        protected TipoCambioService $tiposCambio,
     ) {}
 
     /**
@@ -486,7 +487,13 @@ class OrdenVentaService
                 'vendedor_id' => $orden->vendedor_id,
                 'fecha_emision' => $datos['fecha_emision'] ?? now()->toDateString(),
                 'moneda' => $orden->moneda,
+                // El de la fecha de la venta; si no hay, el del pedido.
+                'tipo_cambio' => $orden->moneda === 'USD'
+                    ? ($this->tiposCambio->venta($datos['fecha_emision'] ?? null) ?? (float) $orden->tipo_cambio)
+                    : null,
                 'tipo_pago' => $datos['tipo_pago'] ?? 'contado',
+                'cuotas' => $datos['cuotas'] ?? [],
+                'autorizar_exceso' => (bool) ($datos['autorizar_exceso'] ?? false),
                 'subtotal' => (float) $orden->subtotal,
                 'descuento_total' => (float) $orden->descuento_total,
                 'total' => (float) $orden->total,
@@ -713,6 +720,10 @@ class OrdenVentaService
             'fecha_emision' => $data['fecha_emision'],
             'fecha_entrega' => $data['fecha_entrega'] ?? null,
             'moneda' => $data['moneda'] ?? 'PEN',
+            // En dólares: el SUNAT venta del día, salvo que se ponga otro.
+            'tipo_cambio' => ($data['moneda'] ?? 'PEN') === 'USD'
+                ? ((float) ($data['tipo_cambio'] ?? 0) ?: $this->tiposCambio->venta($data['fecha_emision']))
+                : null,
             'observaciones' => $data['observaciones'] ?? null,
         ];
     }

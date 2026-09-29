@@ -23,15 +23,20 @@ class CierreCajaController extends Controller
         $aperturaIds = $cierres->pluck('apertura_caja_id')->filter();
 
         $movimientos = MovimientoCaja::whereIn('apertura_caja_id', $aperturaIds)
-            ->get(['apertura_caja_id', 'tipo', 'monto', 'cuenta_bancaria_id', 'billetera_id'])
+            ->get(['apertura_caja_id', 'tipo', 'monto', 'moneda', 'cuenta_bancaria_id', 'billetera_id'])
             ->groupBy('apertura_caja_id');
 
         $cierres->each(function (CierreCaja $cierre) use ($movimientos) {
-            $lineas = $movimientos->get($cierre->apertura_caja_id, collect());
+            $todas = $movimientos->get($cierre->apertura_caja_id, collect());
+            // Los totales son en soles; los dólares van aparte.
+            $lineas = $todas->filter(fn ($m) => ($m->moneda ?: 'PEN') === 'PEN');
+            $dolares = $todas->where('moneda', 'USD');
+            $cierre->ingresos_usd = $dolares->isEmpty() ? null : round((float) $dolares->where('tipo', 'ingreso')->sum('monto'), 2);
+            $cierre->egresos_usd = $dolares->isEmpty() ? null : round((float) $dolares->where('tipo', 'egreso')->sum('monto'), 2);
 
             $cierre->ingresos = round((float) $lineas->where('tipo', 'ingreso')->sum('monto'), 2);
             $cierre->egresos = round((float) $lineas->where('tipo', 'egreso')->sum('monto'), 2);
-            $cierre->movimientos_count = $lineas->count();
+            $cierre->movimientos_count = $todas->count();
 
             // El efectivo es lo único que se cuenta físicamente al cerrar.
             $porMetodo = fn ($tipo, $metodo) => round((float) $lineas

@@ -70,6 +70,17 @@ Route::middleware('auth:api')->group(function () {
     // Distritos del Perú (catálogo fijo) para departamento → provincia → distrito
     Route::get('ubigeos', [\App\Http\Controllers\UbigeoController::class, 'index']);
 
+    // Tipo de cambio. El del día lo leen ventas y cobros (sin permiso); la
+    // pantalla donde se pone el comercial es "tipos-cambio".
+    Route::get('tipo-cambio', [\App\Http\Controllers\TipoCambioController::class, 'dia']);
+    Route::get('tipos-cambio', [\App\Http\Controllers\TipoCambioController::class, 'index']);
+    Route::put('tipos-cambio', [\App\Http\Controllers\TipoCambioController::class, 'guardar']);
+    Route::post('tipos-cambio/sunat', [\App\Http\Controllers\TipoCambioController::class, 'sunat']);
+
+    // Estado de cuenta de un cliente: pantalla, Excel (y el PDF va por /pdf).
+    Route::get('estado-cuenta/{cliente}', [\App\Http\Controllers\EstadoCuentaController::class, 'show']);
+    Route::get('estado-cuenta/{cliente}/excel', [\App\Http\Controllers\EstadoCuentaController::class, 'excel']);
+
     // Dashboard / escritorio
     Route::get('dashboard', [DashboardController::class, 'index']);
     Route::get('alertas', [AlertaController::class, 'index']);
@@ -185,6 +196,8 @@ Route::middleware('auth:api')->group(function () {
     Route::get('clientes/categorias-comerciales', [\App\Http\Controllers\CategoriaComercialController::class, 'opciones']);
     Route::get('clientes/actividades-comerciales', [\App\Http\Controllers\ActividadComercialController::class, 'opciones']);
     Route::apiResource('clientes', ClienteController::class);
+    // La línea de crédito en uso: lo aprobado, lo que debe y lo disponible.
+    Route::get('clientes/{cliente}/credito', [ClienteController::class, 'credito']);
     Route::apiResource('categorias-comerciales', \App\Http\Controllers\CategoriaComercialController::class)
         ->except(['show'])->parameters(['categorias-comerciales' => 'categoriaComercial']);
     Route::apiResource('actividades-comerciales', \App\Http\Controllers\ActividadComercialController::class)

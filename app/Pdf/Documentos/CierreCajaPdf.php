@@ -28,14 +28,17 @@ class CierreCajaPdf implements DocumentoPdf
         ])->findOrFail($id);
 
         $movimientos = MovimientoCaja::where('apertura_caja_id', $cierre->apertura_caja_id)->get();
-        $ingresos = (float) $movimientos->where('tipo', 'ingreso')->sum('monto');
-        $egresos = (float) $movimientos->where('tipo', 'egreso')->sum('monto');
+        // Soles y dólares no se suman: los totales son en soles.
+        $soles = $movimientos->filter(fn ($m) => ($m->moneda ?: 'PEN') === 'PEN');
+        $dolares = $movimientos->where('moneda', 'USD');
 
         return [
             'cierre' => $cierre,
             'documento' => 'Cierre #' . str_pad((string) $cierre->id, 5, '0', STR_PAD_LEFT),
-            'ingresos' => $ingresos,
-            'egresos' => $egresos,
+            'ingresos' => (float) $soles->where('tipo', 'ingreso')->sum('monto'),
+            'egresos' => (float) $soles->where('tipo', 'egreso')->sum('monto'),
+            'ingresosUsd' => $dolares->isEmpty() ? null : (float) $dolares->where('tipo', 'ingreso')->sum('monto'),
+            'egresosUsd' => $dolares->isEmpty() ? null : (float) $dolares->where('tipo', 'egreso')->sum('monto'),
             'movimientosCount' => $movimientos->count(),
         ];
     }

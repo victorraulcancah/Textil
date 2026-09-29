@@ -27,19 +27,23 @@ class DashboardController extends Controller
         // ---- Base de ventas emitidas en el rango ----
         $ventas = NotaVenta::where('estado', 'emitida')->whereBetween('fecha_emision', $rango);
 
-        $ventasTotal = (float) (clone $ventas)->sum('total');
+        // Las ventas en dólares se suman en soles, con el tipo de cambio de su día.
+        $enSoles = "CASE WHEN moneda = 'USD' THEN total * COALESCE(tipo_cambio, 1) ELSE total END";
+        $fx = "(CASE WHEN nv.moneda = 'USD' THEN COALESCE(nv.tipo_cambio, 1) ELSE 1 END)";
+
+        $ventasTotal = (float) (clone $ventas)->selectRaw("SUM({$enSoles}) as total")->value('total');
         $numVentas = (int) (clone $ventas)->count();
         $ticket = $numVentas > 0 ? round($ventasTotal / $numVentas, 2) : 0;
 
         // ---- Serie: ventas por día ----
         $ventasPorDia = (clone $ventas)
-            ->selectRaw('DATE(fecha_emision) as fecha, SUM(total) as total')
+            ->selectRaw("DATE(fecha_emision) as fecha, SUM({$enSoles}) as total")
             ->groupBy('fecha')->orderBy('fecha')->get()
             ->map(fn ($r) => ['fecha' => $r->fecha, 'total' => round((float) $r->total, 2)]);
 
         // ---- Contado vs Crédito ----
         $pagoTipo = (clone $ventas)
-            ->selectRaw('tipo_pago, SUM(total) as total')
+            ->selectRaw("tipo_pago, SUM({$enSoles}) as total")
             ->groupBy('tipo_pago')->get()
             ->map(fn ($r) => ['tipo' => $r->tipo_pago, 'total' => round((float) $r->total, 2)]);
 
@@ -53,10 +57,10 @@ class DashboardController extends Controller
             ->where('nv.estado', 'emitida')
             ->whereBetween('nv.fecha_emision', $rango)
             ->groupBy('p.id', 'p.nombre')
-            ->selectRaw('p.id, p.nombre,
+            ->selectRaw("p.id, p.nombre,
                 SUM(d.cantidad) as unidades,
-                SUM(d.subtotal) as total,
-                SUM((d.precio_unitario - (pp.factor_conversion * COALESCE(c.costo,0))) * d.cantidad) as ganancia')
+                SUM(d.subtotal * {$fx}) as total,
+                SUM((d.precio_unitario * {$fx} - (pp.factor_conversion * COALESCE(c.costo,0))) * d.cantidad) as ganancia")
             ->get()
             ->map(fn ($r) => [
                 'id' => (int) $r->id,
@@ -80,18 +84,24 @@ class DashboardController extends Controller
             ->where('nv.estado', 'emitida')
             ->whereBetween('nv.fecha_emision', $rango)
             ->groupBy('cat.id', 'cat.nombre')
-            ->selectRaw("COALESCE(cat.nombre, 'Sin categoría') as categoria, SUM(d.subtotal) as total")
+            ->selectRaw("COALESCE(cat.nombre, 'Sin categoría') as categoria, SUM(d.subtotal * {$fx}) as total")
             ->orderByDesc('total')->get()
             ->map(fn ($r) => ['categoria' => $r->categoria, 'total' => round((float) $r->total, 2)]);
 
         // ---- Caja: ingresos vs egresos en el rango ----
+        // En soles: los movimientos en dólares no se suman con ellos.
         $caja = MovimientoCaja::whereBetween('fecha', $rango)
+            ->where('moneda', 'PEN')
             ->selectRaw('tipo, SUM(monto) as total')
             ->groupBy('tipo')->get()
             ->map(fn ($r) => ['tipo' => $r->tipo, 'total' => round((float) $r->total, 2)]);
 
         // ---- Snapshot de stock / deudas ----
-        $porCobrar = round((float) CuentaPorCobrar::whereIn('estado', ['pendiente', 'parcial'])->sum('saldo'), 2);
+        // Lo que se debe en dólares, en soles al tipo de cambio de hoy.
+        $tipoCambioHoy = (float) (app(\App\Services\TipoCambioService::class)->venta() ?? 1);
+        $porCobrar = round((float) CuentaPorCobrar::whereIn('estado', ['pendiente', 'parcial'])
+            ->selectRaw("SUM(CASE WHEN moneda = 'USD' THEN saldo * ? ELSE saldo END) as saldo", [$tipoCambioHoy])
+            ->value('saldo'), 2);
         $porPagar = round((float) CuentaPorPagar::whereIn('estado', ['pendiente', 'parcial'])->sum('saldo'), 2);
         $capitalInmovilizado = round((float) ProductoAlmacenStock::selectRaw('SUM(stock_actual * costo_promedio) as v')->value('v'), 2);
 

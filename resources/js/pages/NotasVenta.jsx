@@ -13,8 +13,9 @@ import { Alert, Badge, Button, DataTable, DateRangePicker, Input, Modal, SearchS
 const fecha = (v) => (v ? new Date(v).toLocaleDateString('es-PE') : '—');
 const formaLabel = { efectivo: 'Efectivo', transferencia: 'Transferencia', tarjeta: 'Tarjeta', yape: 'Yape', plin: 'Plin', credito: 'Crédito', otro: 'Otro' };
 
-const money = (n) =>
-    new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(n) || 0);
+/** Cada venta en su moneda: soles o dólares. */
+const money = (n, moneda = 'PEN') =>
+    new Intl.NumberFormat('es-PE', { style: 'currency', currency: moneda || 'PEN' }).format(Number(n) || 0);
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
 
@@ -136,7 +137,7 @@ export default function NotasVenta() {
                 </Badge>
             ),
         },
-        { key: 'total', label: 'Total', align: 'right', render: (row) => <span className="font-semibold text-warm-900">{money(row.total)}</span> },
+        { key: 'total', label: 'Total', align: 'right', render: (row) => <span className="font-semibold text-warm-900">{money(row.total, row.moneda)}</span> },
         {
             key: 'estado',
             label: 'Estado',
@@ -352,9 +353,9 @@ export default function NotasVenta() {
                                         .join(' · ')}
                                     campos={[
                                         { label: 'Cant.', value: num(d.cantidad) },
-                                        { label: 'Precio', value: money(d.precio_unitario) },
-                                        { label: 'Subtotal', value: money(d.subtotal), valueClassName: 'text-primary-600' },
-                                        ...(conDescuento ? [{ label: 'Dscto.', value: money(d.descuento) }] : []),
+                                        { label: 'Precio', value: money(d.precio_unitario, seleccionada?.moneda) },
+                                        { label: 'Subtotal', value: money(d.subtotal, seleccionada?.moneda), valueClassName: 'text-primary-600' },
+                                        ...(conDescuento ? [{ label: 'Dscto.', value: money(d.descuento, seleccionada?.moneda) }] : []),
                                     ]}
                                 />
                             );
@@ -362,7 +363,7 @@ export default function NotasVenta() {
                         <div className="flex items-center justify-between px-1 pt-1 text-sm">
                             <span className="font-medium text-warm-500">Total</span>
                             <span className="text-base font-bold text-warm-900">
-                                {money(detallesVenta.reduce((a, d) => a + Number(d.subtotal || 0), 0))}
+                                {money(detallesVenta.reduce((a, d) => a + Number(d.subtotal || 0), 0), seleccionada?.moneda)}
                             </span>
                         </div>
                     </div>
@@ -418,12 +419,12 @@ export default function NotasVenta() {
                                         <td className="px-3 py-2 text-warm-500">{producto?.marca?.nombre ?? '—'}</td>
                                         <td className="px-3 py-2 text-warm-500">{d.presentacion?.nombre ?? '—'}</td>
                                         <td className="px-3 py-2 text-right text-warm-900">{num(d.cantidad)}</td>
-                                        <td className="px-3 py-2 text-right text-warm-900">{money(d.precio_unitario)}</td>
+                                        <td className="px-3 py-2 text-right text-warm-900">{money(d.precio_unitario, seleccionada?.moneda)}</td>
                                         <td className="px-3 py-2 text-right text-warm-500">
-                                            {Number(d.descuento) > 0 ? money(d.descuento) : '—'}
+                                            {Number(d.descuento) > 0 ? money(d.descuento, seleccionada?.moneda) : '—'}
                                         </td>
                                         <td className="px-3 py-2 text-right font-semibold text-primary-600">
-                                            {money(d.subtotal)}
+                                            {money(d.subtotal, seleccionada?.moneda)}
                                         </td>
                                     </tr>
                                 );
@@ -436,10 +437,10 @@ export default function NotasVenta() {
                                     <td className="px-3 py-2 text-right">{num(totalesVenta.cantidad)}</td>
                                     <td className="px-3 py-2" />
                                     <td className="px-3 py-2 text-right">
-                                        {totalesVenta.descuento > 0 ? money(totalesVenta.descuento) : '—'}
+                                        {totalesVenta.descuento > 0 ? money(totalesVenta.descuento, seleccionada?.moneda) : '—'}
                                     </td>
                                     <td className="px-3 py-2 text-right text-primary-700">
-                                        {money(totalesVenta.subtotal)}
+                                        {money(totalesVenta.subtotal, seleccionada?.moneda)}
                                     </td>
                                 </tr>
                             </tfoot>
@@ -529,8 +530,8 @@ export default function NotasVenta() {
                                                     {d.presentacion?.nombre && <span className="text-warm-400"> · {d.presentacion.nombre}</span>}
                                                 </td>
                                                 <td className="px-3 py-2 text-right">{Number(d.cantidad)}</td>
-                                                <td className="px-3 py-2 text-right">{money(d.precio_unitario)}</td>
-                                                <td className="px-3 py-2 text-right font-medium text-warm-900">{money(d.subtotal)}</td>
+                                                <td className="px-3 py-2 text-right">{money(d.precio_unitario, detalle.moneda)}</td>
+                                                <td className="px-3 py-2 text-right font-medium text-warm-900">{money(d.subtotal, detalle.moneda)}</td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -549,7 +550,12 @@ export default function NotasVenta() {
                                         {detalle.pagos.map((p) => (
                                             <li key={p.id} className="flex justify-between">
                                                 <span className="text-warm-600">{formaLabel[p.forma_pago] ?? p.metodo_pago?.nombre ?? p.forma_pago}</span>
-                                                <span className="font-medium text-warm-900">{money(p.monto)}</span>
+                                                <span className="font-medium text-warm-900">
+                                                    {/* Cobrada con soles una venta en dólares: lo que entró y lo que abonó. */}
+                                                    {p.monto_pen != null
+                                                        ? `${money(p.monto_pen, 'PEN')} (= ${money(p.monto, detalle.moneda)})`
+                                                        : money(p.monto, detalle.moneda)}
+                                                </span>
                                             </li>
                                         ))}
                                     </ul>
@@ -557,15 +563,15 @@ export default function NotasVenta() {
                             </div>
                             <div className="rounded-xl border border-edge p-4">
                                 <div className="flex justify-between text-sm text-warm-600">
-                                    <span>Subtotal</span><span>{money(detalle.subtotal)}</span>
+                                    <span>Subtotal</span><span>{money(detalle.subtotal, detalle.moneda)}</span>
                                 </div>
                                 {Number(detalle.descuento_total) > 0 && (
                                     <div className="flex justify-between text-sm text-warm-600">
-                                        <span>Descuento</span><span>- {money(detalle.descuento_total)}</span>
+                                        <span>Descuento</span><span>- {money(detalle.descuento_total, detalle.moneda)}</span>
                                     </div>
                                 )}
                                 <div className="mt-2 flex justify-between border-t border-edge pt-2 text-base font-extrabold text-warm-900">
-                                    <span>Total</span><span>{money(detalle.total)}</span>
+                                    <span>Total</span><span>{money(detalle.total, detalle.moneda)}</span>
                                 </div>
                             </div>
                         </div>

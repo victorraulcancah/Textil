@@ -34,6 +34,20 @@
     </table>
     <div class="sep"></div>
 
+    {{-- Los dólares se arquean aparte, si los hubo. --}}
+    @if ($ingresosUsd !== null)
+        <table class="row">
+            <tr><td class="muted">Ingresos en dólares</td><td class="right">US$ {{ number_format($ingresosUsd, 2) }}</td></tr>
+            <tr><td class="muted">Egresos en dólares</td><td class="right">- US$ {{ number_format((float) $egresosUsd, 2) }}</td></tr>
+            @if ($cierre->monto_sistema_usd !== null)
+                <tr><td class="strong">Esperado (US$)</td><td class="right strong">US$ {{ number_format((float) $cierre->monto_sistema_usd, 2) }}</td></tr>
+                <tr><td class="strong">Contado (US$)</td><td class="right strong">US$ {{ number_format((float) $cierre->monto_contado_usd, 2) }}</td></tr>
+                <tr><td class="strong">Diferencia (US$)</td><td class="right strong">{{ (float) $cierre->diferencia_usd < 0 ? '-' : '' }}US$ {{ number_format(abs((float) $cierre->diferencia_usd), 2) }}</td></tr>
+            @endif
+        </table>
+        <div class="sep"></div>
+    @endif
+
     <div class="center muted">Firma del responsable</div>
     <div style="height: 26px;"></div>
     <div class="center">__________________________</div>

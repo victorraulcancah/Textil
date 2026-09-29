@@ -18,13 +18,16 @@ import Layout from '../components/Layout';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
 import MetodoCajaPicker from '../components/MetodoCajaPicker';
+import CreditoVenta from '../components/CreditoVenta';
+import ExcesoCreditoModal from '../components/ExcesoCreditoModal';
+import { cargarTipoCambio, NOMBRE_MONEDA, redondear } from '../lib/moneda';
 import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
 import DetalleCard from '../components/ui/DetalleCard';
 import { Alert, Badge, Button, DataTable, DateRangePicker, Input, Modal, SearchSelect, Select } from '../components/ui';
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
-const money = (n) =>
-    new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(n) || 0);
+const money = (n, moneda = 'PEN') =>
+    new Intl.NumberFormat('es-PE', { style: 'currency', currency: moneda || 'PEN' }).format(Number(n) || 0);
 // Una fecha sin hora ("2026-09-18") se interpreta como UTC y en Perú se
 // mostraría el día anterior: se le fija la medianoche local.
 const fecha = (v) => (v ? new Date(String(v).length === 10 ? `${v}T00:00:00` : v).toLocaleDateString('es-PE') : '—');
@@ -167,7 +170,7 @@ export default function Pedidos() {
             label: 'Total',
             align: 'right',
             searchable: false,
-            render: (row) => money(row.total),
+            render: (row) => money(row.total, row.moneda),
         },
         {
             key: 'estado',
@@ -418,8 +421,8 @@ export default function Pedidos() {
                                 campos={[
                                     { label: 'Cant.', value: `${num(d.cantidad)} (${num(d.metros)} m)` },
                                     { label: 'Cubierto', value: `${num(d.metros_asignados)} m` },
-                                    { label: 'P. unit.', value: d.precio_oculto ? 'Por confirmar' : money(d.precio_unitario) },
-                                    { label: 'Importe', value: d.precio_oculto ? '—' : money(d.subtotal), valueClassName: 'text-primary-600' },
+                                    { label: 'P. unit.', value: d.precio_oculto ? 'Por confirmar' : money(d.precio_unitario, detalle.moneda) },
+                                    { label: 'Importe', value: d.precio_oculto ? '—' : money(d.subtotal, detalle.moneda), valueClassName: 'text-primary-600' },
                                 ]}
                             />
                         ))}
@@ -476,7 +479,7 @@ function DetallePedido({ pedido, procesando, onAccion, onFacturar, onPdf }) {
                     </h2>
                     <p className="text-xs text-warm-500">
                         {pedido.cliente ?? 'Cliente varios'} · {pedido.detalles?.length ?? 0} producto(s) ·{' '}
-                        {num(pedido.total_metros)} m · {money(pedido.total)}
+                        {num(pedido.total_metros)} m · {money(pedido.total, pedido.moneda)}
                         {pedido.requerimiento_numero && ` · ${pedido.requerimiento_numero}`}
                     </p>
                 </div>
@@ -602,10 +605,10 @@ function DetallePedido({ pedido, procesando, onAccion, onFacturar, onPdf }) {
                                     )}
                                 </td>
                                 <td className="px-4 py-2 text-right">
-                                    {d.precio_oculto ? <span className="text-warm-400">Por confirmar</span> : money(d.precio_unitario)}
+                                    {d.precio_oculto ? <span className="text-warm-400">Por confirmar</span> : money(d.precio_unitario, pedido.moneda)}
                                 </td>
                                 <td className="px-4 py-2 text-right font-medium">
-                                    {d.precio_oculto ? <span className="font-normal text-warm-400">—</span> : money(d.subtotal)}
+                                    {d.precio_oculto ? <span className="font-normal text-warm-400">—</span> : money(d.subtotal, pedido.moneda)}
                                 </td>
                             </tr>
                         ))}
@@ -668,7 +671,13 @@ function AnularModal({ pedido, onClose, onAnulado }) {
  * Emitir la nota de venta del pedido despachado. La tela ya salió al
  * despachar; aquí se registra la venta y cómo paga el cliente.
  */
-const emptyPago = () => ({ tipo: 'efectivo', cuentaId: '', billeteraId: '', monto: '' });
+// moneda "" = la del pedido; "PEN" = un pedido en dólares cobrado con soles.
+const emptyPago = () => ({ tipo: 'efectivo', cuentaId: '', billeteraId: '', monto: '', moneda: '', tipoCambio: '' });
+
+const hoyIso = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
 function FacturarModal({ pedido, onClose, onFacturado }) {
     const toast = useToast();
@@ -679,14 +688,34 @@ function FacturarModal({ pedido, onClose, onFacturado }) {
     const [cuentas, setCuentas] = useState([]);
     const [billeteras, setBilleteras] = useState([]);
     const [guardando, setGuardando] = useState(false);
+    /** A crédito: en qué cuotas se paga. */
+    const [cuotas, setCuotas] = useState([]);
+    /** La venta no cupo en la línea de crédito: el aviso y si se puede autorizar. */
+    const [exceso, setExceso] = useState(null);
+    /** El de hoy: SUNAT para la venta y el comercial para cobrar en soles. */
+    const [tcDia, setTcDia] = useState(null);
 
     const total = Number(pedido?.total) || 0;
+    const moneda = pedido?.moneda || 'PEN';
+    const m = (n) => money(n, moneda);
 
     useEffect(() => {
         if (!pedido) return;
         setTipoPago('contado');
         setPagos([emptyPago()]);
         setMixto(false);
+        setCuotas([]);
+        setExceso(null);
+        cargarTipoCambio().then(setTcDia).catch(() => setTcDia(null));
+        // Sale como compra el cliente: a crédito si su línea lo permite.
+        if (pedido.cliente_id) {
+            api.get(`/clientes/${pedido.cliente_id}/credito`)
+                .then(({ data }) => {
+                    const r = data.resumen;
+                    if (r?.condicion_venta === 'credito' && !r.impedimento) setTipoPago('credito');
+                })
+                .catch(() => {});
+        }
         Promise.all([api.get('/cuentas-bancarias'), api.get('/billeteras-digitales')])
             .then(([cuentasRes, billeterasRes]) => {
                 setCuentas(asList(cuentasRes));
@@ -707,22 +736,99 @@ function FacturarModal({ pedido, onClose, onFacturado }) {
     const alternarMixto = () => {
         setMixto((prev) => {
             if (!prev && !Number(pagos[0].monto)) {
-                setPagos((ps) => ps.map((p, i) => (i === 0 ? { ...p, monto: String(total) } : p)));
+                setPagos((ps) => ps.map((p, i) => (i === 0 ? { ...p, monto: String(totalEn(p)) } : p)));
             }
             if (prev) setPagos((ps) => ps.slice(0, 1));
             return !prev;
         });
     };
 
+    /**
+     * Un pedido en dólares se puede cobrar con soles: el monto va en soles y
+     * abona su equivalente al tipo de cambio comercial (se propone y se
+     * puede cambiar).
+     */
+    const admiteSoles = moneda !== 'PEN';
+    const tcComercial = Number(tcDia?.comercial) || Number(tcDia?.venta) || 0;
+    const enSoles = (p) => admiteSoles && p.moneda === 'PEN';
+    const tcDe = (p) => Number(p.tipoCambio) || tcComercial;
+    const abonoDe = (p) =>
+        enSoles(p) ? (tcDe(p) > 0 ? redondear((Number(p.monto) || 0) / tcDe(p)) : 0) : Number(p.monto) || 0;
+    const totalEn = (p) => (enSoles(p) ? redondear(total * tcDe(p)) : total);
+
     /** En modo simple hay un solo pago que cubre el total. */
-    const pagosEfectivos = mixto ? pagos : [{ ...pagos[0], monto: String(total) }];
-    const pagado = pagosEfectivos.reduce((acc, p) => acc + (Number(p.monto) || 0), 0);
+    const pagosEfectivos = mixto ? pagos : [{ ...pagos[0], monto: String(totalEn(pagos[0])) }];
+    const pagado = pagosEfectivos.reduce((acc, p) => acc + abonoDe(p), 0);
     const saldo = total - pagado;
     const esContado = tipoPago === 'contado';
 
-    const emitir = async () => {
+    const cambiarMonedaPago = (i, nueva) =>
+        setPagos((prev) =>
+            prev.map((p, idx) => {
+                if (idx !== i || (p.moneda || '') === nueva) return p;
+                const tc = Number(p.tipoCambio) || tcComercial;
+                const monto = Number(p.monto) || 0;
+                return {
+                    ...p,
+                    moneda: nueva,
+                    tipoCambio: nueva === 'PEN' && !p.tipoCambio && tcComercial ? String(tcComercial) : p.tipoCambio,
+                    monto: monto && tc > 0 ? String(nueva === 'PEN' ? redondear(monto * tc) : redondear(monto / tc)) : p.monto,
+                };
+            }),
+        );
+
+    /** "Dólares | Soles" y, en soles, el tipo de cambio comercial. */
+    const controlesMoneda = (p, i) =>
+        admiteSoles ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+                <div className="inline-flex rounded-lg border border-edge bg-gray-50 p-0.5">
+                    {[moneda, 'PEN'].map((mon) => {
+                        const activa = (p.moneda || moneda) === mon;
+                        return (
+                            <button
+                                key={mon}
+                                type="button"
+                                onClick={() => cambiarMonedaPago(i, mon === moneda ? '' : 'PEN')}
+                                className={`rounded-md px-3 py-1 text-xs font-semibold transition ${
+                                    activa ? 'bg-white text-primary-700 shadow-sm' : 'text-warm-500 hover:text-warm-700'
+                                }`}
+                            >
+                                {NOMBRE_MONEDA[mon] ?? mon}
+                            </button>
+                        );
+                    })}
+                </div>
+                {enSoles(p) && (
+                    <>
+                        <Input
+                            type="number"
+                            min="0"
+                            step="0.0001"
+                            placeholder="T.C. comercial"
+                            value={p.tipoCambio}
+                            onChange={(e) => setPago(i, { tipoCambio: e.target.value })}
+                            className="w-28 text-right"
+                            aria-label="Tipo de cambio comercial"
+                        />
+                        <span className="text-xs text-warm-500">T.C. comercial{mixto ? ` · abona ${m(abonoDe(p))}` : ''}</span>
+                    </>
+                )}
+            </div>
+        ) : null;
+
+    /** Con `autorizarExceso`, quien tiene permiso emite la venta aunque pase la línea. */
+    const emitir = async (autorizarExceso = false) => {
         if (esContado && mixto && Math.abs(saldo) > 0.001) {
             return toast.error('Los pagos deben sumar exactamente el total.');
+        }
+        if (esContado && pagosEfectivos.some((p) => enSoles(p) && Number(p.monto) > 0 && !(tcDe(p) > 0))) {
+            return toast.error('Para cobrar en soles, pon el tipo de cambio comercial.');
+        }
+        if (!esContado) {
+            const suma = cuotas.reduce((acc, c) => acc + (Number(c.monto) || 0), 0);
+            if (cuotas.length === 0 || Math.abs(suma - total) > 0.01 * Math.max(cuotas.length, 1)) {
+                return toast.error('Las cuotas deben sumar el total de la venta.');
+            }
         }
         setGuardando(true);
         try {
@@ -736,13 +842,24 @@ function FacturarModal({ pedido, onClose, onFacturado }) {
                               cuenta_bancaria_id: p.tipo === 'transferencia' ? p.cuentaId || null : null,
                               billetera_id: p.tipo === 'billetera' ? p.billeteraId || null : null,
                               monto: Number(p.monto),
-                              fecha: new Date().toISOString().slice(0, 10),
+                              ...(enSoles(p) ? { moneda: 'PEN', tipo_cambio: tcDe(p) } : {}),
+                              fecha: hoyIso(),
                           }))
-                    : [{ forma_pago: 'credito', monto: total, fecha: new Date().toISOString().slice(0, 10) }],
+                    : [{ forma_pago: 'credito', monto: total, fecha: hoyIso() }],
+                ...(esContado
+                    ? {}
+                    : { cuotas: cuotas.map((c) => ({ fecha_vencimiento: c.fecha_vencimiento, monto: Number(c.monto) || 0 })) }),
+                ...(autorizarExceso ? { autorizar_exceso: true } : {}),
             });
+            setExceso(null);
             onFacturado(data?.data ?? data);
         } catch (err) {
-            toast.error(err.response?.data?.message ?? 'No se pudo emitir la nota de venta.');
+            // No cabe en la línea de crédito: el aviso, y "Autorizar" si se puede.
+            if (err.response?.data?.exceso_credito) {
+                setExceso({ message: err.response.data.message, detalle: err.response.data.exceso_credito });
+            } else {
+                toast.error(err.response?.data?.message ?? 'No se pudo emitir la nota de venta.');
+            }
         } finally {
             setGuardando(false);
         }
@@ -753,11 +870,11 @@ function FacturarModal({ pedido, onClose, onFacturado }) {
             open={Boolean(pedido)}
             onClose={onClose}
             title="Emitir nota de venta"
-            description={`${pedido?.documento ?? ''} · ${money(pedido?.total)}`}
+            description={`${pedido?.documento ?? ''} · ${m(pedido?.total)}`}
             footer={
                 <>
                     <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-                    <Button loading={guardando} onClick={emitir}>Emitir nota de venta</Button>
+                    <Button loading={guardando} onClick={() => emitir()}>Emitir nota de venta</Button>
                 </>
             }
         >
@@ -802,13 +919,29 @@ function FacturarModal({ pedido, onClose, onFacturado }) {
                             tipo={pagos[0].tipo}
                             cuentaId={pagos[0].cuentaId}
                             billeteraId={pagos[0].billeteraId}
-                            onChange={(m) => setPago(0, m)}
+                            onChange={(metodo) => setPago(0, metodo)}
                         />
+                        {controlesMoneda(pagos[0], 0)}
                         <div className="flex items-center justify-between rounded-lg bg-primary-50 px-3 py-2.5 text-sm">
                             <span className="text-warm-500">Se cobra el total</span>
-                            <span className="font-bold text-primary-700">{money(total)}</span>
+                            <span className="font-bold text-primary-700">
+                                {enSoles(pagos[0]) ? `${money(totalEn(pagos[0]), 'PEN')} (= ${m(total)})` : m(total)}
+                            </span>
                         </div>
                     </div>
+                )}
+
+                {/* A crédito: cómo está la línea del cliente y en qué cuotas paga. */}
+                {!esContado && (
+                    <CreditoVenta
+                        clienteId={pedido?.cliente_id}
+                        total={total}
+                        moneda={moneda}
+                        tipoCambio={tcDia?.venta}
+                        fecha={hoyIso()}
+                        cuotas={cuotas}
+                        onCuotas={setCuotas}
+                    />
                 )}
 
                 {esContado && mixto && (
@@ -822,14 +955,14 @@ function FacturarModal({ pedido, onClose, onFacturado }) {
                                         tipo={p.tipo}
                                         cuentaId={p.cuentaId}
                                         billeteraId={p.billeteraId}
-                                        onChange={(m) => setPago(i, m)}
+                                        onChange={(metodo) => setPago(i, metodo)}
                                     />
                                     <div className="mt-2 flex items-center gap-2">
                                         <Input
                                             type="number"
                                             min="0"
                                             step="any"
-                                            placeholder="Monto"
+                                            placeholder={enSoles(p) ? 'Monto en soles' : 'Monto'}
                                             value={p.monto}
                                             onChange={(e) => setPago(i, { monto: e.target.value })}
                                             className="text-right"
@@ -844,6 +977,7 @@ function FacturarModal({ pedido, onClose, onFacturado }) {
                                             <Trash2 className="h-4 w-4" />
                                         </button>
                                     </div>
+                                    {controlesMoneda(p, i)}
                                 </div>
                             ))}
                         </div>
@@ -854,19 +988,26 @@ function FacturarModal({ pedido, onClose, onFacturado }) {
 
                         <div className="flex justify-between border-t border-dashed border-edge pt-2 text-sm">
                             <span className="text-warm-500">Cobrado</span>
-                            <span className="font-semibold text-green-600">{money(pagado)}</span>
+                            <span className="font-semibold text-green-600">{m(pagado)}</span>
                         </div>
                         {Math.abs(saldo) > 0.001 && (
                             <div className="flex justify-between text-sm">
                                 <span className="text-warm-500">{saldo > 0 ? 'Falta cobrar' : 'Sobra'}</span>
                                 <span className={saldo > 0 ? 'font-semibold text-amber-600' : 'font-semibold text-red-600'}>
-                                    {money(Math.abs(saldo))}
+                                    {m(Math.abs(saldo))}
                                 </span>
                             </div>
                         )}
                     </>
                 )}
             </div>
+
+            <ExcesoCreditoModal
+                exceso={exceso}
+                onClose={() => setExceso(null)}
+                autorizando={guardando}
+                onAutorizar={() => emitir(true)}
+            />
         </Modal>
     );
 }

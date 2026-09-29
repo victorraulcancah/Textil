@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
     ArrowLeft,
+    CalendarClock,
     Package,
     Pencil,
     Plus,
@@ -11,6 +12,14 @@ import {
 } from "lucide-react";
 import api, { asList } from "../lib/api";
 import { precioPara } from "../lib/precios";
+import {
+    cargarTipoCambio,
+    convertir,
+    money,
+    MONEDAS,
+    NOMBRE_MONEDA,
+    redondear,
+} from "../lib/moneda";
 import { opcionesAlmacen } from "../lib/almacenes";
 import { useToast } from "../lib/toast";
 import { useAuth } from "../lib/auth";
@@ -18,6 +27,8 @@ import Layout from "../components/Layout";
 import MetodoCajaPicker from "../components/MetodoCajaPicker";
 import ProductoPickerModal from "../components/ProductoPickerModal";
 import SelectorRollo from "../components/SelectorRollo";
+import CreditoVenta from "../components/CreditoVenta";
+import ExcesoCreditoModal from "../components/ExcesoCreditoModal";
 import {
     Alert,
     Button,
@@ -28,18 +39,15 @@ import {
     Spinner,
 } from "../components/ui";
 
-const money = (n) =>
-    new Intl.NumberFormat("es-PE", {
-        style: "currency",
-        currency: "PEN",
-    }).format(Number(n) || 0);
-
 const num = (n) =>
     new Intl.NumberFormat("es-PE", { maximumFractionDigits: 2 }).format(
         Number(n) || 0,
     );
 
 const hoy = () => new Date().toISOString().slice(0, 10);
+
+/** "2026-09-29" → "29/09". */
+const diaMes = (f) => (f ? String(f).slice(5, 10).split("-").reverse().join("/") : "");
 
 /** Venta al paso: no se identifica al comprador. */
 const CLIENTE_GENERICO = "Clientes varios";
@@ -57,6 +65,9 @@ const emptyPago = () => ({
     cuentaId: "",
     billeteraId: "",
     monto: "",
+    // "" = en la moneda de la venta; "PEN" = una venta en dólares cobrada con soles.
+    moneda: "",
+    tipoCambio: "",
 });
 
 export default function CrearVenta() {
@@ -81,8 +92,20 @@ export default function CrearVenta() {
         almacen_id: "",
         fecha_emision: hoy(),
         tipo_pago: "contado",
+        moneda: "PEN",
+        // SUNAT venta de la fecha, si la venta es en dólares.
+        tipo_cambio: "",
         observaciones: "",
     });
+
+    /** El tipo de cambio de la fecha de la venta: SUNAT (venta) y comercial. */
+    const [tcDia, setTcDia] = useState(null);
+    /** El de la venta se escribió a mano (o viene guardado): ya no sigue al SUNAT. */
+    const [tcManual, setTcManual] = useState(false);
+    /** A crédito: en qué cuotas se paga. */
+    const [cuotas, setCuotas] = useState([]);
+    /** La venta no cupo en la línea de crédito: el aviso y si se puede autorizar. */
+    const [exceso, setExceso] = useState(null);
 
     /** Panel superior de búsqueda/alta. */
     const [panel, setPanel] = useState({ ...panelVacio });
@@ -151,8 +174,14 @@ export default function CrearVenta() {
                     fecha_emision:
                         String(venta.fecha_emision ?? "").slice(0, 10) || hoy(),
                     tipo_pago: venta.tipo_pago ?? "contado",
+                    moneda: venta.moneda ?? "PEN",
+                    tipo_cambio: venta.tipo_cambio
+                        ? String(Number(venta.tipo_cambio))
+                        : "",
                     observaciones: venta.observaciones ?? "",
                 });
+                // El tipo de cambio guardado no se reemplaza por el del día.
+                setTcManual(Boolean(venta.tipo_cambio));
 
                 setItems(
                     (venta.detalles ?? []).map((d) => ({
@@ -184,7 +213,15 @@ export default function CrearVenta() {
                             billeteraId: p.billetera_id
                                 ? String(p.billetera_id)
                                 : "",
-                            monto: String(Number(p.monto) || 0),
+                            // Cobrado con soles: se edita lo que entró en soles.
+                            monto: String(
+                                Number(p.monto_pen ?? p.monto) || 0,
+                            ),
+                            moneda: p.monto_pen != null ? "PEN" : "",
+                            tipoCambio:
+                                p.monto_pen != null && p.tipo_cambio
+                                    ? String(Number(p.tipo_cambio))
+                                    : "",
                         })),
                     );
                     setMixto(cobros.length > 1);
@@ -220,17 +257,30 @@ export default function CrearVenta() {
         clientes.find((c) => String(c.id) === String(form.cliente_id)) ?? null;
     const tipoPrecioId = cliente?.tipo_precio_id ?? null;
 
-    /** El precio de lista: el del tipo de precio del cliente, según la cantidad. */
+    /** Un precio del producto (en su moneda) llevado a la moneda de la venta. */
+    const enMonedaVenta = (precio, productoId) =>
+        convertir(
+            precio,
+            productoDe(productoId)?.moneda_venta || "PEN",
+            form.moneda,
+            form.tipo_cambio,
+        );
+
+    /** El precio de lista: el del tipo de precio del cliente, según la cantidad, en la moneda de la venta. */
     const precioDeLista = (productoId, presentacionId, cantidad) =>
         String(
-            precioPara(
-                presentacionDe(productoId, presentacionId),
-                tipoPrecioId,
-                cantidad,
+            enMonedaVenta(
+                precioPara(
+                    presentacionDe(productoId, presentacionId),
+                    tipoPrecioId,
+                    cantidad,
+                ),
+                productoId,
             ),
         );
 
-    // Otro cliente, otro tipo de precio: lo que no tiene precio a mano se recalcula.
+    // Otro cliente, otro tipo de precio, otra moneda u otro tipo de cambio: lo
+    // que no tiene precio a mano se recalcula.
     useEffect(() => {
         setItems((prev) =>
             prev.map((it) =>
@@ -258,7 +308,21 @@ export default function CrearVenta() {
                       ),
                   },
         );
-    }, [tipoPrecioId]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [tipoPrecioId, form.moneda, form.tipo_cambio]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // El tipo de cambio de la fecha de la venta. El de la venta sigue al SUNAT
+    // mientras no se escriba otro.
+    useEffect(() => {
+        if (!form.fecha_emision) return;
+        cargarTipoCambio(form.fecha_emision)
+            .then((tc) => {
+                setTcDia(tc);
+                if (!tcManual && tc?.venta) {
+                    setForm((prev) => ({ ...prev, tipo_cambio: String(tc.venta) }));
+                }
+            })
+            .catch(() => setTcDia(null));
+    }, [form.fecha_emision]); // eslint-disable-line react-hooks/exhaustive-deps
 
     /** Stock (en unidad base) de cada producto en el almacén elegido. */
     const stockDelAlmacen = useMemo(() => {
@@ -375,6 +439,43 @@ export default function CrearVenta() {
     const setPanelCampo = (patch) =>
         setPanel((prev) => ({ ...prev, ...patch }));
 
+    /**
+     * Otra moneda: lo que tiene precio a mano se lleva a la nueva con el tipo
+     * de cambio; lo demás lo recalcula la lista de precios. Los cobros vuelven
+     * a la moneda de la venta.
+     */
+    const cambiarMoneda = (nueva) => {
+        if (nueva === form.moneda) return;
+        const tc = Number(form.tipo_cambio) || Number(tcDia?.venta) || 0;
+        const llevar = (precio) => String(convertir(precio, form.moneda, nueva, tc));
+        setItems((prev) =>
+            prev.map((it) =>
+                it.precio_manual ? { ...it, precio_unitario: llevar(it.precio_unitario) } : it,
+            ),
+        );
+        setPanel((prev) =>
+            prev.precioManual ? { ...prev, precio_unitario: llevar(prev.precio_unitario) } : prev,
+        );
+        setPagos((prev) => prev.map((p) => ({ ...p, moneda: "", tipoCambio: "", monto: "" })));
+        setForm((prev) => ({
+            ...prev,
+            moneda: nueva,
+            tipo_cambio: prev.tipo_cambio || (tcDia?.venta ? String(tcDia.venta) : ""),
+        }));
+    };
+
+    /** Al elegir el cliente, la venta sale como él compra: a crédito o al contado. */
+    const elegirCliente = (clienteId) => {
+        const c = clientes.find((x) => String(x.id) === String(clienteId));
+        const linea = c?.linea_credito;
+        const aCredito = linea?.condicion_venta === "credito" && linea?.activa;
+        setForm((prev) => ({
+            ...prev,
+            cliente_id: clienteId ?? "",
+            ...(editando ? {} : { tipo_pago: aCredito ? "credito" : "contado" }),
+        }));
+    };
+
     const elegirProducto = (productoId) => {
         const unidades = unidadesDe(productoId);
         const presentacionId = unidades.length === 1 ? unidades[0].value : "";
@@ -430,7 +531,10 @@ export default function CrearVenta() {
                             ? {}
                             : {
                                   precio_unitario: String(
-                                      precioPara(presentacion, tipoPrecioId, total),
+                                      enMonedaVenta(
+                                          precioPara(presentacion, tipoPrecioId, total),
+                                          producto.id,
+                                      ),
                                   ),
                               }),
                     };
@@ -440,7 +544,10 @@ export default function CrearVenta() {
                         producto_presentacion_id: String(presentacion.id),
                         cantidad: String(cantidad),
                         precio_unitario: String(
-                            precioPara(presentacion, tipoPrecioId, cantidad),
+                            enMonedaVenta(
+                                precioPara(presentacion, tipoPrecioId, cantidad),
+                                producto.id,
+                            ),
                         ),
                         precio_manual: false,
                     });
@@ -553,23 +660,105 @@ export default function CrearVenta() {
         0,
     );
     const esContado = form.tipo_pago === "contado";
+    /** Un monto en la moneda de la venta. */
+    const m = (n) => money(n, form.moneda);
+
+    /**
+     * Una venta en dólares se puede cobrar con soles: cada cobro dice en qué
+     * moneda entró, y los soles se llevan a dólares con el tipo de cambio
+     * comercial del día (se propone y se puede cambiar).
+     */
+    const admiteSoles = form.moneda !== "PEN";
+    const tcComercial = Number(tcDia?.comercial) || Number(form.tipo_cambio) || 0;
+    const enSoles = (p) => admiteSoles && p.moneda === "PEN";
+    const tcDe = (p) => Number(p.tipoCambio) || tcComercial;
+    /** Lo que un cobro abona a la venta, en la moneda de la venta. */
+    const abonoDe = (p) =>
+        enSoles(p)
+            ? tcDe(p) > 0
+                ? redondear((Number(p.monto) || 0) / tcDe(p))
+                : 0
+            : Number(p.monto) || 0;
+    /** El total de la venta en la moneda en que entra ese cobro. */
+    const totalEn = (p) => (enSoles(p) ? redondear(total * tcDe(p)) : total);
 
     /** En modo simple hay un solo pago que cubre el total. */
     const pagosEfectivos = mixto
         ? pagos
-        : [{ ...pagos[0], monto: String(total) }];
-    const pagado = pagosEfectivos.reduce(
-        (acc, p) => acc + (Number(p.monto) || 0),
-        0,
-    );
+        : [{ ...pagos[0], monto: String(totalEn(pagos[0])) }];
+    const pagado = pagosEfectivos.reduce((acc, p) => acc + abonoDe(p), 0);
     const saldo = total - pagado;
+
+    /** Cambia la moneda de un cobro, llevando lo ya escrito a la otra moneda. */
+    const cambiarMonedaPago = (i, moneda) =>
+        setPagos((prev) =>
+            prev.map((p, idx) => {
+                if (idx !== i || (p.moneda || "") === moneda) return p;
+                const tc = Number(p.tipoCambio) || tcComercial;
+                const monto = Number(p.monto) || 0;
+                return {
+                    ...p,
+                    moneda,
+                    tipoCambio:
+                        moneda === "PEN" && !p.tipoCambio && tcComercial
+                            ? String(tcComercial)
+                            : p.tipoCambio,
+                    monto:
+                        monto && tc > 0
+                            ? String(moneda === "PEN" ? redondear(monto * tc) : redondear(monto / tc))
+                            : p.monto,
+                };
+            }),
+        );
+
+    /** "Dólares | Soles" y, en soles, el tipo de cambio comercial. Solo en una venta que no es en soles. */
+    const controlesMoneda = (p, i) =>
+        admiteSoles ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+                <div className="inline-flex rounded-lg border border-edge bg-gray-50 p-0.5">
+                    {[form.moneda, "PEN"].map((mon) => {
+                        const activa = (p.moneda || form.moneda) === mon;
+                        return (
+                            <button
+                                key={mon}
+                                type="button"
+                                onClick={() => cambiarMonedaPago(i, mon === form.moneda ? "" : "PEN")}
+                                className={`rounded-md px-3 py-1 text-xs font-semibold transition ${
+                                    activa ? "bg-white text-primary-700 shadow-sm" : "text-warm-500 hover:text-warm-700"
+                                }`}
+                            >
+                                {NOMBRE_MONEDA[mon] ?? mon}
+                            </button>
+                        );
+                    })}
+                </div>
+                {enSoles(p) && (
+                    <>
+                        <Input
+                            type="number"
+                            min="0"
+                            step="0.0001"
+                            placeholder="T.C. comercial"
+                            value={p.tipoCambio}
+                            onChange={(e) => setPago(i, { tipoCambio: e.target.value })}
+                            className="w-28 text-right"
+                            aria-label="Tipo de cambio comercial"
+                        />
+                        <span className="text-xs text-warm-500">
+                            T.C. comercial
+                            {mixto ? ` · abona ${money(abonoDe(p), form.moneda)}` : ""}
+                        </span>
+                    </>
+                )}
+            </div>
+        ) : null;
 
     const alternarMixto = () => {
         setMixto((prev) => {
             if (!prev && !Number(pagos[0].monto)) {
                 setPagos((ps) =>
                     ps.map((p, i) =>
-                        i === 0 ? { ...p, monto: String(total) } : p,
+                        i === 0 ? { ...p, monto: String(totalEn(p)) } : p,
                     ),
                 );
             }
@@ -578,9 +767,19 @@ export default function CrearVenta() {
         });
     };
 
-    const guardar = async () => {
+    /** Con `autorizarExceso`, quien tiene permiso registra la venta aunque pase la línea. */
+    const guardar = async (autorizarExceso = false) => {
         if (items.length === 0)
             return toast.error("Agrega al menos un producto.");
+        if (form.moneda !== "PEN" && !(Number(form.tipo_cambio) > 0))
+            return toast.error("Pon el tipo de cambio de la venta.");
+        if (!esContado) {
+            const suma = cuotas.reduce((acc, c) => acc + (Number(c.monto) || 0), 0);
+            if (cuotas.length === 0 || Math.abs(suma - total) > 0.01 * Math.max(cuotas.length, 1))
+                return toast.error("Las cuotas deben sumar el total de la venta.");
+        }
+        if (esContado && pagosEfectivos.some((p) => enSoles(p) && Number(p.monto) > 0 && !(tcDe(p) > 0)))
+            return toast.error("Para cobrar en soles, pon el tipo de cambio comercial.");
         if (!form.almacen_id) return toast.error("Selecciona el almacén.");
         if (form.tipo_pago === "credito" && !form.cliente_id) {
             return toast.error(
@@ -633,7 +832,9 @@ export default function CrearVenta() {
                               : null,
                       billetera_id:
                           p.tipo === "billetera" ? p.billeteraId || null : null,
+                      // En soles: el backend abona su equivalente al tipo de cambio.
                       monto: Number(p.monto),
+                      ...(enSoles(p) ? { moneda: "PEN", tipo_cambio: tcDe(p) } : {}),
                       fecha: form.fecha_emision,
                       referencia: null,
                   }))
@@ -659,8 +860,19 @@ export default function CrearVenta() {
                 almacen_id: form.almacen_id,
                 vendedor_id: user?.id,
                 fecha_emision: form.fecha_emision,
-                moneda: "PEN",
+                moneda: form.moneda,
+                tipo_cambio:
+                    form.moneda !== "PEN" ? Number(form.tipo_cambio) || null : null,
                 tipo_pago: form.tipo_pago,
+                ...(esContado
+                    ? {}
+                    : {
+                          cuotas: cuotas.map((c) => ({
+                              fecha_vencimiento: c.fecha_vencimiento,
+                              monto: Number(c.monto) || 0,
+                          })),
+                      }),
+                ...(autorizarExceso ? { autorizar_exceso: true } : {}),
                 subtotal: total,
                 descuento_total: 0,
                 total,
@@ -683,6 +895,14 @@ export default function CrearVenta() {
             );
             navigate("/notas-venta");
         } catch (err) {
+            // No cabe en la línea de crédito: el aviso, y "Autorizar" si se puede.
+            if (err.response?.data?.exceso_credito) {
+                setExceso({
+                    message: err.response.data.message,
+                    detalle: err.response.data.exceso_credito,
+                });
+                return;
+            }
             const msg = err.response?.data?.message;
             const firstErr = err.response?.data?.errors
                 ? Object.values(err.response.data.errors)[0]?.[0]
@@ -1055,7 +1275,7 @@ export default function CrearVenta() {
                                                     />
                                                 </td>
                                                 <td className="px-3 py-2 text-right font-semibold text-primary-600">
-                                                    {money(sub)}
+                                                    {m(sub)}
                                                 </td>
                                                 <td className="px-3 py-2">
                                                     <div className="flex items-center justify-center">
@@ -1105,7 +1325,7 @@ export default function CrearVenta() {
                                             : "Cliente"
                                     }
                                     value={form.cliente_id}
-                                    onChange={(v) => setField("cliente_id", v)}
+                                    onChange={elegirCliente}
                                     options={clientes.map((c) => ({
                                         value: String(c.id),
                                         label:
@@ -1162,8 +1382,54 @@ export default function CrearVenta() {
                                     { value: "credito", label: "Crédito" },
                                 ]}
                             />
+                            <Select
+                                label="Moneda"
+                                value={form.moneda}
+                                onChange={(e) => cambiarMoneda(e.target.value)}
+                                options={MONEDAS}
+                            />
+                            {form.moneda !== "PEN" && (
+                                <div>
+                                    <Input
+                                        label="Tipo de cambio (SUNAT venta)"
+                                        type="number"
+                                        min="0"
+                                        step="0.0001"
+                                        value={form.tipo_cambio}
+                                        onChange={(e) => {
+                                            setTcManual(true);
+                                            setField("tipo_cambio", e.target.value);
+                                        }}
+                                        className="text-right"
+                                    />
+                                    <p className="mt-1 text-xs text-warm-500">
+                                        {tcDia?.venta
+                                            ? `SUNAT del ${diaMes(tcDia.fecha_venta)}: ${tcDia.venta}`
+                                            : "Sin tipo de cambio de SUNAT: escríbelo."}
+                                        {tcDia?.comercial ? ` · Comercial: ${tcDia.comercial}` : ""}
+                                    </p>
+                                </div>
+                            )}
                         </div>
                     </div>
+
+                    {/* A crédito: cómo está la línea del cliente y en qué cuotas paga. */}
+                    {!esContado && (
+                        <div className="rounded-xl border border-edge bg-white p-5 shadow-sm">
+                            <h2 className="mb-3 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-warm-500">
+                                <CalendarClock className="h-4 w-4" /> Crédito y cuotas
+                            </h2>
+                            <CreditoVenta
+                                clienteId={form.cliente_id}
+                                total={total}
+                                moneda={form.moneda}
+                                tipoCambio={form.tipo_cambio}
+                                fecha={form.fecha_emision}
+                                cuotas={cuotas}
+                                onCuotas={setCuotas}
+                            />
+                        </div>
+                    )}
 
                     {/* Al crédito no hay cobro que editar: la venta genera una
                         cuenta por cobrar y ahí se registran los pagos. */}
@@ -1176,14 +1442,18 @@ export default function CrearVenta() {
                                     </h2>
                                     <p className="mt-1 text-sm text-warm-900">
                                         {mixto
-                                            ? `${pagos.length} métodos · Cobrado ${money(pagado)}`
-                                            : `${pagos[0].tipo === "efectivo" ? "Efectivo" : pagos[0].tipo === "transferencia" ? "Transferencia" : "Billetera"} · ${money(total)}`}
+                                            ? `${pagos.length} métodos · Cobrado ${m(pagado)}`
+                                            : `${pagos[0].tipo === "efectivo" ? "Efectivo" : pagos[0].tipo === "transferencia" ? "Transferencia" : "Billetera"} · ${
+                                                  enSoles(pagos[0])
+                                                      ? `${money(totalEn(pagos[0]), "PEN")} (= ${m(total)})`
+                                                      : m(total)
+                                              }`}
                                     </p>
                                     {mixto && Math.abs(saldo) > 0.001 && (
                                         <p
                                             className={`mt-0.5 text-xs font-semibold ${saldo > 0 ? "text-amber-600" : "text-red-600"}`}
                                         >
-                                            {saldo > 0 ? "Falta cobrar" : "Vuelto"}: {money(Math.abs(saldo))}
+                                            {saldo > 0 ? "Falta cobrar" : "Vuelto"}: {m(Math.abs(saldo))}
                                         </p>
                                     )}
                                 </div>
@@ -1245,12 +1515,15 @@ export default function CrearVenta() {
                                         })
                                     }
                                 />
+                                {controlesMoneda(pagos[0], 0)}
                                 <div className="flex items-center justify-between rounded-lg bg-primary-50 px-3 py-2.5 text-sm">
                                     <span className="text-warm-500">
                                         Se cobra el total
                                     </span>
                                     <span className="font-bold text-primary-700">
-                                        {money(total)}
+                                        {enSoles(pagos[0])
+                                            ? `${money(totalEn(pagos[0]), "PEN")} (= ${m(total)})`
+                                            : m(total)}
                                     </span>
                                 </div>
                             </div>
@@ -1285,7 +1558,7 @@ export default function CrearVenta() {
                                                     type="number"
                                                     min="0"
                                                     step="any"
-                                                    placeholder="Monto"
+                                                    placeholder={enSoles(p) ? "Monto en soles" : "Monto"}
                                                     value={p.monto}
                                                     onChange={(e) =>
                                                         setPago(i, {
@@ -1309,6 +1582,7 @@ export default function CrearVenta() {
                                                     <Trash2 className="h-4 w-4" />
                                                 </button>
                                             </div>
+                                            {controlesMoneda(p, i)}
                                         </div>
                                     ))}
                                 </div>
@@ -1328,7 +1602,7 @@ export default function CrearVenta() {
                                         Cobrado
                                     </span>
                                     <span className="font-semibold text-green-600">
-                                        {money(pagado)}
+                                        {m(pagado)}
                                     </span>
                                 </div>
                                 {Math.abs(saldo) > 0.001 && (
@@ -1345,7 +1619,7 @@ export default function CrearVenta() {
                                                     : "font-semibold text-red-600"
                                             }
                                         >
-                                            {money(Math.abs(saldo))}
+                                            {m(Math.abs(saldo))}
                                         </span>
                                     </div>
                                 )}
@@ -1387,13 +1661,18 @@ export default function CrearVenta() {
                                 Total
                             </span>
                             <span className="text-2xl font-extrabold text-warm-900">
-                                {money(total)}
+                                {m(total)}
                             </span>
                         </div>
+                        {form.moneda !== "PEN" && Number(form.tipo_cambio) > 0 && (
+                            <p className="mt-1 text-right text-xs text-warm-500">
+                                ≈ {money(total * Number(form.tipo_cambio), "PEN")} al T.C. {form.tipo_cambio}
+                            </p>
+                        )}
 
                         <div className="mt-5 flex flex-col gap-2">
                             <Button
-                                onClick={guardar}
+                                onClick={() => guardar()}
                                 loading={saving}
                                 className="w-full justify-center"
                             >
@@ -1416,6 +1695,16 @@ export default function CrearVenta() {
                     </div>
                 </div>
             </div>
+
+            <ExcesoCreditoModal
+                exceso={exceso}
+                onClose={() => setExceso(null)}
+                autorizando={saving}
+                onAutorizar={async () => {
+                    await guardar(true);
+                    setExceso(null);
+                }}
+            />
 
             {/* El buscador avanzado muestra el catálogo completo; lo que no
                 tiene stock en el almacén se ve pero no se puede agregar. */}

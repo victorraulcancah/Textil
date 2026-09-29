@@ -5,11 +5,14 @@ namespace App\Http\Controllers;
 use App\Models\AperturaCaja;
 use App\Models\CuentaPorCobrar;
 use App\Models\CuentaPorPagar;
+use App\Models\LineaCredito;
+use App\Services\EstadoCuentaService;
 use Illuminate\Support\Facades\DB;
 
 /**
  * Alertas del negocio calculadas en vivo (no se persisten): quiebre y bajo stock,
- * cobranzas y pagos vencidos, y cajas abiertas de días anteriores.
+ * cuotas por cobrar por vencer y vencidas, pagos vencidos, y cajas abiertas de
+ * días anteriores. Son generales: las ve todo el que ve la campana.
  */
 class AlertaController extends Controller
 {
@@ -45,17 +48,37 @@ class AlertaController extends Controller
             }
         }
 
-        // ── Cuentas por cobrar vencidas ──
-        CuentaPorCobrar::with('cliente:id,nombre')
+        // ── Cuotas por cobrar: por vencer (unos días antes), en gracia y vencidas ──
+        // Una cuota cuenta como vencida recién pasados los días de gracia del cliente.
+        $gracia = LineaCredito::pluck('dias_gracia', 'cliente_id');
+        $aviso = now()->addDays(EstadoCuentaService::DIAS_AVISO)->toDateString();
+
+        CuentaPorCobrar::with(['cliente:id,nombre', 'notaVenta:id,serie,numero'])
             ->whereIn('estado', ['pendiente', 'parcial'])
-            ->whereDate('fecha_vencimiento', '<', $hoy)
+            ->whereDate('fecha_vencimiento', '<=', $aviso)
+            ->orderBy('fecha_vencimiento')
             ->get()
-            ->each(function ($c) use (&$alertas) {
+            ->each(function ($c) use (&$alertas, $gracia) {
+                $dias = (int) today()->diffInDays($c->fecha_vencimiento, false);
+                $situacion = EstadoCuentaService::situacion($dias, (int) ($gracia[$c->cliente_id] ?? 0));
+                $cliente = $c->cliente->nombre ?? 'Cliente';
+                $vence = $c->fecha_vencimiento->format('d/m/Y');
+
+                [$nivel, $tipo, $titulo, $cuando] = match ($situacion) {
+                    'vencida' => ['warning', 'cxc_vencida', "Cobranza vencida: {$cliente}", "venció el {$vence}"],
+                    'en_gracia' => ['info', 'cuota_en_gracia', "Cuota en días de gracia: {$cliente}", "venció el {$vence}"],
+                    'vence_hoy' => ['info', 'cuota_por_vencer', "Cuota vence hoy: {$cliente}", 'vence hoy'],
+                    default => ['info', 'cuota_por_vencer', "Cuota por vencer: {$cliente}", "vence el {$vence}"],
+                };
+
+                $documento = $c->notaVenta ? "{$c->notaVenta->serie}-{$c->notaVenta->numero} · " : '';
+                $cuota = $c->total_cuotas > 1 ? "Cuota {$c->numero_cuota}/{$c->total_cuotas} · " : '';
+
                 $alertas[] = [
-                    'nivel' => 'warning',
-                    'tipo' => 'cxc_vencida',
-                    'titulo' => 'Cobranza vencida: '.($c->cliente->nombre ?? 'Cliente'),
-                    'detalle' => 'Saldo S/ '.$this->n($c->saldo).' · venció el '.$c->fecha_vencimiento?->format('d/m/Y'),
+                    'nivel' => $nivel,
+                    'tipo' => $tipo,
+                    'titulo' => $titulo,
+                    'detalle' => "{$documento}{$cuota}Saldo ".$this->dinero($c->saldo, $c->moneda)." · {$cuando}",
                 ];
             });
 
@@ -69,7 +92,7 @@ class AlertaController extends Controller
                     'nivel' => 'warning',
                     'tipo' => 'cxp_vencida',
                     'titulo' => 'Pago vencido a: '.($c->proveedor->nombre ?? 'Proveedor'),
-                    'detalle' => 'Saldo S/ '.$this->n($c->saldo).' · venció el '.$c->fecha_vencimiento?->format('d/m/Y'),
+                    'detalle' => 'Saldo '.$this->dinero($c->saldo, $c->moneda).' · venció el '.$c->fecha_vencimiento?->format('d/m/Y'),
                 ];
             });
 
@@ -103,6 +126,12 @@ class AlertaController extends Controller
             ],
             'alertas' => $alertas,
         ]);
+    }
+
+    /** Un saldo con el símbolo de su moneda: "S/ 120.5", "US$ 300". */
+    private function dinero($monto, ?string $moneda): string
+    {
+        return ($moneda === 'USD' ? 'US$ ' : 'S/ ').$this->n($monto);
     }
 
     /** Formatea un número quitando decimales sobrantes (10.00 → 10, 2.50 → 2.5). */

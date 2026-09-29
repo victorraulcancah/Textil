@@ -2,7 +2,9 @@
 namespace App\Services;
 
 use App\Models\AperturaCaja;
+use App\Models\Cliente;
 use App\Models\CuentaPorCobrar;
+use App\Models\LineaCredito;
 use App\Models\MotivoMovimiento;
 use App\Models\MovimientoCaja;
 use App\Models\NotaVenta;
@@ -12,13 +14,16 @@ use App\Models\Rollo;
 use App\Models\RolloMovimiento;
 use App\Models\SerieDocumento;
 use App\Models\User;
+use Carbon\Carbon;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 
 /**
  * Emitir, editar y anular notas de venta.
  *
  * Una venta toca tres cosas fuera de sí misma: descuenta stock, registra el
- * ingreso en caja y, si es al crédito, crea la cuenta por cobrar. Editar una
+ * ingreso en caja y, si es al crédito, crea la cuenta por cobrar de cada
+ * cuota (antes comprueba que quepa en la línea de crédito del cliente). Editar una
  * venta es deshacer las tres y volver a aplicarlas con los datos nuevos, todo
  * dentro de una transacción: si algo falla, no queda a medias.
  *
@@ -32,11 +37,16 @@ class NotaVentaService
     public function __construct(
         protected StockService $stockService,
         protected RolloService $rollos,
+        protected CreditoService $credito,
+        protected TipoCambioService $tiposCambio,
     ) {}
 
     public function crear(array $data): NotaVenta
     {
         return DB::transaction(function () use ($data) {
+            $data = $this->conTipoCambio($data);
+            $this->verificarCredito($data);
+
             $serie = $data['serie'] ?? 'NV01';
             $serieDoc = SerieDocumento::where('tipo_documento', 'nota_venta')
                 ->where('serie', $serie)
@@ -88,7 +98,11 @@ class NotaVentaService
         }
 
         return DB::transaction(function () use ($notaVenta, $data) {
+            $data = $this->conTipoCambio($data);
+
             $this->revertir($notaVenta);
+            // Ya sin la deuda de esta misma venta: lo que cuenta es lo demás.
+            $this->verificarCredito($data);
 
             $notaVenta->detalles()->delete();
             $notaVenta->pagos()->delete();
@@ -133,6 +147,7 @@ class NotaVentaService
             'vendedor_id' => $data['vendedor_id'],
             'fecha_emision' => $data['fecha_emision'],
             'moneda' => $data['moneda'] ?? 'PEN',
+            'tipo_cambio' => $data['tipo_cambio'] ?? null,
             'tipo_pago' => $data['tipo_pago'] ?? 'contado',
             'subtotal' => $data['subtotal'],
             'descuento_total' => $data['descuento_total'] ?? 0,
@@ -145,7 +160,9 @@ class NotaVentaService
     private function aplicar(NotaVenta $nota, array $data): void
     {
         $nota->detalles()->createMany($data['detalles']);
-        $nota->pagos()->createMany($data['pagos']);
+
+        $cobros = array_map(fn ($pago) => $this->cobroDe($pago, $nota->moneda), $data['pagos']);
+        $nota->pagos()->createMany($cobros);
 
         $nota->load(['detalles.presentacion.producto', 'detalles.rollo', 'almacen']);
 
@@ -195,7 +212,11 @@ class NotaVentaService
                 ->where('nombre', 'Ingreso por venta')
                 ->value('id');
 
-            foreach ($data['pagos'] as $pago) {
+            foreach ($cobros as $pago) {
+                // La plata que de verdad entró: cobrada en soles, en soles; si
+                // no, en la moneda de la venta.
+                $enSoles = $pago['monto_pen'] !== null;
+
                 MovimientoCaja::create([
                     'apertura_caja_id' => $apertura->id,
                     'tipo' => 'ingreso',
@@ -203,7 +224,8 @@ class NotaVentaService
                     'descripcion' => "Venta {$nota->serie}-{$nota->numero}",
                     'cuenta_bancaria_id' => ($pago['forma_pago'] ?? null) === 'transferencia' ? ($pago['cuenta_bancaria_id'] ?? null) : null,
                     'billetera_id' => ($pago['forma_pago'] ?? null) === 'billetera' ? ($pago['billetera_id'] ?? null) : null,
-                    'monto' => $pago['monto'],
+                    'monto' => $enSoles ? $pago['monto_pen'] : $pago['monto'],
+                    'moneda' => $enSoles ? 'PEN' : $nota->moneda,
                     'fecha' => $pago['fecha'],
                     'numero_operacion' => $pago['referencia'] ?? null,
                     'documento_referencia_tipo' => 'nota_venta',
@@ -212,17 +234,138 @@ class NotaVentaService
             }
         }
 
+        // A crédito, cada cuota es una cuenta por cobrar con su vencimiento.
         if ($data['tipo_pago'] === 'credito' && ($data['cliente_id'] ?? null)) {
-            CuentaPorCobrar::create([
-                'nota_venta_id' => $nota->id,
-                'cliente_id' => $data['cliente_id'],
-                'monto_total' => $data['total'],
-                'monto_pagado' => 0,
-                'saldo' => $data['total'],
-                'fecha_vencimiento' => $data['fecha_emision'],
-                'estado' => 'pendiente',
-            ]);
+            $cuotas = $this->cuotas($data);
+
+            foreach ($cuotas as $i => $cuota) {
+                CuentaPorCobrar::create([
+                    'nota_venta_id' => $nota->id,
+                    'cliente_id' => $data['cliente_id'],
+                    'numero_cuota' => $i + 1,
+                    'total_cuotas' => count($cuotas),
+                    'monto_total' => $cuota['monto'],
+                    'moneda' => $nota->moneda,
+                    'monto_pagado' => 0,
+                    'saldo' => $cuota['monto'],
+                    'fecha_vencimiento' => $cuota['fecha_vencimiento'],
+                    'estado' => 'pendiente',
+                ]);
+            }
         }
+    }
+
+    /**
+     * Una venta en dólares lleva su tipo de cambio: el que se indicó o el
+     * SUNAT venta de su fecha. Sin ninguno no se puede llevar a soles.
+     */
+    private function conTipoCambio(array $data): array
+    {
+        if (($data['moneda'] ?? 'PEN') !== 'USD') {
+            return ['tipo_cambio' => null] + $data;
+        }
+
+        $tipoCambio = (float) ($data['tipo_cambio'] ?? 0) ?: $this->tiposCambio->venta($data['fecha_emision']);
+        if (! $tipoCambio) {
+            throw new \DomainException(
+                'No hay tipo de cambio para vender en dólares: ponlo en Tesorería → Tipo de cambio.'
+            );
+        }
+
+        return ['tipo_cambio' => $tipoCambio] + $data;
+    }
+
+    /** A crédito: se necesita el cliente y que la venta quepa en su línea. */
+    private function verificarCredito(array $data): void
+    {
+        if (($data['tipo_pago'] ?? 'contado') !== 'credito') {
+            return;
+        }
+
+        $cliente = ($data['cliente_id'] ?? null) ? Cliente::with('lineaCredito')->find($data['cliente_id']) : null;
+        if (! $cliente) {
+            throw new \DomainException('Una venta al crédito necesita un cliente identificado.');
+        }
+
+        $this->credito->verificarVenta(
+            $cliente,
+            (float) $data['total'],
+            $data['moneda'] ?? 'PEN',
+            $data['tipo_cambio'] ?? null,
+            (bool) ($data['autorizar_exceso'] ?? false),
+        );
+    }
+
+    /**
+     * Un cobro tal como se guarda: `monto` es lo que abona a la venta, en su
+     * moneda. Si una venta en dólares se cobró con soles, el monto llega en
+     * soles y se abona su equivalente al tipo de cambio que se indicó.
+     */
+    private function cobroDe(array $pago, string $moneda): array
+    {
+        $cobro = ['moneda' => $moneda, 'monto_pen' => null, 'tipo_cambio' => null]
+            + Arr::except($pago, ['moneda', 'tipo_cambio', 'monto_pen']);
+
+        $enSoles = $moneda !== 'PEN'
+            && ($pago['moneda'] ?? $moneda) === 'PEN'
+            && ($pago['forma_pago'] ?? null) !== 'credito';
+
+        if (! $enSoles) {
+            return $cobro;
+        }
+
+        $tipoCambio = (float) ($pago['tipo_cambio'] ?? 0);
+        if ($tipoCambio <= 0) {
+            throw new \DomainException('Para cobrar en soles una venta en dólares, pon el tipo de cambio.');
+        }
+
+        $soles = round((float) $pago['monto'], 2);
+
+        return ['monto' => round($soles / $tipoCambio, 2), 'monto_pen' => $soles, 'tipo_cambio' => $tipoCambio] + $cobro;
+    }
+
+    /**
+     * Las cuotas de una venta a crédito, por vencimiento. Sin cuotas, una sola
+     * a los días de crédito del cliente. Deben sumar el total de la venta: la
+     * última se queda con los céntimos del redondeo.
+     *
+     * @return list<array{fecha_vencimiento: string, monto: float}>
+     */
+    private function cuotas(array $data): array
+    {
+        $total = round((float) $data['total'], 2);
+        $emision = Carbon::parse($data['fecha_emision'])->toDateString();
+
+        $cuotas = collect($data['cuotas'] ?? [])
+            ->map(fn ($c) => [
+                'fecha_vencimiento' => Carbon::parse($c['fecha_vencimiento'])->toDateString(),
+                'monto' => round((float) $c['monto'], 2),
+            ])
+            ->sortBy('fecha_vencimiento')
+            ->values();
+
+        if ($cuotas->isEmpty()) {
+            $dias = (int) (LineaCredito::where('cliente_id', $data['cliente_id'])->value('dias_credito') ?? 0);
+
+            return [['fecha_vencimiento' => Carbon::parse($emision)->addDays($dias)->toDateString(), 'monto' => $total]];
+        }
+
+        if ($cuotas->contains(fn ($c) => $c['fecha_vencimiento'] < $emision)) {
+            throw new \DomainException('Una cuota no puede vencer antes de la fecha de la venta.');
+        }
+
+        $suma = round($cuotas->sum('monto'), 2);
+        if (abs($suma - $total) > 0.01 * $cuotas->count()) {
+            throw new \DomainException(
+                'Las cuotas suman '.number_format($suma, 2).' y la venta es de '.number_format($total, 2).'.'
+            );
+        }
+
+        $lista = $cuotas->all();
+        $ultima = count($lista) - 1;
+        $lista[$ultima]['monto'] = round($lista[$ultima]['monto'] + ($total - $suma), 2);
+
+        return $lista;
     }
 
     /** Deshace el efecto de la venta: devuelve stock, borra caja y deuda. */

@@ -1,4 +1,4 @@
-@props(['lineas' => [], 'total', 'moneda' => 'S/', 'enLetras' => null, 'formato' => 'a4'])
+@props(['lineas' => [], 'total', 'moneda' => 'S/', 'enLetras' => null, 'formato' => 'a4', 'etiqueta' => 'TOTAL'])
 
 @php
     // $lineas: ['Subtotal' => '100.00', 'Descuento' => '-5.00'] (opcional).
@@ -11,7 +11,7 @@
             <tr><td class="muted">{{ $label }}</td><td class="right">{{ $moneda }} {{ $valor }}</td></tr>
         @endforeach
         <tr>
-            <td class="strong" style="font-size: 11px;">TOTAL</td>
+            <td class="strong" style="font-size: 11px;">{{ $etiqueta }}</td>
             <td class="right strong" style="font-size: 11px;">{{ $moneda }} {{ $total }}</td>
         </tr>
     </table>
@@ -36,7 +36,7 @@
                         </tr>
                     @endforeach
                     <tr>
-                        <td class="right strong" style="font-size: 13px; color: {{ config('theme.warm') }};">TOTAL</td>
+                        <td class="right strong" style="font-size: 13px; color: {{ config('theme.warm') }};">{{ $etiqueta }}</td>
                         <td class="right strong" style="font-size: 13px; color: {{ config('theme.warm') }};">{{ $moneda }} {{ $total }}</td>
                     </tr>
                 </table>

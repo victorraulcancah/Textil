@@ -22,7 +22,8 @@ class ReporteController extends Controller
 {
     private const COSTO_SUB = '(SELECT producto_id, AVG(NULLIF(costo_promedio,0)) AS costo FROM producto_almacen_stock GROUP BY producto_id)';
 
-    private const AGG = 'SUM(d.subtotal) as ventas,
+    // Una venta en dólares se lleva a soles con el tipo de cambio de su día.
+    private const AGG = 'SUM(d.subtotal * (CASE WHEN nv.moneda = \'USD\' THEN COALESCE(nv.tipo_cambio, 1) ELSE 1 END)) as ventas,
         SUM(d.cantidad * pp.factor_conversion * COALESCE(c.costo,0)) as costo,
         SUM(d.cantidad) as unidades,
         COUNT(DISTINCT nv.id) as num_ventas';

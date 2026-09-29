@@ -9,11 +9,10 @@ import ColorSelect from '../components/ColorSelect';
 import ProductoPickerModal from '../components/ProductoPickerModal';
 import { tipoUnidad } from '../lib/unidades';
 import { precioPara } from '../lib/precios';
-import { Alert, Button, Input, SearchSelect, Spinner } from '../components/ui';
+import { cargarTipoCambio, convertir, money, MONEDAS } from '../lib/moneda';
+import { Alert, Button, Input, SearchSelect, Select, Spinner } from '../components/ui';
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
-const money = (n) =>
-    new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(n) || 0);
 
 const hoy = () => new Date().toISOString().slice(0, 10);
 
@@ -47,8 +46,16 @@ export default function CrearPedido() {
         cliente_id: '',
         fecha_emision: hoy(),
         fecha_entrega: '',
+        moneda: 'PEN',
+        // SUNAT venta de la fecha, si el pedido es en dólares.
+        tipo_cambio: '',
         observaciones: '',
     });
+
+    /** El tipo de cambio de la fecha del pedido: SUNAT (venta) y comercial. */
+    const [tcDia, setTcDia] = useState(null);
+    /** El del pedido se escribió a mano (o viene guardado): ya no sigue al SUNAT. */
+    const [tcManual, setTcManual] = useState(false);
 
     /** Líneas ya agregadas al pedido. */
     const [lineas, setLineas] = useState([]);
@@ -116,8 +123,11 @@ export default function CrearPedido() {
                         cliente_id: p.cliente_id ? String(p.cliente_id) : '',
                         fecha_emision: p.fecha_emision,
                         fecha_entrega: p.fecha_entrega ?? '',
+                        moneda: p.moneda ?? 'PEN',
+                        tipo_cambio: p.tipo_cambio ? String(Number(p.tipo_cambio)) : '',
                         observaciones: p.observaciones ?? '',
                     });
+                    setTcManual(Boolean(p.tipo_cambio));
 
                     setLineas(
                         (p.detalles ?? []).map((d) => ({
@@ -168,10 +178,17 @@ export default function CrearPedido() {
     const presentacionDe = (id) =>
         productos.flatMap((p) => p.presentaciones ?? []).find((pr) => String(pr.id) === String(id)) ?? null;
 
-    /** El precio de lista: el del tipo de precio del cliente, según la cantidad. */
-    const precioDeLista = (pres, cantidad) => String(precioPara(pres, tipoPrecioId, cantidad));
+    /** En qué moneda se vende el producto de esa presentación. */
+    const monedaDe = (pres) =>
+        productos.find((p) => (p.presentaciones ?? []).some((pr) => String(pr.id) === String(pres?.id)))?.moneda_venta ||
+        'PEN';
 
-    // Otro cliente, otro tipo de precio: las líneas sin precio a mano se recalculan.
+    /** El precio de lista: el del tipo de precio del cliente, según la cantidad, en la moneda del pedido. */
+    const precioDeLista = (pres, cantidad) =>
+        String(convertir(precioPara(pres, tipoPrecioId, cantidad), monedaDe(pres), cabecera.moneda, cabecera.tipo_cambio));
+
+    // Otro cliente, otro tipo de precio, otra moneda u otro tipo de cambio: las
+    // líneas sin precio a mano se recalculan.
     useEffect(() => {
         setLineas((prev) =>
             prev.map((l) =>
@@ -180,7 +197,36 @@ export default function CrearPedido() {
                     : { ...l, precio_unitario: precioDeLista(presentacionDe(l.producto_presentacion_id), l.cantidad) },
             ),
         );
-    }, [tipoPrecioId]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [tipoPrecioId, cabecera.moneda, cabecera.tipo_cambio]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // El tipo de cambio de la fecha. El del pedido sigue al SUNAT mientras no se escriba otro.
+    useEffect(() => {
+        if (!cabecera.fecha_emision) return;
+        cargarTipoCambio(cabecera.fecha_emision)
+            .then((tc) => {
+                setTcDia(tc);
+                if (!tcManual && tc?.venta) setCabecera((p) => ({ ...p, tipo_cambio: String(tc.venta) }));
+            })
+            .catch(() => setTcDia(null));
+    }, [cabecera.fecha_emision]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    /** Otra moneda: lo que tiene precio a mano se lleva a la nueva; lo demás lo recalcula la lista. */
+    const cambiarMoneda = (nueva) => {
+        if (nueva === cabecera.moneda) return;
+        const tc = Number(cabecera.tipo_cambio) || Number(tcDia?.venta) || 0;
+        setLineas((prev) =>
+            prev.map((l) =>
+                l.precio_manual
+                    ? { ...l, precio_unitario: String(convertir(l.precio_unitario, cabecera.moneda, nueva, tc)) }
+                    : l,
+            ),
+        );
+        setCabecera((p) => ({
+            ...p,
+            moneda: nueva,
+            tipo_cambio: p.tipo_cambio || (tcDia?.venta ? String(tcDia.venta) : ''),
+        }));
+    };
 
     /**
      * El stock del producto, expresado en la unidad elegida. Con un color
@@ -397,8 +443,13 @@ export default function CrearPedido() {
         setErrores({});
 
         try {
+            if (cabecera.moneda !== 'PEN' && !(Number(cabecera.tipo_cambio) > 0)) {
+                toast.error('Pon el tipo de cambio del pedido.');
+                return;
+            }
             const cuerpo = {
                 ...cabecera,
+                tipo_cambio: cabecera.moneda !== 'PEN' ? Number(cabecera.tipo_cambio) || null : null,
                 cliente_id: cabecera.cliente_id || null,
                 fecha_entrega: cabecera.fecha_entrega || null,
                 vendedor_id: user?.id,
@@ -704,7 +755,7 @@ export default function CrearPedido() {
                                             {l.precio_oculto ? (
                                                 <span className="font-normal text-warm-400">Por confirmar</span>
                                             ) : (
-                                                money((Number(l.cantidad) || 0) * (Number(l.precio_unitario) || 0))
+                                                money((Number(l.cantidad) || 0) * (Number(l.precio_unitario) || 0), cabecera.moneda)
                                             )}
                                         </td>
                                         <td className="px-3 py-2 text-center">
@@ -761,6 +812,33 @@ export default function CrearPedido() {
                                 onChange={(e) => setCabecera((p) => ({ ...p, fecha_entrega: e.target.value }))}
                                 error={errores.fecha_entrega?.[0]}
                             />
+                            <Select
+                                label="Moneda"
+                                value={cabecera.moneda}
+                                onChange={(e) => cambiarMoneda(e.target.value)}
+                                options={MONEDAS}
+                            />
+                            {cabecera.moneda !== 'PEN' && (
+                                <div>
+                                    <Input
+                                        label="Tipo de cambio (SUNAT venta)"
+                                        type="number"
+                                        min="0"
+                                        step="0.0001"
+                                        value={cabecera.tipo_cambio}
+                                        onChange={(e) => {
+                                            setTcManual(true);
+                                            setCabecera((p) => ({ ...p, tipo_cambio: e.target.value }));
+                                        }}
+                                        className="text-right"
+                                    />
+                                    <p className="mt-1 text-xs text-warm-500">
+                                        {tcDia?.venta
+                                            ? `SUNAT: ${tcDia.venta}${tcDia.comercial ? ` · Comercial: ${tcDia.comercial}` : ''}`
+                                            : 'Sin tipo de cambio de SUNAT: escríbelo.'}
+                                    </p>
+                                </div>
+                            )}
                             <Input
                                 label="Observación"
                                 placeholder="Referencia…"
@@ -781,8 +859,13 @@ export default function CrearPedido() {
                             <span className="text-xs font-semibold uppercase tracking-wide text-warm-500">
                                 Total del pedido
                             </span>
-                            <span className="text-2xl font-bold text-primary-600">{money(total)}</span>
+                            <span className="text-2xl font-bold text-primary-600">{money(total, cabecera.moneda)}</span>
                         </div>
+                        {cabecera.moneda !== 'PEN' && Number(cabecera.tipo_cambio) > 0 && (
+                            <p className="mt-1 text-right text-xs text-warm-500">
+                                ≈ {money(total * Number(cabecera.tipo_cambio), 'PEN')} al T.C. {cabecera.tipo_cambio}
+                            </p>
+                        )}
                     </section>
 
                     <div className="flex justify-end gap-2">

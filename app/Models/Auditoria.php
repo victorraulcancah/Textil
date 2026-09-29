@@ -38,6 +38,8 @@ class Auditoria extends Model
         'elimino' => 'Eliminó',
         'inicio_sesion' => 'Inició sesión',
         'cerro_sesion' => 'Cerró sesión',
+        // Vender a crédito por encima de la línea del cliente.
+        'autorizo_exceso_credito' => 'Autorizó exceso de crédito',
     ];
 
     public function usuario()

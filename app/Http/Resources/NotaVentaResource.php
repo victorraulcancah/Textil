@@ -18,6 +18,8 @@ class NotaVentaResource extends JsonResource
             'orden_venta_id' => $this->orden_venta_id,
             'fecha_emision' => $this->fecha_emision,
             'moneda' => $this->moneda,
+            // SUNAT venta del día, si la venta es en dólares.
+            'tipo_cambio' => $this->tipo_cambio,
             'tipo_pago' => $this->tipo_pago,
             'subtotal' => $this->subtotal,
             'descuento_total' => $this->descuento_total,

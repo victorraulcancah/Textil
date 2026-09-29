@@ -4,6 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\Cliente;
 use App\Models\ClienteDireccion;
+use App\Models\LineaCredito;
+use App\Services\CreditoService;
+use App\Support\Permisos;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
@@ -18,6 +21,8 @@ class ClienteController extends Controller
         'categoriaComercial:id,nombre',
         'actividadComercial:id,nombre',
         'direcciones',
+        // Condición de venta y días de crédito: la venta los necesita.
+        'lineaCredito',
     ];
 
     public function index(Request $request)
@@ -42,12 +47,13 @@ class ClienteController extends Controller
             $direcciones = Cliente::normalizarDirecciones($data['direcciones'] ?? []);
             // Como antes, todo cliente nuevo nace activo.
             $cliente = Cliente::create([
-                ...Arr::except($data, ['direcciones', 'activo']),
+                ...Arr::except($data, ['direcciones', 'activo', 'linea_credito']),
                 // Sin código escrito, el siguiente correlativo.
                 'codigo' => ($data['codigo'] ?? null) ?: Cliente::siguienteCodigo(),
                 'direccion' => Cliente::direccionPredeterminada($direcciones),
             ]);
             $cliente->guardarDirecciones($direcciones);
+            $this->guardarLinea($cliente, $data);
 
             return $cliente;
         });
@@ -65,7 +71,7 @@ class ClienteController extends Controller
         $data = $this->validar($request, $cliente);
 
         DB::transaction(function () use ($cliente, $data) {
-            $cambios = Arr::except($data, ['direcciones']);
+            $cambios = Arr::except($data, ['direcciones', 'linea_credito']);
             // El código no se queda vacío: si lo borran, sigue el que tenía.
             if (array_key_exists('codigo', $cambios) && blank($cambios['codigo'])) {
                 $cambios['codigo'] = $cliente->codigo ?: Cliente::siguienteCodigo();
@@ -81,9 +87,19 @@ class ClienteController extends Controller
             if ($direcciones !== null) {
                 $cliente->guardarDirecciones($direcciones);
             }
+            $this->guardarLinea($cliente, $data);
         });
 
         return response()->json($cliente->load(self::RELACIONES));
+    }
+
+    /** La línea de crédito en uso: lo aprobado, lo que debe y lo disponible hoy. */
+    public function credito(Cliente $cliente, CreditoService $credito)
+    {
+        return response()->json([
+            'linea' => $cliente->lineaCredito,
+            'resumen' => $credito->resumen($cliente),
+        ]);
     }
 
     public function destroy(Cliente $cliente)
@@ -122,12 +138,34 @@ class ClienteController extends Controller
             'direcciones.*.distrito' => 'nullable|string|max:80',
             'direcciones.*.ubigeo' => 'nullable|digits:6|exists:ubigeos,ubigeo',
             'direcciones.*.codigo_postal' => 'nullable|string|max:10',
+
+            // La línea de crédito viaja con el cliente; null la quita.
+            'linea_credito' => 'sometimes|nullable|array',
+            'linea_credito.moneda' => 'required_with:linea_credito|in:PEN,USD',
+            'linea_credito.limite' => 'required_with:linea_credito|numeric|min:0',
+            'linea_credito.fecha_aprobacion' => 'nullable|date',
+            'linea_credito.vigente_hasta' => 'nullable|date',
+            'linea_credito.activa' => 'boolean',
+            'linea_credito.condicion_venta' => ['required_with:linea_credito', Rule::in([LineaCredito::CONTADO, LineaCredito::CREDITO])],
+            'linea_credito.dias_credito' => 'nullable|integer|min:0|max:720',
+            'linea_credito.dias_gracia' => 'nullable|integer|min:0|max:365',
+            'linea_credito.ampliacion_tipo' => ['nullable', Rule::in([LineaCredito::AMPLIACION_IMPORTE, LineaCredito::AMPLIACION_PORCENTAJE])],
+            'linea_credito.ampliacion_valor' => 'nullable|numeric|min:0',
+            'linea_credito.ampliacion_hasta' => 'nullable|date',
+            'linea_credito.observaciones' => 'nullable|string|max:2000',
         ], [
             'codigo.unique' => 'Ya hay otro cliente con ese código.',
             'direcciones.*.direccion.required' => 'Escribe la dirección.',
             'direcciones.*.ubigeo.digits' => 'El ubigeo tiene 6 dígitos.',
             'direcciones.*.ubigeo.exists' => 'Ese ubigeo no existe.',
+            'linea_credito.limite.required_with' => 'Pon el límite de la línea de crédito.',
         ]);
+
+        // Cuánto se le fía lo decide quien aprueba crédito, no cualquiera que
+        // edite los datos del cliente.
+        if (array_key_exists('linea_credito', $data) && ! Permisos::puede($request->user(), 'ventas.clientes.linea_credito')) {
+            abort(403, 'No tienes permiso para aprobar líneas de crédito.');
+        }
 
         $direcciones = collect($data['direcciones'] ?? []);
         if ($direcciones->where('tipo', ClienteDireccion::FISCAL)->count() > 1) {
@@ -138,6 +176,42 @@ class ClienteController extends Controller
         }
 
         return $data;
+    }
+
+    /** Crea, actualiza o quita la línea de crédito, si vino en lo guardado. */
+    private function guardarLinea(Cliente $cliente, array $data): void
+    {
+        if (! array_key_exists('linea_credito', $data)) {
+            return;
+        }
+
+        $linea = $data['linea_credito'];
+        if ($linea === null) {
+            $cliente->lineaCredito()->delete();
+
+            return;
+        }
+
+        // Sin tipo de ampliación no hay ampliación: ni valor ni fecha.
+        if (empty($linea['ampliacion_tipo'])) {
+            $linea = ['ampliacion_tipo' => null, 'ampliacion_valor' => 0, 'ampliacion_hasta' => null] + $linea;
+        }
+
+        $cliente->lineaCredito()->updateOrCreate(['cliente_id' => $cliente->id], [
+            'moneda' => $linea['moneda'],
+            'limite' => $linea['limite'],
+            'fecha_aprobacion' => $linea['fecha_aprobacion'] ?? null,
+            'vigente_hasta' => $linea['vigente_hasta'] ?? null,
+            'activa' => (bool) ($linea['activa'] ?? true),
+            'condicion_venta' => $linea['condicion_venta'],
+            'dias_credito' => (int) ($linea['dias_credito'] ?? 0),
+            'dias_gracia' => (int) ($linea['dias_gracia'] ?? 0),
+            'ampliacion_tipo' => $linea['ampliacion_tipo'] ?? null,
+            'ampliacion_valor' => (float) ($linea['ampliacion_valor'] ?? 0),
+            'ampliacion_hasta' => $linea['ampliacion_hasta'] ?? null,
+            'observaciones' => $linea['observaciones'] ?? null,
+        ]);
+        $cliente->unsetRelation('lineaCredito');
     }
 
     /** El super-admin y quien tenga el permiso "ver todo" ven la cartera completa. */

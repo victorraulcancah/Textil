@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\ExcesoCreditoException;
 use App\Http\Requests\NotaVenta\AnularNotaVentaRequest;
 use App\Http\Requests\NotaVenta\StoreNotaVentaRequest;
 use App\Http\Resources\NotaVentaResource;
@@ -33,6 +34,8 @@ class NotaVentaController extends Controller
     {
         try {
             $nota = $this->notaVentaService->crear($request->validated());
+        } catch (ExcesoCreditoException $e) {
+            return $this->excesoDeCredito($e);
         } catch (\DomainException|\RuntimeException|\InvalidArgumentException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
@@ -48,6 +51,8 @@ class NotaVentaController extends Controller
     {
         try {
             $nota = $this->notaVentaService->actualizar($notaVenta, $request->validated());
+        } catch (ExcesoCreditoException $e) {
+            return $this->excesoDeCredito($e);
         } catch (\DomainException|\RuntimeException|\InvalidArgumentException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
@@ -70,6 +75,15 @@ class NotaVentaController extends Controller
         } catch (\DomainException|\RuntimeException|\InvalidArgumentException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
+    }
+
+    /**
+     * La venta a crédito no cabe en la línea del cliente: el mensaje y los
+     * números, para que la pantalla ofrezca autorizarla a quien puede.
+     */
+    private function excesoDeCredito(ExcesoCreditoException $e)
+    {
+        return response()->json(['message' => $e->getMessage(), 'exceso_credito' => $e->detalle], 422);
     }
 
     public function destroy(NotaVenta $notaVenta)

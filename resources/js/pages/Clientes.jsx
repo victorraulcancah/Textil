@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Briefcase, Edit, IdCard, Mail, MapPin, Phone, Plus, Trash2, User } from 'lucide-react';
+import { Briefcase, CreditCard, Edit, IdCard, Mail, MapPin, Phone, Plus, Trash2, User } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
+import { money } from '../lib/moneda';
 import { cargarUbigeos, esPeru, porCodigo, porNombres, quitarLugar } from '../lib/ubigeos';
 import CampoConAgregar from '../components/CampoConAgregar';
 import ConsultarDocumento from '../components/ConsultarDocumento';
 import Layout from '../components/Layout';
+import LineaCreditoModal, { lineaDesdeApi, lineaParaApi } from '../components/LineaCreditoModal';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import SelectorUbigeo from '../components/SelectorUbigeo';
 import { Alert, Badge, Button, DataTable, Input, Modal, Select, SearchSelect, Tabs, cn } from '../components/ui';
@@ -69,6 +71,16 @@ const emptyForm = {
     tipo_precio_id: '',
     activo: true,
     direcciones: [],
+    // En un cliente nuevo la línea se guarda al crearlo; en uno existente, en su ventana.
+    linea_credito: null,
+};
+
+/** Una línea en una frase: "Crédito a 30 días · S/ 20,000.00". */
+const resumenLinea = (l) => {
+    if (!l) return 'Sin línea de crédito: compra al contado.';
+    if (l.condicion_venta !== 'credito') return 'Compra al contado.';
+    const texto = `Crédito a ${Number(l.dias_credito) || 0} días · ${money(l.limite, l.moneda)}`;
+    return l.activa ? texto : `${texto} · suspendida`;
 };
 
 /** En qué pestaña está cada campo, para llevar al usuario a su error. */
@@ -224,6 +236,7 @@ export default function Clientes() {
     const [actividades, setActividades] = useState([]);
     // Qué catálogo se está creando desde el "+": 'categorias' | 'actividades'.
     const [creando, setCreando] = useState(null);
+    const [lineaOpen, setLineaOpen] = useState(false);
     const [ubigeos, setUbigeos] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -331,6 +344,7 @@ export default function Clientes() {
             tipo_precio_id: c.tipo_precio_id ? String(c.tipo_precio_id) : '',
             activo: Boolean(c.activo),
             direcciones: direcciones.length ? direcciones : [nuevaDireccion('fiscal', true)],
+            linea_credito: lineaDesdeApi(c.linea_credito),
         });
         setFormErrors({});
         setTab('general');
@@ -350,8 +364,12 @@ export default function Clientes() {
         setForm((prev) => ({ ...prev, direcciones }));
         setSaving(true);
         setFormErrors({});
+        const { linea_credito: linea, ...resto } = form;
         const payload = {
-            ...form,
+            ...resto,
+            // La línea de un cliente nuevo viaja con él; la de uno existente se
+            // guarda en su propia ventana.
+            ...(!editing && linea && puede('ventas.clientes.linea_credito') ? { linea_credito: lineaParaApi(linea) } : {}),
             tipo_precio_id: form.tipo_precio_id || null,
             categoria_comercial_id: form.categoria_comercial_id || null,
             actividad_comercial_id: form.actividad_comercial_id || null,
@@ -870,6 +888,15 @@ export default function Clientes() {
                                     Quien tenga a cargo este cliente. Sin "Ver de todos" en Clientes, cada vendedor solo ve
                                     los suyos.
                                 </p>
+                                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-edge bg-gray-50 px-3 py-2.5">
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-medium text-warm-900">Línea de crédito</p>
+                                        <p className="text-xs text-warm-500">{resumenLinea(form.linea_credito)}</p>
+                                    </div>
+                                    <Button type="button" variant="secondary" onClick={() => setLineaOpen(true)}>
+                                        <CreditCard className="h-4 w-4" /> Línea de crédito
+                                    </Button>
+                                </div>
                             </div>
                         )}
                     </div>
@@ -881,6 +908,27 @@ export default function Clientes() {
                     </datalist>
                 </form>
             </Modal>
+
+            <LineaCreditoModal
+                open={lineaOpen}
+                onClose={() => setLineaOpen(false)}
+                cliente={editing}
+                valor={form.linea_credito}
+                tipoPrecioId={form.tipo_precio_id}
+                tiposPrecio={tiposPrecio}
+                onAplicar={({ linea, tipo_precio_id }) =>
+                    setForm((prev) => ({ ...prev, linea_credito: linea, tipo_precio_id }))
+                }
+                onGuardado={(c) => {
+                    setEditing(c);
+                    setForm((prev) => ({
+                        ...prev,
+                        linea_credito: lineaDesdeApi(c.linea_credito),
+                        tipo_precio_id: c.tipo_precio_id ? String(c.tipo_precio_id) : '',
+                    }));
+                    load();
+                }}
+            />
 
             {creando && (
                 <CrearEnCatalogo

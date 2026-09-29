@@ -44,6 +44,7 @@ class OrdenVentaResource extends JsonResource
             'editable' => $this->esEditable(),
 
             'moneda' => $this->moneda,
+            'tipo_cambio' => $this->tipo_cambio,
             'subtotal' => (float) $this->subtotal,
             'descuento_total' => (float) $this->descuento_total,
             'total' => (float) $this->total,

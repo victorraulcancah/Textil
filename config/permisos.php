@@ -237,7 +237,12 @@ return [
                 ],
                 // El del día para vender y cobrar se lee sin permiso (tipo-cambio);
                 // esta es la pantalla donde se pone el comercial.
-                'tipos-cambio' => ['label' => 'Tipo de cambio', 'apis' => ['tipos-cambio'], 'acciones' => ['ver', 'editar']],
+                'tipos-cambio' => [
+                    'label' => 'Tipo de cambio',
+                    'apis' => ['tipos-cambio'],
+                    'acciones' => ['ver', 'editar'],
+                    'patrones' => ['tipos-cambio/sunat' => 'editar'],
+                ],
                 'cuentas-por-pagar' => ['label' => 'Cuentas por pagar', 'apis' => ['cuentas-por-pagar']],
             ],
         ],

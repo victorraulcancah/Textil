@@ -17,6 +17,8 @@ class StoreNotaVentaRequest extends FormRequest
             'vendedor_id' => 'required|exists:users,id',
             'fecha_emision' => 'required|date',
             'moneda' => 'string|max:10|in:PEN,USD',
+            // En dólares; sin él se usa el SUNAT venta de la fecha.
+            'tipo_cambio' => 'nullable|numeric|min:0.0001',
             'tipo_pago' => 'string|max:20|in:contado,credito',
             'subtotal' => 'required|numeric|min:0',
             'descuento_total' => 'numeric|min:0',
@@ -40,6 +42,18 @@ class StoreNotaVentaRequest extends FormRequest
             'pagos.*.monto' => 'required|numeric|min:0.01',
             'pagos.*.fecha' => 'required|date',
             'pagos.*.referencia' => 'nullable|string|max:100',
+            // Una venta en dólares que se cobra con soles: el monto va en
+            // soles y se abona su equivalente a este tipo de cambio.
+            'pagos.*.moneda' => 'nullable|in:PEN,USD',
+            'pagos.*.tipo_cambio' => 'nullable|numeric|min:0.0001',
+
+            // A crédito: cuándo vence cada cuota y cuánto es. Sin cuotas, una
+            // sola a los días de crédito del cliente.
+            'cuotas' => 'nullable|array|max:60',
+            'cuotas.*.fecha_vencimiento' => 'required|date',
+            'cuotas.*.monto' => 'required|numeric|min:0.01',
+            // Pasarse de la línea de crédito, si quien vende tiene permiso.
+            'autorizar_exceso' => 'nullable|boolean',
         ];
     }
 

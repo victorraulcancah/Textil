@@ -25,7 +25,9 @@ class StoreOrdenVentaRequest extends FormRequest
             'vendedor_id' => 'required|exists:users,id',
             'fecha_emision' => 'required|date',
             'fecha_entrega' => 'nullable|date|after_or_equal:fecha_emision',
-            'moneda' => 'nullable|string|max:10',
+            'moneda' => 'nullable|in:PEN,USD',
+            // En dólares; sin él se usa el SUNAT venta del día.
+            'tipo_cambio' => 'nullable|numeric|min:0.0001',
             'observaciones' => 'nullable|string',
 
             'detalles' => 'required|array|min:1',

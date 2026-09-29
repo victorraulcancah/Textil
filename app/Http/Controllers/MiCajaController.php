@@ -81,7 +81,11 @@ class MiCajaController extends Controller
     public function cerrar(Request $request)
     {
         $user = auth('api')->user();
-        $data = $request->validate(['monto_contado' => 'required|numeric|min:0']);
+        $data = $request->validate([
+            'monto_contado' => 'required|numeric|min:0',
+            // Los dólares del cajón se cuentan aparte.
+            'monto_contado_usd' => 'nullable|numeric|min:0',
+        ]);
 
         $apertura = AperturaCaja::where('caja_id', $user?->caja_id)
             ->where('estado', 'abierta')
@@ -96,12 +100,23 @@ class MiCajaController extends Controller
         $sistema = $resumen['esperado'];
         $contado = (float) $data['monto_contado'];
 
-        DB::transaction(function () use ($apertura, $sistema, $contado) {
+        // Si entraron o salieron dólares en efectivo, también se arquean.
+        $dolares = $resumen['dolares'];
+        $sistemaUsd = $dolares ? $dolares['esperado'] : null;
+        if ($sistemaUsd !== null && abs($sistemaUsd) > 0.005 && ! isset($data['monto_contado_usd'])) {
+            throw ValidationException::withMessages(['monto_contado_usd' => 'Cuenta también los dólares del cajón.']);
+        }
+        $contadoUsd = isset($data['monto_contado_usd']) ? (float) $data['monto_contado_usd'] : null;
+
+        DB::transaction(function () use ($apertura, $sistema, $contado, $sistemaUsd, $contadoUsd) {
             CierreCaja::create([
                 'apertura_caja_id' => $apertura->id,
                 'monto_sistema' => $sistema,
                 'monto_contado' => $contado,
                 'diferencia' => round($contado - $sistema, 2),
+                'monto_sistema_usd' => $sistemaUsd,
+                'monto_contado_usd' => $contadoUsd,
+                'diferencia_usd' => $sistemaUsd !== null && $contadoUsd !== null ? round($contadoUsd - $sistemaUsd, 2) : null,
                 'fecha_cierre' => now(),
             ]);
             $apertura->update(['estado' => 'cerrada']);
@@ -120,8 +135,13 @@ class MiCajaController extends Controller
      */
     private function resumen(AperturaCaja $apertura): array
     {
-        $movimientos = MovimientoCaja::where('apertura_caja_id', $apertura->id)
-            ->get(['tipo', 'monto', 'cuenta_bancaria_id', 'billetera_id']);
+        $todos = MovimientoCaja::where('apertura_caja_id', $apertura->id)
+            ->get(['tipo', 'monto', 'moneda', 'cuenta_bancaria_id', 'billetera_id']);
+
+        // Soles y dólares no se suman: lo de arriba es en soles y los dólares
+        // van en su propio bloque (null si no hubo ninguno).
+        $movimientos = $todos->filter(fn ($m) => ($m->moneda ?: 'PEN') === 'PEN');
+        $dolares = $todos->where('moneda', 'USD');
 
         $enEfectivo = fn ($m) => ! $m->cuenta_bancaria_id && ! $m->billetera_id;
 
@@ -144,7 +164,27 @@ class MiCajaController extends Controller
             'otros_ingresos' => $suma($ingresos->reject($enEfectivo)),
             'otros_egresos' => $suma($egresos->reject($enEfectivo)),
             'esperado' => round($inicial + $efectivoIngresos - $efectivoEgresos, 2),
-            'movimientos' => $movimientos->count(),
+            'movimientos' => $todos->count(),
+            'dolares' => $dolares->isEmpty() ? null : $this->bloqueDolares($dolares, $enEfectivo, $suma),
+        ];
+    }
+
+    /** Lo mismo para los dólares: el cajón arranca sin dólares. */
+    private function bloqueDolares($dolares, $enEfectivo, $suma): array
+    {
+        $ingresos = $dolares->where('tipo', 'ingreso');
+        $egresos = $dolares->where('tipo', 'egreso');
+        $efectivoIngresos = $suma($ingresos->filter($enEfectivo));
+        $efectivoEgresos = $suma($egresos->filter($enEfectivo));
+
+        return [
+            'ingresos' => $suma($ingresos),
+            'egresos' => $suma($egresos),
+            'efectivo_ingresos' => $efectivoIngresos,
+            'efectivo_egresos' => $efectivoEgresos,
+            'otros_ingresos' => $suma($ingresos->reject($enEfectivo)),
+            'otros_egresos' => $suma($egresos->reject($enEfectivo)),
+            'esperado' => round($efectivoIngresos - $efectivoEgresos, 2),
         ];
     }
 }

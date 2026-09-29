@@ -35,7 +35,7 @@
         @if ($ingles)
             {{-- Purchase Order: la cabecera va en inglés (shipper, consignee, embarque y ficha de la tela). --}}
             @php
-                $azul = '#2f5597';
+                $azul = config('theme.primary');
                 $cab = "background: {$azul}; color: #fff; font-weight: bold; text-align: center; text-transform: uppercase; font-size: 8px; padding: 3px 4px; border: 2px solid #fff;";
                 $val = 'text-align: center; font-size: 8.5px; padding: 3px 4px;';
                 $g = $ingles;

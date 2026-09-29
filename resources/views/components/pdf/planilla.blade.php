@@ -41,7 +41,7 @@
         <thead>
             <tr>
                 @foreach ($titulos as $t)
-                    <th style="{{ $borde }} background: #2563eb; color: #fff; font-size: 8px; text-transform: uppercase;">{{ $t }}</th>
+                    <th style="{{ $borde }} background: {{ config('theme.primary') }}; color: #fff; font-size: 8px; text-transform: uppercase;">{{ $t }}</th>
                 @endforeach
             </tr>
         </thead>

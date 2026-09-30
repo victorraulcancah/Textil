@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Pencil, Plus, Trash2, Wallet, X } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { cargarTipoCambio } from '../lib/moneda';
@@ -9,7 +9,12 @@ import { Alert, Badge, Button, Input, Modal } from './ui';
 const money = (n, moneda = 'PEN') =>
     new Intl.NumberFormat('es-PE', { style: 'currency', currency: moneda || 'PEN' }).format(Number(n) || 0);
 
-const hoy = () => new Date().toISOString().slice(0, 10);
+/** Hoy en la fecha local (no en UTC: de noche en Perú UTC ya es mañana). */
+const hoy = () => {
+    const d = new Date();
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 10);
+};
 
 const estadoBadge = (estado) => {
     const map = { pendiente: 'red', parcial: 'amber', pagado: 'green', anulado: 'gray' };
@@ -57,11 +62,18 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo, onSaved 
     const [saving, setSaving] = useState(false);
     /** Al cobrar, el tipo de cambio comercial del día se propone para pagar en soles. */
     const [tcComercial, setTcComercial] = useState(null);
+    /** Día en que se recibió el pago: hoy, o uno pasado si se registra tarde. */
+    const [fecha, setFecha] = useState(hoy());
+    /** Lo último que se propuso como tipo de cambio: si la línea todavía lo tiene, no la tocó nadie. */
+    const tcPropuesto = useRef(null);
+    /** Fecha para la que no hay tipo de cambio guardado: SUNAT solo publica el de hoy. */
+    const [tcSinDato, setTcSinDato] = useState(null);
 
     useEffect(() => {
         setState(cuenta);
         setLineas([emptyLinea()]);
         setEditId(null);
+        setFecha(hoy());
     }, [cuenta]);
 
     useEffect(() => {
@@ -75,12 +87,35 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo, onSaved 
                 /* ignore */
             }
         })();
-        if (esCobrar) {
-            cargarTipoCambio()
-                .then((tc) => setTcComercial(tc?.comercial ?? tc?.venta ?? null))
-                .catch(() => setTcComercial(null));
-        }
-    }, [open, esCobrar]);
+    }, [open]);
+
+    // El tipo de cambio que se propone es el del día del pago: el comercial de ese día
+    // si ya se cobró con uno y, si no, el de SUNAT de esa fecha. Se escribe a mano igual.
+    useEffect(() => {
+        if (!open || !esCobrar || !fecha) return;
+        let vigente = true;
+        cargarTipoCambio(fecha)
+            .then((tc) => {
+                if (!vigente) return;
+                const nuevo = tc?.comercial ?? tc?.venta ?? null;
+                const anterior = tcPropuesto.current;
+                tcPropuesto.current = nuevo;
+                setTcComercial(nuevo);
+                setTcSinDato(nuevo ? null : fecha);
+                // Las líneas en soles que conservan lo propuesto pasan al de la nueva fecha.
+                setLineas((ls) =>
+                    ls.map((l) =>
+                        l.moneda === 'PEN' && (!l.tipoCambio || (anterior != null && Number(l.tipoCambio) === Number(anterior)))
+                            ? { ...l, tipoCambio: nuevo ? String(nuevo) : '' }
+                            : l,
+                    ),
+                );
+            })
+            .catch(() => vigente && (setTcComercial(null), setTcSinDato(fecha)));
+        return () => {
+            vigente = false;
+        };
+    }, [open, esCobrar, fecha]);
 
     const pagos = useMemo(() => (Array.isArray(state?.pagos) ? state.pagos : []), [state]);
     const nombre = esCobrar ? state?.cliente?.nombre : state?.proveedor?.nombre;
@@ -168,7 +203,9 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo, onSaved 
                         <span className="text-xs text-warm-500">
                             {Number(l.tipoCambio) > 0
                                 ? `= ${money(abonoDe(l), monedaDeuda)}${esCobrar ? ' (T.C. comercial)' : ''}`
-                                : 'Pon el tipo de cambio del día'}
+                                : esCobrar && !l.id && tcSinDato === fecha
+                                  ? `No hay tipo de cambio guardado del ${fechaCorta(fecha)}: escríbelo`
+                                  : 'Pon el tipo de cambio del día'}
                         </span>
                     </>
                 )}
@@ -177,12 +214,13 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo, onSaved 
 
     const registrar = async () => {
         const validos = lineas.filter((l) => Number(l.monto) > 0);
+        if (!fecha || fecha > hoy()) return toast.error('La fecha del pago no puede ser futura.');
         if (validos.length === 0) return toast.error('Agrega al menos un pago con monto.');
         if (validos.some(faltaTipoCambio)) return toast.error('Para pagar en soles, pon el tipo de cambio del día.');
         if (nuevoTotal > saldo + 0.01) return toast.error('El pago excede el saldo pendiente.');
         setSaving(true);
         try {
-            const res = await api.post(`${basePath}/${state.id}/pagos`, { fecha: hoy(), pagos: validos.map(toPayload) });
+            const res = await api.post(`${basePath}/${state.id}/pagos`, { fecha, pagos: validos.map(toPayload) });
             setState(res.data);
             setLineas([emptyLinea()]);
             toast.success('Pago registrado.');
@@ -206,6 +244,7 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo, onSaved 
             referencia: p.referencia ?? '',
             moneda: pagadoEnSoles ? 'PEN' : '',
             tipoCambio: pagadoEnSoles && p.tipo_cambio ? String(Number(p.tipo_cambio)) : '',
+            fecha: String(p.fecha ?? '').slice(0, 10),
         });
     };
 
@@ -214,7 +253,7 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo, onSaved 
         if (faltaTipoCambio(editForm)) return toast.error('Para pagar en soles, pon el tipo de cambio del día.');
         setSaving(true);
         try {
-            const res = await api.put(`${basePath}/pagos/${editId}`, toPayload(editForm));
+            const res = await api.put(`${basePath}/pagos/${editId}`, { ...toPayload(editForm), fecha: editForm.fecha || undefined });
             setState(res.data);
             setEditId(null);
             toast.success('Pago actualizado.');
@@ -283,6 +322,7 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo, onSaved 
                                     onChange={({ tipo, cuentaId, billeteraId }) => setEditForm((f) => ({ ...f, tipo, cuentaId, billeteraId }))}
                                 />
                                 <div className="flex items-center gap-2">
+                                    <Input type="date" max={hoy()} value={editForm.fecha ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, fecha: e.target.value }))} className="w-40" aria-label="Fecha del pago" />
                                     <Input type="number" min="0" step="any" placeholder={enSoles(editForm) ? 'Monto en soles' : 'Monto'} value={editForm.monto} onChange={(e) => setEditForm((f) => ({ ...f, monto: e.target.value }))} className="w-28 text-right" />
                                     <Input placeholder="Referencia" value={editForm.referencia} onChange={(e) => setEditForm((f) => ({ ...f, referencia: e.target.value }))} className="flex-1" />
                                     <button type="button" onClick={guardarEdit} disabled={saving} className="rounded-md p-2 text-green-600 hover:bg-green-100" aria-label="Guardar"><Check className="h-4 w-4" /></button>
@@ -327,6 +367,9 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo, onSaved 
                             <Wallet className="h-4 w-4" /> Registrar pago (mixto)
                         </h3>
                         <Button type="button" variant="ghost" size="sm" onClick={addLinea}><Plus className="h-4 w-4" /> Agregar forma</Button>
+                    </div>
+                    <div className="mb-3 w-44">
+                        <Input label={esCobrar ? 'Fecha del cobro' : 'Fecha del pago'} type="date" max={hoy()} value={fecha} onChange={(e) => setFecha(e.target.value)} />
                     </div>
                     <div className="space-y-3">
                         {lineas.map((l, i) => (

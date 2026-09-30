@@ -36,7 +36,8 @@ class CuentaPorPagarController extends Controller
         }
 
         $data = $request->validate([
-            'fecha' => 'nullable|date',
+            // El día en que se cobró/pagó de verdad: puede ser uno pasado, nunca futuro.
+            'fecha' => 'nullable|date|before_or_equal:'.now()->toDateString(),
             'pagos' => 'required|array|min:1',
             'pagos.*.forma_pago' => 'required|in:'.self::FORMAS,
             'pagos.*.cuenta_bancaria_id' => 'nullable|exists:cuentas_bancarias,id',
@@ -116,7 +117,8 @@ class CuentaPorPagarController extends Controller
             'billetera_id' => 'nullable|exists:billeteras_digitales,id',
             'monto' => 'required|numeric|min:0.01',
             'referencia' => 'nullable|string|max:100',
-            'fecha' => 'nullable|date',
+            // El día en que se cobró/pagó de verdad: puede ser uno pasado, nunca futuro.
+            'fecha' => 'nullable|date|before_or_equal:'.now()->toDateString(),
             'moneda' => 'nullable|in:PEN,USD,CNY,EUR',
             'tipo_cambio' => 'nullable|numeric|min:0.0001',
         ]);

@@ -25,6 +25,13 @@ class TipoCambioService
 {
     private const URL_SUNAT = 'https://www.sunat.gob.pe/a/txt/tipoCambio.txt';
 
+    /**
+     * Histórico: el Banco Central publica la serie "Sistema bancario SBS"
+     * (compra y venta), que es de donde sale el de SUNAT: el que SUNAT publica
+     * para un día es el de la SBS del día hábil anterior.
+     */
+    private const URL_BCRP = 'https://estadisticas.bcrp.gob.pe/estadisticas/series/api/PD04639PD-PD04640PD/json/';
+
     /** Si SUNAT no respondió, no se reintenta en cada pedido: espera este rato. */
     private const ESPERA_TRAS_FALLO_MIN = 15;
 
@@ -40,6 +47,8 @@ class TipoCambioService
 
         if ($fecha >= today()->toDateString()) {
             $this->traerDeSunat();
+        } else {
+            $this->traerHistorico($fecha);
         }
 
         $sunat = TipoCambio::where('fecha', '<=', $fecha)->whereNotNull('venta')->orderByDesc('fecha')->first();
@@ -122,6 +131,62 @@ class TipoCambioService
         Cache::forget('tipo_cambio.sunat_fallo');
 
         return $publicado['fecha'] === $hoy;
+    }
+
+    /**
+     * Un día pasado que no se guardó (no se vendió ni cobró ese día): se
+     * consulta al Banco Central y queda guardado. Si no responde, se espera un
+     * rato antes de reintentar y el tipo de cambio se escribe a mano.
+     */
+    public function traerHistorico(string $fecha): bool
+    {
+        if (TipoCambio::where('fecha', $fecha)->whereNotNull('venta')->exists()) {
+            return true;
+        }
+
+        $llave = "tipo_cambio.bcrp_fallo.{$fecha}";
+        if (Cache::has($llave)) {
+            return false;
+        }
+
+        $dia = Carbon::parse($fecha);
+        // Hasta 10 días atrás para cubrir fines de semana y feriados largos.
+        $url = self::URL_BCRP.$dia->copy()->subDays(10)->format('Y-n-j').'/'.$dia->copy()->subDay()->format('Y-n-j').'/ing';
+
+        try {
+            $respuesta = Http::timeout(8)->get($url);
+        } catch (\Throwable) {
+            $respuesta = null;
+        }
+
+        $periodos = $respuesta?->successful() ? ($respuesta->json('periods') ?? []) : [];
+
+        // El último día hábil anterior con dato: los "n.d." no cuentan.
+        $valores = null;
+        foreach (array_reverse($periodos) as $periodo) {
+            [$compra, $venta] = array_pad($periodo['values'] ?? [], 2, null);
+            if (is_numeric($compra) && is_numeric($venta) && (float) $venta > 0) {
+                $valores = [round((float) $compra, 4), round((float) $venta, 4)];
+                break;
+            }
+        }
+
+        if (! $valores) {
+            Cache::put($llave, true, now()->addMinutes(self::ESPERA_TRAS_FALLO_MIN));
+
+            return false;
+        }
+
+        // Lo trae el sistema, no una persona: no va a la auditoría.
+        TipoCambio::withoutEvents(function () use ($fecha, $valores) {
+            try {
+                TipoCambio::updateOrCreate(['fecha' => $fecha], ['compra' => $valores[0], 'venta' => $valores[1]]);
+            } catch (QueryException) {
+                // Otro pedido lo guardó al mismo tiempo: ya está.
+            }
+        });
+
+        return true;
     }
 
     /** @return array{fecha: string, compra: float, venta: float}|null */

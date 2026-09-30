@@ -63,6 +63,22 @@ class OrdenCompra extends Model
         return $this->belongsTo(Proveedor::class);
     }
 
+    /**
+     * El número con el que sale en el documento: código corto del proveedor +
+     * número de la orden + año de emisión (HAN-002-26). Sin código corto, el
+     * código de la orden tal cual (OCN-002).
+     */
+    public function codigoDocumento(): string
+    {
+        $corto = $this->proveedor?->codigo_corto;
+
+        if (! $corto || ! preg_match('/(\d+)$/', (string) $this->codigo, $m)) {
+            return (string) $this->codigo;
+        }
+
+        return sprintf('%s-%s-%s', $corto, $m[1], $this->fecha_emision?->format('y') ?? date('y'));
+    }
+
     /** ¿Es una compra de importación? Solo ahí aplican los campos de embarque. */
     public function esExterior(): bool
     {

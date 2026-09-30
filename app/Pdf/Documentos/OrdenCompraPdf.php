@@ -53,7 +53,7 @@ class OrdenCompraPdf implements DocumentoPdf
 
         return [
             'orden' => $orden,
-            'documento' => $orden->codigo,
+            'documento' => $orden->codigoDocumento(),
             'filas' => $filas,
             // La planilla (una tabla por tela, con su color code), en el A4.
             'planilla' => PlanillaTela::deOrdenCompra($orden),
@@ -155,6 +155,6 @@ class OrdenCompraPdf implements DocumentoPdf
 
     public function archivo(int $id): string
     {
-        return 'orden-compra-' . OrdenCompra::findOrFail($id)->codigo;
+        return 'orden-compra-' . OrdenCompra::with('proveedor:id,codigo_corto')->findOrFail($id)->codigoDocumento();
     }
 }

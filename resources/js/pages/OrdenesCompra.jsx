@@ -191,6 +191,20 @@ export default function OrdenesCompra() {
                 row.proveedor?.codigo ? <Badge variant="blue" className="whitespace-nowrap">{row.proveedor.codigo}</Badge> : <span className="text-warm-400">—</span>,
         },
         {
+            key: 'proveedor_codigo_corto',
+            label: 'Código corto',
+            // Código corto del proveedor + número de la orden + año de emisión: HAN-002-26.
+            render: (row) => {
+                const numero = String(row.codigo ?? '').match(/(\d+)$/)?.[1];
+                const anio = String(row.fecha_emision ?? '').slice(2, 4);
+                return row.proveedor?.codigo_corto && numero ? (
+                    <Badge variant="gray" className="whitespace-nowrap">{`${row.proveedor.codigo_corto}-${numero}-${anio}`}</Badge>
+                ) : (
+                    <span className="text-warm-400">—</span>
+                );
+            },
+        },
+        {
             key: 'proveedor',
             label: 'Proveedor',
             render: (row) => (

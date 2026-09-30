@@ -19,7 +19,7 @@
                 <div class="strong upper" style="font-size: 17px; letter-spacing: 1px; color: {{ config('theme.primary') }};">{{ $marcaTexto }}</div>
             @endif
             {{-- Un dato corto bajo el logo (el código interno de la orden de compra, por ejemplo). --}}
-            @if ($bajoLogo)<div class="strong" style="margin-top: 3px; font-size: 10px; color: {{ config('theme.text') }};">{{ $bajoLogo }}</div>@endif
+            @if ($bajoLogo)<div class="strong" style="margin-top: 5px; font-size: 16px; letter-spacing: 0.5px; color: {{ config('theme.text') }};">{{ $bajoLogo }}</div>@endif
         </td>
         <td style="vertical-align: middle; text-align: center; padding: 0 8px;">
             <span class="strong" style="font-size: 14px; color: {{ config('theme.text') }};">{{ $nombreEmpresa }}</span><br>

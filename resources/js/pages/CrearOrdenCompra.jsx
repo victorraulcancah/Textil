@@ -1095,11 +1095,17 @@ export default function CrearOrdenCompra() {
                                         key={opcion.value}
                                         type="button"
                                         onClick={() =>
-                                            setForm((prev) => ({
-                                                ...prev,
-                                                tipo: opcion.value,
-                                                moneda: opcion.value === 'exterior' ? 'USD' : 'PEN',
-                                            }))
+                                            setForm((prev) => {
+                                                // El proveedor elegido deja de valer si es del otro tipo.
+                                                const elegido = proveedores.find((p) => String(p.id) === String(prev.proveedor_id));
+                                                const sigue = !elegido || (elegido.tipo === 'extranjero') === (opcion.value === 'exterior');
+                                                return {
+                                                    ...prev,
+                                                    tipo: opcion.value,
+                                                    moneda: opcion.value === 'exterior' ? 'USD' : 'PEN',
+                                                    ...(sigue ? {} : { proveedor_id: '' }),
+                                                };
+                                            })
                                         }
                                         className={`rounded-md px-3 py-1 text-xs font-semibold transition ${
                                             form.tipo === opcion.value
@@ -1130,10 +1136,13 @@ export default function CrearOrdenCompra() {
                                     label="Proveedor"
                                     value={form.proveedor_id}
                                     onChange={elegirProveedor}
-                                    options={proveedores.map((p) => ({
-                                        value: String(p.id),
-                                        label: p.codigo_corto ? `${p.nombre} (${p.codigo_corto})` : p.nombre,
-                                    }))}
+                                    // Solo los del tipo de la orden: nacionales o extranjeros.
+                                    options={proveedores
+                                        .filter((p) => (p.tipo === 'extranjero') === (form.tipo === 'exterior') || String(p.id) === String(form.proveedor_id))
+                                        .map((p) => ({
+                                            value: String(p.id),
+                                            label: p.codigo_corto ? `${p.nombre} (${p.codigo_corto})` : p.nombre,
+                                        }))}
                                     placeholder="Buscar proveedor…"
                                     emptyText="Sin coincidencias"
                                     error={formErrors.proveedor_id}

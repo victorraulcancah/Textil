@@ -1000,7 +1000,10 @@ export default function CrearCompra() {
                                     label="Proveedor"
                                     value={form.proveedor_id}
                                     onChange={elegirProveedor}
-                                    options={proveedores.map((p) => ({ value: String(p.id), label: p.nombre }))}
+                                    // Solo los del tipo de la compra: nacionales o extranjeros.
+                                    options={proveedores
+                                        .filter((p) => (p.tipo === 'extranjero') === form.es_importacion || String(p.id) === String(form.proveedor_id))
+                                        .map((p) => ({ value: String(p.id), label: p.nombre }))}
                                     placeholder="Buscar proveedor…"
                                     emptyText="Sin coincidencias"
                                     error={formErrors.proveedor_id}
@@ -1218,7 +1221,14 @@ export default function CrearCompra() {
                                     <button
                                         key={String(opcion.value)}
                                         type="button"
-                                        onClick={() => setField('es_importacion', opcion.value)}
+                                        onClick={() =>
+                                            setForm((prev) => {
+                                                // El proveedor elegido deja de valer si es del otro tipo.
+                                                const elegido = proveedores.find((p) => String(p.id) === String(prev.proveedor_id));
+                                                const sigue = !elegido || (elegido.tipo === 'extranjero') === opcion.value;
+                                                return { ...prev, es_importacion: opcion.value, ...(sigue ? {} : { proveedor_id: '' }) };
+                                            })
+                                        }
                                         className={`rounded-md px-3 py-1 text-xs font-semibold transition ${
                                             form.es_importacion === opcion.value
                                                 ? 'bg-white text-primary-700 shadow-sm'

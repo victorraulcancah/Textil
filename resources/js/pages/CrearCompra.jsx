@@ -1548,7 +1548,7 @@ export default function CrearCompra() {
                             />
                         </div>
                         <div className="flex items-center justify-between border-b border-dashed border-edge py-2 text-sm">
-                            <span className="text-warm-500">Gastos en el costo</span>
+                            <span className="text-warm-500">Costos</span>
                             <span className="flex items-center gap-2">
                                 {gastosCosto > 0 && <span className="font-medium text-warm-900">{money(gastosCosto, form.moneda_origen)}</span>}
                                 <Button type="button" variant="secondary" size="sm" onClick={() => setModalGastos(true)}>

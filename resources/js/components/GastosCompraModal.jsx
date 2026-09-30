@@ -1,13 +1,16 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { cargarTipoCambio } from '../lib/moneda';
 import CatalogoSelect from './CatalogoSelect';
-import { Button, Modal } from './ui';
+import { Button, Modal, Tabs } from './ui';
 
 const money = (n, moneda = 'PEN') =>
     new Intl.NumberFormat(moneda === 'USD' ? 'en-US' : 'es-PE', { style: 'currency', currency: moneda || 'PEN' }).format(Number(n) || 0);
 
 const redondear = (n) => Math.round((Number(n) || 0) * 100) / 100;
+const numero = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
+/** Costo por metro: con 4 decimales, como en la hoja de costos. */
+const unitario = (n) => Number(n).toLocaleString('es-PE', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
 
 const inputCls =
     'block w-full rounded-md border-0 px-2 py-1.5 text-sm text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-primary-600';
@@ -48,8 +51,10 @@ export function montoEnSoles(gasto, tipoCambioCompra) {
  * No cambian lo que se le paga al proveedor: al recibir la mercadería se reparten
  * entre las líneas según su valor.
  */
-export default function GastosCompraModal({ open, gastos, monedaCompra = 'PEN', tipoCambio, subtotal, onClose, onGuardar }) {
+export default function GastosCompraModal({ open, gastos, monedaCompra = 'PEN', tipoCambio, subtotal, metros = 0, lineas = [], onClose, onGuardar }) {
     const [filas, setFilas] = useState([]);
+    /** 'gastos' (las filas) o 'resumen' (lo que cuesta cada metro con todos los gastos). */
+    const [pestana, setPestana] = useState('gastos');
     /** Sube cuando se agrega, renombra o elimina un concepto: todas las filas recargan su lista. */
     const [versionConceptos, setVersionConceptos] = useState(0);
     const contador = useRef(0);
@@ -61,6 +66,7 @@ export default function GastosCompraModal({ open, gastos, monedaCompra = 'PEN', 
     useEffect(() => {
         if (!open) return;
         pedidos.current = {};
+        setPestana('gastos');
         // Los ya guardados traen su tipo de cambio: no se vuelve a proponer otro.
         setFilas(gastos.length ? gastos.map((g) => conId({ ...g, tc_manual: Boolean(g.tipo_cambio) })) : [conId(gastoVacio(monedaCompra))]);
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -92,6 +98,58 @@ export default function GastosCompraModal({ open, gastos, monedaCompra = 'PEN', 
     const totalCosto = enCompra.reduce((s, x) => s + (x.f.incluye_costo ? x.valor || 0 : 0), 0);
     const totalSoles = validas.reduce((s, f) => s + (f.incluye_costo ? montoEnSoles(f, tipoCambio) || 0 : 0), 0);
     const recargo = Number(subtotal) > 0 ? (totalCosto / Number(subtotal)) * 100 : 0;
+
+    // Resumen del costo comercial: la mercadería (FOB) más los gastos marcados, por metro, en
+    // soles y en la moneda de la compra (cada gasto con el tipo de cambio de su día).
+    const tcCompra = Number(tipoCambio) || 0;
+    const fobSoles = monedaCompra === 'PEN' ? Number(subtotal) || 0 : tcCompra > 0 ? redondear((Number(subtotal) || 0) * tcCompra) : null;
+    const columnas = [
+        { moneda: 'PEN', etiqueta: 'Soles (S/)', fob: fobSoles, gastos: totalSoles },
+        ...(monedaCompra !== 'PEN' ? [{ moneda: monedaCompra, etiqueta: monedaCompra === 'USD' ? 'Dólares (US$)' : monedaCompra, fob: Number(subtotal) || 0, gastos: totalCosto }] : []),
+    ].map((c) => {
+        const total = c.fob === null ? null : c.fob + c.gastos;
+        return { ...c, total, unitario: total !== null && Number(metros) > 0 ? total / Number(metros) : null };
+    });
+
+    /**
+     * El costo de cada producto y de cada color: los gastos se reparten entre las líneas en proporción
+     * a su valor (como al recibir la mercadería), así que cada color trae su costo por metro ya con
+     * los gastos. Sale por columna de moneda, igual que el total.
+     */
+    const grupos = (() => {
+        const porProducto = new Map();
+        (lineas ?? []).forEach((l) => {
+            const metrosL = Number(l.metros) || 0;
+            if (!(metrosL > 0)) return;
+            if (!porProducto.has(l.producto_id)) porProducto.set(l.producto_id, { producto: l.producto, colores: [] });
+            porProducto.get(l.producto_id).colores.push({ color: l.color, rollos: Number(l.rollos) || 0, metros: metrosL, valor: metrosL * (Number(l.costo) || 0) });
+        });
+        const base = Number(subtotal) || 0;
+
+        // Un conjunto de líneas → sus rollos, metros y el costo por metro en cada columna.
+        const resumir = (filas) => {
+            const valor = filas.reduce((s, f) => s + f.valor, 0);
+            const metrosF = filas.reduce((s, f) => s + f.metros, 0);
+            return {
+                rollos: filas.reduce((s, f) => s + f.rollos, 0),
+                metros: metrosF,
+                porMoneda: columnas.map((c) => {
+                    const fob = c.moneda === 'PEN' && monedaCompra !== 'PEN' ? (tcCompra > 0 ? valor * tcCompra : null) : valor;
+                    const gastosParte = base > 0 ? (c.gastos * valor) / base : 0;
+                    return {
+                        fob: fob === null ? null : fob / metrosF,
+                        costo: fob === null ? null : (fob + gastosParte) / metrosF,
+                    };
+                }),
+            };
+        };
+
+        return [...porProducto.values()].map((g) => ({
+            producto: g.producto,
+            total: resumir(g.colores),
+            colores: g.colores.map((c) => ({ color: c.color, ...resumir([c]) })),
+        }));
+    })();
 
     const guardar = () => {
         onGuardar(
@@ -125,7 +183,17 @@ export default function GastosCompraModal({ open, gastos, monedaCompra = 'PEN', 
                 </>
             }
         >
-            <div className="space-y-2 overflow-x-auto">
+            <Tabs
+                value={pestana}
+                onChange={setPestana}
+                items={[
+                    { key: 'gastos', label: `Gastos${validas.length ? ` (${validas.length})` : ''}` },
+                    { key: 'resumen', label: 'Resumen de costos' },
+                ]}
+            />
+
+            {pestana === 'gastos' && (
+            <div className="mt-4 space-y-2 overflow-x-auto">
                 <div className={`grid ${COLUMNAS} min-w-[52rem] items-center gap-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-warm-500`}>
                     <span>Concepto</span>
                     <span>Fecha</span>
@@ -247,6 +315,84 @@ export default function GastosCompraModal({ open, gastos, monedaCompra = 'PEN', 
                     Agregar gasto
                 </Button>
             </div>
+            )}
+
+            {/* Resumen del costo: lo que cuesta cada metro con todos los gastos. */}
+            {pestana === 'resumen' && (
+            <>
+            {/* Lo que cuesta cada producto por metro, ya con los gastos. */}
+            <div className="mt-4 overflow-x-auto rounded-lg border border-edge text-sm">
+                <table className="w-full min-w-[40rem]">
+                    <thead>
+                        <tr className="bg-gray-50 text-xs font-semibold uppercase tracking-wide text-warm-500">
+                            <th className="px-3 py-2 text-left">Costo por producto</th>
+                            <th className="px-3 py-2 text-right">Rollos</th>
+                            <th className="px-3 py-2 text-right">Metros</th>
+                            {columnas.map((c) => (
+                                <th key={c.moneda} className="px-3 py-2 text-right">
+                                    Costo/m {c.moneda === 'PEN' ? 'S/' : c.moneda === 'USD' ? 'US$' : c.moneda}
+                                </th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {grupos.length === 0 && (
+                            <tr>
+                                <td colSpan={3 + columnas.length} className="px-3 py-6 text-center text-warm-500">
+                                    Agrega productos a la compra para ver su costo.
+                                </td>
+                            </tr>
+                        )}
+                        {grupos.map((g) => (
+                            <Fragment key={g.producto}>
+                                <tr className="border-t border-edge bg-primary-50/60 font-semibold text-warm-900">
+                                    <td className="px-3 py-2 uppercase">{g.producto}</td>
+                                    <td className="px-3 py-2 text-right">{g.total.rollos || ''}</td>
+                                    <td className="px-3 py-2 text-right">{numero(g.total.metros)}</td>
+                                    {g.total.porMoneda.map((v, i) => (
+                                        <td key={columnas[i].moneda} className="px-3 py-2 text-right">{v.costo === null ? '—' : unitario(v.costo)}</td>
+                                    ))}
+                                </tr>
+                            </Fragment>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+
+            <div className="mt-4 overflow-hidden rounded-lg border border-edge text-sm">
+                <div className={`grid items-center bg-gray-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-warm-500 ${columnas.length > 1 ? 'grid-cols-[1fr_9rem_9rem]' : 'grid-cols-[1fr_9rem]'}`}>
+                    <span>Resumen del costo</span>
+                    {columnas.map((c) => (
+                        <span key={c.moneda} className="text-right">{c.etiqueta}</span>
+                    ))}
+                </div>
+                {[
+                    { etiqueta: 'FOB (mercadería)', valor: (c) => (c.fob === null ? '—' : money(c.fob, c.moneda)) },
+                    { etiqueta: 'Gastos en el costo', valor: (c) => money(c.gastos, c.moneda) },
+                    { etiqueta: 'Total costo comercial de importación', fuerte: true, valor: (c) => (c.total === null ? '—' : money(c.total, c.moneda)) },
+                    { etiqueta: 'Cantidad metros', valor: () => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(metros) || 0) },
+                ].map((fila) => (
+                    <div
+                        key={fila.etiqueta}
+                        className={`grid items-center border-t border-edge px-3 py-2 ${columnas.length > 1 ? 'grid-cols-[1fr_9rem_9rem]' : 'grid-cols-[1fr_9rem]'} ${fila.fuerte ? 'font-bold text-warm-900' : 'text-warm-700'}`}
+                    >
+                        <span className="uppercase">{fila.etiqueta}</span>
+                        {columnas.map((c) => (
+                            <span key={c.moneda} className="text-right">{fila.valor(c)}</span>
+                        ))}
+                    </div>
+                ))}
+                <div className={`grid items-center border-t border-edge bg-amber-200 px-3 py-2 font-bold text-warm-900 ${columnas.length > 1 ? 'grid-cols-[1fr_9rem_9rem]' : 'grid-cols-[1fr_9rem]'}`}>
+                    <span className="uppercase">Costo comercial unitario metros</span>
+                    {columnas.map((c) => (
+                        <span key={c.moneda} className="text-right">
+                            {c.unitario === null ? '—' : c.unitario.toLocaleString('es-PE', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}
+                        </span>
+                    ))}
+                </div>
+            </div>
+            </>
+            )}
 
             {sinTipoCambio && (
                 <p className="mt-3 text-xs font-medium text-red-600">

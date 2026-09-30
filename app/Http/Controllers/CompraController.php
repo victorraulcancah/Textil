@@ -24,6 +24,7 @@ class CompraController extends Controller
         'detalles.presentacion.producto',
         'detalles.color',
         'pagos',
+        'gastos',
     ];
 
     public function index()
@@ -103,6 +104,7 @@ class CompraController extends Controller
             ]);
 
             $this->crearDetalles($compra, $data['detalles']);
+            $this->crearGastos($compra, $data['gastos'] ?? []);
             $this->crearPagos($compra, $data['pagos'] ?? []);
             $this->sincronizarCuentaPorPagar($compra);
             $this->sincronizarSalidasDeCaja($compra);
@@ -133,7 +135,12 @@ class CompraController extends Controller
         $data = $request->validated();
 
         DB::transaction(function () use ($data, $compra) {
-            $compra->update(collect($data)->except(['detalles', 'pagos'])->all());
+            $compra->update(collect($data)->except(['detalles', 'pagos', 'gastos'])->all());
+
+            if (array_key_exists('gastos', $data)) {
+                $compra->gastos()->delete();
+                $this->crearGastos($compra, $data['gastos'] ?? []);
+            }
 
             // Detalles y pagos se reemplazan completos: más simple y sin huérfanos.
             if (array_key_exists('detalles', $data)) {
@@ -317,6 +324,40 @@ class CompraController extends Controller
         ];
 
         $cuenta ? $cuenta->update($datos) : CuentaPorPagar::create($datos);
+    }
+
+    /**
+     * Guarda los gastos de la compra. Cada uno se escribe en su moneda (los de
+     * aduana suelen ser en soles) y se guarda también en la moneda de la compra,
+     * que es con la que se reparte entre las líneas.
+     */
+    private function crearGastos(Compra $compra, array $gastos): void
+    {
+        $monedaCompra = $compra->moneda_origen ?: 'PEN';
+        $tipoCambio = (float) $compra->tipo_cambio;
+
+        foreach ($gastos as $g) {
+            $moneda = $g['moneda'] ?? $monedaCompra;
+            $origen = round((float) $g['monto'], 2);
+
+            // Soles en una compra en dólares: se pasa a dólares con el tipo de cambio de la compra.
+            $monto = match (true) {
+                $moneda === $monedaCompra => $origen,
+                $monedaCompra !== 'PEN' && $moneda === 'PEN' && $tipoCambio > 0 => round($origen / $tipoCambio, 2),
+                $monedaCompra === 'PEN' && $moneda !== 'PEN' && $tipoCambio > 0 => round($origen * $tipoCambio, 2),
+                default => throw ValidationException::withMessages([
+                    'gastos' => "Para el gasto \"{$g['concepto']}\" en {$moneda}, pon el tipo de cambio de la compra.",
+                ]),
+            };
+
+            $compra->gastos()->create([
+                'concepto' => trim($g['concepto']),
+                'monto_origen' => $origen,
+                'moneda' => $moneda,
+                'monto' => $monto,
+                'incluye_costo' => (bool) ($g['incluye_costo'] ?? true),
+            ]);
+        }
     }
 
     /** Crea las líneas calculando el subtotal de cada una. */

@@ -9,6 +9,7 @@ import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import MetodoCajaPicker from '../components/MetodoCajaPicker';
 import ColorSelect from '../components/ColorSelect';
+import GastosCompraModal, { montoEnMonedaCompra } from '../components/GastosCompraModal';
 import ProductoPickerModal from '../components/ProductoPickerModal';
 import TelaCompraModal, { presentacionMetroDe } from '../components/TelaCompraModal';
 import { Button, Input, Modal, SearchSelect, Select, Spinner } from '../components/ui';
@@ -115,6 +116,9 @@ export default function CrearCompra() {
     /** Pago y embarque son muchos campos: se editan en modales aparte. */
     const [modalPago, setModalPago] = useState(false);
     const [modalExterior, setModalExterior] = useState(false);
+    /** Otros gastos que se suman al costo de la mercadería (seguro, aduana, transporte…). */
+    const [gastos, setGastos] = useState([]);
+    const [modalGastos, setModalGastos] = useState(false);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -185,6 +189,15 @@ export default function CrearCompra() {
                         rollos: d.rollos != null ? String(d.rollos) : '',
                         cantidad: String(d.cantidad),
                         costo_unitario: String(d.costo_unitario),
+                    })),
+                );
+
+                setGastos(
+                    (compra.gastos ?? []).map((g) => ({
+                        concepto: g.concepto,
+                        monto: String(Number(g.monto_origen)),
+                        moneda: g.moneda,
+                        incluye_costo: Boolean(g.incluye_costo),
                     })),
                 );
 
@@ -587,6 +600,11 @@ export default function CrearCompra() {
     );
     const flete = Number(form.flete) || 0;
     const total = subtotal + flete;
+    /** Lo que los gastos marcados suman al costo, en la moneda de la compra. */
+    const gastosCosto = gastos.reduce(
+        (s, g) => s + (g.incluye_costo ? montoEnMonedaCompra(g, form.moneda_origen || 'PEN', form.tipo_cambio) || 0 : 0),
+        0,
+    );
     const esContado = form.forma_pago === 'contado';
 
     /**
@@ -683,6 +701,12 @@ export default function CrearCompra() {
             dias_credito: form.forma_pago === 'credito' ? Number(form.dias_credito) || 0 : 0,
             fecha_vencimiento: form.forma_pago === 'credito' ? form.fecha_vencimiento : null,
             flete,
+            gastos: gastos.map((g) => ({
+                concepto: g.concepto,
+                monto: Number(g.monto),
+                moneda: g.moneda,
+                incluye_costo: g.incluye_costo,
+            })),
             observaciones: form.observaciones,
 
             // La moneda se pacta con el proveedor, sea la compra nacional o
@@ -1490,6 +1514,16 @@ export default function CrearCompra() {
                                 className="w-28 rounded-md border-0 bg-white px-2 py-1 text-right text-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-primary-600"
                             />
                         </div>
+                        <div className="flex items-center justify-between border-b border-dashed border-edge py-2 text-sm">
+                            <span className="text-warm-500">Gastos en el costo</span>
+                            <span className="flex items-center gap-2">
+                                {gastosCosto > 0 && <span className="font-medium text-warm-900">{money(gastosCosto, form.moneda_origen)}</span>}
+                                <Button type="button" variant="secondary" size="sm" onClick={() => setModalGastos(true)}>
+                                    <Plus className="h-4 w-4" />
+                                    {gastos.length ? `Gastos (${gastos.length})` : 'Agregar gastos'}
+                                </Button>
+                            </span>
+                        </div>
                         <div className="mt-3 flex items-center justify-between border-t border-edge pt-3">
                             <span className="text-sm font-bold uppercase tracking-wide text-primary-700">Total</span>
                             <span className="text-2xl font-extrabold text-warm-900">{money(total, form.moneda_origen)}</span>
@@ -1497,6 +1531,12 @@ export default function CrearCompra() {
                         {form.moneda_origen === 'USD' && Number(form.tipo_cambio) > 0 && (
                             <p className="mt-1 text-right text-xs text-warm-500">
                                 ≈ {money(total * Number(form.tipo_cambio), 'PEN')} al tipo de cambio de hoy
+                            </p>
+                        )}
+                        {gastosCosto > 0 && subtotal > 0 && (
+                            <p className="mt-2 rounded-md bg-primary-50 px-2.5 py-1.5 text-right text-xs text-primary-700">
+                                Costo de la mercadería con gastos: {money(subtotal + gastosCosto, form.moneda_origen)}{' '}
+                                (+{((gastosCosto / subtotal) * 100).toFixed(2)} %). No cambia el total a pagar.
                             </p>
                         )}
 
@@ -1528,6 +1568,16 @@ export default function CrearCompra() {
                 productos={productos}
                 stockPorProducto={stockPorProducto}
                 title="Buscar productos"
+            />
+
+            <GastosCompraModal
+                open={modalGastos}
+                gastos={gastos}
+                monedaCompra={form.moneda_origen || 'PEN'}
+                tipoCambio={form.tipo_cambio}
+                subtotal={subtotal}
+                onClose={() => setModalGastos(false)}
+                onGuardar={setGastos}
             />
 
             {telaCompra && (

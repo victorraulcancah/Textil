@@ -32,6 +32,13 @@ class UpdateCompraRequest extends FormRequest
             'fecha_vencimiento' => 'nullable|date',
             'flete' => 'nullable|numeric|min:0',
 
+            // Otros gastos que se suman al costo (seguro, aduana, transporte local…).
+            'gastos' => 'nullable|array',
+            'gastos.*.concepto' => 'required|string|max:100',
+            'gastos.*.monto' => 'required|numeric|min:0.01',
+            'gastos.*.moneda' => 'nullable|in:PEN,USD,CNY,EUR',
+            'gastos.*.incluye_costo' => 'nullable|boolean',
+
             'es_importacion' => 'nullable|boolean',
             'numero_importacion' => 'nullable|string|max:40',
             'contenedor' => 'nullable|string|max:40',

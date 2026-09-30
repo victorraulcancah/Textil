@@ -70,6 +70,9 @@ class CompraResource extends JsonResource
             'orden_compra' => $this->whenLoaded('ordenCompra'),
             'detalles' => CompraDetalleResource::collection($this->whenLoaded('detalles')),
             'pagos' => CompraPagoResource::collection($this->whenLoaded('pagos')),
+            'gastos' => $this->whenLoaded('gastos'),
+            // Lo que los gastos suman al costo de la mercadería, en la moneda de la compra.
+            'gastos_costo' => $this->whenLoaded('gastos', fn () => round((float) $this->gastos->where('incluye_costo', true)->sum('monto'), 2)),
             'detalles_count' => $this->whenCounted('detalles'),
 
             'created_at' => $this->created_at,

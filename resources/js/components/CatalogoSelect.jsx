@@ -16,8 +16,11 @@ const norma = (t) => String(t ?? '').replace(/\s+/g, '').toUpperCase();
  *   onChange  — (nombre) => void
  *
  * Un valor que ya no está en la lista (de una orden anterior) se sigue mostrando.
+ *
+ * Con varias listas iguales en pantalla (las filas de un modal), `version` hace que todas
+ * recarguen cuando una cambia el catálogo, y `onCambio` avisa para subirla.
  */
-export default function CatalogoSelect({ label, endpoint, value, onChange, titulo, placeholder = 'Elige…', className }) {
+export default function CatalogoSelect({ label, endpoint, value, onChange, titulo, placeholder = 'Elige…', className, version, onCambio }) {
     const toast = useToast();
     const [items, setItems] = useState([]);
     const [abierto, setAbierto] = useState(false);
@@ -36,7 +39,7 @@ export default function CatalogoSelect({ label, endpoint, value, onChange, titul
 
     useEffect(() => {
         cargar();
-    }, [cargar]);
+    }, [cargar, version]);
 
     const activos = items.filter((i) => i.activo !== false);
     // El valor escrito de otra forma ("40HC") se reconoce con el de la lista ("40 HC").
@@ -58,6 +61,7 @@ export default function CatalogoSelect({ label, endpoint, value, onChange, titul
         try {
             const { data } = await api.post(endpoint, { nombre: nuevo.trim(), activo: true });
             await cargar();
+            onCambio?.();
             setNuevo('');
             onChange?.(data.nombre);
             toast.success(`"${data.nombre}" agregado.`);
@@ -74,6 +78,7 @@ export default function CatalogoSelect({ label, endpoint, value, onChange, titul
         try {
             const { data } = await api.put(`${endpoint}/${item.id}`, { nombre: editNombre.trim() });
             await cargar();
+            onCambio?.();
             // Si era el elegido, el formulario pasa al nombre nuevo.
             if (norma(item.nombre) === norma(value)) onChange?.(data.nombre);
             setEditId(null);
@@ -89,6 +94,7 @@ export default function CatalogoSelect({ label, endpoint, value, onChange, titul
         try {
             const { data } = await api.delete(`${endpoint}/${item.id}`);
             await cargar();
+            onCambio?.();
             if (data?.desactivado) toast.success(data.message);
             else if (norma(item.nombre) === norma(value)) onChange?.('');
         } catch (err) {

@@ -110,6 +110,26 @@ class Compra extends Model
         return $this->hasMany(CompraPago::class);
     }
 
+    public function gastos()
+    {
+        return $this->hasMany(CompraGasto::class);
+    }
+
+    /**
+     * Cuánto encarecen los gastos de la compra a la mercadería, como fracción de
+     * su valor (0.05 = 5 %). Se reparten en proporción al valor de cada línea, así
+     * que a todas les sube el costo por igual en términos relativos.
+     */
+    public function recargoPorGastos(): float
+    {
+        $subtotal = (float) $this->subtotal;
+        if ($subtotal <= 0) {
+            return 0.0;
+        }
+
+        return (float) $this->gastos()->where('incluye_costo', true)->sum('monto') / $subtotal;
+    }
+
     public function recepciones()
     {
         return $this->hasMany(RecepcionCompra::class);

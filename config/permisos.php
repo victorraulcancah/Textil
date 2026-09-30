@@ -156,7 +156,7 @@ return [
                         'ordenes-compra/*/anular' => 'editar',
                     ],
                 ],
-                'compras' => ['label' => 'Compras', 'apis' => ['compras'], 'pdf' => ['compra']],
+                'compras' => ['label' => 'Compras', 'apis' => ['compras', 'conceptos-gasto'], 'pdf' => ['compra']],
                 'recepciones-compra' => [
                     'label' => 'Recepciones de compra',
                     'apis' => ['recepciones-compra'],

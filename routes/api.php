@@ -159,6 +159,8 @@ Route::middleware('auth:api')->group(function () {
     // Catálogos chicos de la orden de compra al exterior, que se administran desde su formulario.
     Route::apiResource('tipos-contenedor', TipoContenedorController::class)->except(['show']);
     Route::apiResource('puertos', PuertoController::class)->except(['show']);
+    // Los conceptos de los gastos adicionales de la compra, también desde su modal.
+    Route::apiResource('conceptos-gasto', \App\Http\Controllers\ConceptoGastoController::class)->except(['show']);
     Route::post('transferencias/{transferencia}/aprobar', [TransferenciaController::class, 'aprobar']);
     Route::post('transferencias/{transferencia}/rechazar', [TransferenciaController::class, 'rechazar']);
     Route::post('transferencias/{transferencia}/recibir', [TransferenciaController::class, 'recibir']);

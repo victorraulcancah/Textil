@@ -291,6 +291,7 @@ class RecepcionCompraController extends Controller
                     throw new \RuntimeException('La compra está finalizada: ya no admite recepciones.');
                 }
 
+                $recargoGastos = $compra->recargoPorGastos();
                 $pendientes = $compra->pendientePorLinea();
 
                 $recepcion = RecepcionCompra::create([
@@ -358,7 +359,8 @@ class RecepcionCompraController extends Controller
                     // así se pactó con el proveedor.
                     $costoPresentacion = (float) $linea->costo_unitario;
                     // El que de verdad se usa para valorizar el stock.
-                    $costoPresentacionPen = round($costoPresentacion * $tipoCambio, 4);
+                    // Con los gastos de la compra repartidos (seguro, aduana, transporte…).
+                    $costoPresentacionPen = round($costoPresentacion * (1 + $recargoGastos) * $tipoCambio, 4);
 
                     // StockService valoriza en unidad base; el costo es por presentación.
                     $factor = (float) $presentacion->factor_conversion ?: 1;

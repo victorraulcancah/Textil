@@ -555,91 +555,108 @@ export default function CrearOrdenCompra() {
                     </Button>
                 }
             >
-                <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                    <Select
-                        label="Tipo de carga"
-                        value={form.cargo_type}
-                        onChange={(e) => setField('cargo_type', e.target.value)}
-                        options={[
-                            { value: '', label: '—' },
-                            { value: 'FCL', label: 'FCL (contenedor completo)' },
-                            { value: 'LCL', label: 'LCL (carga consolidada)' },
-                        ]}
-                    />
-                    {/* Cuántos contenedores y de qué tipo: sale "2X40 HC". */}
-                    <ContenedorSelect
-                        value={form.numero_contenedor}
-                        onChange={(v) => setField('numero_contenedor', v)}
-                    />
-                    <Select
-                        label="Medio de embarque"
-                        value={form.medio_transporte}
-                        onChange={(e) => setField('medio_transporte', e.target.value)}
-                        options={[
-                            { value: '', label: '—' },
-                            { value: 'SEAFREIGHT', label: 'Marítimo (seafreight)' },
-                            { value: 'AIRFREIGHT', label: 'Aéreo (airfreight)' },
-                        ]}
-                    />
-                    <Select
-                        label="Incoterm"
-                        value={form.incoterm}
-                        onChange={(e) => setField('incoterm', e.target.value)}
-                        options={[
-                            { value: '', label: '—' },
-                            { value: 'FOB', label: 'FOB' },
-                            { value: 'CIF', label: 'CIF' },
-                            { value: 'CFR', label: 'CFR' },
-                            { value: 'EXW', label: 'EXW' },
-                            { value: 'DDP', label: 'DDP' },
-                        ]}
-                    />
-                    <Input
-                        label="País de origen"
-                        placeholder="CHINA - CN"
-                        value={form.pais_origen}
-                        onChange={(e) => setField('pais_origen', e.target.value)}
-                    />
-                    <Input
-                        label="País de destino"
-                        placeholder="PERÚ - PE"
-                        value={form.pais_destino}
-                        onChange={(e) => setField('pais_destino', e.target.value)}
-                    />
-                    {/* Los puertos son una lista que se administra con el icono de más. */}
-                    <CatalogoSelect
-                        label="Puerto de embarque"
-                        titulo="Puertos"
-                        endpoint="/puertos"
-                        value={form.puerto_embarque}
-                        onChange={(v) => setField('puerto_embarque', v)}
-                        placeholder="—"
-                    />
-                    <CatalogoSelect
-                        label="Puerto de llegada"
-                        titulo="Puertos"
-                        endpoint="/puertos"
-                        value={form.puerto_destino}
-                        onChange={(v) => setField('puerto_destino', v)}
-                        placeholder="—"
-                    />
-                    <Input
-                        label="Fecha de embarque"
-                        type="date"
-                        value={form.fecha_embarque_estimada}
-                        onChange={(e) => setField('fecha_embarque_estimada', e.target.value)}
-                    />
-                    <Input
-                        label="Elaborado por"
-                        value={form.elaborado_por}
-                        onChange={(e) => setField('elaborado_por', e.target.value)}
-                    />
-                    <Input
-                        label="Aprobado por"
-                        placeholder="Se llena al aprobar"
-                        value={form.aprobado_por}
-                        onChange={(e) => setField('aprobado_por', e.target.value)}
-                    />
+                <div className="space-y-6">
+                    {/* Qué se embarca y cómo */}
+                    <section>
+                        <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500">Embarque</h3>
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                            <Select
+                                label="Tipo de carga"
+                                value={form.cargo_type}
+                                onChange={(e) => setField('cargo_type', e.target.value)}
+                                options={[
+                                    { value: '', label: '—' },
+                                    { value: 'FCL', label: 'FCL (contenedor completo)' },
+                                    { value: 'LCL', label: 'LCL (carga consolidada)' },
+                                ]}
+                            />
+                            <Select
+                                label="Medio de embarque"
+                                value={form.medio_transporte}
+                                onChange={(e) => setField('medio_transporte', e.target.value)}
+                                options={[
+                                    { value: '', label: '—' },
+                                    { value: 'SEAFREIGHT', label: 'Marítimo (seafreight)' },
+                                    { value: 'AIRFREIGHT', label: 'Aéreo (airfreight)' },
+                                ]}
+                            />
+                            <Select
+                                label="Incoterm"
+                                value={form.incoterm}
+                                onChange={(e) => setField('incoterm', e.target.value)}
+                                options={[
+                                    { value: '', label: '—' },
+                                    { value: 'FOB', label: 'FOB' },
+                                    { value: 'CIF', label: 'CIF' },
+                                    { value: 'CFR', label: 'CFR' },
+                                    { value: 'EXW', label: 'EXW' },
+                                    { value: 'DDP', label: 'DDP' },
+                                ]}
+                            />
+                            {/* Cuántos contenedores y de qué tipo: sale "2X40 HC". */}
+                            <ContenedorSelect className="md:col-span-2" value={form.numero_contenedor} onChange={(v) => setField('numero_contenedor', v)} />
+                            <Input
+                                label="Fecha de embarque"
+                                type="date"
+                                value={form.fecha_embarque_estimada}
+                                onChange={(e) => setField('fecha_embarque_estimada', e.target.value)}
+                            />
+                        </div>
+                    </section>
+
+                    {/* De dónde a dónde */}
+                    <section>
+                        <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500">Ruta</h3>
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                            <Input
+                                label="País de origen"
+                                placeholder="CHINA - CN"
+                                value={form.pais_origen}
+                                onChange={(e) => setField('pais_origen', e.target.value)}
+                            />
+                            <Input
+                                label="País de destino"
+                                placeholder="PERÚ - PE"
+                                value={form.pais_destino}
+                                onChange={(e) => setField('pais_destino', e.target.value)}
+                            />
+                            {/* Los puertos son una lista que se administra con el icono de más. */}
+                            <CatalogoSelect
+                                label="Puerto de embarque"
+                                titulo="Puertos"
+                                endpoint="/puertos"
+                                value={form.puerto_embarque}
+                                onChange={(v) => setField('puerto_embarque', v)}
+                                placeholder="—"
+                            />
+                            <CatalogoSelect
+                                label="Puerto de llegada"
+                                titulo="Puertos"
+                                endpoint="/puertos"
+                                value={form.puerto_destino}
+                                onChange={(v) => setField('puerto_destino', v)}
+                                placeholder="—"
+                            />
+                        </div>
+                    </section>
+
+                    {/* Quién la elabora y la aprueba */}
+                    <section>
+                        <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500">Responsables</h3>
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                            <Input
+                                label="Elaborado por"
+                                value={form.elaborado_por}
+                                onChange={(e) => setField('elaborado_por', e.target.value)}
+                            />
+                            <Input
+                                label="Aprobado por"
+                                placeholder="Se llena al aprobar"
+                                value={form.aprobado_por}
+                                onChange={(e) => setField('aprobado_por', e.target.value)}
+                            />
+                        </div>
+                    </section>
                 </div>
             </Modal>
 

@@ -51,7 +51,7 @@ export function montoEnSoles(gasto, tipoCambioCompra) {
  * No cambian lo que se le paga al proveedor: al recibir la mercadería se reparten
  * entre las líneas según su valor.
  */
-export default function GastosCompraModal({ open, gastos, monedaCompra = 'PEN', tipoCambio, subtotal, metros = 0, lineas = [], onClose, onGuardar }) {
+export default function GastosCompraModal({ open, gastos, monedaCompra = 'PEN', tipoCambio, subtotal, flete = 0, metros = 0, lineas = [], onClose, onGuardar }) {
     const [filas, setFilas] = useState([]);
     /** 'gastos' (las filas) o 'resumen' (lo que cuesta cada metro con todos los gastos). */
     const [pestana, setPestana] = useState('gastos');
@@ -97,19 +97,30 @@ export default function GastosCompraModal({ open, gastos, monedaCompra = 'PEN', 
     const sinTipoCambio = enCompra.some((x) => x.valor === null);
     const totalCosto = enCompra.reduce((s, x) => s + (x.f.incluye_costo ? x.valor || 0 : 0), 0);
     const totalSoles = validas.reduce((s, f) => s + (f.incluye_costo ? montoEnSoles(f, tipoCambio) || 0 : 0), 0);
-    const recargo = Number(subtotal) > 0 ? (totalCosto / Number(subtotal)) * 100 : 0;
 
-    // Resumen del costo comercial: la mercadería (FOB) más los gastos marcados, por metro, en
-    // soles y en la moneda de la compra (cada gasto con el tipo de cambio de su día).
+    // Resumen del costo comercial: la mercadería (FOB) más el flete, el seguro y los demás gastos
+    // marcados, por metro, en soles y en la moneda de la compra (cada gasto con el tipo de cambio de su día).
     const tcCompra = Number(tipoCambio) || 0;
+    const fleteCompra = Number(flete) || 0;
+    const fleteSoles = monedaCompra === 'PEN' ? fleteCompra : tcCompra > 0 ? redondear(fleteCompra * tcCompra) : 0;
+    const esSeguro = (f) => f.concepto.trim().toUpperCase() === 'SEGURO';
+    const seguroCompra = enCompra.reduce((s, x) => s + (x.f.incluye_costo && esSeguro(x.f) ? x.valor || 0 : 0), 0);
+    const seguroSoles = validas.reduce((s, f) => s + (f.incluye_costo && esSeguro(f) ? montoEnSoles(f, tipoCambio) || 0 : 0), 0);
+    // Lo que se suma al costo además del FOB, en la moneda de la compra.
+    const sumaAlCosto = totalCosto + fleteCompra;
+    const recargo = Number(subtotal) > 0 ? (sumaAlCosto / Number(subtotal)) * 100 : 0;
     const fobSoles = monedaCompra === 'PEN' ? Number(subtotal) || 0 : tcCompra > 0 ? redondear((Number(subtotal) || 0) * tcCompra) : null;
     const columnas = [
-        { moneda: 'PEN', etiqueta: 'Soles (S/)', fob: fobSoles, gastos: totalSoles },
-        ...(monedaCompra !== 'PEN' ? [{ moneda: monedaCompra, etiqueta: monedaCompra === 'USD' ? 'Dólares (US$)' : monedaCompra, fob: Number(subtotal) || 0, gastos: totalCosto }] : []),
+        { moneda: 'PEN', etiqueta: 'Soles (S/)', fob: fobSoles, flete: fleteSoles, seguro: seguroSoles, otros: totalSoles - seguroSoles },
+        ...(monedaCompra !== 'PEN'
+            ? [{ moneda: monedaCompra, etiqueta: monedaCompra === 'USD' ? 'Dólares (US$)' : monedaCompra, fob: Number(subtotal) || 0, flete: fleteCompra, seguro: seguroCompra, otros: totalCosto - seguroCompra }]
+            : []),
     ].map((c) => {
-        const total = c.fob === null ? null : c.fob + c.gastos;
-        return { ...c, total, unitario: total !== null && Number(metros) > 0 ? total / Number(metros) : null };
+        const gastos = c.flete + c.seguro + c.otros;
+        const total = c.fob === null ? null : c.fob + gastos;
+        return { ...c, gastos, total, unitario: total !== null && Number(metros) > 0 ? total / Number(metros) : null };
     });
+    const hayOtros = columnas.some((c) => c.otros > 0.004);
 
     /**
      * El costo de cada producto y de cada color: los gastos se reparten entre las líneas en proporción
@@ -170,8 +181,8 @@ export default function GastosCompraModal({ open, gastos, monedaCompra = 'PEN', 
             footer={
                 <>
                     <span className="mr-auto text-xs text-warm-500">
-                        {totalCosto > 0
-                            ? `+${money(totalCosto, monedaCompra)} al costo (${recargo.toFixed(2)} % del subtotal)${totalSoles > 0 ? ` · ${money(totalSoles, 'PEN')} en soles` : ''}`
+                        {sumaAlCosto > 0
+                            ? `+${money(sumaAlCosto, monedaCompra)} al costo con el flete (${recargo.toFixed(2)} % del subtotal)`
                             : 'Sin gastos en el costo'}
                     </span>
                     <Button variant="secondary" onClick={onClose}>
@@ -368,7 +379,9 @@ export default function GastosCompraModal({ open, gastos, monedaCompra = 'PEN', 
                 </div>
                 {[
                     { etiqueta: 'FOB (mercadería)', valor: (c) => (c.fob === null ? '—' : money(c.fob, c.moneda)) },
-                    { etiqueta: 'Gastos en el costo', valor: (c) => money(c.gastos, c.moneda) },
+                    { etiqueta: 'Flete', valor: (c) => money(c.flete, c.moneda) },
+                    { etiqueta: 'Seguro', valor: (c) => money(c.seguro, c.moneda) },
+                    ...(hayOtros ? [{ etiqueta: 'Otros gastos', valor: (c) => money(c.otros, c.moneda) }] : []),
                     { etiqueta: 'Total costo comercial de importación', fuerte: true, valor: (c) => (c.total === null ? '—' : money(c.total, c.moneda)) },
                     { etiqueta: 'Cantidad metros', valor: () => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(metros) || 0) },
                 ].map((fila) => (

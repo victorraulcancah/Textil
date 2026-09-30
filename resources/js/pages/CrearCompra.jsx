@@ -1802,10 +1802,10 @@ export default function CrearCompra() {
                                 ≈ {money(total * Number(form.tipo_cambio), 'PEN')} al tipo de cambio de hoy
                             </p>
                         )}
-                        {gastosCosto > 0 && subtotal > 0 && (
+                        {(gastosCosto > 0 || flete > 0) && subtotal > 0 && (
                             <p className="mt-2 rounded-md bg-primary-50 px-2.5 py-1.5 text-right text-xs text-primary-700">
-                                Costo de la mercadería con gastos: {money(subtotal + gastosCosto, form.moneda_origen)}{' '}
-                                (+{((gastosCosto / subtotal) * 100).toFixed(2)} %). No cambia el total a pagar.
+                                Costo de la mercadería con flete y gastos: {money(subtotal + flete + gastosCosto, form.moneda_origen)}{' '}
+                                (+{(((flete + gastosCosto) / subtotal) * 100).toFixed(2)} %). Los gastos no cambian el total a pagar.
                             </p>
                         )}
 
@@ -1845,6 +1845,7 @@ export default function CrearCompra() {
                 monedaCompra={form.moneda_origen || 'PEN'}
                 tipoCambio={form.tipo_cambio}
                 subtotal={subtotal}
+                flete={flete}
                 metros={metrosTelas}
                 lineas={lineasCosto}
                 onClose={() => setModalGastos(false)}

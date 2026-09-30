@@ -116,8 +116,8 @@ class Compra extends Model
     }
 
     /**
-     * Cuánto encarecen los gastos de la compra a la mercadería, como fracción de
-     * su valor (0.05 = 5 %). Se reparten en proporción al valor de cada línea, así
+     * Cuánto encarecen el flete y los gastos de la compra a la mercadería, como fracción
+     * de su valor (0.05 = 5 %). Se reparten en proporción al valor de cada línea, así
      * que a todas les sube el costo por igual en términos relativos.
      */
     public function recargoPorGastos(): float
@@ -127,7 +127,7 @@ class Compra extends Model
             return 0.0;
         }
 
-        return (float) $this->gastos()->where('incluye_costo', true)->sum('monto') / $subtotal;
+        return ((float) $this->gastos()->where('incluye_costo', true)->sum('monto') + (float) $this->flete) / $subtotal;
     }
 
     public function recepciones()

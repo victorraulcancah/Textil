@@ -1,10 +1,11 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './lib/auth';
+import { AuthProvider, useAuth } from './lib/auth';
 import { ToastProvider } from './lib/toast';
 import ProtectedRoute from './components/ProtectedRoute';
-import RutaProtegida from './components/RutaProtegida';
+import AccesoDenegado from './components/AccesoDenegado';
+import RutaProtegida, { pantallaInicial } from './components/RutaProtegida';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Roles from './pages/Roles';
@@ -53,12 +54,22 @@ import Utilidades from './pages/Utilidades';
 import Ganancias from './pages/Ganancias';
 import Auditoria from './pages/Auditoria';
 import Accesos from './pages/Accesos';
+import Inicio from './pages/Inicio';
 import EnConstruccion from './pages/EnConstruccion';
 
+/**
+ * La raíz lleva al escritorio si el usuario puede verlo y, si no, a su Inicio;
+ * sin esto caía en el comodín "*" y mostraba "En construcción".
+ */
+function Raiz() {
+    const { puede } = useAuth();
+    return <Navigate to={pantallaInicial(puede)} replace />;
+}
+
 const routes = [
-    // La raíz lleva al escritorio; sin esto caía en el comodín "*" y mostraba
-    // "En construcción" al entrar por la URL base o al volver del login.
-    { path: '/', element: <Navigate to="/dashboard" replace /> },
+    { path: '/', element: <Raiz /> },
+    // Inicio es de todos: no exige permiso, desde aquí se piden los accesos.
+    { path: '/inicio', element: <Inicio /> },
     { path: '/dashboard', element: <Dashboard /> },
     { path: '/roles', element: <Roles /> },
     { path: '/usuarios', element: <Usuarios /> },
@@ -122,6 +133,7 @@ createRoot(document.getElementById('root')).render(
         <BrowserRouter>
             <ToastProvider>
                 <AuthProvider>
+                    <AccesoDenegado />
                     <Routes>
                     <Route path="/login" element={<Login />} />
                     {routes.map(({ path, element }) => (

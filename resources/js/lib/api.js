@@ -19,6 +19,13 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
     (response) => response,
     (error) => {
+        // Falta el permiso: se avisa para que la interfaz ofrezca pedirlo. Ver es
+        // distinto: si ni siquiera puede abrir la pantalla, eso lo resuelve la
+        // pantalla bloqueada, no una ventana en cada consulta.
+        const denegado = error.response?.status === 403 ? error.response.data : null;
+        if (denegado?.permiso && denegado.accion && denegado.accion !== 'ver') {
+            window.dispatchEvent(new CustomEvent('permiso-denegado', { detail: denegado }));
+        }
         if (error.response?.status === 401 && !error.config?.url?.includes('/login')) {
             localStorage.removeItem('access_token');
             localStorage.removeItem('user');

@@ -206,7 +206,71 @@ class Permisos
             return false;
         }
 
-        return $user->hasRole(config('permisos.super_admin')) || $user->can($permiso);
+        return $user->hasRole(config('permisos.super_admin'))
+            || $user->can($permiso)
+            || self::excepcionVigente($user, $permiso) !== null;
+    }
+
+    /**
+     * La excepción que hoy le sirve al usuario para este permiso, si hay.
+     * Se prefiere la que no se gasta (permanente, temporal) a la de una vez.
+     */
+    public static function excepcionVigente(\App\Models\User $user, string $permiso): ?\App\Models\PermisoExcepcion
+    {
+        return \App\Models\PermisoExcepcion::vigentes()
+            ->where('user_id', $user->id)
+            ->where('permiso', $permiso)
+            ->orderByRaw("alcance = 'una_vez'")
+            ->orderBy('id')
+            ->first();
+    }
+
+    /**
+     * Permisos que tiene el usuario hoy: la unión de los de todos sus roles
+     * más sus excepciones vigentes. El administrador los tiene todos.
+     *
+     * @return list<string>
+     */
+    public static function efectivos(\App\Models\User $user): array
+    {
+        if ($user->hasRole(config('permisos.super_admin'))) {
+            return self::todos();
+        }
+
+        $deRoles = $user->getAllPermissions()->pluck('name');
+        $deExcepciones = \App\Models\PermisoExcepcion::vigentes()
+            ->where('user_id', $user->id)
+            ->pluck('permiso');
+
+        return $deRoles->merge($deExcepciones)->unique()->values()->all();
+    }
+
+    /** "Ventas › Clientes › Crear" para un permiso (o el mismo nombre si no existe). */
+    public static function etiqueta(string $permiso): string
+    {
+        [$sub, $accion] = self::partes($permiso);
+        [$modulo, $submodulo] = array_pad(explode('.', $sub, 2), 2, null);
+        $datos = config("permisos.modulos.{$modulo}");
+        $subDatos = $datos['submodulos'][$submodulo] ?? null;
+
+        if (! $datos || ! $subDatos) {
+            return $permiso;
+        }
+
+        return implode(' › ', [$datos['label'], $subDatos['label'], config("permisos.acciones.{$accion}", $accion)]);
+    }
+
+    /**
+     * Nombre del submódulo y de la acción de un permiso, para que la
+     * interfaz pueda ofrecer pedirlo: ['ventas.clientes', 'crear'].
+     *
+     * @return array{0: string, 1: string}
+     */
+    public static function partes(string $permiso): array
+    {
+        $acc = substr($permiso, (int) strrpos($permiso, '.') + 1);
+
+        return [substr($permiso, 0, (int) strrpos($permiso, '.')), $acc];
     }
 
     /** Qué acción representa cada método HTTP. */

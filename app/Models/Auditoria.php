@@ -40,6 +40,12 @@ class Auditoria extends Model
         'cerro_sesion' => 'Cerró sesión',
         // Vender a crédito por encima de la línea del cliente.
         'autorizo_exceso_credito' => 'Autorizó exceso de crédito',
+        // Accesos: excepciones por persona y solicitudes de permiso.
+        'solicito_acceso' => 'Solicitó un acceso',
+        'concedio_acceso' => 'Concedió un acceso',
+        'revoco_acceso' => 'Revocó un acceso',
+        'aprobo_solicitud' => 'Aprobó una solicitud de acceso',
+        'rechazo_solicitud' => 'Rechazó una solicitud de acceso',
     ];
 
     public function usuario()

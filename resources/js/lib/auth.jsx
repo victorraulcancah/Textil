@@ -32,6 +32,14 @@ export function AuthProvider({ children }) {
             .finally(() => setLoading(false));
     }, []);
 
+    /** Vuelve a pedir el usuario: así se refrescan sus permisos (p. ej. tras aprobar un acceso). */
+    const recargar = useCallback(async () => {
+        const { data } = await api.get('/me');
+        setUser(data);
+        localStorage.setItem('user', JSON.stringify(data));
+        return data;
+    }, []);
+
     const login = useCallback(async (email, password) => {
         const { data } = await api.post('/login', { email, password });
         localStorage.setItem('access_token', data.access_token);
@@ -65,7 +73,7 @@ export function AuthProvider({ children }) {
     );
 
     return (
-        <AuthContext.Provider value={{ user, loading, login, logout, puede }}>
+        <AuthContext.Provider value={{ user, loading, login, logout, puede, recargar }}>
             {children}
         </AuthContext.Provider>
     );

@@ -6,13 +6,16 @@ use App\Models\AperturaCaja;
 use App\Models\CuentaPorCobrar;
 use App\Models\CuentaPorPagar;
 use App\Models\LineaCredito;
+use App\Models\SolicitudPermiso;
 use App\Services\EstadoCuentaService;
+use App\Support\Permisos;
 use Illuminate\Support\Facades\DB;
 
 /**
  * Alertas del negocio calculadas en vivo (no se persisten): quiebre y bajo stock,
  * cuotas por cobrar por vencer y vencidas, pagos vencidos, y cajas abiertas de
- * días anteriores. Son generales: las ve todo el que ve la campana.
+ * días anteriores. Son generales: las ve todo el que ve la campana. Las
+ * solicitudes de acceso pendientes solo las ve quien puede resolverlas.
  */
 class AlertaController extends Controller
 {
@@ -109,6 +112,23 @@ class AlertaController extends Controller
                     'detalle' => 'Abierta desde el '.$a->fecha_apertura?->format('d/m/Y').'. Considera cerrarla.',
                 ];
             });
+
+        // ── Solicitudes de acceso pendientes (para quien las aprueba) ──
+        if (Permisos::puede(auth('api')->user(), 'gestion.accesos.editar')) {
+            SolicitudPermiso::with('usuario:id,name')
+                ->where('estado', 'pendiente')
+                ->oldest('id')
+                ->get()
+                ->each(function ($s) use (&$alertas) {
+                    $alertas[] = [
+                        'nivel' => 'warning',
+                        'tipo' => 'solicitud_acceso',
+                        'titulo' => 'Solicitud de acceso: '.($s->usuario->name ?? 'Usuario'),
+                        'detalle' => Permisos::etiqueta($s->permiso).' · pedida el '.$s->created_at?->format('d/m/Y'),
+                        'ruta' => '/accesos?tab=solicitudes',
+                    ];
+                });
+        }
 
         // Orden por severidad
         $orden = ['danger' => 0, 'warning' => 1, 'info' => 2];

@@ -35,14 +35,14 @@ class UserController extends Controller
     public function store(StoreUserRequest $request): JsonResponse
     {
         $data = $request->validated();
-        $role = $data['role'] ?? null;
-        unset($data['role']);
+        $roles = $this->rolesDe($data);
+        unset($data['role'], $data['roles']);
 
-        $user = DB::transaction(function () use ($data, $role) {
+        $user = DB::transaction(function () use ($data, $roles) {
             $user = User::create($data);
 
-            if ($role) {
-                $user->syncRoles([$role]);
+            if ($roles) {
+                $user->syncRoles($roles);
             }
 
             return $user;
@@ -60,16 +60,17 @@ class UserController extends Controller
     {
         $user = User::findOrFail($id);
         $data = $request->validated();
-        $role = $data['role'] ?? null;
-        unset($data['role']);
+        $roles = $this->rolesDe($data);
+        unset($data['role'], $data['roles']);
 
-        DB::transaction(function () use ($user, $data, $role) {
+        DB::transaction(function () use ($user, $data, $roles) {
             if (!empty($data)) {
                 $user->update($data);
             }
 
-            if ($role) {
-                $user->syncRoles([$role]);
+            // Sus permisos son la unión de los de todos sus roles.
+            if ($roles) {
+                $user->syncRoles($roles);
             }
         });
 
@@ -89,6 +90,19 @@ class UserController extends Controller
         $user->assignRole($request->role);
 
         return response()->json($user->load('roles'));
+    }
+
+    /**
+     * Los roles que llegan: la lista `roles` o, por compatibilidad, el `role`
+     * único. El primero es el principal.
+     *
+     * @return list<string>
+     */
+    private function rolesDe(array $data): array
+    {
+        $roles = $data['roles'] ?? (isset($data['role']) ? [$data['role']] : []);
+
+        return array_values(array_unique($roles));
     }
 
     public function roles(): JsonResponse

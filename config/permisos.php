@@ -258,6 +258,17 @@ return [
             'label' => 'Gestión',
             'submodulos' => [
                 'roles' => ['label' => 'Roles y permisos', 'apis' => ['roles']],
+                // Excepciones por persona y bandeja de solicitudes de acceso.
+                // Conceder = crear, revocar = eliminar, resolver = editar.
+                // Lo que pide cada usuario para sí va en "mi-acceso/", libre.
+                'accesos' => [
+                    'label' => 'Accesos',
+                    'apis' => ['accesos'],
+                    'patrones' => [
+                        'accesos/solicitudes/*/aprobar' => 'editar',
+                        'accesos/solicitudes/*/rechazar' => 'editar',
+                    ],
+                ],
                 'usuarios' => ['label' => 'Usuarios', 'apis' => ['users']],
                 'empresa' => ['label' => 'Empresa', 'apis' => ['empresas']],
                 'auditoria' => ['label' => 'Auditoría', 'apis' => ['auditorias'], 'acciones' => ['ver']],

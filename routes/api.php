@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AccesoController;
 use App\Http\Controllers\AjusteInventarioController;
 use App\Http\Controllers\AlertaController;
 use App\Http\Controllers\AlmacenController;
@@ -12,6 +13,7 @@ use App\Http\Controllers\CierreCajaController;
 use App\Http\Controllers\CuentaBancariaController;
 use App\Http\Controllers\CuentaPorCobrarController;
 use App\Http\Controllers\CuentaPorPagarController;
+use App\Http\Controllers\MiAccesoController;
 use App\Http\Controllers\MiCajaController;
 use App\Http\Controllers\MovimientoCajaController;
 use App\Http\Controllers\TarjetaBancariaController;
@@ -261,6 +263,18 @@ Route::post('movimientos-caja', [MovimientoCajaController::class, 'store']);
     Route::put('users/{id}', [UserController::class, 'update']);
     Route::delete('users/{id}', [UserController::class, 'destroy']);
     Route::post('users/{id}/assign-role', [UserController::class, 'assignRole']);
+    // Accesos: bandeja de solicitudes y excepciones por persona (protegidas por
+    // "gestion.accesos"). Lo que cada quien ve y pide para sí va en "mi-acceso/",
+    // fuera del árbol: si hiciera falta un permiso para pedir permisos, nadie podría.
+    Route::get('accesos/solicitudes', [AccesoController::class, 'solicitudes']);
+    Route::post('accesos/solicitudes/{id}/aprobar', [AccesoController::class, 'aprobar']);
+    Route::post('accesos/solicitudes/{id}/rechazar', [AccesoController::class, 'rechazar']);
+    Route::get('accesos/excepciones', [AccesoController::class, 'excepciones']);
+    Route::post('accesos/excepciones', [AccesoController::class, 'conceder']);
+    Route::delete('accesos/excepciones/{id}', [AccesoController::class, 'revocar']);
+    Route::get('mi-acceso', [MiAccesoController::class, 'resumen']);
+    Route::get('mi-acceso/solicitudes', [MiAccesoController::class, 'solicitudes']);
+    Route::post('mi-acceso/solicitudes', [MiAccesoController::class, 'solicitar']);
     // Antes del apiResource: si no, {role} capturaría "permisos".
     Route::get('roles/permisos', [RoleController::class, 'arbolPermisos']);
     Route::apiResource('roles', RoleController::class);

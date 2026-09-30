@@ -1,19 +1,75 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Save, Shield, ShieldCheck } from 'lucide-react';
+import { Inbox, Save, Shield, ShieldCheck, UserCog } from 'lucide-react';
 import api from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
-import { Alert, Badge, Button, SearchSelect, Spinner, cn } from '../components/ui';
+import AccesosPorPersona from '../components/accesos/AccesosPorPersona';
+import SolicitudesAcceso from '../components/accesos/SolicitudesAcceso';
+import { Alert, Badge, Button, SearchSelect, Spinner, Tabs, cn } from '../components/ui';
 
 /**
- * Qué puede hacer cada rol, en tres niveles: módulo → submódulo → acciones.
+ * Accesos, en tres pestañas: lo que puede cada rol, las excepciones por
+ * persona y la bandeja de solicitudes que hacen los usuarios desde su Inicio.
  *
  * Vive aparte de la pantalla de Roles (donde solo se crean y renombran) porque
  * el árbol es largo y necesita espacio propio.
  */
 export default function Accesos() {
+    const [params, setParams] = useSearchParams();
+    const tab = ['rol', 'persona', 'solicitudes'].includes(params.get('tab')) ? params.get('tab') : 'rol';
+    const [pendientes, setPendientes] = useState(0);
+
+    const contarPendientes = useCallback(() => {
+        api.get('/accesos/solicitudes', { params: { estado: 'pendiente' } })
+            .then(({ data }) => setPendientes(data?.pendientes ?? 0))
+            .catch(() => {});
+    }, []);
+
+    useEffect(() => {
+        contarPendientes();
+    }, [contarPendientes]);
+
+    const cambiarTab = (key) =>
+        setParams((prev) => {
+            const next = new URLSearchParams(prev);
+            next.set('tab', key);
+            return next;
+        }, { replace: true });
+
+    return (
+        <Layout>
+            <PageHeader
+                title="Accesos"
+                description="Qué puede ver y hacer cada rol, cada persona y lo que piden los usuarios"
+            />
+
+            <Tabs
+                value={tab}
+                onChange={cambiarTab}
+                items={[
+                    { key: 'rol', label: 'Por rol', icon: Shield },
+                    { key: 'persona', label: 'Por persona', icon: UserCog },
+                    {
+                        key: 'solicitudes',
+                        label: pendientes > 0 ? `Solicitudes (${pendientes})` : 'Solicitudes',
+                        icon: Inbox,
+                    },
+                ]}
+            />
+
+            <div className="pt-4">
+                {tab === 'rol' && <AccesosPorRol />}
+                {tab === 'persona' && <AccesosPorPersona />}
+                {tab === 'solicitudes' && <SolicitudesAcceso onCambio={contarPendientes} />}
+            </div>
+        </Layout>
+    );
+}
+
+/** Qué puede hacer cada rol, en tres niveles: módulo → submódulo → acciones. */
+function AccesosPorRol() {
     const toast = useToast();
     const [params, setParams] = useSearchParams();
 
@@ -73,7 +129,11 @@ export default function Accesos() {
     useEffect(() => {
         if (!rol) return;
         setPermisos(new Set(rol.es_super_admin ? todosLosPermisos : rol.permisos ?? []));
-        setParams(rol ? { rol: String(rol.id) } : {}, { replace: true });
+        setParams((prev) => {
+            const next = new URLSearchParams(prev);
+            next.set('rol', String(rol.id));
+            return next;
+        }, { replace: true });
     }, [rol, todosLosPermisos, setParams]);
 
     const alternar = (permiso) =>
@@ -116,19 +176,15 @@ export default function Accesos() {
     }, [rol, permisos]);
 
     return (
-        <Layout>
-            <PageHeader
-                title="Accesos"
-                description="Qué puede ver y hacer cada rol en el sistema"
-                actions={
-                    rol && !rol.es_super_admin ? (
-                        <Button onClick={guardar} loading={saving} disabled={!hayCambios}>
-                            <Save className="h-4 w-4" />
-                            Guardar cambios
-                        </Button>
-                    ) : null
-                }
-            />
+        <>
+            {rol && !rol.es_super_admin && (
+                <div className="mb-4 flex justify-end">
+                    <Button onClick={guardar} loading={saving} disabled={!hayCambios}>
+                        <Save className="h-4 w-4" />
+                        Guardar cambios
+                    </Button>
+                </div>
+            )}
 
             {error && <Alert variant="error" className="mb-4">{error}</Alert>}
 
@@ -386,6 +442,6 @@ export default function Accesos() {
                     </section>
                 </div>
             )}
-        </Layout>
+        </>
     );
 }

@@ -1,4 +1,5 @@
 import {
+    Home,
     LayoutDashboard,
     SlidersHorizontal,
     Shield,
@@ -50,9 +51,11 @@ import {
 
 /**
  * Menú lateral. `permiso` es el submódulo de config/permisos.php que da
- * acceso: el Sidebar oculta lo que el rol no puede ver.
+ * acceso: el Sidebar oculta lo que el rol no puede ver. Sin `permiso` la entrada
+ * es libre: la ve cualquier usuario (Inicio, desde donde se piden accesos).
  */
 export const navigation = [
+    { label: 'Inicio', icon: Home, to: '/inicio', libre: true },
     { label: 'Dashboard', icon: LayoutDashboard, to: '/dashboard', permiso: 'dashboard.dashboard' },
     {
         label: 'Ventas',
@@ -130,7 +133,7 @@ export const navigation = [
         icon: SlidersHorizontal,
         children: [
             { label: 'Roles', icon: Shield, to: '/roles', permiso: 'gestion.roles' },
-            { label: 'Accesos', icon: KeyRound, to: '/accesos', permiso: 'gestion.roles' },
+            { label: 'Accesos', icon: KeyRound, to: '/accesos', permiso: 'gestion.accesos' },
             { label: 'Usuarios', icon: Users, to: '/usuarios', permiso: 'gestion.usuarios' },
             { label: 'Empresa', icon: Building2, to: '/empresa', permiso: 'gestion.empresa' },
             { label: 'Auditoría', icon: ShieldCheck, to: '/auditoria', permiso: 'gestion.auditoria' },

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AlertOctagon, AlertTriangle, Bell, Info, RefreshCw, X } from 'lucide-react';
 import api from '../lib/api';
 import { cn } from './ui';
@@ -14,6 +15,7 @@ export default function AlertsBell() {
     const [data, setData] = useState({ total: 0, por_nivel: {}, alertas: [] });
     const [loading, setLoading] = useState(false);
     const ref = useRef(null);
+    const navigate = useNavigate();
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -113,8 +115,20 @@ export default function AlertsBell() {
                                 {data.alertas.map((a) => {
                                     const style = NIVEL[a.nivel] ?? NIVEL.info;
                                     const Icon = style.Icon;
+                                    // Las que tienen `ruta` llevan a la pantalla donde se atienden.
+                                    const Fila = a.ruta ? 'button' : 'div';
                                     return (
-                                        <li key={a.id} className="flex gap-3 px-4 py-3">
+                                        <li key={a.id}>
+                                          <Fila
+                                            {...(a.ruta && {
+                                                type: 'button',
+                                                onClick: () => {
+                                                    setOpen(false);
+                                                    navigate(a.ruta);
+                                                },
+                                            })}
+                                            className={cn('flex w-full gap-3 px-4 py-3 text-left', a.ruta && 'cursor-pointer hover:bg-gray-50')}
+                                          >
                                             <span className={cn('mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full', style.chip)}>
                                                 <Icon className="h-4 w-4" />
                                             </span>
@@ -122,6 +136,7 @@ export default function AlertsBell() {
                                                 <p className="text-sm font-medium text-warm-900">{a.titulo}</p>
                                                 <p className="text-xs text-warm-500">{a.detalle}</p>
                                             </div>
+                                          </Fila>
                                         </li>
                                     );
                                 })}

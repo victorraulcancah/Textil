@@ -21,6 +21,9 @@ class StoreUserRequest extends FormRequest
             'empresa_id' => 'nullable|exists:empresas,id',
             'caja_id' => 'nullable|exists:cajas,id',
             'role' => 'nullable|string|exists:roles,name',
+            // Varios roles: sus permisos se suman. El primero es el principal.
+            'roles' => 'nullable|array|min:1',
+            'roles.*' => 'string|exists:roles,name',
         ];
     }
 

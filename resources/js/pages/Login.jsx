@@ -59,7 +59,7 @@ export default function Login() {
     const [formError, setFormError] = useState(null);
     const [loading, setLoading] = useState(false);
 
-    const from = location.state?.from?.pathname || '/dashboard';
+    const from = location.state?.from?.pathname || '/';
 
     useEffect(() => {
         if (remember) {

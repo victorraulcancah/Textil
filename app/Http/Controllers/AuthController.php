@@ -49,16 +49,12 @@ class AuthController extends Controller
     }
 
     /**
-     * Permisos efectivos del usuario, para que la interfaz oculte lo que no
-     * puede usar. El rol de administración los recibe todos.
+     * Permisos efectivos del usuario (todos sus roles más sus excepciones
+     * vigentes), para que la interfaz oculte lo que no puede usar.
      */
     private function permisosDe(User $user): array
     {
-        if ($user->hasRole(config('permisos.super_admin'))) {
-            return \App\Support\Permisos::todos();
-        }
-
-        return $user->getAllPermissions()->pluck('name')->all();
+        return \App\Support\Permisos::efectivos($user);
     }
 
     public function logout(): JsonResponse

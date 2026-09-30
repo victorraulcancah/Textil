@@ -52,4 +52,10 @@ class User extends Authenticatable implements JWTSubject
     {
         return $this->belongsTo(Caja::class);
     }
+
+    /** Permisos que se le concedieron a esta persona por encima de sus roles. */
+    public function excepciones()
+    {
+        return $this->hasMany(PermisoExcepcion::class);
+    }
 }

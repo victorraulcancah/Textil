@@ -77,7 +77,7 @@ export default function GastosCompraModal({ open, gastos, monedaCompra = 'PEN', 
             cargarTipoCambio(f.fecha)
                 .then((tc) => {
                     const venta = tc?.venta ? String(tc.venta) : '';
-                    setFilas((prev) => prev.map((x) => (x._id === f._id && !x.tc_manual ? { ...x, tipo_cambio: venta, soles_txt: undefined } : x)));
+                    setFilas((prev) => prev.map((x) => (x._id === f._id && !x.tc_manual ? { ...x, tipo_cambio: venta, soles_txt: undefined, monto_txt: undefined } : x)));
                 })
                 .catch(() => {});
         });
@@ -95,7 +95,7 @@ export default function GastosCompraModal({ open, gastos, monedaCompra = 'PEN', 
 
     const guardar = () => {
         onGuardar(
-            validas.map(({ _id, soles_txt, ...f }) => ({ ...f, concepto: f.concepto.trim(), monto: String(f.monto), tc_manual: undefined })),
+            validas.map(({ _id, soles_txt, monto_txt, ...f }) => ({ ...f, concepto: f.concepto.trim(), monto: String(f.monto), tc_manual: undefined })),
         );
         onClose();
     };
@@ -141,13 +141,22 @@ export default function GastosCompraModal({ open, gastos, monedaCompra = 'PEN', 
                     const soles = montoEnSoles(f, tipoCambio);
                     const conTc = necesitaTipoCambio(f, monedaCompra);
                     const tc = tipoCambioDe(f, tipoCambio);
-                    // Lo que se escribe en soles se conserva tal cual mientras se teclea.
+                    // "Monto" está siempre en la moneda de la compra (dólares); "Monto S/" en soles. Lo que se
+                    // escribe en uno se conserva tal cual mientras se teclea y el otro sale con el tipo de cambio.
+                    // Un gasto pagado en soles guarda los soles; uno pagado en dólares, los dólares.
+                    const enMonedaCompra = f.moneda === monedaCompra;
+                    const equivalente = Number(f.monto) > 0 && tc > 0 && !enMonedaCompra ? redondear(Number(f.monto) / tc) : '';
+                    const montoVisible = f.monto_txt ?? (enMonedaCompra || monedaCompra === 'PEN' ? f.monto : equivalente === '' ? '' : String(equivalente));
                     const solesVisible = f.soles_txt ?? (soles ? String(soles) : '');
-                    // Soles escritos → el monto en su moneda (dólares = soles ÷ tipo de cambio).
+                    const escribirMonto = (valor) => {
+                        if (enMonedaCompra || monedaCompra === 'PEN') return poner(f._id, { monto: valor, monto_txt: undefined, soles_txt: undefined });
+                        // Pagado en soles: lo escrito en la moneda de la compra se pasa a soles.
+                        poner(f._id, { monto_txt: valor, soles_txt: undefined, monto: tc > 0 && valor !== '' ? String(redondear(Number(valor) * tc)) : '' });
+                    };
                     const escribirSoles = (valor) => {
-                        if (f.moneda === 'PEN') return poner(f._id, { monto: valor, soles_txt: undefined });
+                        if (f.moneda === 'PEN') return poner(f._id, { monto: valor, soles_txt: valor, monto_txt: undefined });
                         if (!(tc > 0)) return poner(f._id, { soles_txt: valor });
-                        poner(f._id, { soles_txt: valor, monto: valor === '' ? '' : String(redondear(Number(valor) / tc)) });
+                        poner(f._id, { soles_txt: valor, monto_txt: undefined, monto: valor === '' ? '' : String(redondear(Number(valor) / tc)) });
                     };
 
                     return (
@@ -173,15 +182,15 @@ export default function GastosCompraModal({ open, gastos, monedaCompra = 'PEN', 
                                 type="number"
                                 min="0"
                                 step="any"
-                                value={f.monto}
-                                onChange={(e) => poner(f._id, { monto: e.target.value, soles_txt: undefined })}
+                                value={montoVisible}
+                                onChange={(e) => escribirMonto(e.target.value)}
                                 placeholder="0.00"
                                 className={`${inputCls} text-right`}
                                 aria-label="Monto"
                             />
                             <select
                                 value={f.moneda}
-                                onChange={(e) => poner(f._id, { moneda: e.target.value, tc_manual: false, soles_txt: undefined })}
+                                onChange={(e) => poner(f._id, { moneda: e.target.value, tc_manual: false, soles_txt: undefined, monto_txt: undefined })}
                                 className={inputCls}
                                 aria-label="Moneda"
                             >
@@ -196,7 +205,7 @@ export default function GastosCompraModal({ open, gastos, monedaCompra = 'PEN', 
                                 min="0"
                                 step="0.0001"
                                 value={conTc ? f.tipo_cambio ?? '' : ''}
-                                onChange={(e) => poner(f._id, { tipo_cambio: e.target.value, tc_manual: true, soles_txt: undefined })}
+                                onChange={(e) => poner(f._id, { tipo_cambio: e.target.value, tc_manual: true, soles_txt: undefined, monto_txt: undefined })}
                                 disabled={!conTc}
                                 placeholder={conTc ? 'T.C.' : '—'}
                                 className={`${inputCls} text-right disabled:bg-gray-50`}

@@ -46,8 +46,9 @@ class CompraPdf implements DocumentoPdf
         ])->all();
 
         $dolares = $compra->moneda_origen === 'USD';
-        $tipoDoc = ['factura' => 'Factura', 'boleta' => 'Boleta', 'guia' => 'Guía', 'ticket' => 'Ticket'];
-        $docProveedor = trim(($compra->serie ?? '') . ($compra->numero ? '-' . $compra->numero : ''));
+        $tipoDoc = ['factura' => 'Factura', 'boleta' => 'Boleta', 'guia' => 'Guía', 'ticket' => 'Ticket', 'no_domiciliado' => 'Comprobante no domiciliado'];
+        // Sin serie (comprobante no domiciliado) es solo el número, sin guion delante.
+        $docProveedor = implode('-', array_filter([$compra->serie, $compra->numero]));
 
         return [
             'compra' => $compra,

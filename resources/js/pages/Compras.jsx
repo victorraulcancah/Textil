@@ -30,7 +30,7 @@ const money = (n, moneda = 'PEN') =>
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
 
-const docLabel = { factura: 'Factura', boleta: 'Boleta', guia: 'Guía' };
+const docLabel = { factura: 'Factura', boleta: 'Boleta', guia: 'Guía', no_domiciliado: 'Comprobante no domiciliado' };
 
 export default function Compras() {
     const toast = useToast();
@@ -151,7 +151,7 @@ export default function Compras() {
             render: (row) => (
                 <span className="text-gray-700">
                     {docLabel[row.tipo_documento] ?? row.tipo_documento}
-                    {row.serie || row.numero ? ` ${row.serie ?? ''}-${row.numero ?? ''}` : ''}
+                    {row.serie || row.numero ? ` ${[row.serie, row.numero].filter(Boolean).join('-')}` : ''}
                 </span>
             ),
         },

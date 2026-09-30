@@ -1,9 +1,10 @@
 import { paisConCodigo } from '../lib/paises';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Package, Pencil, Plus, Ship, ShoppingBag, Trash2, Wallet } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useAuth } from '../lib/auth';
+import { cargarTipoCambio } from '../lib/moneda';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import MetodoCajaPicker from '../components/MetodoCajaPicker';
@@ -321,6 +322,38 @@ export default function CrearCompra() {
         });
         if (formErrors.proveedor_id) setFormErrors((prev) => ({ ...prev, proveedor_id: undefined }));
     };
+
+    /**
+     * En dólares, el tipo de cambio se trae solo: el de SUNAT de la fecha de la
+     * compra. No pisa uno escrito a mano ni el de una compra ya guardada: solo se
+     * rellena si está vacío o si sigue siendo el que se puso solo antes.
+     */
+    const tcAuto = useRef('');
+    const [tcFuente, setTcFuente] = useState(null);
+    useEffect(() => {
+        if (form.moneda_origen !== 'USD' || !form.fecha) {
+            setTcFuente(null);
+            return;
+        }
+        let vigente = true;
+        cargarTipoCambio(form.fecha)
+            .then((tc) => {
+                if (!vigente) return;
+                const sunat = tc?.venta ? String(tc.venta) : '';
+                setTcFuente(sunat ? tc.fecha_venta : null);
+                setForm((prev) => {
+                    if (prev.moneda_origen !== 'USD' || !sunat) return prev;
+                    const propio = prev.tipo_cambio !== '' && prev.tipo_cambio !== tcAuto.current;
+                    if (propio) return prev;
+                    tcAuto.current = sunat;
+                    return { ...prev, tipo_cambio: sunat };
+                });
+            })
+            .catch(() => vigente && setTcFuente(null));
+        return () => {
+            vigente = false;
+        };
+    }, [form.moneda_origen, form.fecha]);
 
     /** "2026-09-30" + 10 días → "2026-10-10" (con fechas de calendario, sin husos horarios de por medio). */
     const sumarDias = (fecha, dias) => {
@@ -1013,14 +1046,35 @@ export default function CrearCompra() {
                             <Select
                                 label="Tipo documento"
                                 value={form.tipo_documento}
-                                onChange={(e) => setField('tipo_documento', e.target.value)}
+                                onChange={(e) =>
+                                    // El comprobante de un no domiciliado trae un solo número (el de la
+                                    // invoice): no lleva serie.
+                                    setForm((prev) => ({
+                                        ...prev,
+                                        tipo_documento: e.target.value,
+                                        ...(e.target.value === 'no_domiciliado' ? { serie: '' } : {}),
+                                    }))
+                                }
                                 options={[
                                     { value: 'factura', label: 'Factura' },
                                     { value: 'boleta', label: 'Boleta' },
+                                    { value: 'no_domiciliado', label: 'Comprobante no domiciliado' },
                                 ]}
                             />
-                            <Input label="Serie" placeholder="F001" value={form.serie} onChange={(e) => setField('serie', e.target.value)} error={formErrors.serie} />
-                            <Input label="Número" placeholder="00000000" value={form.numero} onChange={(e) => setField('numero', e.target.value)} error={formErrors.numero} />
+                            {form.tipo_documento === 'no_domiciliado' ? (
+                                <Input
+                                    label="Factura / Invoice"
+                                    placeholder="N° de la factura del proveedor"
+                                    value={form.numero}
+                                    onChange={(e) => setField('numero', e.target.value)}
+                                    error={formErrors.numero}
+                                />
+                            ) : (
+                                <>
+                                    <Input label="Serie" placeholder="F001" value={form.serie} onChange={(e) => setField('serie', e.target.value)} error={formErrors.serie} />
+                                    <Input label="Número" placeholder="00000000" value={form.numero} onChange={(e) => setField('numero', e.target.value)} error={formErrors.numero} />
+                                </>
+                            )}
                             <div className="col-span-2">
                                 <Select
                                     label="Forma de pago"
@@ -1271,11 +1325,16 @@ export default function CrearCompra() {
                                     label="Tipo de cambio"
                                     type="number"
                                     step="0.0001"
-                                    placeholder="3.7500"
+                                    placeholder="T.C."
                                     value={form.tipo_cambio}
                                     onChange={(e) => setField('tipo_cambio', e.target.value)}
                                     error={formErrors.tipo_cambio}
                                 />
+                            )}
+                            {form.moneda_origen === 'USD' && tcFuente && (
+                                <p className="col-span-2 -mt-1 text-xs text-warm-400">
+                                    T.C. SUNAT del {tcFuente.split('-').reverse().join('/')}. Puedes cambiarlo.
+                                </p>
                             )}
                         </div>
                     </div>

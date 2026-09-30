@@ -208,6 +208,12 @@ export default function CrearCompra() {
             // Transformar orden → compra: se copian proveedor, embarque y líneas
             // completas, para no perder lo que ya se llenó en la orden.
             const { data: orden } = await api.get(`/ordenes-compra/${ordenCompraId}`);
+            // Una orden solo se transforma en compra cuando ya está aprobada.
+            if (!['aprobada', 'enviada', 'parcial', 'completada'].includes(orden.estado)) {
+                toast.error('La orden debe estar aprobada para transformarla en compra.');
+                navigate('/ordenes-compra');
+                return;
+            }
             setOrdenCodigo(orden.codigo ?? '');
             const esExterior = orden.tipo === 'exterior';
             setForm((prev) => ({

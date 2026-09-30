@@ -45,6 +45,16 @@ class CompraController extends Controller
     {
         $data = $request->validated();
 
+        // Una orden de compra solo se transforma en compra cuando ya está aprobada.
+        if (! empty($data['orden_compra_id'])) {
+            $orden = \App\Models\OrdenCompra::find($data['orden_compra_id']);
+            if ($orden && ! in_array($orden->estado, ['aprobada', 'enviada', 'parcial', 'completada'], true)) {
+                throw ValidationException::withMessages([
+                    'orden_compra_id' => 'La orden de compra debe estar aprobada para transformarla en compra.',
+                ]);
+            }
+        }
+
         $compra = DB::transaction(function () use ($data) {
             $subtotal = $this->calcularSubtotal($data['detalles']);
             $flete = (float) ($data['flete'] ?? 0);

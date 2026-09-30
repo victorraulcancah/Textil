@@ -117,6 +117,7 @@ Route::middleware('auth:api')->group(function () {
 
     // Compras
     Route::apiResource('proveedores', ProveedorController::class);
+    Route::get('ordenes-compra/aprobadores', [OrdenCompraController::class, 'aprobadores']);
     Route::apiResource('ordenes-compra', OrdenCompraController::class);
     Route::post('ordenes-compra/{ordenesCompra}/aprobar', [OrdenCompraController::class, 'aprobar']);
     Route::post('ordenes-compra/{ordenesCompra}/enviar', [OrdenCompraController::class, 'enviar']);

@@ -42,6 +42,8 @@ class OrdenCompra extends Model
         'fecha_embarque_estimada',
         'elaborado_por',
         'aprobado_por',
+        // El usuario elegido como aprobador: el único que puede aprobarla.
+        'aprobador_id',
     ];
 
     protected function casts(): array
@@ -75,6 +77,12 @@ class OrdenCompra extends Model
     public function usuarioCrea()
     {
         return $this->belongsTo(User::class, 'usuario_crea_id');
+    }
+
+    /** El usuario designado para aprobar la orden (puede no haberse elegido). */
+    public function aprobador()
+    {
+        return $this->belongsTo(User::class, 'aprobador_id');
     }
 
     public function usuarioAprueba()

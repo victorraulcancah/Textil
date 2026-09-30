@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { Ban, CheckCircle2, FileDown, Pencil, Printer, Send, ShoppingCart, Trash2 } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
+import { useAuth } from '../lib/auth';
 import Layout from '../components/Layout';
 import ActionsMenu from '../components/ActionsMenu';
 import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
@@ -32,6 +33,7 @@ const estadoInfo = {
 
 export default function OrdenesCompra() {
     const toast = useToast();
+    const { user } = useAuth();
     const navigate = useNavigate();
     const [ordenes, setOrdenes] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -221,6 +223,9 @@ export default function OrdenesCompra() {
                 const bloqueada = row.compras_count > 0;
                 // Aprobar es un compromiso formal: de ahí en más ya no se edita ni elimina.
                 const editable = row.estado === 'pendiente' && !bloqueada;
+                // Si se eligió un aprobador, solo él aprueba; y sin aprobar no se transforma en compra.
+                const aprobadorOtro = row.aprobador_id && Number(row.aprobador_id) !== Number(user?.id);
+                const aprobada = ['aprobada', 'enviada', 'parcial', 'completada'].includes(row.estado);
 
                 return (
                     <ActionsMenu
@@ -230,7 +235,8 @@ export default function OrdenesCompra() {
                                 icon: CheckCircle2,
                                 color: 'text-green-600',
                                 hidden: row.estado !== 'pendiente',
-                                disabled: actionId === row.id,
+                                disabled: actionId === row.id || aprobadorOtro,
+                                title: aprobadorOtro ? `Solo ${row.aprobador?.name ?? 'el aprobador elegido'} puede aprobarla` : undefined,
                                 onClick: () => aprobar(row),
                             },
                             {
@@ -254,8 +260,8 @@ export default function OrdenesCompra() {
                                 label: 'Transformar a compra',
                                 icon: FileDown,
                                 color: 'text-green-600',
-                                disabled: bloqueada,
-                                title: bloqueada ? 'Ya se transformó en compra' : undefined,
+                                disabled: bloqueada || !aprobada,
+                                title: bloqueada ? 'Ya se transformó en compra' : !aprobada ? 'Primero debe aprobarse la orden' : undefined,
                                 onClick: () => navigate(`/compras/nueva?orden=${row.id}`),
                             },
                             {

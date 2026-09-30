@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\OrdenCompra;
 use App\Models\Proveedor;
 use App\Models\SerieDocumento;
+use App\Models\User;
+use App\Support\Permisos;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -17,7 +19,7 @@ class OrdenCompraController extends Controller
     private const CAMPOS_EXTERIOR = [
         'cargo_type', 'medio_transporte', 'incoterm', 'pais_origen', 'pais_destino',
         'puerto_embarque', 'puerto_destino', 'numero_contenedor',
-        'fecha_embarque_estimada', 'elaborado_por', 'aprobado_por',
+        'fecha_embarque_estimada', 'elaborado_por', 'aprobado_por', 'aprobador_id',
     ];
 
     /**
@@ -85,6 +87,7 @@ class OrdenCompraController extends Controller
                 'proveedor:id,nombre,codigo_corto',
                 'compras:id,orden_compra_id,correlativo,fecha',
                 'usuarioAprueba:id,name',
+                'aprobador:id,name',
                 'usuarioEnvia:id,name',
                 // Detalle para la segunda tabla de la lista.
                 'detalles.presentacion.producto.marca',
@@ -118,6 +121,7 @@ class OrdenCompraController extends Controller
             'fecha_embarque_estimada' => 'nullable|date',
             'elaborado_por' => 'nullable|string|max:150',
             'aprobado_por' => 'nullable|string|max:150',
+            'aprobador_id' => 'nullable|exists:users,id',
 
             'detalles' => 'required|array|min:1',
             'detalles.*.producto_presentacion_id' => 'required|exists:producto_presentaciones,id',
@@ -139,6 +143,10 @@ class OrdenCompraController extends Controller
             $camposExterior = $data['tipo'] === 'exterior'
                 ? array_intersect_key($data, array_flip(self::CAMPOS_EXTERIOR))
                 : [];
+            if (! empty($camposExterior['aprobador_id'])) {
+                // La orden imprime el nombre de quien la aprueba.
+                $camposExterior['aprobado_por'] = User::find($camposExterior['aprobador_id'])?->name;
+            }
 
             $orden = OrdenCompra::create(array_merge([
                 'codigo' => $this->generarCodigo($proveedor, $data['fecha_emision']),
@@ -180,14 +188,37 @@ class OrdenCompraController extends Controller
             ], 422);
         }
 
+        // Si se eligió un aprobador, solo él puede aprobarla.
+        if ($ordenesCompra->aprobador_id && (int) $ordenesCompra->aprobador_id !== (int) auth()->id()) {
+            $nombre = $ordenesCompra->aprobador?->name ?? 'el aprobador elegido';
+
+            return response()->json([
+                'message' => "Solo {$nombre} puede aprobar esta orden.",
+            ], 403);
+        }
+
         $ordenesCompra->update([
             'estado' => 'aprobada',
             'usuario_aprueba_id' => auth()->id(),
             'fecha_aprobacion' => now(),
+            'aprobado_por' => $ordenesCompra->aprobado_por ?: auth()->user()?->name,
         ]);
 
         return response()->json(
             $ordenesCompra->fresh()->load(['proveedor', 'usuarioAprueba:id,name', 'usuarioEnvia:id,name'])
+        );
+    }
+
+    /**
+     * Quiénes pueden aprobar una orden: los usuarios con permiso para editar
+     * órdenes de compra. De esta lista se elige el aprobador.
+     */
+    public function aprobadores()
+    {
+        return response()->json(
+            User::orderBy('name')->get(['id', 'name'])
+                ->filter(fn (User $u) => Permisos::puede($u, 'compras.ordenes-compra.editar'))
+                ->values()
         );
     }
 
@@ -274,6 +305,7 @@ class OrdenCompraController extends Controller
             'fecha_embarque_estimada' => 'nullable|date',
             'elaborado_por' => 'nullable|string|max:150',
             'aprobado_por' => 'nullable|string|max:150',
+            'aprobador_id' => 'nullable|exists:users,id',
 
             'detalles' => 'sometimes|required|array|min:1',
             'detalles.*.producto_presentacion_id' => 'required|exists:producto_presentaciones,id',
@@ -283,6 +315,11 @@ class OrdenCompraController extends Controller
             'detalles.*.cantidad' => 'required|numeric|min:0.01',
             'detalles.*.precio_unitario' => 'required|numeric|min:0',
         ]);
+
+        // Quien aprueba se elige de la lista; su nombre es el que se imprime.
+        if (array_key_exists('aprobador_id', $data)) {
+            $data['aprobado_por'] = $data['aprobador_id'] ? User::find($data['aprobador_id'])?->name : null;
+        }
 
         DB::transaction(function () use ($data, $ordenesCompra) {
             $ordenesCompra->update(collect($data)->except('detalles')->all());

@@ -44,6 +44,8 @@ const exteriorVacio = {
     fecha_embarque_estimada: '',
     elaborado_por: '',
     aprobado_por: '',
+    // El usuario que aprueba (se elige de la lista): solo él podrá aprobarla.
+    aprobador_id: '',
 };
 
 export default function CrearOrdenCompra() {
@@ -57,6 +59,8 @@ export default function CrearOrdenCompra() {
     const [codigo, setCodigo] = useState('');
 
     const [proveedores, setProveedores] = useState([]);
+    /** Usuarios que pueden aprobar órdenes: de ahí se elige el aprobador. */
+    const [aprobadores, setAprobadores] = useState([]);
     const [productos, setProductos] = useState([]);
     const [stockPorProducto, setStockPorProducto] = useState({});
     const [loading, setLoading] = useState(true);
@@ -96,12 +100,14 @@ export default function CrearOrdenCompra() {
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            const [provRes, prodRes, existRes] = await Promise.all([
+            const [provRes, prodRes, existRes, aprobRes] = await Promise.all([
                 api.get('/proveedores'),
                 api.get('/productos', { params: { per_page: 500 } }),
                 api.get('/existencias'),
+                api.get('/ordenes-compra/aprobadores').catch(() => ({ data: [] })),
             ]);
             setProveedores(asList(provRes));
+            setAprobadores(asList(aprobRes));
             setProductos(asList(prodRes));
 
             // El stock vive por almacén: lo acumulamos por producto (en unidad base).
@@ -137,6 +143,7 @@ export default function CrearOrdenCompra() {
                 fecha_embarque_estimada: (orden.fecha_embarque_estimada ?? '').slice(0, 10),
                 elaborado_por: orden.elaborado_por ?? '',
                 aprobado_por: orden.aprobado_por ?? '',
+                aprobador_id: orden.aprobador_id ? String(orden.aprobador_id) : '',
             });
             setItems(
                 (orden.detalles ?? []).map((d) => ({
@@ -480,6 +487,7 @@ export default function CrearOrdenCompra() {
             fecha_embarque_estimada: form.fecha_embarque_estimada || null,
             elaborado_por: form.elaborado_por || null,
             aprobado_por: form.aprobado_por || null,
+            aprobador_id: form.aprobador_id || null,
             detalles: items.map((it) => ({
                 producto_presentacion_id: it.producto_presentacion_id,
                 producto_color_id: it.producto_color_id || null,
@@ -649,12 +657,18 @@ export default function CrearOrdenCompra() {
                                 value={form.elaborado_por}
                                 onChange={(e) => setField('elaborado_por', e.target.value)}
                             />
-                            <Input
-                                label="Aprobado por"
-                                placeholder="Se llena al aprobar"
-                                value={form.aprobado_por}
-                                onChange={(e) => setField('aprobado_por', e.target.value)}
-                            />
+                            {/* Se elige de la lista: solo esa persona podrá aprobar la orden. */}
+                            <div>
+                                <SearchSelect
+                                    label="Aprobado por"
+                                    value={form.aprobador_id}
+                                    onChange={(v) => setField('aprobador_id', v ?? '')}
+                                    options={aprobadores.map((u) => ({ value: String(u.id), label: u.name }))}
+                                    placeholder="Elige quién aprueba…"
+                                    emptyText="Sin coincidencias"
+                                />
+                                <p className="mt-1 text-xs text-warm-400">Solo esta persona podrá aprobar la orden.</p>
+                            </div>
                         </div>
                     </section>
                 </div>

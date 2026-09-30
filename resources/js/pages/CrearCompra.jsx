@@ -322,6 +322,38 @@ export default function CrearCompra() {
         if (formErrors.proveedor_id) setFormErrors((prev) => ({ ...prev, proveedor_id: undefined }));
     };
 
+    /** "2026-09-30" + 10 días → "2026-10-10" (con fechas de calendario, sin husos horarios de por medio). */
+    const sumarDias = (fecha, dias) => {
+        const [y, m, d] = String(fecha).split('-').map(Number);
+        if (!y || !m || !d) return '';
+        const f = new Date(Date.UTC(y, m - 1, d + (Number(dias) || 0)));
+        return f.toISOString().slice(0, 10);
+    };
+    const diasEntre = (desde, hasta) => {
+        const t = (x) => {
+            const [y, m, d] = String(x).split('-').map(Number);
+            return Date.UTC(y, m - 1, d);
+        };
+        return Math.max(0, Math.round((t(hasta) - t(desde)) / 86400000));
+    };
+
+    /**
+     * A crédito, los días y el vencimiento van juntos: los días se cuentan desde la
+     * fecha de la compra. Poner los días calcula el vencimiento; cambiar el vencimiento
+     * calcula los días; y cambiar la fecha de la compra mueve el vencimiento.
+     */
+    const setCredito = (campo, valor) =>
+        setForm((prev) => {
+            if (campo === 'dias_credito') {
+                return { ...prev, dias_credito: valor, fecha_vencimiento: sumarDias(prev.fecha, valor) || prev.fecha_vencimiento };
+            }
+            if (campo === 'fecha_vencimiento') {
+                return { ...prev, fecha_vencimiento: valor, dias_credito: valor ? String(diasEntre(prev.fecha, valor)) : prev.dias_credito };
+            }
+            // 'fecha': el plazo se conserva y el vencimiento se corre con la fecha.
+            return { ...prev, fecha: valor, fecha_vencimiento: sumarDias(valor, prev.dias_credito) || prev.fecha_vencimiento };
+        });
+
     const setField = (name, value) => {
         setForm((prev) => ({ ...prev, [name]: value }));
         if (formErrors[name]) setFormErrors((prev) => ({ ...prev, [name]: undefined }));
@@ -974,7 +1006,7 @@ export default function CrearCompra() {
                                     error={formErrors.proveedor_id}
                                 />
                             </div>
-                            <Input label="Fecha" type="date" value={form.fecha} onChange={(e) => setField('fecha', e.target.value)} error={formErrors.fecha} />
+                            <Input label="Fecha" type="date" value={form.fecha} onChange={(e) => (form.forma_pago === 'credito' ? setCredito('fecha', e.target.value) : setField('fecha', e.target.value))} error={formErrors.fecha} />
                             <Select
                                 label="Tipo documento"
                                 value={form.tipo_documento}
@@ -990,7 +1022,10 @@ export default function CrearCompra() {
                                 <Select
                                     label="Forma de pago"
                                     value={form.forma_pago}
-                                    onChange={(e) => setField('forma_pago', e.target.value)}
+                                    onChange={(e) => {
+                                        setField('forma_pago', e.target.value);
+                                        if (e.target.value === 'credito') setCredito('dias_credito', form.dias_credito);
+                                    }}
                                     options={[
                                         { value: 'contado', label: 'Contado' },
                                         { value: 'credito', label: 'Crédito' },
@@ -999,8 +1034,8 @@ export default function CrearCompra() {
                             </div>
                             {form.forma_pago === 'credito' && (
                                 <>
-                                    <Input label="N° días" type="number" min="0" value={form.dias_credito} onChange={(e) => setField('dias_credito', e.target.value)} />
-                                    <Input label="Vencimiento" type="date" value={form.fecha_vencimiento} onChange={(e) => setField('fecha_vencimiento', e.target.value)} />
+                                    <Input label="N° días" type="number" min="0" value={form.dias_credito} onChange={(e) => setCredito('dias_credito', e.target.value)} />
+                                    <Input label="Vencimiento" type="date" value={form.fecha_vencimiento} onChange={(e) => setCredito('fecha_vencimiento', e.target.value)} />
                                 </>
                             )}
                         </div>

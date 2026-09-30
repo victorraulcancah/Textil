@@ -6,7 +6,6 @@ use App\Models\OrdenCompra;
 use App\Models\Proveedor;
 use App\Models\SerieDocumento;
 use App\Models\User;
-use App\Support\Permisos;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -210,16 +209,13 @@ class OrdenCompraController extends Controller
     }
 
     /**
-     * Quiénes pueden aprobar una orden: los usuarios con permiso para editar
-     * órdenes de compra. De esta lista se elige el aprobador.
+     * De quién se puede elegir el aprobador: todos los usuarios, sin importar su
+     * rol. Quien sea elegido puede aprobar esa orden aunque su rol no tenga
+     * permiso de editar órdenes (ver VerificarPermiso).
      */
     public function aprobadores()
     {
-        return response()->json(
-            User::orderBy('name')->get(['id', 'name'])
-                ->filter(fn (User $u) => Permisos::puede($u, 'compras.ordenes-compra.editar'))
-                ->values()
-        );
+        return response()->json(User::orderBy('name')->get(['id', 'name']));
     }
 
     /** Marca la orden ya aprobada como enviada al proveedor. */

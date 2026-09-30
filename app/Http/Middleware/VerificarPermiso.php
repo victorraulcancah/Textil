@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\OrdenCompra;
 use App\Support\Permisos;
 use Closure;
 use Illuminate\Http\Request;
@@ -28,6 +29,13 @@ class VerificarPermiso
         // El rol de administración siempre puede: así un permiso mal quitado
         // no deja a nadie fuera del sistema.
         if ($user->hasRole(config('permisos.super_admin'))) {
+            return $next($request);
+        }
+
+        // La persona elegida como aprobador de una orden de compra puede aprobarla
+        // sea cual sea su rol: es justamente la única que puede.
+        if ($request->isMethod('POST') && preg_match('#(?:^|/)ordenes-compra/(\d+)/aprobar$#', $request->path(), $m)
+            && (int) OrdenCompra::where('id', $m[1])->value('aprobador_id') === (int) $user->id) {
             return $next($request);
         }
 

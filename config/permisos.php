@@ -135,7 +135,16 @@ return [
         'compras' => [
             'label' => 'Compras',
             'submodulos' => [
-                'proveedores' => ['label' => 'Proveedores', 'apis' => ['proveedores']],
+                'proveedores' => [
+                    'label' => 'Proveedores',
+                    'apis' => ['proveedores'],
+                    'acciones' => ['ver', 'crear', 'editar', 'eliminar', 'importar'],
+                    // La plantilla y la carga por Excel son su propia acción.
+                    'patrones' => [
+                        'proveedores/plantilla-excel' => 'importar',
+                        'proveedores/importar-excel' => 'importar',
+                    ],
+                ],
                 'ordenes-compra' => [
                     'label' => 'Órdenes de compra',
                     'apis' => ['ordenes-compra', 'tipos-contenedor', 'puertos'],

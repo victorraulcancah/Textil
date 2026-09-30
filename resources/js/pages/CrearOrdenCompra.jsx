@@ -408,6 +408,28 @@ export default function CrearOrdenCompra() {
     const setItem = (i, patch) =>
         setItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
 
+    /**
+     * Cambiar los rollos de un color mantiene el factor (los metros de cada
+     * rollo) y recalcula los metros: 1 rollo de 70 m → 11 rollos = 770 m. Sin
+     * esto el factor, que es metros ÷ rollos, cambiaría al teclear los rollos.
+     * Si se borran los rollos, el factor se recuerda para cuando se vuelvan a poner.
+     */
+    const cambiarRollos = (i, valor) =>
+        setItems((prev) =>
+            prev.map((it, idx) => {
+                if (idx !== i) return it;
+                const antes = Number(it.rollos) || 0;
+                const factor = it.factor_rollo || (antes > 0 ? (Number(it.cantidad) || 0) / antes : 0);
+                const rollos = Number(valor) || 0;
+                return {
+                    ...it,
+                    rollos: valor,
+                    factor_rollo: factor > 0 ? factor : it.factor_rollo,
+                    ...(factor > 0 && rollos > 0 ? { cantidad: String(Math.round(rollos * factor * 100) / 100) } : {}),
+                };
+            }),
+        );
+
     /** Cambiar la unidad de una fila trae el precio de compra de esa presentación. */
     const cambiarUnidadItem = (i, presentacionId) =>
         setItem(i, {
@@ -911,19 +933,20 @@ export default function CrearOrdenCompra() {
                                                                                         min="0"
                                                                                         step="1"
                                                                                         value={it.rollos}
-                                                                                        onChange={(e) => setItem(i, { rollos: e.target.value })}
+                                                                                        onChange={(e) => cambiarRollos(i, e.target.value)}
                                                                                         className="text-right"
                                                                                         aria-label={`Rollos de ${producto?.nombre} ${color?.nombre ?? ''}`}
                                                                                         tabIndex={abierta ? 0 : -1}
                                                                                     />
-                                                                                    {/* El factor: los metros de cada rollo (metros ÷ rollos). */}
+                                                                                    {/* El factor: los metros de cada rollo. Al cambiar los rollos se
+                                                                                        mantiene; al cambiar los metros a mano, se recalcula (metros ÷ rollos). */}
                                                                                     <span className="text-right text-warm-700">{factor || '—'}</span>
                                                                                     <Input
                                                                                         type="number"
                                                                                         min="0"
                                                                                         step="any"
                                                                                         value={it.cantidad}
-                                                                                        onChange={(e) => setItem(i, { cantidad: e.target.value })}
+                                                                                        onChange={(e) => setItem(i, { cantidad: e.target.value, factor_rollo: undefined })}
                                                                                         className="text-right"
                                                                                         aria-label={`Metros de ${producto?.nombre} ${color?.nombre ?? ''}`}
                                                                                         tabIndex={abierta ? 0 : -1}

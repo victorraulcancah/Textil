@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Building2, Edit, Mail, Phone, Trash2, User } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Building2, Download, Edit, FileSpreadsheet, Mail, Phone, Trash2, User } from 'lucide-react';
 import api, { asList } from '../lib/api';
+import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import PageHeader, { CreateButton } from '../components/PageHeader';
@@ -51,7 +52,13 @@ const documentoDe = (p) =>
 
 export default function Proveedores() {
     const toast = useToast();
+    const { puede } = useAuth();
     const [proveedores, setProveedores] = useState([]);
+    const archivoRef = useRef(null);
+    const [importando, setImportando] = useState(false);
+    const [descargando, setDescargando] = useState(false);
+    /** Resultado de la última carga: cuántos entraron y qué filas se omitieron (y por qué). */
+    const [resultadoCarga, setResultadoCarga] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
@@ -69,6 +76,47 @@ export default function Proveedores() {
     const [filterPais, setFilterPais] = useState('');
     const [filterDocumento, setFilterDocumento] = useState('');
     const [filterCorto, setFilterCorto] = useState('');
+
+    /** Descarga la plantilla de Excel para llenar y volver a subir con "Cargar Excel". */
+    const descargarPlantilla = async () => {
+        setDescargando(true);
+        try {
+            const { data } = await api.get('/proveedores/plantilla-excel', { responseType: 'blob' });
+            const url = URL.createObjectURL(data);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'plantilla-proveedores.xlsx';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 4000);
+        } catch {
+            toast.error('No se pudo descargar la plantilla.');
+        } finally {
+            setDescargando(false);
+        }
+    };
+
+    /** Carga masiva: una fila por proveedor; el código (EXT-1, NAC-1…) lo asigna el sistema. */
+    const importarExcel = async (file) => {
+        if (!file) return;
+        setImportando(true);
+        try {
+            const form = new FormData();
+            form.append('archivo', file);
+            const { data } = await api.post('/proveedores/importar-excel', form, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+            });
+            if (data.creados > 0) toast.success(`Se crearon ${data.creados} proveedor(es).`);
+            if (!data.creados && !data.advertencias?.length) toast.error('El archivo no tenía proveedores nuevos que cargar.');
+            setResultadoCarga(data.advertencias?.length ? data : null);
+            await load();
+        } catch (err) {
+            toast.error(err.response?.data?.message ?? 'No se pudo leer el Excel.');
+        } finally {
+            setImportando(false);
+        }
+    };
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -299,10 +347,59 @@ export default function Proveedores() {
             <PageHeader
                 title="Proveedores"
                 description="Administra tus proveedores"
-                actions={<CreateButton onClick={openCreate}>Crear proveedor</CreateButton>}
+                actions={
+                    <>
+                        {puede('compras.proveedores.importar') && (
+                            <>
+                                <input
+                                    ref={archivoRef}
+                                    type="file"
+                                    accept=".xlsx,.xls"
+                                    className="hidden"
+                                    onChange={(e) => {
+                                        importarExcel(e.target.files?.[0]);
+                                        e.target.value = '';
+                                    }}
+                                />
+                                <Button variant="secondary" loading={descargando} onClick={descargarPlantilla}>
+                                    <Download className="h-4 w-4" />
+                                    Plantilla Excel
+                                </Button>
+                                <Button variant="secondary" loading={importando} onClick={() => archivoRef.current?.click()}>
+                                    <FileSpreadsheet className="h-4 w-4" />
+                                    Cargar Excel
+                                </Button>
+                            </>
+                        )}
+                        <CreateButton onClick={openCreate}>Crear proveedor</CreateButton>
+                    </>
+                }
             />
 
             {error && <Alert variant="error" className="mb-4">{error}</Alert>}
+
+            {resultadoCarga && (
+                <Alert variant="warning" className="mb-4">
+                    <div className="flex items-start justify-between gap-3">
+                        <p className="font-medium">
+                            Carga terminada: {resultadoCarga.creados} proveedor(es) creado(s),{' '}
+                            {resultadoCarga.advertencias.length} aviso(s).
+                        </p>
+                        <button
+                            type="button"
+                            onClick={() => setResultadoCarga(null)}
+                            className="shrink-0 text-xs font-semibold underline"
+                        >
+                            Cerrar
+                        </button>
+                    </div>
+                    <ul className="mt-1 max-h-40 list-disc space-y-0.5 overflow-y-auto pl-5 text-xs">
+                        {resultadoCarga.advertencias.map((a, i) => (
+                            <li key={i}>{a}</li>
+                        ))}
+                    </ul>
+                </Alert>
+            )}
 
             <DataTable
                 columns={columns}

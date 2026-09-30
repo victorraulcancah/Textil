@@ -118,6 +118,9 @@ Route::middleware('auth:api')->group(function () {
     Route::apiResource('unidades-medida', UnidadMedidaController::class);
 
     // Compras
+    // Antes del apiResource: si no, {proveedore} capturaría "plantilla-excel".
+    Route::get('proveedores/plantilla-excel', [\App\Http\Controllers\ProveedorExcelController::class, 'plantilla']);
+    Route::post('proveedores/importar-excel', [\App\Http\Controllers\ProveedorExcelController::class, 'importar']);
     Route::apiResource('proveedores', ProveedorController::class);
     Route::get('ordenes-compra/aprobadores', [OrdenCompraController::class, 'aprobadores']);
     Route::apiResource('ordenes-compra', OrdenCompraController::class);

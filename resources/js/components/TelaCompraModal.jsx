@@ -54,6 +54,21 @@ export default function TelaCompraModal({ producto, moneda = 'PEN', costo = fals
         ),
     );
 
+    /**
+     * El factor de todos los colores de una vez (lo normal: los rollos de una
+     * tela traen los mismos metros). Cada color se puede corregir después en su fila.
+     * Arranca con el factor que ya tengan todos en común, si es uno solo.
+     */
+    const [factorBase, setFactorBase] = useState(() => {
+        const valores = new Set(base.map((c) => (Number(c.metros_por_rollo) > 0 ? String(Number(c.metros_por_rollo)) : '')));
+        return valores.size === 1 ? [...valores][0] : '';
+    });
+
+    const cambiarFactorBase = (valor) => {
+        setFactorBase(valor);
+        setFilas((prev) => Object.fromEntries(Object.entries(prev).map(([k, f]) => [k, { ...f, factor: valor }])));
+    };
+
     const poner = (c, campo, valor) =>
         setFilas((prev) => ({ ...prev, [clave(c)]: { ...prev[clave(c)], [campo]: valor } }));
 
@@ -118,13 +133,15 @@ export default function TelaCompraModal({ producto, moneda = 'PEN', costo = fals
                 </p>
             ) : (
                 <>
-                    {/* El precio del metro, como la celda de arriba de la hoja. */}
-                    <div className="mb-3 flex flex-wrap items-center gap-3">
-                        <span className="rounded bg-amber-200 px-3 py-1.5 text-sm font-bold uppercase text-warm-900">
+                    {/* El precio del metro y el factor, como las celdas de arriba de la hoja. */}
+                    <div className="mb-3 flex flex-wrap items-end gap-x-4 gap-y-3">
+                        <span className="rounded bg-amber-200 px-3 py-2 text-sm font-bold uppercase text-warm-900">
                             {producto.nombre}
                         </span>
-                        <label className="flex items-center gap-2 text-sm font-medium text-warm-700">
-                            {nombrePrecio} por metro ({moneda})
+                        <label className="block text-sm font-medium text-warm-700">
+                            <span className="mb-1 block whitespace-nowrap">
+                                {costo ? 'Costo' : 'Precio'} / m ({moneda})
+                            </span>
                             <input
                                 type="number"
                                 min="0"
@@ -133,6 +150,18 @@ export default function TelaCompraModal({ producto, moneda = 'PEN', costo = fals
                                 onChange={(e) => setPrecioBase(e.target.value)}
                                 className={`${inputCls} w-28 bg-amber-50`}
                                 aria-label={`${nombrePrecio} por metro`}
+                            />
+                        </label>
+                        <label className="block text-sm font-medium text-warm-700">
+                            <span className="mb-1 block whitespace-nowrap">Factor (m/rollo)</span>
+                            <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={factorBase}
+                                onChange={(e) => cambiarFactorBase(e.target.value)}
+                                className={`${inputCls} w-28 bg-amber-50`}
+                                aria-label="Factor de todos los colores"
                             />
                         </label>
                     </div>

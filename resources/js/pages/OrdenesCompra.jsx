@@ -182,7 +182,14 @@ export default function OrdenesCompra() {
     );
 
     const columns = [
+        { key: 'id', label: 'Nº', render: (row) => <span className="font-semibold text-warm-900">{row.id}</span> },
         { key: 'codigo', label: 'Código', render: (row) => <Badge variant="gray">{row.codigo}</Badge> },
+        {
+            key: 'proveedor_codigo',
+            label: 'Cód. proveedor',
+            render: (row) =>
+                row.proveedor?.codigo ? <Badge variant="blue" className="whitespace-nowrap">{row.proveedor.codigo}</Badge> : <span className="text-warm-400">—</span>,
+        },
         {
             key: 'proveedor',
             label: 'Proveedor',

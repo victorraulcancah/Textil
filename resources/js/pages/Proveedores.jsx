@@ -30,8 +30,7 @@ const emptyForm = {
     codigo: '',
     // De eso depende qué campos pide el formulario más abajo.
     tipo: 'nacional',
-    // Solo para proveedores que emiten su propia numeración de orden de
-    // compra: KET-001-26. Opcional.
+    // Numera las compras que no vienen de una orden: KET-001-26. Opcional.
     codigo_corto: '',
     ruc: '',
     // De qué documento es el número de arriba: RUC, DNI, CE o SIN.
@@ -369,7 +368,7 @@ export default function Proveedores() {
                                     .map((pais) => ({ value: pais, label: pais })),
                             ]}
                         />
-                        {/* El código corto arma la numeración de sus órdenes de compra (KET-001-26). */}
+                        {/* El código corto numera las compras sin orden (KET-001-26). */}
                         <Select
                             label="Código corto"
                             value={filterCorto}
@@ -506,7 +505,7 @@ export default function Proveedores() {
                                 error={formErrors.codigo_corto}
                             />
                             <p className="mt-1 text-xs text-warm-400">
-                                Solo si el proveedor numera así sus órdenes: KET-001-26.
+                                Numera las compras que no vienen de una orden: KET-001-26.
                             </p>
                         </div>
 

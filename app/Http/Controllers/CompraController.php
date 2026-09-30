@@ -30,6 +30,7 @@ class CompraController extends Controller
     {
         $compras = Compra::with([
             'proveedor:id,nombre',
+            'ordenCompra:id,codigo',
             'detalles.presentacion.producto.marca',
             // Solo las vigentes: una recepción deshecha devolvió su mercadería.
             'recepciones' => fn ($q) => $q->where('activo', true)->with('detalles'),

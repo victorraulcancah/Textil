@@ -465,8 +465,7 @@ export default function CrearOrdenCompra() {
         setSaving(true);
         setFormErrors({});
 
-        // El código lo asigna el backend: correlativo del proveedor si tiene
-        // código corto (KET-001-26), o el correlativo interno si no.
+        // El código lo asigna el backend: OCN-001 (nacional) u OCE-001 (exterior).
         const payload = {
             tipo: form.tipo,
             proveedor_id: form.proveedor_id,

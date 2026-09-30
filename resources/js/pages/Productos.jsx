@@ -1487,7 +1487,7 @@ export default function Productos() {
                             En qué colores existe esta tela. El código del color se suma al de la
                             tela y forma el producto con color: tela 01-01 + color 074 →
                             01-01-074. Cada rollo lleva su propio código único, el de la
-                            orden de compra (KET-001-26-000001).
+                            orden de compra (OCE-001-000001).
                         </p>
                         <p className="mb-3 text-xs text-warm-400">
                             Para cargar muchos de una vez, sube un Excel con Código, Nombre, Metraje (m) y

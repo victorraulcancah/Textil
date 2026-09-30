@@ -11,9 +11,6 @@ use Illuminate\Support\Facades\DB;
 
 class OrdenCompraController extends Controller
 {
-    /** Serie del correlativo interno de respaldo, para proveedores sin código corto. */
-    private const SERIE = 'OC0001';
-
     /** Campos que solo tienen sentido en una compra al exterior. */
     private const CAMPOS_EXTERIOR = [
         'cargo_type', 'medio_transporte', 'incoterm', 'pais_origen', 'pais_destino',
@@ -22,58 +19,29 @@ class OrdenCompraController extends Controller
     ];
 
     /**
-     * Código de la orden.
-     *
-     * Si el proveedor tiene código corto (KET), se usa su propia numeración:
-     * KET-001-26 — código del proveedor, correlativo de 3 dígitos por
-     * proveedor (no se reinicia cada año, así que a los 999 pasa a 4 dígitos
-     * sin romper nada) y los dos últimos dígitos del año de emisión.
-     *
-     * Sin código corto se usa el correlativo interno de siempre
-     * (OC0001-00000019), para no obligar a configurar nada de entrada.
+     * Código de la orden: OCN-001 para las nacionales y OCE-001 para las de
+     * exterior, cada tipo con su propio correlativo de 3 dígitos (a los 999
+     * pasa a 4 sin romper nada). Es el que identifica la orden en la lista,
+     * el PDF y los rollos que se reciben de ella.
      */
-    private function generarCodigo(Proveedor $proveedor, string $fechaEmision): string
+    public static function generarCodigo(string $tipo): string
     {
-        if ($proveedor->codigo_corto) {
-            return $this->generarCodigoProveedor($proveedor, $fechaEmision);
-        }
+        $serie = $tipo === 'exterior' ? 'OCE' : 'OCN';
 
         $serieDoc = SerieDocumento::where('tipo_documento', 'orden_compra')
-            ->where('serie', self::SERIE)
-            ->lockForUpdate()
-            ->firstOrCreate(
-                ['tipo_documento' => 'orden_compra', 'serie' => self::SERIE],
-                ['numero_actual' => 0, 'activo' => true]
-            );
-
-        // El contador puede ir por detrás de los códigos que ya existen: los
-        // datos de ejemplo y los códigos escritos a mano no lo tocan. Se salta
-        // los usados en vez de chocar contra la clave única.
-        do {
-            $serieDoc->increment('numero_actual');
-            $codigo = self::SERIE . '-' . str_pad($serieDoc->numero_actual, 8, '0', STR_PAD_LEFT);
-        } while (OrdenCompra::where('codigo', $codigo)->exists());
-
-        return $codigo;
-    }
-
-    private function generarCodigoProveedor(Proveedor $proveedor, string $fechaEmision): string
-    {
-        $serie = 'PROV' . $proveedor->id;
-
-        $serieDoc = SerieDocumento::where('tipo_documento', 'orden_compra_proveedor')
             ->where('serie', $serie)
             ->lockForUpdate()
             ->firstOrCreate(
-                ['tipo_documento' => 'orden_compra_proveedor', 'serie' => $serie],
+                ['tipo_documento' => 'orden_compra', 'serie' => $serie],
                 ['numero_actual' => 0, 'activo' => true]
             );
 
-        $anio = substr(date('y', strtotime($fechaEmision)), -2);
-
+        // El contador puede ir por detrás de los códigos que ya existen
+        // (órdenes cargadas a mano): se salta los usados en vez de chocar
+        // contra la clave única.
         do {
             $serieDoc->increment('numero_actual');
-            $codigo = sprintf('%s-%03d-%s', $proveedor->codigo_corto, $serieDoc->numero_actual, $anio);
+            $codigo = sprintf('%s-%03d', $serie, $serieDoc->numero_actual);
         } while (OrdenCompra::where('codigo', $codigo)->exists());
 
         return $codigo;
@@ -83,7 +51,7 @@ class OrdenCompraController extends Controller
     {
         return response()->json(
             OrdenCompra::with([
-                'proveedor:id,nombre,codigo_corto',
+                'proveedor:id,nombre,codigo,codigo_corto',
                 'compras:id,orden_compra_id,correlativo,fecha',
                 'usuarioAprueba:id,name',
                 'aprobador:id,name',
@@ -137,8 +105,6 @@ class OrdenCompraController extends Controller
         $data = $request->validate($this->reglas());
 
         $orden = DB::transaction(function () use ($data) {
-            $proveedor = Proveedor::findOrFail($data['proveedor_id']);
-
             $camposExterior = $data['tipo'] === 'exterior'
                 ? array_intersect_key($data, array_flip(self::CAMPOS_EXTERIOR))
                 : [];
@@ -148,7 +114,7 @@ class OrdenCompraController extends Controller
             }
 
             $orden = OrdenCompra::create(array_merge([
-                'codigo' => $this->generarCodigo($proveedor, $data['fecha_emision']),
+                'codigo' => self::generarCodigo($data['tipo']),
                 'tipo' => $data['tipo'],
                 'proveedor_id' => $data['proveedor_id'],
                 'fecha_emision' => $data['fecha_emision'],
@@ -164,7 +130,7 @@ class OrdenCompraController extends Controller
             return $orden;
         });
 
-        return response()->json($orden->load(['proveedor:id,nombre,codigo_corto', 'detalles.presentacion.producto', 'detalles.color']), 201);
+        return response()->json($orden->load(['proveedor:id,nombre,codigo,codigo_corto', 'detalles.presentacion.producto', 'detalles.color']), 201);
     }
 
     public function show(OrdenCompra $ordenesCompra)
@@ -318,6 +284,11 @@ class OrdenCompraController extends Controller
         }
 
         DB::transaction(function () use ($data, $ordenesCompra) {
+            // Cambiar de nacional a exterior (o al revés) cambia su serie: OCN ↔ OCE.
+            if (isset($data['tipo']) && $data['tipo'] !== $ordenesCompra->tipo) {
+                $data['codigo'] = self::generarCodigo($data['tipo']);
+            }
+
             $ordenesCompra->update(collect($data)->except('detalles')->all());
 
             // Las líneas se reemplazan completas: es más simple y evita huérfanos.

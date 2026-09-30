@@ -600,6 +600,26 @@ export default function CrearCompra() {
     );
     const flete = Number(form.flete) || 0;
     const total = subtotal + flete;
+    /**
+     * El seguro se escribe directo en el resumen, como el flete: es el gasto
+     * "SEGURO" de la lista de gastos (mismo que en el modal), en la moneda de la
+     * compra y dentro del costo de la mercadería.
+     */
+    const esSeguro = (g) => g.concepto.trim().toUpperCase() === 'SEGURO';
+    const seguro = gastos.find(esSeguro);
+    // Tal como se está tecleando; si se cargó en otra moneda desde el modal, ya convertido.
+    const seguroMonto = !seguro
+        ? ''
+        : seguro.moneda === (form.moneda_origen || 'PEN')
+          ? seguro.monto
+          : montoEnMonedaCompra(seguro, form.moneda_origen || 'PEN', form.tipo_cambio) ?? '';
+    const cambiarSeguro = (valor) =>
+        setGastos((prev) => {
+            const resto = prev.filter((g) => !esSeguro(g));
+            if (valor === '') return resto;
+            return [{ concepto: 'SEGURO', monto: valor, moneda: form.moneda_origen || 'PEN', incluye_costo: true }, ...resto];
+        });
+
     /** Lo que los gastos marcados suman al costo, en la moneda de la compra. */
     const gastosCosto = gastos.reduce(
         (s, g) => s + (g.incluye_costo ? montoEnMonedaCompra(g, form.moneda_origen || 'PEN', form.tipo_cambio) || 0 : 0),
@@ -701,7 +721,7 @@ export default function CrearCompra() {
             dias_credito: form.forma_pago === 'credito' ? Number(form.dias_credito) || 0 : 0,
             fecha_vencimiento: form.forma_pago === 'credito' ? form.fecha_vencimiento : null,
             flete,
-            gastos: gastos.map((g) => ({
+            gastos: gastos.filter((g) => g.concepto.trim() && Number(g.monto) > 0).map((g) => ({
                 concepto: g.concepto,
                 monto: Number(g.monto),
                 moneda: g.moneda,
@@ -1512,6 +1532,18 @@ export default function CrearCompra() {
                                 value={form.flete}
                                 onChange={(e) => setField('flete', e.target.value)}
                                 className="w-28 rounded-md border-0 bg-white px-2 py-1 text-right text-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-primary-600"
+                            />
+                        </div>
+                        <div className="flex items-center justify-between border-b border-dashed border-edge py-2 text-sm">
+                            <span className="text-warm-500">Seguro</span>
+                            <input
+                                type="number"
+                                min="0"
+                                step="any"
+                                value={seguroMonto ?? ''}
+                                onChange={(e) => cambiarSeguro(e.target.value)}
+                                className="w-28 rounded-md border-0 bg-white px-2 py-1 text-right text-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-primary-600"
+                                aria-label="Seguro"
                             />
                         </div>
                         <div className="flex items-center justify-between border-b border-dashed border-edge py-2 text-sm">

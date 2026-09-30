@@ -31,7 +31,7 @@
             formato="ticket" />
         @if ($orden->observaciones)<div class="muted">Obs.: {{ $orden->observaciones }}</div>@endif
     @else
-        <x-pdf.encabezado :empresa="$empresa" :titulo="$ingles ? 'PURCHASE ORDER' : 'ORDEN DE COMPRA'" :numero="$documento" />
+        <x-pdf.encabezado :empresa="$empresa" :titulo="$ingles ? 'PURCHASE ORDER' : 'ORDEN DE COMPRA'" :numero="$documento" :bajoLogo="$orden->codigo" />
         @if ($ingles)
             {{-- Purchase Order: la cabecera va en inglés (shipper, consignee, embarque y ficha de la tela). --}}
             @php

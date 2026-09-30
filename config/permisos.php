@@ -138,7 +138,7 @@ return [
                 'proveedores' => ['label' => 'Proveedores', 'apis' => ['proveedores']],
                 'ordenes-compra' => [
                     'label' => 'Órdenes de compra',
-                    'apis' => ['ordenes-compra'],
+                    'apis' => ['ordenes-compra', 'tipos-contenedor', 'puertos'],
                     'pdf' => ['orden-compra'],
                     // Aprobar/enviar/anular es parte de editar la orden, no una acción propia.
                     'patrones' => [

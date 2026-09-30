@@ -27,6 +27,8 @@ use App\Http\Controllers\MarcaController;
 use App\Http\Controllers\MetodoPagoController;
 use App\Http\Controllers\MotivoMovimientoController;
 use App\Http\Controllers\MotivoTrasladoController;
+use App\Http\Controllers\PuertoController;
+use App\Http\Controllers\TipoContenedorController;
 use App\Http\Controllers\MovimientoInventarioController;
 use App\Http\Controllers\NotaVentaController;
 use App\Http\Controllers\OrdenVentaController;
@@ -148,6 +150,9 @@ Route::middleware('auth:api')->group(function () {
     Route::get('movimientos', [MovimientoInventarioController::class, 'index']);
     Route::apiResource('transferencias', TransferenciaController::class);
     Route::apiResource('motivos-traslado', MotivoTrasladoController::class)->except(['show']);
+    // Catálogos chicos de la orden de compra al exterior, que se administran desde su formulario.
+    Route::apiResource('tipos-contenedor', TipoContenedorController::class)->except(['show']);
+    Route::apiResource('puertos', PuertoController::class)->except(['show']);
     Route::post('transferencias/{transferencia}/aprobar', [TransferenciaController::class, 'aprobar']);
     Route::post('transferencias/{transferencia}/rechazar', [TransferenciaController::class, 'rechazar']);
     Route::post('transferencias/{transferencia}/recibir', [TransferenciaController::class, 'recibir']);

@@ -1,9 +1,13 @@
+import { paisConCodigo } from '../lib/paises';
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, ChevronRight, FileText, Package, Pencil, Plus, Ship, Trash2 } from 'lucide-react';
 import api, { asList } from '../lib/api';
+import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
+import CatalogoSelect from '../components/CatalogoSelect';
+import ContenedorSelect from '../components/ContenedorSelect';
 import ColorSelect from '../components/ColorSelect';
 import ProductoPickerModal from '../components/ProductoPickerModal';
 import TelaCompraModal, { presentacionMetroDe } from '../components/TelaCompraModal';
@@ -32,7 +36,8 @@ const exteriorVacio = {
     medio_transporte: '',
     incoterm: '',
     pais_origen: '',
-    pais_destino: '',
+    // La mercadería llega al Perú: es lo que se propone (se puede cambiar).
+    pais_destino: 'PERÚ - PE',
     puerto_embarque: '',
     puerto_destino: '',
     numero_contenedor: '',
@@ -43,6 +48,7 @@ const exteriorVacio = {
 
 export default function CrearOrdenCompra() {
     const toast = useToast();
+    const { user } = useAuth();
     const navigate = useNavigate();
     /** Con :id la pantalla trabaja en modo edición sobre una orden existente. */
     const { id } = useParams();
@@ -66,6 +72,13 @@ export default function CrearOrdenCompra() {
         observaciones: '',
         ...exteriorVacio,
     });
+
+    // "Elaborado por": quien entró al sistema, salvo que sea una orden ya guardada o
+    // se haya escrito otro nombre. No pisa lo que ya hay.
+    useEffect(() => {
+        if (id || !user?.name) return;
+        setForm((prev) => (prev.elaborado_por ? prev : { ...prev, elaborado_por: user.name }));
+    }, [id, user?.name]); // eslint-disable-line react-hooks/exhaustive-deps
 
     /** Panel superior de búsqueda/alta. */
     const [panel, setPanel] = useState({ ...panelVacio });
@@ -188,6 +201,26 @@ export default function CrearOrdenCompra() {
         const abrev = productoPanel.unidad_medida?.abreviatura ?? '';
         return `${new Intl.NumberFormat('es-PE').format(cantidad)}${abrev ? ` ${abrev}` : ''}`;
     }, [productoPanel, stockPorProducto]);
+
+    /**
+     * Al elegir el proveedor se llena el país de origen con el suyo (CHINA - CN).
+     * No pisa lo que se escribió a mano: solo se rellena si estaba vacío o si era
+     * el país del proveedor anterior.
+     */
+    const elegirProveedor = (valor) => {
+        const proveedor = proveedores.find((p) => String(p.id) === String(valor));
+        setForm((prev) => {
+            const anterior = proveedores.find((p) => String(p.id) === String(prev.proveedor_id));
+            const rellenar = !prev.pais_origen || prev.pais_origen === paisConCodigo(anterior?.pais);
+
+            return {
+                ...prev,
+                proveedor_id: valor ?? '',
+                ...(proveedor?.pais && rellenar ? { pais_origen: paisConCodigo(proveedor.pais) } : {}),
+            };
+        });
+        if (formErrors.proveedor_id) setFormErrors((prev) => ({ ...prev, proveedor_id: undefined }));
+    };
 
     const setField = (name, value) => {
         setForm((prev) => ({ ...prev, [name]: value }));
@@ -533,11 +566,10 @@ export default function CrearOrdenCompra() {
                             { value: 'LCL', label: 'LCL (carga consolidada)' },
                         ]}
                     />
-                    <Input
-                        label="N° de contenedor"
-                        placeholder="2X40 HC"
+                    {/* Cuántos contenedores y de qué tipo: sale "2X40 HC". */}
+                    <ContenedorSelect
                         value={form.numero_contenedor}
-                        onChange={(e) => setField('numero_contenedor', e.target.value)}
+                        onChange={(v) => setField('numero_contenedor', v)}
                     />
                     <Select
                         label="Medio de embarque"
@@ -574,17 +606,22 @@ export default function CrearOrdenCompra() {
                         value={form.pais_destino}
                         onChange={(e) => setField('pais_destino', e.target.value)}
                     />
-                    <Input
+                    {/* Los puertos son una lista que se administra con el icono de más. */}
+                    <CatalogoSelect
                         label="Puerto de embarque"
-                        placeholder="NINGBO"
+                        titulo="Puertos"
+                        endpoint="/puertos"
                         value={form.puerto_embarque}
-                        onChange={(e) => setField('puerto_embarque', e.target.value)}
+                        onChange={(v) => setField('puerto_embarque', v)}
+                        placeholder="—"
                     />
-                    <Input
+                    <CatalogoSelect
                         label="Puerto de llegada"
-                        placeholder="CHANCAY"
+                        titulo="Puertos"
+                        endpoint="/puertos"
                         value={form.puerto_destino}
-                        onChange={(e) => setField('puerto_destino', e.target.value)}
+                        onChange={(v) => setField('puerto_destino', v)}
+                        placeholder="—"
                     />
                     <Input
                         label="Fecha de embarque"
@@ -1039,7 +1076,7 @@ export default function CrearOrdenCompra() {
                                 <SearchSelect
                                     label="Proveedor"
                                     value={form.proveedor_id}
-                                    onChange={(v) => setField('proveedor_id', v)}
+                                    onChange={elegirProveedor}
                                     options={proveedores.map((p) => ({
                                         value: String(p.id),
                                         label: p.codigo_corto ? `${p.nombre} (${p.codigo_corto})` : p.nombre,

@@ -115,6 +115,7 @@ class OrdenCompraController extends Controller
 
             $orden = OrdenCompra::create(array_merge([
                 'codigo' => self::generarCodigo($data['tipo']),
+                'numero_proveedor' => OrdenCompra::siguienteNumeroProveedor((int) $data['proveedor_id']),
                 'tipo' => $data['tipo'],
                 'proveedor_id' => $data['proveedor_id'],
                 'fecha_emision' => $data['fecha_emision'],
@@ -287,6 +288,10 @@ class OrdenCompraController extends Controller
             // Cambiar de nacional a exterior (o al revés) cambia su serie: OCN ↔ OCE.
             if (isset($data['tipo']) && $data['tipo'] !== $ordenesCompra->tipo) {
                 $data['codigo'] = self::generarCodigo($data['tipo']);
+            }
+            // Con otro proveedor, la orden pasa a ser la siguiente de ese proveedor.
+            if (isset($data['proveedor_id']) && (int) $data['proveedor_id'] !== (int) $ordenesCompra->proveedor_id) {
+                $data['numero_proveedor'] = OrdenCompra::siguienteNumeroProveedor((int) $data['proveedor_id']);
             }
 
             $ordenesCompra->update(collect($data)->except('detalles')->all());

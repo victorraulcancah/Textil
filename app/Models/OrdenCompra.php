@@ -15,6 +15,8 @@ class OrdenCompra extends Model
 
     protected $fillable = [
         'codigo',
+        // Cuántas órdenes lleva ese proveedor: es el número del documento (HAN-002-26).
+        'numero_proveedor',
         'tipo',
         'proveedor_id',
         'solicitud_id',
@@ -72,11 +74,29 @@ class OrdenCompra extends Model
     {
         $corto = $this->proveedor?->codigo_corto;
 
-        if (! $corto || ! preg_match('/(\d+)$/', (string) $this->codigo, $m)) {
+        if (! $corto || ! $this->numero_proveedor) {
             return (string) $this->codigo;
         }
 
-        return sprintf('%s-%s-%s', $corto, $m[1], $this->fecha_emision?->format('y') ?? date('y'));
+        return sprintf('%s-%03d-%s', $corto, $this->numero_proveedor, $this->fecha_emision?->format('y') ?? date('y'));
+    }
+
+    /**
+     * Siguiente número de las órdenes de este proveedor (1, 2, 3…). No se
+     * reutiliza el de una orden borrada: el contador solo avanza.
+     */
+    public static function siguienteNumeroProveedor(int $proveedorId): int
+    {
+        $serie = SerieDocumento::where('tipo_documento', 'orden_compra_proveedor')
+            ->where('serie', 'PROV'.$proveedorId)
+            ->lockForUpdate()
+            ->firstOrCreate(
+                ['tipo_documento' => 'orden_compra_proveedor', 'serie' => 'PROV'.$proveedorId],
+                ['numero_actual' => 0, 'activo' => true],
+            );
+        $serie->increment('numero_actual');
+
+        return (int) $serie->numero_actual;
     }
 
     /** ¿Es una compra de importación? Solo ahí aplican los campos de embarque. */

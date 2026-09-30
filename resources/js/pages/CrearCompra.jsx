@@ -1520,7 +1520,8 @@ export default function CrearCompra() {
                     <div className="rounded-xl border border-edge bg-white p-5 shadow-sm">
                         <h2 className="mb-3 text-xs font-bold uppercase tracking-wide text-warm-500">Resumen</h2>
                         <div className="flex justify-between border-b border-dashed border-edge py-2 text-sm">
-                            <span className="text-warm-500">Subtotal</span>
+                            {/* La mercadería puesta a bordo: así se le llama al valor de una compra al exterior. */}
+                            <span className="text-warm-500">{form.es_importacion ? 'FOB' : 'Subtotal'}</span>
                             <span className="font-medium text-warm-900">{money(subtotal, form.moneda_origen)}</span>
                         </div>
                         <div className="flex items-center justify-between border-b border-dashed border-edge py-2 text-sm">

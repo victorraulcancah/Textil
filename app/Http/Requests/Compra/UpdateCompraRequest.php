@@ -37,6 +37,8 @@ class UpdateCompraRequest extends FormRequest
             'gastos.*.concepto' => 'required|string|max:100',
             'gastos.*.monto' => 'required|numeric|min:0.01',
             'gastos.*.moneda' => 'nullable|in:PEN,USD,CNY,EUR',
+            'gastos.*.fecha' => 'nullable|date',
+            'gastos.*.tipo_cambio' => 'nullable|numeric|min:0.0001',
             'gastos.*.incluye_costo' => 'nullable|boolean',
 
             'es_importacion' => 'nullable|boolean',

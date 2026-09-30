@@ -9,12 +9,15 @@ class CompraGasto extends Model
 {
     protected $table = 'compra_gastos';
 
-    protected $fillable = ['compra_id', 'concepto', 'monto_origen', 'moneda', 'monto', 'incluye_costo'];
+    protected $fillable = ['compra_id', 'concepto', 'fecha', 'monto_origen', 'moneda', 'tipo_cambio', 'monto_pen', 'monto', 'incluye_costo'];
 
     protected function casts(): array
     {
         return [
+            'fecha' => 'date:Y-m-d',
             'monto_origen' => 'decimal:2',
+            'tipo_cambio' => 'decimal:4',
+            'monto_pen' => 'decimal:2',
             'monto' => 'decimal:2',
             'incluye_costo' => 'boolean',
         ];

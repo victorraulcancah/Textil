@@ -195,8 +195,10 @@ export default function CrearCompra() {
                 setGastos(
                     (compra.gastos ?? []).map((g) => ({
                         concepto: g.concepto,
+                        fecha: g.fecha ? String(g.fecha).slice(0, 10) : '',
                         monto: String(Number(g.monto_origen)),
                         moneda: g.moneda,
+                        tipo_cambio: g.tipo_cambio ? String(Number(g.tipo_cambio)) : '',
                         incluye_costo: Boolean(g.incluye_costo),
                     })),
                 );
@@ -617,7 +619,7 @@ export default function CrearCompra() {
         setGastos((prev) => {
             const resto = prev.filter((g) => !esSeguro(g));
             if (valor === '') return resto;
-            return [{ concepto: 'SEGURO', monto: valor, moneda: form.moneda_origen || 'PEN', incluye_costo: true }, ...resto];
+            return [{ concepto: 'SEGURO', fecha: '', monto: valor, moneda: form.moneda_origen || 'PEN', tipo_cambio: '', incluye_costo: true }, ...resto];
         });
 
     /** Lo que los gastos marcados suman al costo, en la moneda de la compra. */
@@ -723,8 +725,10 @@ export default function CrearCompra() {
             flete,
             gastos: gastos.filter((g) => g.concepto.trim() && Number(g.monto) > 0).map((g) => ({
                 concepto: g.concepto,
+                fecha: g.fecha || null,
                 monto: Number(g.monto),
                 moneda: g.moneda,
+                tipo_cambio: Number(g.tipo_cambio) > 0 ? Number(g.tipo_cambio) : null,
                 incluye_costo: g.incluye_costo,
             })),
             observaciones: form.observaciones,

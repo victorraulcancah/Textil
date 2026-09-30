@@ -334,26 +334,38 @@ class CompraController extends Controller
     private function crearGastos(Compra $compra, array $gastos): void
     {
         $monedaCompra = $compra->moneda_origen ?: 'PEN';
-        $tipoCambio = (float) $compra->tipo_cambio;
 
         foreach ($gastos as $g) {
             $moneda = $g['moneda'] ?? $monedaCompra;
             $origen = round((float) $g['monto'], 2);
+            // El tipo de cambio del día del gasto; si no lo trae, el de la compra.
+            $tipoCambio = (float) ($g['tipo_cambio'] ?? 0) ?: (float) $compra->tipo_cambio;
 
-            // Soles en una compra en dólares: se pasa a dólares con el tipo de cambio de la compra.
+            // A la moneda de la compra: los soles de una compra en dólares se pasan con ese tipo
+            // de cambio, y los dólares de una compra en soles, al revés.
             $monto = match (true) {
                 $moneda === $monedaCompra => $origen,
                 $monedaCompra !== 'PEN' && $moneda === 'PEN' && $tipoCambio > 0 => round($origen / $tipoCambio, 2),
                 $monedaCompra === 'PEN' && $moneda !== 'PEN' && $tipoCambio > 0 => round($origen * $tipoCambio, 2),
                 default => throw ValidationException::withMessages([
-                    'gastos' => "Para el gasto \"{$g['concepto']}\" en {$moneda}, pon el tipo de cambio de la compra.",
+                    'gastos' => "Para el gasto \"{$g['concepto']}\" en {$moneda}, pon el tipo de cambio.",
                 ]),
+            };
+
+            // Lo que fue en soles: el monto mismo, o los dólares por el tipo de cambio.
+            $enSoles = match (true) {
+                $moneda === 'PEN' => $origen,
+                $moneda === 'USD' && $tipoCambio > 0 => round($origen * $tipoCambio, 2),
+                default => null,
             };
 
             $compra->gastos()->create([
                 'concepto' => trim($g['concepto']),
+                'fecha' => $g['fecha'] ?? null,
                 'monto_origen' => $origen,
                 'moneda' => $moneda,
+                'tipo_cambio' => $moneda === 'PEN' && $monedaCompra === 'PEN' ? null : ($tipoCambio > 0 ? $tipoCambio : null),
+                'monto_pen' => $enSoles,
                 'monto' => $monto,
                 'incluye_costo' => (bool) ($g['incluye_costo'] ?? true),
             ]);

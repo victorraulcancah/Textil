@@ -92,9 +92,9 @@
                 </tr>
             </table>
 
-            {{-- La mercadería: una ficha por tela. --}}
+            {{-- La mercadería, intercalada: la ficha de una tela y enseguida sus ítems; luego la siguiente. --}}
             @foreach ($g['bienes'] as $b)
-                <table style="width: 100%; border-collapse: collapse; table-layout: fixed;">
+                <table style="width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 14px;">
                     <colgroup><col style="width: 50%"><col style="width: 25%"><col style="width: 25%"></colgroup>
                     <tr>
                         <td style="{{ $cab }}">Description of goods</td>
@@ -119,10 +119,15 @@
                         </td>
                     </tr>
                 </table>
-            @endforeach
 
-            {{-- Los ítems, con el mismo formato de tabla del pedido: una por tela, con su color code, sub total y total. --}}
-            <x-pdf.planilla :grupos="$planilla['grupos']" :totales="$planilla['totales']" :colorCode="true" :precios="false" />
+                {{-- Sus ítems, con el mismo formato de tabla del pedido; el TOTAL solo al final de todo. --}}
+                <x-pdf.planilla
+                    :grupos="[$planilla['grupos'][$loop->index]]"
+                    :totales="$planilla['totales']"
+                    :colorCode="true"
+                    :precios="false"
+                    :conTotal="$loop->last" />
+            @endforeach
 
             <table style="width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 8.5px;">
                 <tr>

@@ -8,8 +8,9 @@
     pendiente: hay rollos por separar (el total es parcial)
     precios:   con las columnas de precio (el pedido y la proforma); sin ellas, el requerimiento del almacén
     colorCode: con la columna "Color code" (el código que se escribe en la orden de compra y la compra)
+    conTotal:  con la fila TOTAL al final (false cuando la planilla va partida entre otras cosas y el total se pone después)
 --}}
-@props(['grupos' => [], 'totales' => [], 'moneda' => 'S/', 'pendiente' => false, 'precios' => true, 'colorCode' => false])
+@props(['grupos' => [], 'totales' => [], 'moneda' => 'S/', 'pendiente' => false, 'precios' => true, 'colorCode' => false, 'conTotal' => true])
 @php
     $n = fn ($v) => rtrim(rtrim(number_format((float) $v, 2, '.', ''), '0'), '.');
     $celda = fn ($v) => is_numeric($v) ? $n($v) : ($v ?? '');
@@ -76,6 +77,7 @@
     </table>
 @endforeach
 
+@if ($conTotal)
 <table style="width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 12px; border-top: 2px solid #666; border-bottom: 2px solid #666;">
     <colgroup>
         @foreach ($anchos as $a)<col style="width: {{ $a }}%">@endforeach
@@ -91,3 +93,4 @@
         @endif
     </tr>
 </table>
+@endif

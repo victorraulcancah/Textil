@@ -37,6 +37,12 @@ const redondear = (n) => Math.round((Number(n) || 0) * 100) / 100;
  * Registrar (mixto), editar y anular, con método por tipo (efectivo/transferencia/billetera).
  * @param {'cobrar'|'pagar'} tipo
  */
+/** "2026-09-29T05:00:00.000000Z" o "2026-09-29" → "29/09/2026" (sin pasar por la zona horaria: el día es el escrito). */
+const fechaCorta = (valor) => {
+    const m = String(valor ?? '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : (valor ?? '');
+};
+
 export default function PagosCuentaModal({ open, onClose, cuenta, tipo, onSaved }) {
     const toast = useToast();
     const basePath = tipo === 'cobrar' ? '/cuentas-por-cobrar' : '/cuentas-por-pagar';
@@ -291,14 +297,14 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo, onSaved 
                                     // Pagado en soles: lo que salió y lo que abonó a la deuda.
                                     <span className="font-medium text-warm-900">
                                         {money(p.monto_pen, 'PEN')}
-                                        <span className="ml-1 text-xs font-normal text-warm-500">
+                                        <span className="ml-2 text-xs font-normal text-warm-500">· 
                                             T.C. {Number(p.tipo_cambio)} = {money(p.monto, p.moneda || state.moneda)}
                                         </span>
                                     </span>
                                 ) : (
                                     <span className="font-medium text-warm-900">{money(p.monto, p.moneda || state.moneda)}</span>
                                 )}
-                                <span className="text-warm-500">{p.fecha}</span>
+                                <span className="text-warm-500">{fechaCorta(p.fecha)}</span>
                                 {p.referencia && <span className="text-warm-400">· {p.referencia}</span>}
                                 <div className="ml-auto flex items-center gap-1">
                                     <button type="button" onClick={() => startEdit(p)} disabled={anulada || saving} className="rounded-md p-1.5 text-blue-600 hover:bg-blue-50 disabled:opacity-40" aria-label="Editar"><Pencil className="h-4 w-4" /></button>

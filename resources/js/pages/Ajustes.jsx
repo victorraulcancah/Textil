@@ -284,12 +284,17 @@ export default function Ajustes() {
         const lista = (valores) => [{ value: '', label: 'Todos' }, ...valores.map((v) => ({ value: v, label: v }))];
         return {
             almacenes: lista(distintos((a) => a.almacen?.nombre)),
-            motivos: lista(distintos((a) => a.motivo)),
-            origenes: [...lista(distintos((a) => origenDe(a))).slice(0, 1), { value: '__sin__', label: 'Sin origen' }, ...lista(distintos((a) => origenDe(a))).slice(1)],
+            // Todos los motivos del catálogo (aunque aún no tengan ajustes) y los que algún ajuste viejo guarde.
+            motivos: lista([...new Set([...motivos.map((m) => m.nombre), ...ajustes.map((a) => a.motivo)].filter(Boolean))].sort((a, b) => a.localeCompare(b))),
+            origenes: [
+                { value: '', label: 'Todos' },
+                { value: '__sin__', label: 'Sin origen' },
+                ...[...new Set(motivos.map((m) => m.origen).filter(Boolean))].sort((a, b) => a.localeCompare(b)).map((o) => ({ value: o, label: o })),
+            ],
             proveedores: lista(distintos((a) => a.proveedor?.nombre)),
             usuarios: lista(distintos((a) => a.usuario_solicita?.name)),
         };
-    }, [ajustes, origenDe]);
+    }, [ajustes, motivos]);
 
     const filtered = ajustes.filter((a) => {
         if (activeFilters.estado && a.estado !== activeFilters.estado) return false;

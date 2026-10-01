@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Ban, FileText } from 'lucide-react';
+import { Ban, FileText, Wallet } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { money } from '../lib/moneda';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
+import LetraCobroModal from '../components/LetraCobroModal';
 import PageHeader from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
 import { Alert, Badge, Button, DataTable, Modal, Select } from '../components/ui';
@@ -17,9 +18,34 @@ const hoy = () => {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
+/** Días de calendario entre dos fechas "aaaa-mm-dd". */
+const diasEntre = (desde, hasta) => {
+    const t = (x) => {
+        const [y, m, d] = String(x).slice(0, 10).split('-').map(Number);
+        return Date.UTC(y, m - 1, d);
+    };
+    return Math.round((t(hasta) - t(desde)) / 86400000);
+};
+
+/** El detalle del estado de una letra: vigencia si está por cobrar, puntualidad si ya se pagó. */
+const subEstado = (row) => {
+    if (row.estado === 'emitida') {
+        const dias = diasEntre(hoy(), row.fecha_vencimiento);
+        if (dias > 0) return { texto: `Vigente · vence en ${dias} día${dias === 1 ? '' : 's'}`, color: 'text-warm-700' };
+        if (dias === 0) return { texto: 'Vence hoy', color: 'font-medium text-amber-600' };
+        return { texto: `Vencida hace ${-dias} día${dias === -1 ? '' : 's'}`, color: 'font-medium text-red-600' };
+    }
+    if (row.estado === 'pagada') {
+        const tarde = row.fecha_pago && diasEntre(row.fecha_vencimiento, row.fecha_pago) > 0;
+        return { texto: `${tarde ? 'Pagada con atraso' : 'Pagada a tiempo'}${row.fecha_pago ? ` · ${fecha(row.fecha_pago)}` : ''}`, color: tarde ? 'text-amber-600' : 'text-green-600' };
+    }
+    return { texto: '—', color: 'text-gray-300' };
+};
+
 const ESTADOS = [
     { value: '', label: 'Todas' },
-    { value: 'emitida', label: 'Emitidas' },
+    { value: 'emitida', label: 'Por cobrar' },
+    { value: 'pagada', label: 'Pagadas' },
     { value: 'anulada', label: 'Anuladas' },
 ];
 
@@ -35,6 +61,7 @@ export default function LetrasCambio() {
     const [error, setError] = useState(null);
     const [fEstado, setFEstado] = useState('');
     const [pdf, setPdf] = useState(null);
+    const [cobro, setCobro] = useState(null);
     const [anular, setAnular] = useState(null);
     const [anulando, setAnulando] = useState(false);
 
@@ -69,23 +96,65 @@ export default function LetrasCambio() {
     };
 
     const columns = [
-        { key: 'numero', label: 'N°', render: (row) => <span className="font-semibold text-warm-900">{row.numero}</span> },
-        { key: 'referencia', label: 'Referencia', render: (row) => (row.referencia ? <Badge variant="blue">{row.referencia}</Badge> : <span className="text-gray-400">—</span>) },
-        { key: 'aceptante_nombre', label: 'Aceptante', render: (row) => row.aceptante_nombre },
-        { key: 'fecha_giro', label: 'Giro', render: (row) => fecha(row.fecha_giro) },
+        // El orden de las columnas es el de la hoja de control: letra, giro, vencimiento, cliente,
+        // importe, saldo, estado, sub estado y concepto.
+        { key: 'numero', label: 'Letra Nro', render: (row) => <span className="font-semibold text-warm-900">{row.numero}</span> },
+        { key: 'fecha_giro', label: 'Fecha de giro', render: (row) => fecha(row.fecha_giro) },
         {
             key: 'fecha_vencimiento',
-            label: 'Vence',
+            label: 'Fecha de vencimiento',
             render: (row) => {
                 const vencida = row.estado === 'emitida' && String(row.fecha_vencimiento).slice(0, 10) < hoy();
                 return <span className={vencida ? 'font-semibold text-red-600' : ''}>{fecha(row.fecha_vencimiento)}</span>;
             },
         },
+        {
+            key: 'cliente',
+            label: 'Cliente',
+            // Se busca también por el aceptante y la referencia del girador, aunque no tengan columna.
+            getSearchValue: (row) => `${row.cliente?.nombre ?? ''} ${row.aceptante_nombre ?? ''} ${row.referencia ?? ''}`,
+            render: (row) => row.cliente?.nombre ?? row.aceptante_nombre ?? <span className="text-gray-300">—</span>,
+        },
         { key: 'importe', label: 'Importe', align: 'right', render: (row) => <span className="font-semibold text-warm-900">{money(row.importe, row.moneda)}</span> },
+        {
+            key: 'saldo',
+            label: 'Saldo',
+            align: 'right',
+            // Lo que falta cobrar de la letra: todo el importe mientras esté por cobrar; 0 si ya se pagó o se anuló.
+            render: (row) => (
+                <span className={row.estado === 'emitida' ? 'font-medium text-red-600' : 'text-gray-400'}>
+                    {money(row.estado === 'emitida' ? row.importe : 0, row.moneda)}
+                </span>
+            ),
+        },
         {
             key: 'estado',
             label: 'Estado',
-            render: (row) => <Badge variant={row.estado === 'emitida' ? 'green' : 'gray'}>{row.estado === 'emitida' ? 'Emitida' : 'Anulada'}</Badge>,
+            render: (row) => {
+                const info = { emitida: ['amber', 'Por cobrar'], pagada: ['green', 'Pagada'], anulada: ['gray', 'Anulada'] }[row.estado] ?? ['gray', row.estado];
+                return <Badge variant={info[0]}>{info[1]}</Badge>;
+            },
+        },
+        {
+            key: 'sub_estado',
+            label: 'Sub estado',
+            // El detalle del estado: si la letra por cobrar sigue vigente o ya venció, y si la pagada llegó a tiempo.
+            getSearchValue: (row) => subEstado(row).texto,
+            render: (row) => {
+                const { texto, color } = subEstado(row);
+                return <span className={color}>{texto}</span>;
+            },
+        },
+        {
+            key: 'canje',
+            label: 'Concepto',
+            getSearchValue: (row) => (row.cuenta_por_cobrar?.nota_venta ? `${row.cuenta_por_cobrar.nota_venta.serie}-${row.cuenta_por_cobrar.nota_venta.numero}` : ''),
+            render: (row) =>
+                row.cuenta_por_cobrar?.nota_venta ? (
+                    <span className="whitespace-nowrap text-sm text-warm-800">Canje proforma x letra</span>
+                ) : (
+                    <span className="text-gray-300">—</span>
+                ),
         },
         {
             key: 'acciones',
@@ -97,6 +166,11 @@ export default function LetrasCambio() {
                     {puede('tesoreria.letras-cambio.imprimir') && (
                         <Button size="sm" variant="secondary" onClick={() => setPdf(row)}>
                             <FileText className="h-4 w-4" /> PDF
+                        </Button>
+                    )}
+                    {row.estado === 'emitida' && puede('tesoreria.letras-cambio.editar') && (
+                        <Button size="sm" onClick={() => setCobro(row)}>
+                            <Wallet className="h-4 w-4" /> Cobrar
                         </Button>
                     )}
                     {row.estado === 'emitida' && puede('tesoreria.letras-cambio.eliminar') && (
@@ -117,7 +191,7 @@ export default function LetrasCambio() {
 
     return (
         <Layout>
-            <PageHeader title="Letras de cambio" description="Las letras emitidas desde Cuentas por cobrar" />
+            <PageHeader title="Letras de cambio" description="Las letras emitidas desde Cuentas por cobrar: aquí se cobran, se imprimen y se anulan" />
 
             {error && <Alert variant="error" className="mb-4">{error}</Alert>}
 
@@ -125,7 +199,7 @@ export default function LetrasCambio() {
                 columns={columns}
                 rows={rows.filter((r) => !fEstado || r.estado === fEstado)}
                 loading={loading}
-                searchPlaceholder="Buscar por aceptante o referencia..."
+                searchPlaceholder="Buscar por cliente, aceptante o referencia..."
                 emptyMessage="Aún no hay letras emitidas. Se emiten desde Cuentas por cobrar."
                 filterable
                 filterCount={fEstado ? 1 : 0}
@@ -141,6 +215,8 @@ export default function LetrasCambio() {
                 titulo="Letra de cambio"
                 formatos={['a4']}
             />
+
+            <LetraCobroModal open={Boolean(cobro)} letra={cobro} onClose={() => setCobro(null)} onCobrada={load} />
 
             <Modal
                 open={Boolean(anular)}

@@ -253,6 +253,8 @@ return [
                         // Los datos que se proponen al emitir son parte de crear la letra; anular es eliminar.
                         'letras-cambio/prellenar' => 'crear',
                         'letras-cambio/*/anular' => 'eliminar',
+                        // Cobrar una letra es editarla: queda pagada y entra a caja.
+                        'letras-cambio/*/cobrar' => 'editar',
                     ],
                 ],
                 'estado-cuenta' => [

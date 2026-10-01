@@ -21,7 +21,8 @@ class LetraCambioController extends Controller
     public function index()
     {
         return response()->json(
-            LetraCambio::with('cliente:id,nombre')->latest('id')->get(),
+            // La proforma (venta) que se canjea por la letra: sale de la cuenta por cobrar de la que se giró.
+            LetraCambio::with('cliente:id,nombre', 'cuentaPorCobrar:id,nota_venta_id,numero_cuota,total_cuotas', 'cuentaPorCobrar.notaVenta:id,serie,numero,fecha_emision')->latest('id')->get(),
         );
     }
 
@@ -107,6 +108,9 @@ class LetraCambioController extends Controller
                 abort(422, 'El importe excede lo que falta por girar de esta cuenta (saldo '.number_format((float) $cuenta->saldo - $enLetras, 2).').');
             }
 
+            // La letra se gira en la moneda de la deuda que financia.
+            $data['moneda'] = $cuenta->moneda ?: 'PEN';
+
             return LetraCambio::create($data + [
                 'cliente_id' => $cuenta->cliente_id,
                 'numero' => $this->siguienteNumero(),
@@ -118,9 +122,75 @@ class LetraCambioController extends Controller
         return response()->json($letra->load('cliente:id,nombre'), 201);
     }
 
+    /**
+     * Cobra la letra completa: queda "pagada" y el cobro se registra como un pago de la
+     * cuenta por cobrar de la que salió (con su movimiento de caja). Una letra en dólares
+     * se puede cobrar con soles, al tipo de cambio que se indique.
+     */
+    public function cobrar(Request $request, LetraCambio $letrasCambio)
+    {
+        $data = $request->validate([
+            'fecha' => 'required|date|before_or_equal:'.now()->toDateString(),
+            'forma_pago' => 'required|in:efectivo,transferencia,billetera',
+            'cuenta_bancaria_id' => 'nullable|exists:cuentas_bancarias,id',
+            'billetera_id' => 'nullable|exists:billeteras_digitales,id',
+            'referencia' => 'nullable|string|max:100',
+            'moneda' => 'nullable|in:PEN,USD',
+            'tipo_cambio' => 'nullable|numeric|min:0.0001',
+        ]);
+
+        if ($letrasCambio->estado !== 'emitida') {
+            return response()->json(['message' => $letrasCambio->estado === 'pagada' ? 'La letra ya está pagada.' : 'La letra está anulada.'], 422);
+        }
+
+        $cuenta = $letrasCambio->cuentaPorCobrar;
+        if (! $cuenta) {
+            return response()->json(['message' => 'La letra no tiene una cuenta por cobrar asociada.'], 422);
+        }
+
+        $importe = (float) $letrasCambio->importe;
+        $enSoles = ($cuenta->moneda ?: 'PEN') !== 'PEN' && ($data['moneda'] ?? null) === 'PEN';
+        if ($enSoles && empty($data['tipo_cambio'])) {
+            return response()->json(['message' => 'Para cobrar en soles una letra en dólares, pon el tipo de cambio.'], 422);
+        }
+
+        $pago = [
+            'forma_pago' => $data['forma_pago'],
+            'cuenta_bancaria_id' => $data['cuenta_bancaria_id'] ?? null,
+            'billetera_id' => $data['billetera_id'] ?? null,
+            'referencia' => $data['referencia'] ?? null,
+            'monto' => $enSoles ? round($importe * (float) $data['tipo_cambio'], 2) : $importe,
+        ] + ($enSoles ? ['moneda' => 'PEN', 'tipo_cambio' => (float) $data['tipo_cambio']] : []);
+
+        DB::beginTransaction();
+        try {
+            // Primero deja de contar como "en letras": ese importe es el que se cobra ahora.
+            $letrasCambio->update(['estado' => 'pagada', 'fecha_pago' => $data['fecha']]);
+
+            $peticion = Request::create('/', 'POST', ['fecha' => $data['fecha'], 'pagos' => [$pago]]);
+            $respuesta = app(CuentaPorCobrarController::class)->registrarPago($peticion, $cuenta->fresh());
+
+            if ($respuesta->getStatusCode() >= 400) {
+                DB::rollBack();
+
+                return $respuesta;
+            }
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            throw $e;
+        }
+
+        return response()->json($letrasCambio->fresh()->load('cliente:id,nombre'));
+    }
+
     /** La letra queda anulada (no se borra: el número ya existió y hay que poder rastrearlo). */
     public function anular(LetraCambio $letrasCambio)
     {
+        if ($letrasCambio->estado === 'pagada') {
+            return response()->json(['message' => 'La letra ya está pagada: no se puede anular.'], 422);
+        }
+
         if ($letrasCambio->estado !== 'anulada') {
             $letrasCambio->update(['estado' => 'anulada']);
         }

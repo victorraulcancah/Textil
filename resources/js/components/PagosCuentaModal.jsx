@@ -120,7 +120,9 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo, onSaved 
     const pagos = useMemo(() => (Array.isArray(state?.pagos) ? state.pagos : []), [state]);
     const nombre = esCobrar ? state?.cliente?.nombre : state?.proveedor?.nombre;
     const anulada = state?.estado === 'anulado';
-    const saldo = Number(state?.saldo) || 0;
+    // Lo que pasó a letras de cambio se cobra con la letra: aquí solo se cobra el resto.
+    const enLetras = esCobrar ? Number(state?.en_letras) || 0 : 0;
+    const saldo = Math.max((Number(state?.saldo) || 0) - enLetras, 0);
     const puedePagar = !anulada && saldo > 0.005;
 
     /**
@@ -354,6 +356,12 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo, onSaved 
                         ),
                     )}
                 </div>
+            )}
+
+            {enLetras > 0 && (
+                <Alert variant="info" className="mb-3">
+                    {money(enLetras, monedaDeuda)} de esta cuenta están en letras de cambio y se cobran con la letra.
+                </Alert>
             )}
 
             {anulada ? (

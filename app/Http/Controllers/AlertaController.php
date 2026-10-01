@@ -57,10 +57,13 @@ class AlertaController extends Controller
         $aviso = now()->addDays(EstadoCuentaService::DIAS_AVISO)->toDateString();
 
         CuentaPorCobrar::with(['cliente:id,nombre', 'notaVenta:id,serie,numero'])
+            ->withSum(['letras as en_letras' => fn ($q) => $q->where('estado', 'emitida')], 'importe')
             ->whereIn('estado', ['pendiente', 'parcial'])
             ->whereDate('fecha_vencimiento', '<=', $aviso)
             ->orderBy('fecha_vencimiento')
             ->get()
+            // Lo que pasó a letras ya no se cobra en la cuenta: no es una cobranza pendiente.
+            ->filter(fn ($c) => (float) $c->saldo - (float) ($c->en_letras ?? 0) > 0.01)
             ->each(function ($c) use (&$alertas, $gracia) {
                 $dias = (int) today()->diffInDays($c->fecha_vencimiento, false);
                 $situacion = EstadoCuentaService::situacion($dias, (int) ($gracia[$c->cliente_id] ?? 0));

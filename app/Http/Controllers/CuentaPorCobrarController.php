@@ -18,7 +18,12 @@ class CuentaPorCobrarController extends Controller
     public function index()
     {
         return response()->json(
-            CuentaPorCobrar::with(['cliente:id,nombre', 'notaVenta:id,serie,numero,fecha_emision', 'pagos.cuentaBancaria:id,alias,numero_cuenta', 'pagos.billetera:id,nombre'])
+            CuentaPorCobrar::with([
+                'cliente:id,nombre', 'notaVenta:id,serie,numero,fecha_emision', 'pagos.cuentaBancaria:id,alias,numero_cuenta', 'pagos.billetera:id,nombre',
+                // Las letras vigentes que se emitieron desde la cuenta: la relación se ve en la lista.
+                'letras' => fn ($q) => $q->where('estado', 'emitida')->select('id', 'numero', 'cuenta_por_cobrar_id', 'importe', 'moneda', 'fecha_vencimiento')->orderBy('numero'),
+            ])
+                ->withSum(['letras as en_letras' => fn ($q) => $q->where('estado', 'emitida')], 'importe')
                 ->latest('id')
                 ->get()
         );
@@ -26,7 +31,7 @@ class CuentaPorCobrarController extends Controller
 
     public function show(CuentaPorCobrar $cuenta)
     {
-        return response()->json($cuenta->load(['cliente:id,nombre', 'notaVenta:id,serie,numero', 'pagos.cuentaBancaria:id,alias,numero_cuenta', 'pagos.billetera:id,nombre']));
+        return response()->json($cuenta->cargarEnLetras()->load(['cliente:id,nombre', 'notaVenta:id,serie,numero', 'pagos.cuentaBancaria:id,alias,numero_cuenta', 'pagos.billetera:id,nombre']));
     }
 
     /** Registra uno o varios pagos (mixto) contra la cuenta y genera movimiento de caja. */
@@ -59,6 +64,15 @@ class CuentaPorCobrarController extends Controller
         $totalNuevo = collect($abonos)->sum('monto');
         if ($totalNuevo > (float) $cuenta->saldo + 0.01) {
             return response()->json(['message' => 'El pago excede el saldo pendiente.'], 422);
+        }
+
+        // Lo que pasó a letras de cambio ya no se cobra aquí: se cobra con la letra.
+        if ($totalNuevo > $cuenta->saldoCobrable() + 0.01) {
+            return response()->json([
+                'message' => $cuenta->saldoCobrable() <= 0.01
+                    ? 'Esta cuenta pasó a letras de cambio: el cobro se hace con la letra, no aquí.'
+                    : 'Parte de esta cuenta está en letras de cambio: aquí solo puedes cobrar '.number_format($cuenta->saldoCobrable(), 2).'.',
+            ], 422);
         }
 
         $fecha = $data['fecha'] ?? now()->toDateString();
@@ -110,7 +124,7 @@ class CuentaPorCobrarController extends Controller
             $this->recalcular($cuenta);
         });
 
-        return response()->json($cuenta->fresh()->load(['cliente:id,nombre', 'notaVenta:id,serie,numero', 'pagos.cuentaBancaria:id,alias,numero_cuenta', 'pagos.billetera:id,nombre']));
+        return response()->json($cuenta->fresh()->cargarEnLetras()->load(['cliente:id,nombre', 'notaVenta:id,serie,numero', 'pagos.cuentaBancaria:id,alias,numero_cuenta', 'pagos.billetera:id,nombre']));
     }
 
     /** Edita un pago existente y ajusta su movimiento de caja. */
@@ -174,7 +188,7 @@ class CuentaPorCobrarController extends Controller
             $this->recalcular($cuenta);
         });
 
-        return response()->json($cuenta->fresh()->load(['cliente:id,nombre', 'notaVenta:id,serie,numero', 'pagos.cuentaBancaria:id,alias,numero_cuenta', 'pagos.billetera:id,nombre']));
+        return response()->json($cuenta->fresh()->cargarEnLetras()->load(['cliente:id,nombre', 'notaVenta:id,serie,numero', 'pagos.cuentaBancaria:id,alias,numero_cuenta', 'pagos.billetera:id,nombre']));
     }
 
     /** Anula (elimina) un pago y revierte su movimiento de caja. */
@@ -190,7 +204,7 @@ class CuentaPorCobrarController extends Controller
             $this->recalcular($cuenta);
         });
 
-        return response()->json($cuenta->fresh()->load(['cliente:id,nombre', 'notaVenta:id,serie,numero', 'pagos.cuentaBancaria:id,alias,numero_cuenta', 'pagos.billetera:id,nombre']));
+        return response()->json($cuenta->fresh()->cargarEnLetras()->load(['cliente:id,nombre', 'notaVenta:id,serie,numero', 'pagos.cuentaBancaria:id,alias,numero_cuenta', 'pagos.billetera:id,nombre']));
     }
 
     private function aperturaAbierta(): ?AperturaCaja

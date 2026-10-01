@@ -22,7 +22,7 @@ class LetraCambio extends Model
         'fecha_vencimiento', 'moneda', 'importe',
         'aceptante_nombre', 'aceptante_documento', 'aceptante_domicilio', 'aceptante_localidad', 'aceptante_telefono',
         'aval_nombre', 'aval_documento', 'aval_domicilio', 'aval_localidad',
-        'banco', 'oficina', 'cuenta', 'dc', 'estado', 'usuario_id',
+        'banco', 'oficina', 'cuenta', 'dc', 'estado', 'fecha_pago', 'usuario_id',
     ];
 
     protected function casts(): array
@@ -30,6 +30,7 @@ class LetraCambio extends Model
         return [
             'fecha_giro' => 'date:Y-m-d',
             'fecha_vencimiento' => 'date:Y-m-d',
+            'fecha_pago' => 'date:Y-m-d',
             'importe' => 'decimal:2',
         ];
     }

@@ -49,6 +49,29 @@ class CuentaPorCobrar extends Model
         return $this->belongsTo(Cliente::class);
     }
 
+    /** Las letras de cambio emitidas desde esta cuenta. */
+    public function letras()
+    {
+        return $this->hasMany(LetraCambio::class);
+    }
+
+    /**
+     * Suma lo que hoy está en letras vigentes (`en_letras`). Lo que pasa a letras ya no se
+     * cobra en la cuenta: se cobra con la letra, como si la cuenta se hubiera cancelado.
+     */
+    public function cargarEnLetras(): static
+    {
+        return $this->loadSum(['letras as en_letras' => fn ($q) => $q->where('estado', 'emitida')], 'importe');
+    }
+
+    /** Lo que todavía se puede cobrar aquí: el saldo menos lo que pasó a letras. */
+    public function saldoCobrable(): float
+    {
+        $enLetras = (float) ($this->en_letras ?? $this->letras()->where('estado', 'emitida')->sum('importe'));
+
+        return max(round((float) $this->saldo - $enLetras, 2), 0);
+    }
+
     public function pagos()
     {
         return $this->hasMany(CuentaPorCobrarPago::class, 'cuenta_por_cobrar_id');

@@ -27,9 +27,17 @@ const hoy = () => {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
-const estadoBadge = (estado) => {
+/**
+ * Lo que todavía se cobra en la cuenta: el saldo menos lo que pasó a letras de cambio.
+ * Lo que está en letras se cobra con la letra, como si la cuenta se hubiera cancelado.
+ */
+const cobrable = (row) => Math.max((Number(row.saldo) || 0) - (Number(row.en_letras) || 0), 0);
+const enLetrasTotal = (row) => Number(row.saldo) > 0.005 && cobrable(row) <= 0.005;
+
+const estadoBadge = (row) => {
+    if (enLetrasTotal(row)) return <Badge variant="blue">En letras</Badge>;
     const map = { pendiente: 'red', parcial: 'amber', pagado: 'green', anulado: 'gray' };
-    return <Badge variant={map[estado] ?? 'gray'}>{estado ?? '—'}</Badge>;
+    return <Badge variant={map[row.estado] ?? 'gray'}>{row.estado ?? '—'}</Badge>;
 };
 
 export default function CuentasPorCobrar() {
@@ -88,7 +96,7 @@ export default function CuentasPorCobrar() {
             key: 'fecha_vencimiento',
             label: 'Vence',
             render: (row) => {
-                const vencida = ['pendiente', 'parcial'].includes(row.estado) && String(row.fecha_vencimiento).slice(0, 10) < hoy();
+                const vencida = ['pendiente', 'parcial'].includes(row.estado) && !enLetrasTotal(row) && String(row.fecha_vencimiento).slice(0, 10) < hoy();
                 return <span className={vencida ? 'font-semibold text-red-600' : ''}>{fecha(row.fecha_vencimiento)}</span>;
             },
         },
@@ -103,9 +111,53 @@ export default function CuentasPorCobrar() {
             key: 'saldo',
             label: 'Saldo',
             align: 'right',
-            render: (row) => <span className="font-medium text-red-600">{money(row.saldo, row.moneda)}</span>,
+            // Lo que pasó a letras ya no es saldo por cobrar aquí.
+            render: (row) => (
+                <span className={enLetrasTotal(row) ? 'text-gray-400' : 'font-medium text-red-600'}>
+                    {money(cobrable(row), row.moneda)}
+                    {Number(row.en_letras) > 0 && !enLetrasTotal(row) && (
+                        <span className="block text-[11px] font-normal text-warm-500">+ {money(row.en_letras, row.moneda)} en letras</span>
+                    )}
+                </span>
+            ),
         },
-        { key: 'estado', label: 'Estado', render: (row) => estadoBadge(row.estado) },
+        { key: 'estado', label: 'Estado', render: (row) => estadoBadge(row) },
+        {
+            key: 'canje',
+            label: 'Concepto',
+            // Qué proforma se cambió por qué letra: solo si de esta cuenta se giró una letra.
+            getSearchValue: (row) => (row.letras ?? []).map((l) => `letra ${l.numero}`).join(' '),
+            render: (row) => {
+                return row.letras?.length ? (
+                    <span className="whitespace-nowrap text-sm text-warm-800">Canje proforma x letra</span>
+                ) : (
+                    <span className="text-gray-300">—</span>
+                );
+            },
+        },
+        {
+            key: 'letras',
+            label: 'Letras',
+            // De qué letras salió esta cuenta: cada una abre su PDF.
+            render: (row) =>
+                row.letras?.length ? (
+                    <span className="flex flex-wrap gap-1">
+                        {row.letras.map((l) => (
+                            <button
+                                key={l.id}
+                                type="button"
+                                title={`Letra N° ${l.numero} · ${money(l.importe, l.moneda)} · vence ${fecha(l.fecha_vencimiento)}`}
+                                onClick={() => setLetraEmitida(l)}
+                                className="inline-flex"
+                            >
+                                <Badge variant="blue">Letra N° {l.numero}</Badge>
+                            </button>
+                        ))}
+                    </span>
+                ) : (
+                    <span className="text-gray-300">—</span>
+                ),
+        },
         {
             key: 'acciones',
             label: 'Acciones',
@@ -113,10 +165,18 @@ export default function CuentasPorCobrar() {
             align: 'right',
             actions: (row) => (
                 <>
-                    <Button size="sm" variant="secondary" onClick={() => setPagoCuenta(row)}>
-                        <Wallet className="h-4 w-4" /> Pagos
-                    </Button>
-                    {puede('tesoreria.letras-cambio.crear') && ['pendiente', 'parcial'].includes(row.estado) && (
+                    {enLetrasTotal(row) ? (
+                        puede('tesoreria.letras-cambio') && (
+                            <Button size="sm" variant="secondary" onClick={() => navigate('/letras-cambio')}>
+                                <FileSignature className="h-4 w-4" /> Ver letras
+                            </Button>
+                        )
+                    ) : (
+                        <Button size="sm" variant="secondary" onClick={() => setPagoCuenta(row)}>
+                            <Wallet className="h-4 w-4" /> Pagos
+                        </Button>
+                    )}
+                    {puede('tesoreria.letras-cambio.crear') && ['pendiente', 'parcial'].includes(row.estado) && !enLetrasTotal(row) && (
                         <button
                             type="button"
                             aria-label="Emitir letra de cambio"

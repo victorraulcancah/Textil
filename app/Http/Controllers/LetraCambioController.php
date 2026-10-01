@@ -228,7 +228,7 @@ class LetraCambioController extends Controller
                         'apertura_caja_id' => $apertura->id,
                         'tipo' => 'ingreso',
                         'motivo_movimiento_id' => app(CajaService::class)->motivo('Ingreso por cobranza'),
-                        'descripcion' => 'Cobro de la letra '.$letrasCambio->codigo.($letrasCambio->concepto ? " ({$letrasCambio->concepto})" : ''),
+                        'descripcion' => $this->descripcionCobro($letrasCambio, $letrasCambio->concepto),
                         'cuenta_bancaria_id' => $pago['cuenta_bancaria_id'],
                         'billetera_id' => $pago['billetera_id'],
                         'monto' => $pago['monto'],
@@ -252,6 +252,7 @@ class LetraCambioController extends Controller
                 'monto_pagado' => round((float) $letrasCambio->monto_pagado + $cobrado, 2),
             ] + ($completo ? ['estado' => 'pagada', 'fecha_pago' => $data['fecha']] : []));
 
+            $ultimoMovimiento = (int) MovimientoCaja::max('id');
             $peticion = Request::create('/', 'POST', ['fecha' => $data['fecha'], 'pagos' => [$pago]]);
             $respuesta = app(CuentaPorCobrarController::class)->registrarPago($peticion, $cuenta->fresh());
 
@@ -260,6 +261,14 @@ class LetraCambioController extends Controller
 
                 return $respuesta;
             }
+
+            // En Mi Caja y en Movimientos de caja se ve que el cobro fue de una letra o de una renovación,
+            // no solo "Cobranza de la venta": así se reconoce de dónde entró el dinero.
+            $venta = $cuenta->notaVenta ? "{$cuenta->notaVenta->serie}-{$cuenta->notaVenta->numero}" : null;
+            MovimientoCaja::where('id', '>', $ultimoMovimiento)
+                ->where('documento_referencia_tipo', 'cuenta_por_cobrar')
+                ->where('documento_referencia_id', $cuenta->id)
+                ->update(['descripcion' => $this->descripcionCobro($letrasCambio, $venta ? "venta {$venta}" : null)]);
             DB::commit();
         } catch (\Throwable $e) {
             DB::rollBack();
@@ -363,6 +372,14 @@ class LetraCambioController extends Controller
         }
 
         return response()->json($letrasCambio->fresh()->load('cliente:id,nombre'));
+    }
+
+    /** "Cobro de la letra LT001-001 (venta PF01-001)" o, si nació de renovar otra, "Cobro de la renovación RV001-002 (…)". */
+    private function descripcionCobro(LetraCambio $letra, ?string $detalle): string
+    {
+        $que = $letra->serie_renovacion ? 'renovación' : 'letra';
+
+        return "Cobro de la {$que} {$letra->codigo}".($detalle ? " ({$detalle})" : '');
     }
 
     /** La serie de la próxima letra: LT001-001, LT001-002… (las renovaciones no gastan estos números). */

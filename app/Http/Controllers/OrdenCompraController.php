@@ -36,15 +36,17 @@ class OrdenCompraController extends Controller
                 ['numero_actual' => 0, 'activo' => true]
             );
 
-        // El contador puede ir por detrás de los códigos que ya existen
-        // (órdenes cargadas a mano): se salta los usados en vez de chocar
-        // contra la clave única.
-        do {
-            $serieDoc->increment('numero_actual');
-            $codigo = sprintf('%s-%03d', $serie, $serieDoc->numero_actual);
-        } while (OrdenCompra::where('codigo', $codigo)->exists());
+        // Se usa el menor número libre de la serie: una orden anulada suelta su código y la
+        // siguiente lo toma, así el correlativo no queda con huecos ni choca con la clave única.
+        $usados = OrdenCompra::where('codigo', 'like', $serie.'-%')->pluck('codigo')
+            ->map(fn ($c) => (int) substr($c, strlen($serie) + 1))
+            ->all();
+        $numero = OrdenCompra::menorLibre($usados);
+        if ($serieDoc->numero_actual < $numero) {
+            $serieDoc->update(['numero_actual' => $numero]);
+        }
 
-        return $codigo;
+        return sprintf('%s-%03d', $serie, $numero);
     }
 
     public function index()
@@ -222,7 +224,13 @@ class OrdenCompraController extends Controller
             return response()->json(['message' => 'La orden ya está anulada.'], 422);
         }
 
-        $ordenesCompra->update(['estado' => 'anulada']);
+        // La orden anulada suelta su código y su número de proveedor para que la siguiente los use.
+        $ordenesCompra->update([
+            'estado' => 'anulada',
+            'codigo_anulado' => trim($ordenesCompra->codigo.' '.($ordenesCompra->numero_proveedor ? '('.$ordenesCompra->codigoDocumento().')' : '')),
+            'codigo' => null,
+            'numero_proveedor' => null,
+        ]);
 
         return response()->json(
             $ordenesCompra->fresh()->load(['proveedor', 'usuarioAprueba:id,name', 'usuarioEnvia:id,name'])

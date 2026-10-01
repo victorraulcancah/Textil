@@ -2,7 +2,7 @@ import PlanillaTela from '../components/PlanillaTela';
 import { gruposDeCompra } from '../lib/planilla';
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Ban, CheckCircle2, FileDown, Pencil, Printer, Send, ShoppingCart, Trash2 } from 'lucide-react';
+import { Ban, CheckCircle2, FileDown, Pencil, Printer, Send, ShoppingCart } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import { useAuth } from '../lib/auth';
@@ -12,7 +12,7 @@ import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
 import DetalleCard from '../components/ui/DetalleCard';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
-import { Alert, Badge, Button, DataTable, DateRangePicker, Modal, SearchSelect, Select } from '../components/ui';
+import { Alert, Badge, DataTable, DateRangePicker, SearchSelect, Select } from '../components/ui';
 
 const money = (n, moneda = 'PEN') =>
     new Intl.NumberFormat(moneda === 'USD' ? 'en-US' : 'es-PE', {
@@ -39,8 +39,6 @@ export default function OrdenesCompra() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    const [deleteTarget, setDeleteTarget] = useState(null);
-    const [deleting, setDeleting] = useState(false);
     const [actionId, setActionId] = useState(null);
     const [pdfTarget, setPdfTarget] = useState(null);
     /** Orden cuyo detalle se muestra en la segunda tabla. */
@@ -111,20 +109,6 @@ export default function OrdenesCompra() {
         }
     };
 
-    const handleDelete = async () => {
-        setDeleting(true);
-        try {
-            await api.delete(`/ordenes-compra/${deleteTarget.id}`);
-            toast.success('Orden eliminada.');
-            setDeleteTarget(null);
-            await load();
-        } catch (err) {
-            toast.error(err.response?.data?.message ?? 'No se pudo eliminar la orden.');
-        } finally {
-            setDeleting(false);
-        }
-    };
-
     // ── Filtros ──
     const applyFilters = () => {
         const next = {};
@@ -183,7 +167,7 @@ export default function OrdenesCompra() {
 
     const columns = [
         { key: 'id', label: 'Nº', render: (row) => <span className="font-semibold text-warm-900">{row.id}</span> },
-        { key: 'codigo', label: 'Código', render: (row) => <Badge variant="gray">{row.codigo}</Badge> },
+        { key: 'codigo', label: 'Código', render: (row) => (row.codigo ? <Badge variant="gray">{row.codigo}</Badge> : <span className="text-warm-400" title={row.codigo_anulado ? `Tenía ${row.codigo_anulado}` : undefined}>—</span>) },
         {
             key: 'proveedor_codigo',
             label: 'Cód. proveedor',
@@ -291,14 +275,6 @@ export default function OrdenesCompra() {
                                 disabled: !editable,
                                 title: !editable ? 'No se puede editar: la orden ya fue aprobada o tiene compra' : undefined,
                                 onClick: () => navigate(`/ordenes-compra/${row.id}/editar`),
-                            },
-                            {
-                                label: 'Eliminar',
-                                icon: Trash2,
-                                danger: true,
-                                disabled: !editable,
-                                title: !editable ? 'No se puede eliminar: la orden ya fue aprobada o tiene compra' : undefined,
-                                onClick: () => setDeleteTarget(row),
                             },
                         ]}
                     />
@@ -411,21 +387,6 @@ export default function OrdenesCompra() {
                 </div>
             </div>
 
-            <Modal
-                open={Boolean(deleteTarget)}
-                onClose={() => setDeleteTarget(null)}
-                title="Eliminar orden"
-                description={`¿Eliminar la orden ${deleteTarget?.codigo}?`}
-                size="sm"
-                footer={
-                    <>
-                        <Button variant="secondary" onClick={() => setDeleteTarget(null)}>Cancelar</Button>
-                        <Button variant="danger" loading={deleting} onClick={handleDelete}>Eliminar</Button>
-                    </>
-                }
-            >
-                <Alert variant="warning">La orden se eliminará permanentemente.</Alert>
-            </Modal>
                     <PdfViewerModal
                 open={Boolean(pdfTarget)}
                 onClose={() => setPdfTarget(null)}

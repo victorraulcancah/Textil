@@ -123,7 +123,7 @@ Route::middleware('auth:api')->group(function () {
     Route::post('proveedores/importar-excel', [\App\Http\Controllers\ProveedorExcelController::class, 'importar']);
     Route::apiResource('proveedores', ProveedorController::class);
     Route::get('ordenes-compra/aprobadores', [OrdenCompraController::class, 'aprobadores']);
-    Route::apiResource('ordenes-compra', OrdenCompraController::class);
+    Route::apiResource('ordenes-compra', OrdenCompraController::class)->except('destroy');
     Route::post('ordenes-compra/{ordenesCompra}/aprobar', [OrdenCompraController::class, 'aprobar']);
     Route::post('ordenes-compra/{ordenesCompra}/enviar', [OrdenCompraController::class, 'enviar']);
     Route::post('ordenes-compra/{ordenesCompra}/anular', [OrdenCompraController::class, 'anular']);

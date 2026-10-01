@@ -15,6 +15,8 @@ class OrdenCompra extends Model
 
     protected $fillable = [
         'codigo',
+        // El código que tenía al anularla (OCE-006): lo suelta para que lo use la siguiente.
+        'codigo_anulado',
         // Cuántas órdenes lleva ese proveedor: es el número del documento (HAN-002-26).
         'numero_proveedor',
         'tipo',
@@ -82,48 +84,39 @@ class OrdenCompra extends Model
     }
 
     /**
-     * Siguiente número de las órdenes de este proveedor (1, 2, 3…). No se
-     * reutiliza el de una orden borrada: el contador solo avanza.
+     * El menor número libre de las órdenes de este proveedor (1, 2, 3…). Una orden anulada suelta
+     * el suyo, así que el siguiente lo toma y el correlativo no queda con huecos.
+     * `$salvo`: la orden que se está cambiando de proveedor, que no cuenta como ocupada.
      */
-    public static function siguienteNumeroProveedor(int $proveedorId): int
+    public static function siguienteNumeroProveedor(int $proveedorId, ?int $salvo = null): int
     {
-        $serie = SerieDocumento::where('tipo_documento', 'orden_compra_proveedor')
-            ->where('serie', 'PROV'.$proveedorId)
+        $usados = static::where('proveedor_id', $proveedorId)
+            ->whereNotNull('numero_proveedor')
+            ->when($salvo, fn ($q) => $q->where('id', '!=', $salvo))
             ->lockForUpdate()
-            ->firstOrCreate(
-                ['tipo_documento' => 'orden_compra_proveedor', 'serie' => 'PROV'.$proveedorId],
-                ['numero_actual' => 0, 'activo' => true],
-            );
-        $serie->increment('numero_actual');
+            ->pluck('numero_proveedor')
+            ->map(fn ($n) => (int) $n)
+            ->all();
 
-        return (int) $serie->numero_actual;
+        return self::menorLibre($usados);
     }
 
-    /**
-     * El número de una orden que pasa a otro proveedor: la siguiente a la última que ya tiene ese
-     * proveedor (la primera, 001, si no tiene ninguna). No consume el contador cada vez que se
-     * cambia de proveedor —así no se inflaba a 004 tras editar—, y libera el número en el de antes.
-     */
-    public static function numeroAlCambiarProveedor(self $orden, int $proveedorNuevo): int
+    /** El menor entero positivo que no está en la lista. */
+    public static function menorLibre(array $usados): int
     {
-        $nuevo = 1 + (int) static::where('proveedor_id', $proveedorNuevo)->where('id', '!=', $orden->id)->max('numero_proveedor');
-
-        // El contador del proveedor anterior retrocede si esta orden era la última que emitió.
-        SerieDocumento::where('tipo_documento', 'orden_compra_proveedor')
-            ->where('serie', 'PROV'.$orden->proveedor_id)
-            ->where('numero_actual', $orden->numero_proveedor)
-            ->decrement('numero_actual');
-
-        // El del nuevo nunca queda por debajo del número que se le acaba de dar.
-        $serie = SerieDocumento::firstOrCreate(
-            ['tipo_documento' => 'orden_compra_proveedor', 'serie' => 'PROV'.$proveedorNuevo],
-            ['numero_actual' => 0, 'activo' => true],
-        );
-        if ($serie->numero_actual < $nuevo) {
-            $serie->update(['numero_actual' => $nuevo]);
+        $n = 1;
+        $usados = array_flip($usados);
+        while (isset($usados[$n])) {
+            $n++;
         }
 
-        return $nuevo;
+        return $n;
+    }
+
+    /** La orden pasa a otro proveedor: toma el menor número libre de ese proveedor (001 si no tiene órdenes). */
+    public static function numeroAlCambiarProveedor(self $orden, int $proveedorNuevo): int
+    {
+        return static::siguienteNumeroProveedor($proveedorNuevo, $orden->id);
     }
 
     /** ¿Es una compra de importación? Solo ahí aplican los campos de embarque. */

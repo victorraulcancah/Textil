@@ -6,6 +6,7 @@ import { money } from '../lib/moneda';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import ActionsMenu from '../components/ActionsMenu';
+import LetraCambioModal from '../components/LetraCambioModal';
 import LetraCobroModal from '../components/LetraCobroModal';
 import LetraRenovarModal from '../components/LetraRenovarModal';
 import PageHeader, { CreateButton } from '../components/PageHeader';
@@ -55,6 +56,8 @@ export default function LetrasCambio({ renovaciones = false }) {
     const [cobro, setCobro] = useState(null);
     /** Abre la ventana de nueva letra por renovación. */
     const [renovando, setRenovando] = useState(false);
+    /** Abre la ventana para crear una letra suelta (por ejemplo, de un préstamo). */
+    const [creando, setCreando] = useState(false);
     /** La letra cuyo sub estado se está cambiando, el valor elegido y si se está guardando. */
     const [cambioSub, setCambioSub] = useState(null);
     const [subElegido, setSubElegido] = useState('en_cartera');
@@ -207,9 +210,11 @@ export default function LetrasCambio({ renovaciones = false }) {
         {
             key: 'canje',
             label: 'Concepto',
-            getSearchValue: (row) => (row.cuenta_por_cobrar?.nota_venta ? `${row.cuenta_por_cobrar.nota_venta.serie}-${row.cuenta_por_cobrar.nota_venta.numero}` : ''),
+            getSearchValue: (row) => row.concepto ?? (row.cuenta_por_cobrar?.nota_venta ? `${row.cuenta_por_cobrar.nota_venta.serie}-${row.cuenta_por_cobrar.nota_venta.numero}` : ''),
             render: (row) =>
-                row.anterior ? (
+                row.concepto ? (
+                    <span className="whitespace-nowrap text-sm text-warm-800">{row.concepto}</span>
+                ) : row.anterior ? (
                     <span className="whitespace-nowrap text-sm text-warm-800">Renovación letra {row.anterior.codigo}</span>
                 ) : row.cuenta_por_cobrar?.nota_venta ? (
                     <span className="whitespace-nowrap text-sm text-warm-800">Canje proforma x letra</span>
@@ -249,10 +254,16 @@ export default function LetrasCambio({ renovaciones = false }) {
                         : 'Las letras emitidas desde Cuentas por cobrar: aquí se cobran, se imprimen y se anulan'
                 }
                 actions={
-                    puede('tesoreria.renovaciones.crear') && (
-                        // Se elige la letra que se renueva y se gira una nueva por lo que le falta cobrar.
-                        <CreateButton onClick={() => setRenovando(true)}>Crear renovación</CreateButton>
-                    )
+                    <>
+                        {/* Una letra suelta, sin cuenta por cobrar: sirve para las letras de préstamos. */}
+                        {!renovaciones && puede('tesoreria.letras-cambio.crear') && (
+                            <CreateButton onClick={() => setCreando(true)}>Crear letra</CreateButton>
+                        )}
+                        {puede('tesoreria.renovaciones.crear') && (
+                            // Se elige la letra que se renueva y se gira una nueva por lo que le falta cobrar.
+                            <CreateButton onClick={() => setRenovando(true)}>Crear renovación</CreateButton>
+                        )}
+                    </>
                 }
             />
 
@@ -316,6 +327,16 @@ export default function LetrasCambio({ renovaciones = false }) {
                     ))}
                 </div>
             </Modal>
+
+            <LetraCambioModal
+                manual
+                open={creando}
+                onClose={() => setCreando(false)}
+                onEmitida={(letra) => {
+                    load();
+                    setPdf(letra);
+                }}
+            />
 
             <LetraCobroModal open={Boolean(cobro)} letra={cobro} onClose={() => setCobro(null)} onCobrada={load} />
 

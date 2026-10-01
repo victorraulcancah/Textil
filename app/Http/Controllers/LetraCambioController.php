@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\CuentaPorCobrar;
 use App\Models\Empresa;
 use App\Models\LetraCambio;
+use App\Models\MovimientoCaja;
 use App\Models\SerieDocumento;
+use App\Services\CajaService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -78,7 +80,10 @@ class LetraCambioController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'cuenta_por_cobrar_id' => 'required|exists:cuentas_por_cobrar,id',
+            // Sin cuenta por cobrar es una letra suelta (por ejemplo, de un préstamo): lleva su concepto y su cliente.
+            'cuenta_por_cobrar_id' => 'nullable|exists:cuentas_por_cobrar,id',
+            'cliente_id' => 'nullable|exists:clientes,id',
+            'concepto' => 'nullable|string|max:80',
             'referencia' => 'nullable|string|max:60',
             'fecha_giro' => 'required|date',
             'lugar_giro' => 'nullable|string|max:120',
@@ -97,6 +102,12 @@ class LetraCambioController extends Controller
             'aval_domicilio' => 'nullable|string|max:255',
             'aval_localidad' => 'nullable|string|max:120',
 
+            // El segundo aval permanente.
+            'aval2_nombre' => 'nullable|string|max:255',
+            'aval2_documento' => 'nullable|string|max:20',
+            'aval2_domicilio' => 'nullable|string|max:255',
+            'aval2_localidad' => 'nullable|string|max:120',
+
             'banco' => 'nullable|string|max:80',
             'oficina' => 'nullable|string|max:20',
             'cuenta' => 'nullable|string|max:40',
@@ -106,6 +117,18 @@ class LetraCambioController extends Controller
         ]);
 
         $letra = DB::transaction(function () use ($data) {
+            // Letra suelta: no hay deuda de una venta que comprobar; se gira por lo que se escribe.
+            if (empty($data['cuenta_por_cobrar_id'])) {
+                return LetraCambio::create($data + [
+                    'numero' => $this->siguienteNumero(),
+                    'serie_letra' => $this->siguienteSerieLetra(),
+                    'estado' => 'emitida',
+                    'saldo' => $data['importe'],
+                    'sub_estado' => 'en_cartera',
+                    'usuario_id' => auth('api')->id(),
+                ]);
+            }
+
             $cuenta = CuentaPorCobrar::lockForUpdate()->findOrFail($data['cuenta_por_cobrar_id']);
 
             if (in_array($cuenta->estado, ['anulado', 'pagado'], true)) {
@@ -166,9 +189,6 @@ class LetraCambioController extends Controller
         }
 
         $cuenta = $letrasCambio->cuentaPorCobrar;
-        if (! $cuenta) {
-            return response()->json(['message' => 'La letra no tiene una cuenta por cobrar asociada.'], 422);
-        }
 
         $saldo = (float) $letrasCambio->saldo;
         $cobrado = round((float) ($data['monto'] ?? $saldo), 2);
@@ -180,7 +200,8 @@ class LetraCambioController extends Controller
             $cobrado = $saldo;
         }
 
-        $enSoles = ($cuenta->moneda ?: 'PEN') !== 'PEN' && ($data['moneda'] ?? null) === 'PEN';
+        $monedaDeuda = $cuenta ? ($cuenta->moneda ?: 'PEN') : ($letrasCambio->moneda ?: 'PEN');
+        $enSoles = $monedaDeuda !== 'PEN' && ($data['moneda'] ?? null) === 'PEN';
         if ($enSoles && empty($data['tipo_cambio'])) {
             return response()->json(['message' => 'Para cobrar en soles una letra en dólares, pon el tipo de cambio.'], 422);
         }
@@ -192,6 +213,36 @@ class LetraCambioController extends Controller
             'referencia' => $data['referencia'] ?? null,
             'monto' => $enSoles ? round($cobrado * (float) $data['tipo_cambio'], 2) : $cobrado,
         ] + ($enSoles ? ['moneda' => 'PEN', 'tipo_cambio' => (float) $data['tipo_cambio']] : []);
+
+        // Una letra suelta (sin cuenta por cobrar, como las de préstamos): lo cobrado entra a caja.
+        if (! $cuenta) {
+            DB::transaction(function () use ($letrasCambio, $completo, $saldo, $cobrado, $data, $pago, $enSoles) {
+                $letrasCambio->update([
+                    'saldo' => $completo ? 0 : round($saldo - $cobrado, 2),
+                    'monto_pagado' => round((float) $letrasCambio->monto_pagado + $cobrado, 2),
+                ] + ($completo ? ['estado' => 'pagada', 'fecha_pago' => $data['fecha']] : []));
+
+                $apertura = app(CajaService::class)->aperturaPara();
+                if ($apertura) {
+                    MovimientoCaja::create([
+                        'apertura_caja_id' => $apertura->id,
+                        'tipo' => 'ingreso',
+                        'motivo_movimiento_id' => app(CajaService::class)->motivo('Ingreso por cobranza'),
+                        'descripcion' => 'Cobro de la letra '.$letrasCambio->codigo.($letrasCambio->concepto ? " ({$letrasCambio->concepto})" : ''),
+                        'cuenta_bancaria_id' => $pago['cuenta_bancaria_id'],
+                        'billetera_id' => $pago['billetera_id'],
+                        'monto' => $pago['monto'],
+                        'moneda' => $enSoles ? 'PEN' : ($letrasCambio->moneda ?: 'PEN'),
+                        'fecha' => $data['fecha'],
+                        'numero_operacion' => $pago['referencia'],
+                        'documento_referencia_tipo' => 'letra_cambio',
+                        'documento_referencia_id' => $letrasCambio->id,
+                    ]);
+                }
+            });
+
+            return response()->json($letrasCambio->fresh()->load('cliente:id,nombre'));
+        }
 
         DB::beginTransaction();
         try {
@@ -266,6 +317,11 @@ class LetraCambioController extends Controller
                 'aval_documento' => $letrasCambio->aval_documento,
                 'aval_domicilio' => $letrasCambio->aval_domicilio,
                 'aval_localidad' => $letrasCambio->aval_localidad,
+                'aval2_nombre' => $letrasCambio->aval2_nombre,
+                'aval2_documento' => $letrasCambio->aval2_documento,
+                'aval2_domicilio' => $letrasCambio->aval2_domicilio,
+                'aval2_localidad' => $letrasCambio->aval2_localidad,
+                'concepto' => $letrasCambio->concepto,
                 'banco' => $letrasCambio->banco,
                 'oficina' => $letrasCambio->oficina,
                 'cuenta' => $letrasCambio->cuenta,

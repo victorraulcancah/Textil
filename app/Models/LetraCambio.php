@@ -22,6 +22,7 @@ class LetraCambio extends Model
         'fecha_vencimiento', 'moneda', 'importe', 'saldo', 'monto_pagado', 'letra_anterior_id', 'serie_letra', 'serie_renovacion',
         'aceptante_nombre', 'aceptante_documento', 'aceptante_domicilio', 'aceptante_localidad', 'aceptante_telefono',
         'aval_nombre', 'aval_documento', 'aval_domicilio', 'aval_localidad',
+        'concepto', 'aval2_nombre', 'aval2_documento', 'aval2_domicilio', 'aval2_localidad',
         'banco', 'oficina', 'cuenta', 'dc', 'estado', 'sub_estado', 'fecha_pago', 'usuario_id',
     ];
 

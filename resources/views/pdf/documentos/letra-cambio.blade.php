@@ -121,10 +121,10 @@
                             <table class="dato" style="width: 400px;">
                                 <tr><td class="et">DNI/RUC:</td><td>{{ $letra->aval_documento }}</td></tr>
                                 <tr><td class="et">Firma:</td><td style="height: 24px;"></td></tr>
-                                <tr><td class="et">Aval Permanente:</td><td></td></tr>
-                                <tr><td class="et">Domicilio:</td><td></td></tr>
-                                <tr><td class="et">Localidad:</td><td></td></tr>
-                                <tr><td class="et">DNI/RUC:</td><td></td></tr>
+                                <tr><td class="et">Aval Permanente:</td><td>{{ $letra->aval2_nombre }}</td></tr>
+                                <tr><td class="et">Domicilio:</td><td>{{ $letra->aval2_domicilio }}</td></tr>
+                                <tr><td class="et">Localidad:</td><td>{{ $letra->aval2_localidad }}</td></tr>
+                                <tr><td class="et">DNI/RUC:</td><td>{{ $letra->aval2_documento }}</td></tr>
                                 <tr><td class="et">Firma:</td><td style="height: 24px;"></td></tr>
                             </table>
                         </td>

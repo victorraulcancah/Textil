@@ -235,6 +235,8 @@ class LetraCambioController extends Controller
                 'numero' => $this->siguienteNumero(),
                 'cuenta_por_cobrar_id' => $letrasCambio->cuenta_por_cobrar_id,
                 'letra_anterior_id' => $letrasCambio->id,
+                // Toda renovación lleva su propia serie: RV001-001, RV001-002…
+                'serie_renovacion' => $this->siguienteSerieRenovacion(),
                 'cliente_id' => $letrasCambio->cliente_id,
                 'referencia' => $letrasCambio->referencia,
                 'fecha_giro' => $data['fecha_giro'],
@@ -293,6 +295,21 @@ class LetraCambioController extends Controller
         }
 
         return response()->json($letrasCambio->fresh()->load('cliente:id,nombre'));
+    }
+
+    /** La serie de la próxima renovación: RV001-001, RV001-002… (correlativo propio). */
+    private function siguienteSerieRenovacion(): string
+    {
+        $serie = SerieDocumento::where('tipo_documento', 'letra_renovacion')
+            ->where('serie', 'RV001')
+            ->lockForUpdate()
+            ->firstOrCreate(
+                ['tipo_documento' => 'letra_renovacion', 'serie' => 'RV001'],
+                ['numero_actual' => 0, 'activo' => true],
+            );
+        $serie->increment('numero_actual');
+
+        return sprintf('RV001-%03d', $serie->numero_actual);
     }
 
     private function siguienteNumero(): int

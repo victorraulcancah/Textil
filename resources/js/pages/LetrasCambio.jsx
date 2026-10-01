@@ -110,8 +110,16 @@ export default function LetrasCambio() {
         // El orden de las columnas es el de la hoja de control: letra, giro, vencimiento, cliente,
         // importe, saldo, estado, sub estado y concepto.
         // La serie del documento (LT-001) es aparte del número de la letra, que es el identificador de la fila.
-        { key: 'serie', label: 'Serie', width: '96px', getSearchValue: (row) => row.codigo, render: (row) => <span className="whitespace-nowrap font-medium text-warm-800">{row.codigo}</span> },
         { key: 'numero', label: 'Letra Nro', width: '84px', render: (row) => <span className="font-semibold text-warm-900">{row.numero}</span> },
+        { key: 'serie', label: 'Serie', width: '96px', getSearchValue: (row) => row.codigo, render: (row) => <span className="whitespace-nowrap font-medium text-warm-800">{row.codigo}</span> },
+        {
+            // La serie propia de las letras que nacieron de renovar otra (RV001-001…).
+            key: 'serie_renovacion',
+            label: 'Serie renovación',
+            width: '120px',
+            getSearchValue: (row) => row.serie_renovacion ?? '',
+            render: (row) => (row.serie_renovacion ? <Badge variant="blue" className="whitespace-nowrap">{row.serie_renovacion}</Badge> : <span className="text-gray-300">—</span>),
+        },
         { key: 'fecha_giro', label: 'Fecha de giro', render: (row) => fecha(row.fecha_giro) },
         {
             key: 'fecha_vencimiento',
@@ -129,6 +137,13 @@ export default function LetrasCambio() {
             render: (row) => row.cliente?.nombre ?? row.aceptante_nombre ?? <span className="text-gray-300">—</span>,
         },
         { key: 'importe', label: 'Importe', align: 'right', render: (row) => <span className="font-semibold text-warm-900">{money(row.importe, row.moneda)}</span> },
+        {
+            // Todo lo que ya se cobró de la letra (suma de los cobros, parciales o no).
+            key: 'monto_pagado',
+            label: 'Total cobrado',
+            align: 'right',
+            render: (row) => <span className={Number(row.monto_pagado) > 0 ? 'font-medium text-green-600' : 'text-gray-400'}>{money(row.monto_pagado, row.moneda)}</span>,
+        },
         {
             key: 'saldo',
             label: 'Saldo',

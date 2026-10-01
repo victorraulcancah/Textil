@@ -19,7 +19,7 @@ class LetraCambio extends Model
 
     protected $fillable = [
         'numero', 'cuenta_por_cobrar_id', 'cliente_id', 'referencia', 'fecha_giro', 'lugar_giro',
-        'fecha_vencimiento', 'moneda', 'importe', 'saldo', 'monto_pagado', 'letra_anterior_id',
+        'fecha_vencimiento', 'moneda', 'importe', 'saldo', 'monto_pagado', 'letra_anterior_id', 'serie_renovacion',
         'aceptante_nombre', 'aceptante_documento', 'aceptante_domicilio', 'aceptante_localidad', 'aceptante_telefono',
         'aval_nombre', 'aval_documento', 'aval_domicilio', 'aval_localidad',
         'banco', 'oficina', 'cuenta', 'dc', 'estado', 'sub_estado', 'fecha_pago', 'usuario_id',
@@ -32,10 +32,10 @@ class LetraCambio extends Model
         'en_descuento' => 'Letras en descuento - Bancos',
     ];
 
-    /** El código del documento sale con la serie: LT-001, LT-002… */
+    /** El código del documento sale con la serie: LT001-001, LT001-002… */
     protected $appends = ['codigo'];
 
-    public const SERIE = 'LT';
+    public const SERIE = 'LT001';
 
     public static function codigoDe(int|string $numero): string
     {

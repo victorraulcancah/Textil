@@ -42,7 +42,7 @@
                         <td class="cab" style="width: 143px;">Moneda e importe</td>
                     </tr>
                     <tr>
-                        <td class="valor" rowspan="2" style="font-size: 8.5px;">{{ $letra->codigo }}</td>
+                        <td class="valor" rowspan="2" style="font-size: 7px;">{{ $letra->codigo }}</td>
                         <td class="valor" rowspan="2">{{ $letra->referencia }}</td>
                         <td class="peq celda" style="border-bottom: 0;">DÍA / MES / AÑO</td>
                         <td class="valor" rowspan="2" style="font-size: 8.5px;">{{ $letra->lugar_giro }}</td>

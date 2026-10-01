@@ -16,7 +16,7 @@ const money = (n) =>
     new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(n) || 0);
 
 const emptyForm = { estado: 'pendiente', observaciones: '' };
-const emptyMotivoForm = { nombre: '', tipo: 'entrada', activo: true };
+const emptyMotivoForm = { nombre: '', origen: '', tipo: 'entrada', activo: true };
 
 const estadoInfo = {
     pendiente: { label: 'Pendiente', variant: 'amber' },
@@ -173,6 +173,7 @@ export default function Ajustes() {
         setEditingMotivo(motivo);
         setMotivoForm({
             nombre: motivo.nombre ?? '',
+            origen: motivo.origen ?? '',
             tipo: motivo.tipo ?? 'entrada',
             activo: motivo.activo ?? true,
         });
@@ -188,6 +189,7 @@ export default function Ajustes() {
         try {
             const payload = {
                 nombre: motivoForm.nombre,
+                origen: motivoForm.origen.trim() === '' ? null : motivoForm.origen.trim(),
                 tipo: motivoForm.tipo,
                 activo: motivoForm.activo,
                 // Los motivos de esta pantalla son de inventario, no de caja.
@@ -495,6 +497,11 @@ export default function Ajustes() {
                     {row.nombre}
                 </span>
             ),
+        },
+        {
+            key: 'origen',
+            label: 'Origen del motivo',
+            render: (row) => (row.origen ? <span className="text-warm-800">{row.origen}</span> : <span className="text-warm-400">—</span>),
         },
         {
             key: 'tipo',
@@ -838,6 +845,15 @@ export default function Ajustes() {
                             }
                         }}
                         error={motivoFormErrors.nombre}
+                    />
+                    <Input
+                        label="Origen del motivo"
+                        name="origen"
+                        placeholder="Ej.: Despacho, Compras"
+                        maxLength={100}
+                        value={motivoForm.origen}
+                        onChange={(e) => setMotivoForm((prev) => ({ ...prev, origen: e.target.value }))}
+                        error={motivoFormErrors.origen}
                     />
                     <Select
                         label="Tipo"

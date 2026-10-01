@@ -27,9 +27,11 @@ class MotivoMovimientoController extends Controller
             'nombre' => 'required|string|max:255',
             'tipo' => 'required|string|in:entrada,salida',
             'categoria_gasto' => 'nullable|in:operativo,compra,no_operativo',
+            'origen' => 'nullable|string|max:100',
             'activo' => 'boolean',
         ]);
         $data['ambito'] = $request->input('ambito', 'caja');
+
         return response()->json(MotivoMovimiento::create($data), 201);
     }
 
@@ -48,6 +50,7 @@ class MotivoMovimientoController extends Controller
             'nombre' => 'required|string|max:255',
             'tipo' => 'required|string|in:entrada,salida',
             'categoria_gasto' => 'nullable|in:operativo,compra,no_operativo',
+            'origen' => 'nullable|string|max:100',
             'activo' => 'boolean',
         ]);
         $motivosMovimiento->update($data);

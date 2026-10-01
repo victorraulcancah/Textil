@@ -208,6 +208,7 @@ class OrdenVentaController extends Controller
 
         $motivo = MotivoMovimiento::create([
             'nombre' => $nombre,
+            'origen' => 'Despacho',
             'tipo' => 'salida',
             'ambito' => 'inventario',
             'activo' => true,

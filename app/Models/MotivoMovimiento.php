@@ -15,6 +15,8 @@ class MotivoMovimiento extends Model
 
     protected $fillable = [
         'nombre',
+        // De dónde viene el motivo (Despacho, Compras…), en texto libre.
+        'origen',
         'tipo',
         'ambito',
         'categoria_gasto',

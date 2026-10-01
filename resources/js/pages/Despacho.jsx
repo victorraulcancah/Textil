@@ -555,13 +555,15 @@ export default function Despacho() {
                                         pendiente={!completo}
                                         completa={(f) => Boolean(f.hecho)}
                                         accion={
-                                            escaneando
+                                            // La X se puede dar mientras se prepara y también ya separado (hasta
+                                            // despacharlo): quitar un rollo lo devuelve a preparación.
+                                            escaneando || separado
                                                 ? (f) =>
                                                       f.rolloId ? (
                                                           <button
                                                               type="button"
                                                               aria-label={`Quitar ${f.detalle ?? 'rollo'}`}
-                                                              title="Quitar este rollo del pedido"
+                                                              title={separado ? 'Quitar este rollo: el pedido vuelve a preparación' : 'Quitar este rollo del pedido'}
                                                               onClick={() => quitarRollo(f.rolloId)}
                                                               className="rounded p-0.5 text-red-600 transition hover:bg-red-50"
                                                           >

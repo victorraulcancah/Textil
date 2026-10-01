@@ -224,13 +224,17 @@ class OrdenCompraController extends Controller
             return response()->json(['message' => 'La orden ya está anulada.'], 422);
         }
 
-        // La orden anulada suelta su código y su número de proveedor para que la siguiente los use.
-        $ordenesCompra->update([
-            'estado' => 'anulada',
-            'codigo_anulado' => trim($ordenesCompra->codigo.' '.($ordenesCompra->numero_proveedor ? '('.$ordenesCompra->codigoDocumento().')' : '')),
-            'codigo' => null,
-            'numero_proveedor' => null,
-        ]);
+        // La orden anulada suelta su código y su número de proveedor, y las que venían después suben
+        // un puesto: el correlativo (OCE-00N y el número del proveedor) queda seguido, sin huecos.
+        DB::transaction(function () use ($ordenesCompra) {
+            $ordenesCompra->update([
+                'estado' => 'anulada',
+                'codigo_anulado' => trim($ordenesCompra->codigo.' '.($ordenesCompra->numero_proveedor ? '('.$ordenesCompra->codigoDocumento().')' : '')),
+                'codigo' => null,
+                'numero_proveedor' => null,
+            ]);
+            OrdenCompra::compactarCorrelativos($ordenesCompra->tipo, (int) $ordenesCompra->proveedor_id);
+        });
 
         return response()->json(
             $ordenesCompra->fresh()->load(['proveedor', 'usuarioAprueba:id,name', 'usuarioEnvia:id,name'])

@@ -101,6 +101,41 @@ class OrdenCompra extends Model
         return self::menorLibre($usados);
     }
 
+    /**
+     * Tras anular una orden, las que venían después suben un puesto: la serie (OCE-001, OCE-002…)
+     * y el número del proveedor (001, 002…) vuelven a quedar seguidos, sin huecos, en el orden en
+     * que se crearon.
+     */
+    public static function compactarCorrelativos(string $tipo, int $proveedorId): void
+    {
+        $serie = $tipo === 'exterior' ? 'OCE' : 'OCN';
+
+        $activas = static::where('tipo', $tipo)->whereNotNull('codigo')->orderBy('id')->lockForUpdate()->get();
+        $cambian = [];
+        foreach ($activas->values() as $i => $orden) {
+            $codigo = sprintf('%s-%03d', $serie, $i + 1);
+            if ($orden->codigo !== $codigo) {
+                $cambian[$orden->id] = $codigo;
+            }
+        }
+        // Dos pasos: el código es único, y un código que sube no puede chocar con uno que aún no se movió.
+        foreach ($cambian as $id => $codigo) {
+            static::whereKey($id)->update(['codigo' => 'TMP-'.$id]);
+        }
+        foreach ($cambian as $id => $codigo) {
+            static::whereKey($id)->update(['codigo' => $codigo]);
+        }
+        SerieDocumento::where('tipo_documento', 'orden_compra')->where('serie', $serie)->update(['numero_actual' => $activas->count()]);
+
+        $deProveedor = static::where('proveedor_id', $proveedorId)->whereNotNull('numero_proveedor')->orderBy('id')->get();
+        foreach ($deProveedor->values() as $i => $orden) {
+            if ((int) $orden->numero_proveedor !== $i + 1) {
+                static::whereKey($orden->id)->update(['numero_proveedor' => $i + 1]);
+            }
+        }
+        SerieDocumento::where('tipo_documento', 'orden_compra_proveedor')->where('serie', 'PROV'.$proveedorId)->update(['numero_actual' => $deProveedor->count()]);
+    }
+
     /** El menor entero positivo que no está en la lista. */
     public static function menorLibre(array $usados): int
     {

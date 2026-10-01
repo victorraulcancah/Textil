@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowDownLeft, ArrowUpRight, BadgeCheck, Edit, Lock, Printer, Scale, Trash2 } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, BadgeCheck, Download, Edit, Lock, Printer, Scale, Trash2 } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
@@ -8,6 +8,7 @@ import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
 import DetalleCard from '../components/ui/DetalleCard';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
+import { descargarExcel } from '../components/reportes/ReporteUI';
 import { Alert, Badge, Button, DataTable, Input, Modal, Select, Tabs } from '../components/ui';
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
@@ -22,6 +23,13 @@ const estadoInfo = {
     pendiente: { label: 'Pendiente', variant: 'amber' },
     aprobado: { label: 'Aprobado', variant: 'green' },
     rechazado: { label: 'Rechazado', variant: 'red' },
+};
+
+/** El día (aaaa-mm-dd) en la hora local, para comparar con los filtros de fecha. */
+const diaLocal = (fecha) => {
+    if (!fecha) return '';
+    const d = new Date(fecha);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
 const tipoInfo = {
@@ -51,6 +59,13 @@ export default function Ajustes() {
 
     const [filterEstado, setFilterEstado] = useState('');
     const [filterTipo, setFilterTipo] = useState('');
+    const [filterAlmacen, setFilterAlmacen] = useState('');
+    const [filterMotivo, setFilterMotivo] = useState('');
+    const [filterOrigen, setFilterOrigen] = useState('');
+    const [filterProveedor, setFilterProveedor] = useState('');
+    const [filterRegistra, setFilterRegistra] = useState('');
+    const [filterDesde, setFilterDesde] = useState('');
+    const [filterHasta, setFilterHasta] = useState('');
     const [activeFilters, setActiveFilters] = useState({});
 
     const [activeTab, setActiveTab] = useState('ajustes');
@@ -67,6 +82,7 @@ export default function Ajustes() {
     const [motivoDeleting, setMotivoDeleting] = useState(false);
     const [motivoFilterTipo, setMotivoFilterTipo] = useState('');
     const [motivoFilterEstado, setMotivoFilterEstado] = useState('');
+    const [motivoFilterOrigen, setMotivoFilterOrigen] = useState('');
     const [motivoActiveFilters, setMotivoActiveFilters] = useState({});
 
     const load = useCallback(async () => {
@@ -236,31 +252,97 @@ export default function Ajustes() {
         const next = {};
         if (filterEstado) next.estado = filterEstado;
         if (filterTipo) next.tipo = filterTipo;
+        if (filterAlmacen) next.almacen = filterAlmacen;
+        if (filterMotivo) next.motivo = filterMotivo;
+        if (filterOrigen) next.origen = filterOrigen;
+        if (filterProveedor) next.proveedor = filterProveedor;
+        if (filterRegistra) next.registra = filterRegistra;
+        if (filterDesde) next.desde = filterDesde;
+        if (filterHasta) next.hasta = filterHasta;
         setActiveFilters(next);
     };
 
     const clearFilters = () => {
         setFilterEstado('');
         setFilterTipo('');
+        setFilterAlmacen('');
+        setFilterMotivo('');
+        setFilterOrigen('');
+        setFilterProveedor('');
+        setFilterRegistra('');
+        setFilterDesde('');
+        setFilterHasta('');
         setActiveFilters({});
     };
+
+    /** El origen del motivo de un ajuste: lo trae el catálogo de motivos, y el ajuste guarda solo el nombre. */
+    const origenDe = useCallback((ajuste) => motivos.find((m) => m.nombre === ajuste.motivo)?.origen ?? '', [motivos]);
+
+    /** Lo que se puede elegir en cada filtro: lo que realmente hay en los ajustes. */
+    const opciones = useMemo(() => {
+        const distintos = (fn) => [...new Set(ajustes.map(fn).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+        const lista = (valores) => [{ value: '', label: 'Todos' }, ...valores.map((v) => ({ value: v, label: v }))];
+        return {
+            almacenes: lista(distintos((a) => a.almacen?.nombre)),
+            motivos: lista(distintos((a) => a.motivo)),
+            origenes: [...lista(distintos((a) => origenDe(a))).slice(0, 1), { value: '__sin__', label: 'Sin origen' }, ...lista(distintos((a) => origenDe(a))).slice(1)],
+            proveedores: lista(distintos((a) => a.proveedor?.nombre)),
+            usuarios: lista(distintos((a) => a.usuario_solicita?.name)),
+        };
+    }, [ajustes, origenDe]);
 
     const filtered = ajustes.filter((a) => {
         if (activeFilters.estado && a.estado !== activeFilters.estado) return false;
         if (activeFilters.tipo && a.tipo !== activeFilters.tipo) return false;
+        if (activeFilters.almacen && a.almacen?.nombre !== activeFilters.almacen) return false;
+        if (activeFilters.motivo && a.motivo !== activeFilters.motivo) return false;
+        if (activeFilters.origen === '__sin__' && origenDe(a)) return false;
+        if (activeFilters.origen && activeFilters.origen !== '__sin__' && origenDe(a) !== activeFilters.origen) return false;
+        if (activeFilters.proveedor && a.proveedor?.nombre !== activeFilters.proveedor) return false;
+        if (activeFilters.registra && a.usuario_solicita?.name !== activeFilters.registra) return false;
+        const dia = diaLocal(a.fecha);
+        if (activeFilters.desde && (!dia || dia < activeFilters.desde)) return false;
+        if (activeFilters.hasta && (!dia || dia > activeFilters.hasta)) return false;
         return true;
     });
+
+    /** El Excel lleva justo lo que se ve con los filtros aplicados. */
+    const exportarExcel = () => {
+        if (!filtered.length) {
+            toast.error('No hay ajustes con esos filtros para exportar.');
+            return;
+        }
+        const headers = ['#', 'Fecha', 'Número', 'Almacén', 'Proveedor', 'Motivo', 'Origen del motivo', 'Observación', 'Registra', 'Estado', 'Tipo', 'Ítems', 'Total'];
+        const rows = filtered.map((a, i) => [
+            i + 1,
+            a.fecha ? new Date(a.fecha).toLocaleDateString('es-PE') : '',
+            a.documento ?? `#${a.id}`,
+            a.almacen?.nombre ?? '',
+            a.proveedor?.nombre ?? '',
+            a.motivo ?? '',
+            origenDe(a),
+            a.observaciones ?? '',
+            a.usuario_solicita?.name ?? '',
+            estadoInfo[a.estado]?.label ?? a.estado ?? '',
+            tipoInfo[a.tipo]?.label ?? a.tipo ?? '',
+            a.detalles_count ?? '',
+            Number(a.total) || 0,
+        ]);
+        descargarExcel(`ajustes_${diaLocal(new Date())}.xls`, headers, rows);
+    };
 
     const applyMotivoFilters = () => {
         const next = {};
         if (motivoFilterTipo) next.tipo = motivoFilterTipo;
         if (motivoFilterEstado) next.activo = motivoFilterEstado;
+        if (motivoFilterOrigen) next.origen = motivoFilterOrigen;
         setMotivoActiveFilters(next);
     };
 
     const clearMotivoFilters = () => {
         setMotivoFilterTipo('');
         setMotivoFilterEstado('');
+        setMotivoFilterOrigen('');
         setMotivoActiveFilters({});
     };
 
@@ -268,6 +350,8 @@ export default function Ajustes() {
         if (motivoActiveFilters.tipo && m.tipo !== motivoActiveFilters.tipo) return false;
         if (motivoActiveFilters.activo === '1' && !m.activo) return false;
         if (motivoActiveFilters.activo === '0' && m.activo) return false;
+        if (motivoActiveFilters.origen === '__sin__' && m.origen) return false;
+        if (motivoActiveFilters.origen && motivoActiveFilters.origen !== '__sin__' && m.origen !== motivoActiveFilters.origen) return false;
         return true;
     });
 
@@ -299,6 +383,55 @@ export default function Ajustes() {
                 ]}
                 className="w-40"
             />
+            <Select
+                label="Almacén"
+                value={filterAlmacen}
+                onChange={(e) => setFilterAlmacen(e.target.value)}
+                options={opciones.almacenes}
+                className="w-48"
+            />
+            <Select
+                label="Motivo"
+                value={filterMotivo}
+                onChange={(e) => setFilterMotivo(e.target.value)}
+                options={opciones.motivos}
+                className="w-48"
+            />
+            <Select
+                label="Origen del motivo"
+                value={filterOrigen}
+                onChange={(e) => setFilterOrigen(e.target.value)}
+                options={opciones.origenes}
+                className="w-48"
+            />
+            <Select
+                label="Proveedor"
+                value={filterProveedor}
+                onChange={(e) => setFilterProveedor(e.target.value)}
+                options={opciones.proveedores}
+                className="w-48"
+            />
+            <Select
+                label="Registra"
+                value={filterRegistra}
+                onChange={(e) => setFilterRegistra(e.target.value)}
+                options={opciones.usuarios}
+                className="w-48"
+            />
+            <Input
+                label="Desde"
+                type="date"
+                value={filterDesde}
+                onChange={(e) => setFilterDesde(e.target.value)}
+                className="w-40"
+            />
+            <Input
+                label="Hasta"
+                type="date"
+                value={filterHasta}
+                onChange={(e) => setFilterHasta(e.target.value)}
+                className="w-40"
+            />
         </div>
     );
 
@@ -325,6 +458,19 @@ export default function Ajustes() {
                     { value: '0', label: 'Inactivos' },
                 ]}
                 className="w-40"
+            />
+            <Select
+                label="Origen del motivo"
+                value={motivoFilterOrigen}
+                onChange={(e) => setMotivoFilterOrigen(e.target.value)}
+                options={[
+                    { value: '', label: 'Todos' },
+                    { value: '__sin__', label: 'Sin origen' },
+                    ...[...new Set(motivos.map((m) => m.origen).filter(Boolean))]
+                        .sort((a, b) => a.localeCompare(b))
+                        .map((o) => ({ value: o, label: o })),
+                ]}
+                className="w-48"
             />
         </div>
     );
@@ -583,7 +729,13 @@ export default function Ajustes() {
                 }
                 actions={
                     activeTab === 'ajustes' ? (
-                        <CreateButton onClick={() => navigate('/ajustes/nuevo')}>Nuevo ajuste</CreateButton>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <Button variant="secondary" onClick={exportarExcel}>
+                                <Download className="h-4 w-4" />
+                                Exportar Excel
+                            </Button>
+                            <CreateButton onClick={() => navigate('/ajustes/nuevo')}>Nuevo ajuste</CreateButton>
+                        </div>
                     ) : (
                         <CreateButton onClick={openMotivoCreate}>Nuevo motivo</CreateButton>
                     )

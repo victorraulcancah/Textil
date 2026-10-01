@@ -1,5 +1,5 @@
 import { paisConCodigo } from '../lib/paises';
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, ChevronRight, FileText, Package, Pencil, Plus, Ship, Trash2 } from 'lucide-react';
 import api, { asList } from '../lib/api';
@@ -423,6 +423,28 @@ export default function CrearOrdenCompra() {
             setItem(siguiente.i, { color_code: proximo });
         }
         const campo = document.querySelector(`[data-color-code="${siguiente.i}"]`);
+        campo?.focus();
+        campo?.select();
+    };
+
+    /** La fila cuyos metros se están escribiendo (se copian a la siguiente al dar Enter). */
+    const editandoMetros = useRef(null);
+    /**
+     * Enter en los metros de un color: pasa a los del color siguiente. Si acabas de escribir (o de
+     * recibir por copia) ese valor, se lo copia a la fila siguiente; así se llena una columna de
+     * metros iguales con solo dar Enter. Sin haber escrito nada, Enter solo cambia de fila.
+     */
+    const enterMetros = (e, actual, siguiente) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        if (!siguiente) return;
+        if (editandoMetros.current === actual.i && String(actual.it.cantidad) !== String(siguiente.it.cantidad)) {
+            setItem(siguiente.i, { cantidad: actual.it.cantidad, factor_rollo: undefined });
+            editandoMetros.current = siguiente.i;
+        } else {
+            editandoMetros.current = null;
+        }
+        const campo = document.querySelector(`[data-metros="${siguiente.i}"]`);
         campo?.focus();
         campo?.select();
     };
@@ -967,7 +989,15 @@ export default function CrearOrdenCompra() {
                                                                                         min="0"
                                                                                         step="any"
                                                                                         value={it.cantidad}
-                                                                                        onChange={(e) => setItem(i, { cantidad: e.target.value, factor_rollo: undefined })}
+                                                                                        onChange={(e) => {
+                                                                                            editandoMetros.current = i;
+                                                                                            setItem(i, { cantidad: e.target.value, factor_rollo: undefined });
+                                                                                        }}
+                                                                                        onFocus={() => {
+                                                                                            if (editandoMetros.current !== i) editandoMetros.current = null;
+                                                                                        }}
+                                                                                        onKeyDown={(e) => enterMetros(e, colores[n], colores[n + 1])}
+                                                                                        data-metros={i}
                                                                                         className="text-right"
                                                                                         aria-label={`Metros de ${producto?.nombre} ${color?.nombre ?? ''}`}
                                                                                         tabIndex={abierta ? 0 : -1}

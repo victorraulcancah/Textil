@@ -213,6 +213,8 @@ export default function DataTable({
     loading = false,
     emptyMessage = 'No hay registros para mostrar',
     onRowClick = null,
+    /** (row) => void — doble clic sobre la fila (en celular, un toque: no hay doble clic). */
+    onRowDoubleClick = null,
     /** (row, evento) => void — clic derecho sobre la fila (en celular, el toque largo). */
     onRowContextMenu = null,
     /** (row) => string — clases extra por fila, p. ej. para marcar la seleccionada. */
@@ -771,10 +773,11 @@ export default function DataTable({
                                             <tr
                                                 key={row[keyField] ?? index}
                                                 onClick={onRowClick ? () => onRowClick(row) : undefined}
+                                                onDoubleClick={onRowDoubleClick ? () => onRowDoubleClick(row) : undefined}
                                                 onContextMenu={onRowContextMenu ? (e) => onRowContextMenu(row, e) : undefined}
                                                 className={cn(
                                                     'transition',
-                                                    onRowClick ? 'cursor-pointer hover:bg-primary-50/50' : 'hover:bg-gray-50',
+                                                    onRowClick || onRowDoubleClick ? 'cursor-pointer hover:bg-primary-50/50' : 'hover:bg-gray-50',
                                                     rowClassName?.(row),
                                                 )}
                                             >
@@ -830,12 +833,12 @@ export default function DataTable({
                                 <div
                                     key={row[keyField] ?? index}
                                     onClick={
-                                        onRowClick ? () => onRowClick(row) : undefined
+                                        onRowClick ? () => onRowClick(row) : onRowDoubleClick ? () => onRowDoubleClick(row) : undefined
                                     }
                                     onContextMenu={onRowContextMenu ? (e) => onRowContextMenu(row, e) : undefined}
                                     className={cn(
                                         'rounded-xl border border-edge bg-white p-4 shadow-sm transition-colors',
-                                        onRowClick && 'cursor-pointer active:bg-primary-50/50',
+                                        (onRowClick || onRowDoubleClick) && 'cursor-pointer active:bg-primary-50/50',
                                         rowClassName?.(row),
                                     )}
                                 >

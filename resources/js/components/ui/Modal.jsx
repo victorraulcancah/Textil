@@ -9,6 +9,8 @@ const sizes = {
     xl: 'max-w-2xl',
     '2xl': 'max-w-4xl',
     '3xl': 'max-w-6xl',
+    // Casi todo el ancho de la pantalla: para tablas con muchas columnas.
+    full: 'max-w-[94vw]',
 };
 
 // Cuántos modales hay abiertos: el fondo solo se libera al cerrar el último. Con

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+    ChevronRight,
     Layers,
     MapPin,
     Package,
@@ -13,9 +14,7 @@ import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
-import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
-import DetalleCard from '../components/ui/DetalleCard';
-import { Alert, Badge, Button, DataTable, Input, SearchSelect, Select, Spinner } from '../components/ui';
+import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select } from '../components/ui';
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
 const money = (n) =>
@@ -54,16 +53,17 @@ export default function StockPorRollo() {
     const toast = useToast();
 
     const [resumen, setResumen] = useState([]);
-    const [totales, setTotales] = useState({ rollos: 0, metros: 0, valor: 0 });
     const [almacenes, setAlmacenes] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+
+    /** El tipo de tela elegido (su clave): la pantalla abre solo con los tipos y al elegir uno baja a sus telas y colores. */
+    const [tipoSel, setTipoSel] = useState(null);
 
     /** Color elegido: de él cuelga la tabla de rollos. */
     const [seleccion, setSeleccion] = useState(null);
     const [rollos, setRollos] = useState([]);
     const [cargandoRollos, setCargandoRollos] = useState(false);
-    const sheet = useSheet();
 
     const [almacenId, setAlmacenId] = useState('');
     const [estado, setEstado] = useState('');
@@ -84,10 +84,9 @@ export default function StockPorRollo() {
             ]);
             const filas = resumenRes.data?.resumen ?? [];
             setResumen(filas);
-            setTotales(resumenRes.data?.totales ?? { rollos: 0, metros: 0, valor: 0 });
             setAlmacenes(asList(almacenesRes));
             setSeleccion((prev) =>
-                filas.find((f) => claveColor(f) === (prev && claveColor(prev))) ?? filas[0] ?? null,
+                filas.find((f) => claveColor(f) === (prev && claveColor(prev))) ?? null,
             );
         } catch {
             setError('No se pudieron cargar los rollos.');
@@ -99,6 +98,38 @@ export default function StockPorRollo() {
     useEffect(() => {
         load();
     }, [load]);
+
+    /** Los tipos de tela con su stock: lo primero que se ve. Salen de las filas del resumen. */
+    const tipos = useMemo(() => {
+        const grupos = new Map();
+        resumen.forEach((f) => {
+            const clave = claveTipo(f);
+            const g = grupos.get(clave) ?? {
+                clave,
+                nombre: f.tipo_tela ?? 'Sin tipo de tela',
+                familia: f.familia ?? null,
+                telas: new Set(),
+                rollos: 0,
+                metros: 0,
+                valor: 0,
+            };
+            g.telas.add(f.producto_id);
+            g.rollos += Number(f.rollos) || 0;
+            g.metros += Number(f.metros) || 0;
+            g.valor += Number(f.valor) || 0;
+            grupos.set(clave, g);
+        });
+        return [...grupos.values()]
+            .map((g) => ({ ...g, telas: g.telas.size }))
+            .sort((a, b) => a.nombre.localeCompare(b.nombre));
+    }, [resumen]);
+
+    const tipoActual = tipos.find((t) => t.clave === tipoSel) ?? null;
+    const cerrarTipo = () => {
+        setTipoSel(null);
+        setSeleccion(null);
+    };
+    const filasTipo = useMemo(() => resumen.filter((f) => claveTipo(f) === tipoSel), [resumen, tipoSel]);
 
     /** Los rollos del color elegido, con los filtros aplicados. */
     const cargarRollos = useCallback(async () => {
@@ -131,6 +162,25 @@ export default function StockPorRollo() {
     }, [cargarRollos]);
 
     /* ------------------------------ tablas ------------------------------ */
+
+    const columnasTipos = [
+        {
+            key: 'nombre',
+            label: 'Tipo de tela',
+            render: (row) => (
+                <span className="inline-flex items-center gap-2 font-medium text-warm-900">
+                    <Layers className="h-4 w-4 shrink-0 text-primary-600" />
+                    <span className="truncate">{row.nombre}</span>
+                    {row.familia && <span className="text-xs font-normal text-warm-400">{row.familia}</span>}
+                </span>
+            ),
+        },
+        { key: 'telas', label: 'Telas', align: 'right', searchable: false, render: (row) => row.telas },
+        { key: 'rollos', label: 'Rollos', align: 'right', searchable: false, render: (row) => <span className="font-medium">{row.rollos}</span> },
+        { key: 'metros', label: 'Metros', align: 'right', searchable: false, render: (row) => <span className="font-medium text-warm-900">{num(row.metros)} m</span> },
+        { key: 'valor', label: 'Valor', align: 'right', searchable: false, render: (row) => money(row.valor) },
+        { key: 'ir', label: '', searchable: false, render: () => <ChevronRight className="h-4 w-4 text-warm-400" /> },
+    ];
 
     const columnasResumen = [
         {
@@ -331,85 +381,96 @@ export default function StockPorRollo() {
 
     const filtrosActivos = [estado, metrosDesde, metrosHasta].filter(Boolean).length;
 
+    const filtroAlmacen = (
+        <div className="mb-3 flex flex-wrap items-end gap-3">
+            <SearchSelect
+                label="Almacén"
+                value={almacenId}
+                onChange={(v) => setAlmacenId(v ?? '')}
+                placeholder="Todos los almacenes"
+                emptyText="Sin coincidencias"
+                options={almacenes.map((a) => ({ value: String(a.id), label: a.nombre }))}
+                className="w-56"
+            />
+        </div>
+    );
+
     return (
         <Layout>
             <PageHeader
                 title="Stock por rollo"
                 description="Cada rollo con su metraje, su estado y dónde está"
-                actions={
-                    <div className="flex flex-wrap items-center gap-2">
-                        {seleccion && (
-                            <Button
-                                variant="secondary"
-                                onClick={() =>
-                                    setPdf({
-                                        url: `/rollos/etiquetas?producto_id=${seleccion.producto_id}&producto_color_id=${seleccion.producto_color_id}`,
-                                        titulo: `Etiquetas · ${seleccion.color}`,
-                                    })
-                                }
-                            >
-                                <Printer className="h-4 w-4" />
-                                Etiquetas del color
-                            </Button>
-                        )}
-                    </div>
-                }
             />
 
             {error && <Alert variant="error" className="mb-4">{error}</Alert>}
 
-            {/* Lo primero que quiere ver la gerencia al abrir el sistema */}
-            <div className="mb-4 grid gap-3 sm:grid-cols-3">
-                <Tarjeta icono={Layers} titulo="Rollos" valor={totales.rollos} />
-                <Tarjeta icono={Ruler} titulo="Metros" valor={`${num(totales.metros)} m`} />
-                <Tarjeta icono={Package} titulo="Valor del inventario" valor={money(totales.valor)} />
-            </div>
-
-            <div className="mb-3 flex flex-wrap items-end gap-3">
-                <SearchSelect
-                    label="Almacén"
-                    value={almacenId}
-                    onChange={(v) => setAlmacenId(v ?? '')}
-                    placeholder="Todos los almacenes"
-                    emptyText="Sin coincidencias"
-                    options={almacenes.map((a) => ({ value: String(a.id), label: a.nombre }))}
-                    className="w-56"
-                />
-            </div>
-
+            {/* Primer nivel: solo los tipos de tela, con su stock. Doble clic abre sus colores y rollos. */}
+            {filtroAlmacen}
             <DataTable
-                columns={columnasResumen}
-                rows={resumen}
+                columns={columnasTipos}
+                rows={tipos}
                 loading={loading}
-                searchPlaceholder="Buscar tela o color..."
-                onRowClick={(row) => {
-                    setSeleccion(row);
-                    sheet.abrir();
-                }}
-                rowClassName={(row) =>
-                    seleccion && claveColor(row) === claveColor(seleccion)
-                        ? 'bg-primary-50/60'
-                        : ''
-                }
+                searchPlaceholder="Buscar tipo de tela..."
+                onRowDoubleClick={(row) => setTipoSel(row.clave)}
             />
+            <p className="mt-2 text-xs text-warm-400">Doble clic en un tipo de tela para ver sus colores y rollos.</p>
 
-            {/* Nivel 2: los rollos del color elegido */}
-            <div className="mt-6 hidden md:block">
-                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                    <h2 className="text-sm font-semibold text-warm-900">
-                        {seleccion ? (
-                            <>
-                                Rollos de {seleccion.color}
-                                <span className="ml-2 font-normal text-warm-500">
-                                    {rollos.length} rollos · {num(rollos.reduce((s, r) => s + Number(r.metros_actual || 0), 0))} m
-                                </span>
-                            </>
-                        ) : (
-                            'Elige un color para ver sus rollos'
-                        )}
-                    </h2>
-                </div>
+            {/* Segundo nivel: los colores del tipo de tela. Doble clic en un color abre sus rollos. */}
+            <Modal
+                open={Boolean(tipoActual)}
+                onClose={cerrarTipo}
+                title={tipoActual?.nombre ?? ''}
+                description={tipoActual?.familia ?? undefined}
+                size="full"
+            >
+                {tipoActual && (
+                    <>
+                        <div className="mb-4 grid gap-3 sm:grid-cols-3">
+                            <Tarjeta icono={Layers} titulo="Rollos" valor={tipoActual.rollos} />
+                            <Tarjeta icono={Ruler} titulo="Metros" valor={`${num(tipoActual.metros)} m`} />
+                            <Tarjeta icono={Package} titulo="Valor del inventario" valor={money(tipoActual.valor)} />
+                        </div>
 
+                        <DataTable
+                            columns={columnasResumen}
+                            rows={filasTipo}
+                            loading={loading}
+                            searchPlaceholder="Buscar tela o color..."
+                            onRowDoubleClick={(row) => setSeleccion(row)}
+                        />
+                        <p className="mt-2 text-xs text-warm-400">Doble clic en un color para ver sus rollos.</p>
+                    </>
+                )}
+            </Modal>
+
+            {/* Tercer nivel: los rollos del color elegido. */}
+            <Modal
+                open={Boolean(tipoActual && seleccion)}
+                onClose={() => setSeleccion(null)}
+                title={seleccion ? `Rollos de ${seleccion.color ?? seleccion.producto}` : ''}
+                description={
+                    seleccion
+                        ? `${rollos.length} rollos · ${num(rollos.reduce((t, r) => t + Number(r.metros_actual || 0), 0))} m`
+                        : undefined
+                }
+                size="full"
+                footer={
+                    seleccion ? (
+                        <Button
+                            variant="secondary"
+                            onClick={() =>
+                                setPdf({
+                                    url: `/rollos/etiquetas?producto_id=${seleccion.producto_id}&producto_color_id=${seleccion.producto_color_id}`,
+                                    titulo: `Etiquetas · ${seleccion.color}`,
+                                })
+                            }
+                        >
+                            <Printer className="h-4 w-4" />
+                            Etiquetas del color
+                        </Button>
+                    ) : null
+                }
+            >
                 <DataTable
                     columns={columnasRollos}
                     rows={rollos}
@@ -420,52 +481,7 @@ export default function StockPorRollo() {
                     filterCount={filtrosActivos}
                     dense
                 />
-            </div>
-
-            {/* En móvil el detalle se abre desde abajo */}
-            <BottomSheet
-                open={sheet.abierto}
-                onClose={sheet.cerrar}
-                title={seleccion ? `Rollos de ${seleccion.color}` : 'Rollos'}
-                subtitle={
-                    seleccion
-                        ? `${rollos.length} rollos · ${num(rollos.reduce((s, r) => s + Number(r.metros_actual || 0), 0))} m`
-                        : null
-                }
-            >
-                {cargandoRollos ? (
-                    <div className="flex justify-center py-10">
-                        <Spinner className="text-primary-600" />
-                    </div>
-                ) : (
-                    <div className="space-y-3">
-                        {rollos.map((r) => (
-                            <DetalleCard
-                                key={r.id}
-                                titulo={r.codigo}
-                                subtitulo={r.estado_label}
-                                campos={[
-                                    { label: 'Metros', value: `${num(r.metros_actual)} m` },
-                                    { label: 'Peso', value: r.peso_kg ? `${num(r.peso_kg)} kg` : '—' },
-                                    { label: 'Ubicación', value: r.ubicacion },
-                                    ...(r.corte_preparado
-                                        ? [{
-                                            label: 'Corte preparado',
-                                            value: `${num(r.corte_preparado.metros)} m · quedan ${num(r.corte_preparado.saldo)} m`,
-                                        }]
-                                        : []),
-                                ]}
-                                columnas={3}
-                            />
-                        ))}
-                        {!rollos.length && (
-                            <p className="py-8 text-center text-sm text-warm-400">
-                                No hay rollos con esos filtros.
-                            </p>
-                        )}
-                    </div>
-                )}
-            </BottomSheet>
+            </Modal>
 
             <PdfViewerModal
                 open={Boolean(pdf)}
@@ -479,6 +495,7 @@ export default function StockPorRollo() {
 }
 
 const claveColor = (f) => `${f.producto_id}-${f.producto_color_id}`;
+const claveTipo = (f) => String(f.tipo_tela_id ?? 'sin');
 
 function Tarjeta({ icono: Icono, titulo, valor }) {
     return (

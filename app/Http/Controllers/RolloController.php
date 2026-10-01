@@ -74,7 +74,7 @@ class RolloController extends Controller
             ->when($request->filled('almacen_id'), fn ($q) => $q->where('almacen_id', $request->almacen_id))
             ->when($request->filled('producto_id'), fn ($q) => $q->where('producto_id', $request->producto_id))
             ->groupBy('producto_id', 'producto_color_id', 'estado')
-            ->with(['producto:id,codigo,nombre', 'color:id,nombre,codigo,hex'])
+            ->with(['producto:id,codigo,nombre,tipo_tela_id', 'producto.tipoTela:id,nombre,codigo,familia_tela_id', 'producto.tipoTela.familia:id,nombre', 'color:id,nombre,codigo,hex'])
             ->get();
 
         // Se agrupa en PHP para devolver una fila por color con el desglose
@@ -88,6 +88,11 @@ class RolloController extends Controller
                     'producto_id' => $primera->producto_id,
                     'producto' => $primera->producto?->nombre,
                     'producto_codigo' => $primera->producto?->codigo,
+                    // El tipo de tela (la agrupación con la que abre la pantalla de stock por rollo).
+                    'tipo_tela_id' => $primera->producto?->tipo_tela_id,
+                    'tipo_tela' => $primera->producto?->tipoTela?->nombre,
+                    'tipo_tela_codigo' => $primera->producto?->tipoTela?->codigo,
+                    'familia' => $primera->producto?->tipoTela?->familia?->nombre,
                     // El código del producto con color: familia-tipo-color (01-01-001).
                     'codigo_completo' => collect([$primera->producto?->codigo, $primera->color?->codigo])->filter()->implode('-'),
                     'producto_color_id' => $primera->producto_color_id,

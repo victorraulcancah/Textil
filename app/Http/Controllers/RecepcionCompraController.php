@@ -663,30 +663,37 @@ class RecepcionCompraController extends Controller
                 }
             }
 
+            // Las líneas de esta compra que son de ese producto (una por color en las telas).
+            $lineasDe = fn (string $codigoProd) => $compra->detalles
+                ->filter(fn ($d) => $d->presentacion?->producto?->codigo === $codigoProd)
+                ->values();
+
             // El producto puede venir con su color pegado: 01-03-074.
-            $linea = $compra->detalles->first(
-                fn ($d) => $d->presentacion?->producto?->codigo === $codigoProducto
-            );
-            if (! $linea && $codigoColor === '' && preg_match('/^(.+)-(\d{3})$/', $codigoProducto, $m)) {
-                $linea = $compra->detalles->first(
-                    fn ($d) => $d->presentacion?->producto?->codigo === $m[1]
-                );
-                if ($linea) {
+            $lineas = $lineasDe($codigoProducto);
+            if ($lineas->isEmpty() && $codigoColor === '' && preg_match('/^(.+)-(\d{3})$/', $codigoProducto, $m)) {
+                $lineas = $lineasDe($m[1]);
+                if ($lineas->isNotEmpty()) {
                     $codigoProducto = $m[1];
                     $codigoColor = $m[2];
                 }
             }
-            if (! $linea) {
+            if ($lineas->isEmpty()) {
                 $advertencias[] = "Fila {$numeroFila}: el producto \"{$codigoProducto}\" no está en esta compra.";
                 continue;
             }
 
-            $productoColor = $linea->presentacion->producto->colores
+            $productoColor = $lineas->first()->presentacion->producto->colores
                 ->first(fn ($c) => $c->codigo === $codigoColor);
             if ($codigoColor !== '' && ! $productoColor) {
                 $advertencias[] = "Fila {$numeroFila}: el color \"{$codigoColor}\" no existe para \"{$codigoProducto}\".";
                 continue;
             }
+
+            // El rollo va a la línea de su color: una tela tiene una línea por color, y la primera no
+            // es la de todos. Si la compra no tiene línea de ese color, queda en la primera del producto.
+            $linea = ($productoColor
+                ? $lineas->first(fn ($d) => (int) $d->producto_color_id === (int) $productoColor->id)
+                : null) ?? $lineas->first();
 
             // Un código repetido no se puede escanear con certeza: se señala
             // para corregirlo en el Excel antes de confirmar.

@@ -297,6 +297,9 @@ class OrdenCompraController extends Controller
         }
 
         DB::transaction(function () use ($data, $ordenesCompra) {
+            $tipoAntes = $ordenesCompra->tipo;
+            $proveedorAntes = (int) $ordenesCompra->proveedor_id;
+
             // Cambiar de nacional a exterior (o al revés) cambia su serie: OCN ↔ OCE.
             if (isset($data['tipo']) && $data['tipo'] !== $ordenesCompra->tipo) {
                 $data['codigo'] = self::generarCodigo($data['tipo']);
@@ -307,6 +310,11 @@ class OrdenCompraController extends Controller
             }
 
             $ordenesCompra->update(collect($data)->except('detalles')->all());
+
+            // Lo que dejó libre en la serie o en el proveedor de antes lo ocupan las que venían después.
+            if ($ordenesCompra->tipo !== $tipoAntes || (int) $ordenesCompra->proveedor_id !== $proveedorAntes) {
+                OrdenCompra::compactarCorrelativos($tipoAntes, $proveedorAntes);
+            }
 
             // Las líneas se reemplazan completas: es más simple y evita huérfanos.
             if (array_key_exists('detalles', $data)) {

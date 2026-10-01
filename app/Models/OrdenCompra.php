@@ -110,7 +110,9 @@ class OrdenCompra extends Model
     {
         $serie = $tipo === 'exterior' ? 'OCE' : 'OCN';
 
-        $activas = static::where('tipo', $tipo)->whereNotNull('codigo')->orderBy('id')->lockForUpdate()->get();
+        // Se conserva el orden que ya tienen (por su número, y por id si empatan): solo se cierran los huecos.
+        $activas = static::where('tipo', $tipo)->whereNotNull('codigo')->orderBy('id')->lockForUpdate()->get()
+            ->sortBy(fn ($o) => [(int) substr($o->codigo, 4), $o->id])->values();
         $cambian = [];
         foreach ($activas->values() as $i => $orden) {
             $codigo = sprintf('%s-%03d', $serie, $i + 1);
@@ -127,7 +129,7 @@ class OrdenCompra extends Model
         }
         SerieDocumento::where('tipo_documento', 'orden_compra')->where('serie', $serie)->update(['numero_actual' => $activas->count()]);
 
-        $deProveedor = static::where('proveedor_id', $proveedorId)->whereNotNull('numero_proveedor')->orderBy('id')->get();
+        $deProveedor = static::where('proveedor_id', $proveedorId)->whereNotNull('numero_proveedor')->orderBy('numero_proveedor')->orderBy('id')->get();
         foreach ($deProveedor->values() as $i => $orden) {
             if ((int) $orden->numero_proveedor !== $i + 1) {
                 static::whereKey($orden->id)->update(['numero_proveedor' => $i + 1]);

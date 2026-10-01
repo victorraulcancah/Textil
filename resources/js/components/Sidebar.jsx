@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { NavLink, useLocation } from 'react-router-dom';
 import { ChevronDown, ChevronsLeft, ChevronsRight, Menu, X } from 'lucide-react';
@@ -56,9 +56,20 @@ function Punto({ activo }) {
     );
 }
 
+/**
+ * Cada página dibuja su propio Layout, así que el menú se monta de nuevo al navegar. Se recuerda
+ * hasta dónde estaba desplazado para que no salte arriba cada vez que se elige una opción.
+ */
+let scrollMenu = 0;
+
 export default function Sidebar({ collapsed = false, onToggleCollapse }) {
     const { puede } = useAuth();
     const { pathname } = useLocation();
+    const navRef = useRef(null);
+
+    useLayoutEffect(() => {
+        if (navRef.current) navRef.current.scrollTop = scrollMenu;
+    }, []);
 
     /**
      * Solo lo que el rol puede ver: se ocultan los módulos sin permiso, y un
@@ -231,7 +242,13 @@ export default function Sidebar({ collapsed = false, onToggleCollapse }) {
                     )}
                 </div>
 
-                <nav className="flex-1 overflow-y-auto overscroll-contain px-2 py-3 [scrollbar-width:thin]">
+                <nav
+                    ref={navRef}
+                    onScroll={(e) => {
+                        scrollMenu = e.currentTarget.scrollTop;
+                    }}
+                    className="flex-1 overflow-y-auto overscroll-contain px-2 py-3 [scrollbar-width:thin]"
+                >
                     {rail ? (
                         navegacion.map((item) => {
                             const Icon = item.icon;

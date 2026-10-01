@@ -125,6 +125,7 @@
                     :grupos="[$planilla['grupos'][$loop->index]]"
                     :totales="$planilla['totales']"
                     :colorCode="true"
+                    :conFactor="false"
                     :precios="false"
                     :conTotal="$loop->last" />
             @endforeach
@@ -156,7 +157,7 @@
         @endif
         @unless ($ingles)
         {{-- La planilla: una tabla por tela, con el color code que se escribió en la orden. --}}
-        <x-pdf.planilla :grupos="$planilla['grupos']" :totales="$planilla['totales']" :moneda="$moneda" :colorCode="true" />
+        <x-pdf.planilla :grupos="$planilla['grupos']" :totales="$planilla['totales']" :moneda="$moneda" :colorCode="true" :conFactor="false" />
         <x-pdf.cierre
             :observaciones="$orden->observaciones"
             :lineas="['Subtotal' => number_format($total, 2)]"

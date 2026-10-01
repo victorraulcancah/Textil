@@ -109,8 +109,9 @@ class OrdenCompraPdf implements DocumentoPdf
 
                 return [
                     'name' => $mayus($producto?->nombre_tecnico ?: $producto?->nombre),
-                    'weight' => $producto?->gramaje ? $fmt($producto->gramaje).' GSM' : '—',
-                    'width' => $producto?->ancho_cm ? $fmt($producto->ancho_cm).' CM' : '—',
+                    // Como en la hoja del proveedor: el gramaje con su mínimo y el ancho medido de orillo a orillo.
+                    'weight' => $producto?->gramaje ? $fmt($producto->gramaje).' GSM (NO LESS THAN '.$fmt($producto->gramaje).'GSM)' : '—',
+                    'width' => $producto?->ancho_cm ? $fmt($producto->ancho_cm).' CM (HOLE TO HOLE)' : '—',
                     'specification' => $mayus($producto?->composicion) ?: '—',
                     'price' => $precios->map(fn ($p) => $simbolo.number_format($p, 2))->implode(' / '),
                     'hs_code' => $producto?->codigo_arancelario ?: '—',

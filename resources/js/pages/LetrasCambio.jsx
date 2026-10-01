@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Ban, FileText, Wallet } from 'lucide-react';
+import { ArrowLeftRight, Ban, FileText, Wallet } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { money } from '../lib/moneda';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
+import ActionsMenu from '../components/ActionsMenu';
 import LetraCobroModal from '../components/LetraCobroModal';
 import PageHeader from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
@@ -18,29 +19,13 @@ const hoy = () => {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
-/** Días de calendario entre dos fechas "aaaa-mm-dd". */
-const diasEntre = (desde, hasta) => {
-    const t = (x) => {
-        const [y, m, d] = String(x).slice(0, 10).split('-').map(Number);
-        return Date.UTC(y, m - 1, d);
-    };
-    return Math.round((t(hasta) - t(desde)) / 86400000);
-};
-
-/** El detalle del estado de una letra: vigencia si está por cobrar, puntualidad si ya se pagó. */
-const subEstado = (row) => {
-    if (row.estado === 'emitida') {
-        const dias = diasEntre(hoy(), row.fecha_vencimiento);
-        if (dias > 0) return { texto: `Vigente · vence en ${dias} día${dias === 1 ? '' : 's'}`, color: 'text-warm-700' };
-        if (dias === 0) return { texto: 'Vence hoy', color: 'font-medium text-amber-600' };
-        return { texto: `Vencida hace ${-dias} día${dias === -1 ? '' : 's'}`, color: 'font-medium text-red-600' };
-    }
-    if (row.estado === 'pagada') {
-        const tarde = row.fecha_pago && diasEntre(row.fecha_vencimiento, row.fecha_pago) > 0;
-        return { texto: `${tarde ? 'Pagada con atraso' : 'Pagada a tiempo'}${row.fecha_pago ? ` · ${fecha(row.fecha_pago)}` : ''}`, color: tarde ? 'text-amber-600' : 'text-green-600' };
-    }
-    return { texto: '—', color: 'text-gray-300' };
-};
+/** Dónde está la letra mientras se cobra. Nace "en cartera" y se cambia desde la lista. */
+const SUB_ESTADOS = [
+    { value: 'en_cartera', label: 'En cartera', variant: 'gray' },
+    { value: 'cobranza_libre', label: 'Cobranza libre', variant: 'blue' },
+    { value: 'cobranza_banco', label: 'Cobranza banco', variant: 'blue' },
+    { value: 'en_descuento', label: 'Letras en descuento', variant: 'amber' },
+];
 
 const ESTADOS = [
     { value: '', label: 'Todas' },
@@ -62,6 +47,10 @@ export default function LetrasCambio() {
     const [fEstado, setFEstado] = useState('');
     const [pdf, setPdf] = useState(null);
     const [cobro, setCobro] = useState(null);
+    /** La letra cuyo sub estado se está cambiando, el valor elegido y si se está guardando. */
+    const [cambioSub, setCambioSub] = useState(null);
+    const [subElegido, setSubElegido] = useState('en_cartera');
+    const [guardandoSub, setGuardandoSub] = useState(false);
     const [anular, setAnular] = useState(null);
     const [anulando, setAnulando] = useState(false);
 
@@ -80,6 +69,25 @@ export default function LetrasCambio() {
     useEffect(() => {
         load();
     }, [load]);
+
+    const abrirSubEstado = (row) => {
+        setCambioSub(row);
+        setSubElegido(row.sub_estado ?? 'en_cartera');
+    };
+
+    const guardarSubEstado = async () => {
+        setGuardandoSub(true);
+        try {
+            await api.post(`/letras-cambio/${cambioSub.id}/sub-estado`, { sub_estado: subElegido });
+            toast.success(`Letra ${cambioSub.numero}: ${SUB_ESTADOS.find((x) => x.value === subElegido)?.label}.`);
+            setCambioSub(null);
+            await load();
+        } catch (err) {
+            toast.error(err.response?.data?.message ?? 'No se pudo cambiar el sub estado.');
+        } finally {
+            setGuardandoSub(false);
+        }
+    };
 
     const confirmarAnular = async () => {
         setAnulando(true);
@@ -138,11 +146,12 @@ export default function LetrasCambio() {
         {
             key: 'sub_estado',
             label: 'Sub estado',
-            // El detalle del estado: si la letra por cobrar sigue vigente o ya venció, y si la pagada llegó a tiempo.
-            getSearchValue: (row) => subEstado(row).texto,
+            getSearchValue: (row) => (SUB_ESTADOS.find((x) => x.value === (row.sub_estado ?? 'en_cartera'))?.label ?? ''),
+            // Donde está la letra mientras se cobra (en cartera al crearla); una anulada ya no tiene.
             render: (row) => {
-                const { texto, color } = subEstado(row);
-                return <span className={color}>{texto}</span>;
+                if (row.estado === 'anulada') return <span className="text-gray-300">—</span>;
+                const info = SUB_ESTADOS.find((x) => x.value === (row.sub_estado ?? 'en_cartera')) ?? SUB_ESTADOS[0];
+                return <Badge variant={info.variant}>{info.label}</Badge>;
             },
         },
         {
@@ -157,35 +166,24 @@ export default function LetrasCambio() {
                 ),
         },
         {
+            // Un menú (⋮) con todas las acciones: la columna es angosta y los iconos sueltos se cortaban.
             key: 'acciones',
             label: 'Acciones',
             type: 'actions',
-            align: 'right',
-            actions: (row) => (
-                <>
-                    {puede('tesoreria.letras-cambio.imprimir') && (
-                        <Button size="sm" variant="secondary" onClick={() => setPdf(row)}>
-                            <FileText className="h-4 w-4" /> PDF
-                        </Button>
-                    )}
-                    {row.estado === 'emitida' && puede('tesoreria.letras-cambio.editar') && (
-                        <Button size="sm" onClick={() => setCobro(row)}>
-                            <Wallet className="h-4 w-4" /> Cobrar
-                        </Button>
-                    )}
-                    {row.estado === 'emitida' && puede('tesoreria.letras-cambio.eliminar') && (
-                        <button
-                            type="button"
-                            aria-label="Anular"
-                            title="Anular la letra"
-                            onClick={() => setAnular(row)}
-                            className="rounded-md p-1.5 text-red-600 transition hover:bg-red-50"
-                        >
-                            <Ban className="h-4 w-4" />
-                        </button>
-                    )}
-                </>
-            ),
+            width: '70px',
+            actions: (row) => {
+                const porCobrar = row.estado === 'emitida';
+                return (
+                    <ActionsMenu
+                        items={[
+                            { label: 'Imprimir / PDF', icon: FileText, color: 'text-warm-600', hidden: !puede('tesoreria.letras-cambio.imprimir'), onClick: () => setPdf(row) },
+                            { label: 'Cambiar sub estado', icon: ArrowLeftRight, color: 'text-primary-600', hidden: !porCobrar || !puede('tesoreria.letras-cambio.editar'), onClick: () => abrirSubEstado(row) },
+                            { label: 'Cobrar', icon: Wallet, color: 'text-green-600', hidden: !porCobrar || !puede('tesoreria.letras-cambio.editar'), onClick: () => setCobro(row) },
+                            { label: 'Anular', icon: Ban, color: 'text-red-600', hidden: !porCobrar || !puede('tesoreria.letras-cambio.eliminar'), onClick: () => setAnular(row) },
+                        ]}
+                    />
+                );
+            },
         },
     ];
 
@@ -215,6 +213,44 @@ export default function LetrasCambio() {
                 titulo="Letra de cambio"
                 formatos={['a4']}
             />
+
+            <Modal
+                open={Boolean(cambioSub)}
+                onClose={() => setCambioSub(null)}
+                title="Cambiar sub estado"
+                description={cambioSub ? `Letra ${cambioSub.numero} · ${cambioSub.cliente?.nombre ?? cambioSub.aceptante_nombre}` : ''}
+                size="sm"
+                footer={
+                    <>
+                        <Button variant="secondary" onClick={() => setCambioSub(null)}>
+                            Cancelar
+                        </Button>
+                        <Button onClick={guardarSubEstado} loading={guardandoSub} disabled={subElegido === (cambioSub?.sub_estado ?? 'en_cartera')}>
+                            Guardar
+                        </Button>
+                    </>
+                }
+            >
+                <div className="space-y-2">
+                    {SUB_ESTADOS.map((x) => (
+                        <label
+                            key={x.value}
+                            className={`flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 text-sm transition ${
+                                subElegido === x.value ? 'border-primary-300 bg-primary-50' : 'border-edge hover:bg-gray-50'
+                            }`}
+                        >
+                            <input
+                                type="radio"
+                                name="sub-estado"
+                                checked={subElegido === x.value}
+                                onChange={() => setSubElegido(x.value)}
+                                className="h-4 w-4 accent-primary-600"
+                            />
+                            <span className="font-medium text-warm-900">{x.label}</span>
+                        </label>
+                    ))}
+                </div>
+            </Modal>
 
             <LetraCobroModal open={Boolean(cobro)} letra={cobro} onClose={() => setCobro(null)} onCobrada={load} />
 

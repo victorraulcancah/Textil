@@ -115,6 +115,7 @@ class LetraCambioController extends Controller
                 'cliente_id' => $cuenta->cliente_id,
                 'numero' => $this->siguienteNumero(),
                 'estado' => 'emitida',
+                'sub_estado' => 'en_cartera',
                 'usuario_id' => auth('api')->id(),
             ]);
         });
@@ -180,6 +181,22 @@ class LetraCambioController extends Controller
             DB::rollBack();
             throw $e;
         }
+
+        return response()->json($letrasCambio->fresh()->load('cliente:id,nombre'));
+    }
+
+    /** Cambia dónde está la letra mientras se cobra: cartera, cobranza libre, cobranza banco o descuento. */
+    public function cambiarSubEstado(Request $request, LetraCambio $letrasCambio)
+    {
+        $data = $request->validate([
+            'sub_estado' => ['required', Rule::in(array_keys(LetraCambio::SUB_ESTADOS))],
+        ]);
+
+        if ($letrasCambio->estado !== 'emitida') {
+            return response()->json(['message' => 'Solo se cambia el sub estado de una letra por cobrar.'], 422);
+        }
+
+        $letrasCambio->update($data);
 
         return response()->json($letrasCambio->fresh()->load('cliente:id,nombre'));
     }

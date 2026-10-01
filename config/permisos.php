@@ -255,6 +255,7 @@ return [
                         'letras-cambio/*/anular' => 'eliminar',
                         // Cobrar una letra es editarla: queda pagada y entra a caja.
                         'letras-cambio/*/cobrar' => 'editar',
+                        'letras-cambio/*/sub-estado' => 'editar',
                     ],
                 ],
                 'estado-cuenta' => [

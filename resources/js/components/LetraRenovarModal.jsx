@@ -61,7 +61,7 @@ export default function LetraRenovarModal({ open, letras = [], onClose, onRenova
                 fecha_vencimiento: vencimiento,
                 lugar_giro: lugar || null,
             });
-            toast.success(`Letra ${data.codigo} emitida. La letra ${letra.codigo} quedó cancelada.`);
+            toast.success(`Renovación ${data.serie_renovacion} creada. La letra ${letra.serie_renovacion ?? letra.codigo} quedó cancelada.`);
             onRenovada?.(data);
             onClose();
         } catch (err) {
@@ -79,7 +79,7 @@ export default function LetraRenovarModal({ open, letras = [], onClose, onRenova
         <Modal
             open={open}
             onClose={onClose}
-            title="Nueva letra por renovación"
+            title="Crear renovación"
             description="Se gira una letra nueva por lo que falta cobrar de otra, que queda cancelada"
             footer={
                 <>
@@ -88,7 +88,7 @@ export default function LetraRenovarModal({ open, letras = [], onClose, onRenova
                     </Button>
                     <Button onClick={renovar} loading={guardando} disabled={!letra || !fechaGiro || !vencimiento}>
                         <RefreshCw className="h-4 w-4" />
-                        Crear nueva letra
+                        Crear renovación
                     </Button>
                 </>
             }
@@ -104,7 +104,7 @@ export default function LetraRenovarModal({ open, letras = [], onClose, onRenova
                     emptyText="Sin coincidencias"
                     options={letras.map((l) => ({
                         value: String(l.id),
-                        label: `Letra ${l.codigo} · ${l.cliente?.nombre ?? l.aceptante_nombre} · saldo ${money(l.saldo, l.moneda)}`,
+                        label: `Letra ${l.serie_renovacion ?? l.codigo} · ${l.cliente?.nombre ?? l.aceptante_nombre} · saldo ${money(l.saldo, l.moneda)}`,
                     }))}
                 />
 
@@ -130,7 +130,7 @@ export default function LetraRenovarModal({ open, letras = [], onClose, onRenova
                 <Input label="Lugar de giro" value={lugar} onChange={(e) => setLugar(e.target.value)} placeholder="LA VICTORIA LIMA" />
 
                 <Alert variant="info">
-                    Se gira una letra nueva por {money(saldo, letra?.moneda)} con los mismos datos del aceptante y del aval. La letra {letra?.codigo} queda{' '}
+                    Se gira una letra nueva por {money(saldo, letra?.moneda)} con los mismos datos del aceptante y del aval. La letra {letra?.serie_renovacion ?? letra?.codigo} queda{' '}
                     <strong>cancelada</strong> y su saldo pasa a la nueva.
                 </Alert>
             </div>

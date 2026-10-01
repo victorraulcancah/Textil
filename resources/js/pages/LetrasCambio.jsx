@@ -39,7 +39,12 @@ const ESTADOS = [
  * Las letras de cambio emitidas desde las cuentas por cobrar: aquí se consultan,
  * se imprime su PDF y se anulan. Se emiten desde Cuentas por cobrar.
  */
-export default function LetrasCambio() {
+/**
+ * Letras de cambio y, con `renovaciones`, sus renovaciones: son dos listas separadas para no
+ * confundirlas. Las letras (LT001-NNN) salen de cuentas por cobrar; las renovaciones (RV001-NNN)
+ * son las letras nuevas que se giran por el saldo de otra, que queda cancelada.
+ */
+export default function LetrasCambio({ renovaciones = false }) {
     const toast = useToast();
     const { puede } = useAuth();
     const [rows, setRows] = useState([]);
@@ -61,13 +66,13 @@ export default function LetrasCambio() {
         setLoading(true);
         setError(null);
         try {
-            setRows(asList(await api.get('/letras-cambio')));
+            setRows(asList(await api.get(renovaciones ? '/renovaciones' : '/letras-cambio')));
         } catch {
             setError('No se pudieron cargar las letras de cambio.');
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [renovaciones]);
 
     useEffect(() => {
         load();
@@ -110,16 +115,34 @@ export default function LetrasCambio() {
         // El orden de las columnas es el de la hoja de control: letra, giro, vencimiento, cliente,
         // importe, saldo, estado, sub estado y concepto.
         // La serie del documento (LT-001) es aparte del número de la letra, que es el identificador de la fila.
+        // En las renovaciones, primero su serie propia (RV001-001) y la letra de la que salen.
+        ...(renovaciones
+            ? [
+                  {
+                      key: 'serie_renovacion',
+                      label: 'Serie renovación',
+                      width: '130px',
+                      getSearchValue: (row) => row.serie_renovacion ?? '',
+                      render: (row) => <span className="whitespace-nowrap font-semibold text-primary-700">{row.serie_renovacion}</span>,
+                  },
+              ]
+            : []),
         { key: 'numero', label: 'Letra Nro', width: '84px', render: (row) => <span className="font-semibold text-warm-900">{row.numero}</span> },
-        { key: 'serie', label: 'Serie', width: '96px', getSearchValue: (row) => row.codigo, render: (row) => <span className="whitespace-nowrap font-medium text-warm-800">{row.codigo}</span> },
-        {
-            // La serie propia de las letras que nacieron de renovar otra (RV001-001…).
-            key: 'serie_renovacion',
-            label: 'Serie renovación',
-            width: '120px',
-            getSearchValue: (row) => row.serie_renovacion ?? '',
-            render: (row) => (row.serie_renovacion ? <Badge variant="blue" className="whitespace-nowrap">{row.serie_renovacion}</Badge> : <span className="text-gray-300">—</span>),
-        },
+        // Las renovaciones no llevan serie de letra: su documento es RV001 (primera columna).
+        ...(renovaciones
+            ? []
+            : [{ key: 'serie', label: 'Serie', width: '96px', getSearchValue: (row) => row.codigo, render: (row) => <span className="whitespace-nowrap font-medium text-warm-800">{row.codigo}</span> }]),
+        ...(renovaciones
+            ? [
+                  {
+                      key: 'letra_origen',
+                      label: 'Letra origen',
+                      width: '110px',
+                      getSearchValue: (row) => row.anterior?.codigo ?? '',
+                      render: (row) => (row.anterior ? <span className="whitespace-nowrap text-warm-800">{row.anterior.codigo}</span> : <span className="text-gray-300">—</span>),
+                  },
+              ]
+            : []),
         { key: 'fecha_giro', label: 'Fecha de giro', render: (row) => fecha(row.fecha_giro) },
         {
             key: 'fecha_vencimiento',
@@ -164,7 +187,7 @@ export default function LetrasCambio() {
                     <span className="inline-flex flex-col items-start gap-0.5">
                         <Badge variant={info[0]}>{info[1]}</Badge>
                         {/* Una letra cancelada pasó a la nueva: se dice a cuál. */}
-                        {row.estado === 'cancelada' && row.renovacion && <span className="text-[11px] text-warm-500">→ letra {row.renovacion.codigo}</span>}
+                        {row.estado === 'cancelada' && row.renovacion && <span className="text-[11px] text-warm-500">→ renovación {row.renovacion.serie_renovacion ?? row.renovacion.codigo}</span>}
                         {row.estado === 'emitida' && Number(row.monto_pagado) > 0 && <span className="text-[11px] text-green-600">cobrado {money(row.monto_pagado, row.moneda)}</span>}
                     </span>
                 );
@@ -219,12 +242,16 @@ export default function LetrasCambio() {
     return (
         <Layout>
             <PageHeader
-                title="Letras de cambio"
-                description="Las letras emitidas desde Cuentas por cobrar: aquí se cobran, se imprimen y se anulan"
+                title={renovaciones ? 'Renovaciones de letras' : 'Letras de cambio'}
+                description={
+                    renovaciones
+                        ? 'Las letras nuevas que se giraron por el saldo de otra (serie RV001): aquí se cobran, se imprimen y se anulan'
+                        : 'Las letras emitidas desde Cuentas por cobrar: aquí se cobran, se imprimen y se anulan'
+                }
                 actions={
-                    puede('tesoreria.letras-cambio.crear') && (
-                        // Una letra nueva por renovación: se elige la letra y se gira otra por lo que le falta cobrar.
-                        <CreateButton onClick={() => setRenovando(true)}>Nueva letra</CreateButton>
+                    puede('tesoreria.renovaciones.crear') && (
+                        // Se elige la letra que se renueva y se gira una nueva por lo que le falta cobrar.
+                        <CreateButton onClick={() => setRenovando(true)}>Crear renovación</CreateButton>
                     )
                 }
             />
@@ -236,7 +263,7 @@ export default function LetrasCambio() {
                 rows={rows.filter((r) => !fEstado || r.estado === fEstado)}
                 loading={loading}
                 searchPlaceholder="Buscar por cliente, aceptante o referencia..."
-                emptyMessage="Aún no hay letras emitidas. Se emiten desde Cuentas por cobrar."
+                emptyMessage={renovaciones ? 'Aún no hay renovaciones. Se crean con "Crear renovación".' : 'Aún no hay letras emitidas. Se emiten desde Cuentas por cobrar.'}
                 filterable
                 filterCount={fEstado ? 1 : 0}
                 filters={<Select label="Estado" value={fEstado} onChange={(e) => setFEstado(e.target.value)} options={ESTADOS} />}

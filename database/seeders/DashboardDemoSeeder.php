@@ -107,7 +107,7 @@ class DashboardDemoSeeder extends Seeder
             $numero++;
 
             $nota = NotaVenta::create([
-                'serie' => 'NV01',
+                'serie' => 'PF01',
                 'numero' => str_pad((string) $numero, 4, '0', STR_PAD_LEFT),
                 'cliente_id' => $cliente?->id,
                 'almacen_id' => $almacen->id,

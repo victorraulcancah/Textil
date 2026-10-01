@@ -150,7 +150,7 @@ export default function CuentasPorCobrar() {
                                 onClick={() => setLetraEmitida(l)}
                                 className="inline-flex"
                             >
-                                <Badge variant="blue">{l.codigo}</Badge>
+                                <Badge variant="blue">{l.serie_renovacion ?? l.codigo}</Badge>
                             </button>
                         ))}
                     </span>

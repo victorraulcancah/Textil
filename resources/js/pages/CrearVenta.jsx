@@ -1118,7 +1118,7 @@ export default function CrearVenta() {
                 descuento_total: 0,
                 total,
                 observaciones: form.observaciones,
-                serie: "NV01",
+                serie: "PF01",
                 detalles,
                 pagos: pagosPayload,
             };

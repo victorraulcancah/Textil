@@ -510,7 +510,7 @@ class OrdenVentaService
             $total = round(collect($detalles)->sum('subtotal'), 2);
 
             $nota = $this->notasVenta->crear([
-                'serie' => $datos['serie'] ?? 'NV01',
+                'serie' => $datos['serie'] ?? \App\Models\NotaVenta::SERIE,
                 'orden_venta_id' => $orden->id,
                 'cliente_id' => $orden->cliente_id,
                 'almacen_id' => $orden->almacen_id,

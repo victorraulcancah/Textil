@@ -19,7 +19,7 @@ class LetraCambio extends Model
 
     protected $fillable = [
         'numero', 'cuenta_por_cobrar_id', 'cliente_id', 'referencia', 'fecha_giro', 'lugar_giro',
-        'fecha_vencimiento', 'moneda', 'importe', 'saldo', 'monto_pagado', 'letra_anterior_id', 'serie_renovacion',
+        'fecha_vencimiento', 'moneda', 'importe', 'saldo', 'monto_pagado', 'letra_anterior_id', 'serie_letra', 'serie_renovacion',
         'aceptante_nombre', 'aceptante_documento', 'aceptante_domicilio', 'aceptante_localidad', 'aceptante_telefono',
         'aval_nombre', 'aval_documento', 'aval_domicilio', 'aval_localidad',
         'banco', 'oficina', 'cuenta', 'dc', 'estado', 'sub_estado', 'fecha_pago', 'usuario_id',
@@ -37,14 +37,13 @@ class LetraCambio extends Model
 
     public const SERIE = 'LT001';
 
-    public static function codigoDe(int|string $numero): string
-    {
-        return self::SERIE.'-'.str_pad((string) $numero, 3, '0', STR_PAD_LEFT);
-    }
-
+    /**
+     * El código del documento: LT001-NNN para una letra y RV001-NNN para una renovación (que es
+     * otro documento y no lleva serie de letra).
+     */
     public function getCodigoAttribute(): string
     {
-        return self::codigoDe($this->numero);
+        return $this->serie_letra ?? $this->serie_renovacion ?? self::SERIE.'-'.str_pad((string) $this->numero, 3, '0', STR_PAD_LEFT);
     }
 
     protected function casts(): array

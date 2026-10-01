@@ -245,6 +245,8 @@ Route::middleware('auth:api')->group(function () {
     Route::get('movimientos-caja', [MovimientoCajaController::class, 'index']);
 Route::post('movimientos-caja', [MovimientoCajaController::class, 'store']);
     // Letras de cambio: se emiten desde una cuenta por cobrar; aquí se consultan y se anulan.
+    // Las renovaciones de letras tienen su propia lista.
+    Route::get('renovaciones', [\App\Http\Controllers\LetraCambioController::class, 'renovaciones']);
     Route::get('letras-cambio/prellenar', [\App\Http\Controllers\LetraCambioController::class, 'prellenar']);
     Route::get('letras-cambio', [\App\Http\Controllers\LetraCambioController::class, 'index']);
     Route::post('letras-cambio', [\App\Http\Controllers\LetraCambioController::class, 'store']);

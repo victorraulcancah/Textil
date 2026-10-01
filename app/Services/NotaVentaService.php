@@ -47,7 +47,7 @@ class NotaVentaService
             $data = $this->conTipoCambio($data);
             $this->verificarCredito($data);
 
-            $serie = $data['serie'] ?? 'NV01';
+            $serie = $data['serie'] ?? NotaVenta::SERIE;
             $serieDoc = SerieDocumento::where('tipo_documento', 'nota_venta')
                 ->where('serie', $serie)
                 ->lockForUpdate()

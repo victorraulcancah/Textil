@@ -256,9 +256,13 @@ return [
                         // Cobrar una letra es editarla: queda pagada y entra a caja.
                         'letras-cambio/*/cobrar' => 'editar',
                         'letras-cambio/*/sub-estado' => 'editar',
-                        // Renovar gira una letra nueva: es crear.
-                        'letras-cambio/*/renovar' => 'crear',
                     ],
+                ],
+                // Las letras que nacieron de renovar otra (serie RV001): su lista y crear una renovación.
+                'renovaciones' => [
+                    'label' => 'Renovaciones de letras',
+                    'apis' => ['renovaciones'],
+                    'patrones' => ['letras-cambio/*/renovar' => 'crear'],
                 ],
                 'estado-cuenta' => [
                     'label' => 'Estado de cuenta',

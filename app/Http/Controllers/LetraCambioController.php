@@ -18,12 +18,22 @@ class LetraCambioController extends Controller
 {
     private const SERIE = 'L001';
 
+    /** Las letras de cambio emitidas desde cuentas por cobrar (las renovaciones tienen su propia lista). */
     public function index()
     {
-        return response()->json(
-            // La proforma (venta) que se canjea por la letra: sale de la cuenta por cobrar de la que se giró.
-            LetraCambio::with('cliente:id,nombre', 'anterior:id,numero', 'renovacion:id,numero,letra_anterior_id', 'cuentaPorCobrar:id,nota_venta_id,numero_cuota,total_cuotas', 'cuentaPorCobrar.notaVenta:id,serie,numero,fecha_emision')->latest('id')->get(),
-        );
+        return response()->json($this->lista()->whereNull('letra_anterior_id')->get());
+    }
+
+    /** Las renovaciones: letras que nacieron de renovar otra, con su serie RV001-NNN. */
+    public function renovaciones()
+    {
+        return response()->json($this->lista()->whereNotNull('letra_anterior_id')->get());
+    }
+
+    private function lista()
+    {
+        // La proforma (venta) que se canjea por la letra: sale de la cuenta por cobrar de la que se giró.
+        return LetraCambio::with('cliente:id,nombre', 'anterior:id,numero,serie_renovacion', 'renovacion:id,numero,serie_renovacion,letra_anterior_id', 'cuentaPorCobrar:id,nota_venta_id,numero_cuota,total_cuotas', 'cuentaPorCobrar.notaVenta:id,serie,numero,fecha_emision')->latest('id');
     }
 
     public function show(LetraCambio $letrasCambio)
@@ -114,6 +124,8 @@ class LetraCambioController extends Controller
             return LetraCambio::create($data + [
                 'cliente_id' => $cuenta->cliente_id,
                 'numero' => $this->siguienteNumero(),
+                // Una letra lleva su serie LT001-NNN; una renovación (otro documento) no la usa.
+                'serie_letra' => $this->siguienteSerieLetra(),
                 'estado' => 'emitida',
                 'saldo' => $data['importe'],
                 'sub_estado' => 'en_cartera',
@@ -295,6 +307,21 @@ class LetraCambioController extends Controller
         }
 
         return response()->json($letrasCambio->fresh()->load('cliente:id,nombre'));
+    }
+
+    /** La serie de la próxima letra: LT001-001, LT001-002… (las renovaciones no gastan estos números). */
+    private function siguienteSerieLetra(): string
+    {
+        $serie = SerieDocumento::where('tipo_documento', 'letra_serie')
+            ->where('serie', LetraCambio::SERIE)
+            ->lockForUpdate()
+            ->firstOrCreate(
+                ['tipo_documento' => 'letra_serie', 'serie' => LetraCambio::SERIE],
+                ['numero_actual' => 0, 'activo' => true],
+            );
+        $serie->increment('numero_actual');
+
+        return sprintf('%s-%03d', LetraCambio::SERIE, $serie->numero_actual);
     }
 
     /** La serie de la próxima renovación: RV001-001, RV001-002… (correlativo propio). */

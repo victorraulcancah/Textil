@@ -11,6 +11,10 @@ class NotaVenta extends Model
 
     /** Nombre del módulo en la bitácora de auditoría. */
     protected string $auditarModulo = 'Proforma';
+
+    /** La serie con la que se numeran las proformas nuevas: PF01-001, PF01-002… (las anteriores conservan NV01). */
+    public const SERIE = 'PF01';
+
     protected $table = 'notas_venta';
 
     protected $fillable = [

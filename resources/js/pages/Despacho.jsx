@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Camera, Check, ClipboardList, FileText, PackageCheck, ScanLine, TriangleAlert, UserPlus, Users, X } from 'lucide-react';
+import { Camera, Check, ClipboardList, FileText, PackageCheck, PlusCircle, ScanLine, Scissors, TriangleAlert, UserPlus, Users, X } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
@@ -9,7 +9,7 @@ import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import PlanillaTela from '../components/PlanillaTela';
 import PdfViewerModal from '../components/PdfViewerModal';
-import { Alert, Badge, Button, Modal, Spinner, cn } from '../components/ui';
+import { Alert, Badge, Button, Input, Modal, Select, Spinner, cn } from '../components/ui';
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
 
@@ -191,6 +191,76 @@ export default function Despacho() {
             toast.error(err.response?.data?.message ?? 'No se pudo despachar el pedido.');
         } finally {
             setDespachando(false);
+        }
+    };
+
+    /**
+     * Descontar metraje de un rollo ya tomado: un ajuste de sistema con su motivo (los de salida de
+     * Ajustes). El rollo se queda en el pedido con menos metros.
+     */
+    const [descuento, setDescuento] = useState(null);
+    const [motivosAjuste, setMotivosAjuste] = useState(null);
+    const [formDescuento, setFormDescuento] = useState({ metros: '', motivo: '', observaciones: '' });
+    const [guardandoDescuento, setGuardandoDescuento] = useState(false);
+    /** El motivo nuevo que se está escribiendo (null = el campo está cerrado). */
+    const [motivoNuevo, setMotivoNuevo] = useState(null);
+    const [guardandoMotivo, setGuardandoMotivo] = useState(false);
+
+    /** Los datos del rollo (código, metros, color) tal como están en el pedido. */
+    const rolloDelPedido = (rolloId) =>
+        (detalle?.detalles ?? []).flatMap((d) => d.rollos ?? []).find((r) => r.rollo_id === rolloId) ?? null;
+
+    const abrirDescuento = async (rolloId) => {
+        const r = rolloDelPedido(rolloId);
+        if (!r) return;
+        setDescuento(r);
+        setFormDescuento({ metros: '', motivo: '', observaciones: '' });
+        setMotivoNuevo(null);
+        if (motivosAjuste) return;
+        try {
+            const { data } = await api.get('/ordenes-venta/motivos-ajuste');
+            setMotivosAjuste(asList({ data }));
+        } catch (err) {
+            setDescuento(null);
+            toast.error(err.response?.data?.message ?? 'No se pudieron cargar los motivos de ajuste.');
+        }
+    };
+
+    /** Crea un motivo (queda en el catálogo de Ajustes) y lo deja elegido. */
+    const agregarMotivo = async () => {
+        const nombre = (motivoNuevo ?? '').trim();
+        if (!nombre) return;
+        setGuardandoMotivo(true);
+        try {
+            const { data } = await api.post('/ordenes-venta/motivos-ajuste/nuevo', { nombre });
+            setMotivosAjuste((prev) => [...(prev ?? []), data]);
+            setFormDescuento((f) => ({ ...f, motivo: data.nombre }));
+            setMotivoNuevo(null);
+            toast.success(`Motivo "${data.nombre}" agregado.`);
+        } catch (err) {
+            toast.error(err.response?.data?.errors?.nombre?.[0] ?? err.response?.data?.message ?? 'No se pudo agregar el motivo.');
+        } finally {
+            setGuardandoMotivo(false);
+        }
+    };
+
+    const guardarDescuento = async () => {
+        setGuardandoDescuento(true);
+        try {
+            const { data } = await api.post(`/ordenes-venta/${detalle.id}/descontar-metraje`, {
+                rollo_id: descuento.rollo_id,
+                metros: Number(formDescuento.metros),
+                motivo: formDescuento.motivo,
+                observaciones: formDescuento.observaciones || undefined,
+            });
+            setDetalle(data?.data ?? data);
+            setDescuento(null);
+            toast.success(`Se descontaron ${num(formDescuento.metros)} m de ${descuento.codigo}.`);
+            await cargar();
+        } catch (err) {
+            toast.error(err.response?.data?.message ?? 'No se pudo descontar el metraje.');
+        } finally {
+            setGuardandoDescuento(false);
         }
     };
 
@@ -560,15 +630,26 @@ export default function Despacho() {
                                             escaneando || separado
                                                 ? (f) =>
                                                       f.rolloId ? (
-                                                          <button
-                                                              type="button"
-                                                              aria-label={`Quitar ${f.detalle ?? 'rollo'}`}
-                                                              title={separado ? 'Quitar este rollo: el pedido vuelve a preparación' : 'Quitar este rollo del pedido'}
-                                                              onClick={() => quitarRollo(f.rolloId)}
-                                                              className="rounded p-0.5 text-red-600 transition hover:bg-red-50"
-                                                          >
-                                                              <X className="h-3.5 w-3.5" />
-                                                          </button>
+                                                          <span className="inline-flex items-center gap-1">
+                                                              <button
+                                                                  type="button"
+                                                                  aria-label={`Descontar metraje de ${f.detalle ?? 'rollo'}`}
+                                                                  title="Descontar metraje de este rollo (ajuste de sistema)"
+                                                                  onClick={() => abrirDescuento(f.rolloId)}
+                                                                  className="rounded p-0.5 text-primary-600 transition hover:bg-primary-50"
+                                                              >
+                                                                  <Scissors className="h-3.5 w-3.5" />
+                                                              </button>
+                                                              <button
+                                                                  type="button"
+                                                                  aria-label={`Quitar ${f.detalle ?? 'rollo'}`}
+                                                                  title={separado ? 'Quitar este rollo: el pedido vuelve a preparación' : 'Quitar este rollo del pedido'}
+                                                                  onClick={() => quitarRollo(f.rolloId)}
+                                                                  className="rounded p-0.5 text-red-600 transition hover:bg-red-50"
+                                                              >
+                                                                  <X className="h-3.5 w-3.5" />
+                                                              </button>
+                                                          </span>
                                                       ) : null
                                                 : null
                                         }
@@ -595,6 +676,101 @@ export default function Despacho() {
                 nombre={pdf?.nombre}
                 titulo="Requerimiento de almacén"
             />
+
+            {/* Descontar metraje de un rollo: ajuste de sistema con su motivo. */}
+            <Modal
+                open={Boolean(descuento)}
+                onClose={() => setDescuento(null)}
+                title="Descontar metraje"
+                description={descuento ? `Rollo ${descuento.codigo} · ${descuento.color ?? ''} · tiene ${num(descuento.metros_rollo)} m` : ''}
+                size="sm"
+                footer={
+                    <>
+                        <Button variant="secondary" onClick={() => setDescuento(null)}>
+                            Cancelar
+                        </Button>
+                        <Button
+                            loading={guardandoDescuento}
+                            disabled={!(Number(formDescuento.metros) > 0) || !formDescuento.motivo}
+                            onClick={guardarDescuento}
+                        >
+                            Descontar
+                        </Button>
+                    </>
+                }
+            >
+                {!motivosAjuste ? (
+                    <div className="flex justify-center py-6">
+                        <Spinner className="text-primary-600" />
+                    </div>
+                ) : (
+                    <div className="space-y-3">
+                        <Input
+                            label="Metros a descontar"
+                            type="number"
+                            min="0"
+                            step="any"
+                            autoFocus
+                            value={formDescuento.metros}
+                            onChange={(e) => setFormDescuento((f) => ({ ...f, metros: e.target.value }))}
+                        />
+                        {/* El motivo, con el icono de más para crear otros sin salir de aquí. */}
+                        <div className="flex items-end gap-2">
+                            <Select
+                                label="Motivo del ajuste de sistema"
+                                value={formDescuento.motivo}
+                                onChange={(e) => setFormDescuento((f) => ({ ...f, motivo: e.target.value }))}
+                                options={[
+                                    { value: '', label: 'Elige el motivo' },
+                                    ...motivosAjuste.map((m) => ({ value: m.nombre, label: m.nombre })),
+                                ]}
+                                className="flex-1"
+                            />
+                            <button
+                                type="button"
+                                aria-label="Agregar un motivo"
+                                title="Agregar un motivo nuevo"
+                                onClick={() => setMotivoNuevo((v) => (v === null ? '' : null))}
+                                className="mb-1 rounded-full p-1 text-primary-600 transition hover:bg-primary-50"
+                            >
+                                <PlusCircle className="h-6 w-6" />
+                            </button>
+                        </div>
+                        {motivoNuevo !== null && (
+                            <div className="flex items-end gap-2 rounded-md bg-gray-50 p-2">
+                                <Input
+                                    label="Motivo nuevo"
+                                    autoFocus
+                                    value={motivoNuevo}
+                                    onChange={(e) => setMotivoNuevo(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            agregarMotivo();
+                                        }
+                                    }}
+                                    placeholder="Ej.: Falla de tela"
+                                    className="flex-1"
+                                />
+                                <Button size="sm" loading={guardandoMotivo} disabled={!motivoNuevo.trim()} onClick={agregarMotivo}>
+                                    Agregar
+                                </Button>
+                            </div>
+                        )}
+                        <Input
+                            label="Observación (opcional)"
+                            value={formDescuento.observaciones}
+                            onChange={(e) => setFormDescuento((f) => ({ ...f, observaciones: e.target.value }))}
+                        />
+                        {descuento && Number(formDescuento.metros) > 0 && (
+                            <p className="text-xs text-warm-500">
+                                El rollo quedará en {num(Math.max(Number(descuento.metros_rollo) - Number(formDescuento.metros), 0))} m
+                                y el pedido se despacha con esos metros.
+                            </p>
+                        )}
+                    </div>
+                )}
+            </Modal>
 
             {/* El encargado reparte el pedido: uno o varios almaceneros. */}
             <Modal

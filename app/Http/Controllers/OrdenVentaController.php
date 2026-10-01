@@ -9,6 +9,7 @@ use App\Http\Requests\OrdenVenta\StoreOrdenVentaRequest;
 use App\Http\Requests\OrdenVenta\UpdateOrdenVentaRequest;
 use App\Http\Resources\NotaVentaResource;
 use App\Http\Resources\OrdenVentaResource;
+use App\Models\MotivoMovimiento;
 use App\Models\OrdenVenta;
 use App\Services\OrdenVentaService;
 use Illuminate\Http\JsonResponse;
@@ -181,6 +182,59 @@ class OrdenVentaController extends Controller
     {
         return new OrdenVentaResource(
             $this->pedidos->anular($ordenesVenta, $request->validated()['motivo'])->load(self::RELACIONES)
+        );
+    }
+
+    /** Los motivos con los que se puede descontar metraje de un rollo (los de salida de Ajustes). */
+    public function motivosAjuste()
+    {
+        return response()->json(
+            MotivoMovimiento::where('ambito', 'inventario')->where('tipo', 'salida')
+                ->where('activo', true)->where('es_sistema', false)->whereNull('categoria_gasto')
+                ->orderBy('id')->get(['id', 'nombre'])
+        );
+    }
+
+    /** Agrega un motivo de salida de inventario (el mismo catálogo de Ajustes) sin salir de la preparación. */
+    public function crearMotivoAjuste(Request $request)
+    {
+        $nombre = trim($request->validate(['nombre' => 'required|string|max:255'])['nombre']);
+
+        $existe = MotivoMovimiento::where('ambito', 'inventario')->where('tipo', 'salida')
+            ->whereRaw('lower(nombre) = ?', [mb_strtolower($nombre)])->exists();
+        if ($existe) {
+            return response()->json(['message' => 'Ese motivo ya existe.', 'errors' => ['nombre' => ['Ese motivo ya existe.']]], 422);
+        }
+
+        $motivo = MotivoMovimiento::create([
+            'nombre' => $nombre,
+            'tipo' => 'salida',
+            'ambito' => 'inventario',
+            'activo' => true,
+        ]);
+
+        return response()->json($motivo->only(['id', 'nombre']), 201);
+    }
+
+    /** Descuenta metros de un rollo del pedido, como ajuste de sistema con su motivo. */
+    public function descontarMetraje(Request $request, OrdenVenta $ordenesVenta)
+    {
+        $datos = $request->validate([
+            'rollo_id' => 'required|integer',
+            'metros' => 'required|numeric|min:0.01',
+            'motivo' => 'required|string|max:255',
+            'observaciones' => 'nullable|string|max:500',
+        ]);
+
+        $motivo = MotivoMovimiento::where('ambito', 'inventario')->where('tipo', 'salida')
+            ->where('activo', true)->where('es_sistema', false)->where('nombre', $datos['motivo'])->first();
+        if (! $motivo) {
+            return response()->json(['message' => 'Elige un motivo de ajuste válido.'], 422);
+        }
+
+        return new OrdenVentaResource(
+            $this->pedidos->descontarMetraje($ordenesVenta, (int) $datos['rollo_id'], (float) $datos['metros'], $motivo->nombre, $datos['observaciones'] ?? null)
+                ->load(self::RELACIONES)
         );
     }
 

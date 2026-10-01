@@ -203,6 +203,10 @@ return [
                         'ordenes-venta/almaceneros' => 'ver',
                         'ordenes-venta/*/asignar' => 'asignar',
                         'ordenes-venta/*/escanear' => 'editar',
+                        'ordenes-venta/motivos-ajuste' => 'ver',
+                        // Agregar un motivo nuevo es escribir: pide editar, no solo ver.
+                        'ordenes-venta/motivos-ajuste/nuevo' => 'editar',
+                        'ordenes-venta/*/descontar-metraje' => 'editar',
                         'ordenes-venta/*/quitar-rollo' => 'editar',
                         'ordenes-venta/*/separar' => 'editar',
                         'ordenes-venta/*/despachar' => 'editar',

@@ -23,7 +23,7 @@ const Columnas = ({ precios, accion, colorCode }) => (
         ).map((ancho, i) => (
             <col key={i} style={{ width: `${ancho}%` }} />
         ))}
-        {accion && <col style={{ width: '48px' }} />}
+        {accion && <col style={{ width: '72px' }} />}
     </colgroup>
 );
 

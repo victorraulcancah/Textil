@@ -49,6 +49,7 @@ class OrdenVentaService
         protected NotaVentaService $notasVenta,
         protected StockService $stock,
         protected TipoCambioService $tiposCambio,
+        protected AjusteRolloService $ajustesRollo,
     ) {}
 
     /**
@@ -364,6 +365,69 @@ class OrdenVentaService
                 'rollos_pedidos' => $avance['rollos_pedidos'],
                 'completo' => $orden->estaVerificada(),
             ];
+        });
+    }
+
+    /**
+     * Descuenta metros de un rollo que ya está en el pedido, como un ajuste de sistema con su motivo
+     * (el rollo se queda en el pedido con menos metros; no se quita). El pedido se cobra y se
+     * despacha con los metros que quedan.
+     */
+    public function descontarMetraje(OrdenVenta $orden, int $rolloId, float $metros, string $motivo, ?string $observaciones = null): OrdenVenta
+    {
+        if (! in_array($orden->estado, [OrdenVenta::PREPARANDO, OrdenVenta::SEPARADO], true)) {
+            throw new \DomainException('Solo se puede descontar metraje mientras el pedido se prepara.');
+        }
+
+        $metros = round($metros, 2);
+        if ($metros <= 0) {
+            throw new \DomainException('Pon cuántos metros descontar.');
+        }
+
+        return DB::transaction(function () use ($orden, $rolloId, $metros, $motivo, $observaciones) {
+            $orden->load('detalles.rollos.rollo');
+
+            $linea = $orden->detalles->first(fn ($d) => $d->rollos->contains('rollo_id', $rolloId));
+            $asignado = $linea?->rollos->firstWhere('rollo_id', $rolloId);
+            if (! $linea || ! $asignado) {
+                throw new \DomainException('Ese rollo no está en este pedido.');
+            }
+
+            $rollo = Rollo::lockForUpdate()->findOrFail($rolloId);
+            if ($metros >= (float) $rollo->metros_actual) {
+                throw new \DomainException(
+                    "El rollo {$rollo->codigo} tiene {$rollo->metros_actual} m: no se pueden descontar {$metros} m (si no sirve, quítalo del pedido)."
+                );
+            }
+
+            $this->ajustesRollo->descontar(
+                $rollo,
+                $metros,
+                $motivo,
+                trim("Preparación del pedido ".($orden->requerimiento_numero ?? $orden->documento).". ".($observaciones ?? '')),
+            );
+
+            // El pedido sigue con ese rollo, pero con lo que ahora mide: lo que se llevaba entero se lleva
+            // entero con los metros que quedan; un corte no puede pasar de lo que da el rollo.
+            $rollo->refresh();
+            $metrosRollo = (float) $rollo->metros_actual;
+            $nuevos = $linea->esPorRollos() ? $metrosRollo : min((float) $asignado->metros, $metrosRollo);
+            $asignado->update([
+                'metros' => $nuevos,
+                'metros_rollo' => $metrosRollo,
+                'entero' => $nuevos + 0.001 >= $metrosRollo,
+            ]);
+
+            $this->revalorizar($linea);
+            $this->recalcularTotales($orden);
+
+            // Con menos metros puede que ya no esté cubierto lo pedido: vuelve a preparación.
+            $orden->load('detalles.rollos');
+            if ($orden->estado === OrdenVenta::SEPARADO && ! $orden->estaVerificada()) {
+                $orden->update(['estado' => OrdenVenta::PREPARANDO]);
+            }
+
+            return $this->conRelaciones($orden->fresh());
         });
     }
 

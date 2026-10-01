@@ -244,6 +244,17 @@ return [
                 'cierres-caja' => ['label' => 'Cierres de caja', 'apis' => ['cierres-caja'], 'pdf' => ['cierre-caja']],
                 'motivos-movimiento' => ['label' => 'Motivos de movimiento', 'apis' => ['motivos-movimiento']],
                 'cuentas-por-cobrar' => ['label' => 'Cuentas por cobrar', 'apis' => ['cuentas-por-cobrar']],
+                // Las letras de cambio se emiten desde una cuenta por cobrar y se consultan aquí, con su PDF.
+                'letras-cambio' => [
+                    'label' => 'Letras de cambio',
+                    'apis' => ['letras-cambio'],
+                    'pdf' => ['letra-cambio'],
+                    'patrones' => [
+                        // Los datos que se proponen al emitir son parte de crear la letra; anular es eliminar.
+                        'letras-cambio/prellenar' => 'crear',
+                        'letras-cambio/*/anular' => 'eliminar',
+                    ],
+                ],
                 'estado-cuenta' => [
                     'label' => 'Estado de cuenta',
                     'apis' => ['estado-cuenta'],

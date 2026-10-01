@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileSearch, Wallet } from 'lucide-react';
+import { FileSearch, FileSignature, Wallet } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { money } from '../lib/moneda';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
+import LetraCambioModal from '../components/LetraCambioModal';
 import PagosCuentaModal from '../components/PagosCuentaModal';
+import PdfViewerModal from '../components/PdfViewerModal';
 import { Alert, Badge, Button, DataTable, SearchSelect, Select } from '../components/ui';
 
 const ESTADOS = [
@@ -37,6 +39,9 @@ export default function CuentasPorCobrar() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [pagoCuenta, setPagoCuenta] = useState(null);
+    /** La cuenta de la que se emite una letra, y la letra recién emitida (para abrir su PDF). */
+    const [letraCuenta, setLetraCuenta] = useState(null);
+    const [letraEmitida, setLetraEmitida] = useState(null);
     const [fEstado, setFEstado] = useState('');
     const [fCliente, setFCliente] = useState('');
 
@@ -111,6 +116,17 @@ export default function CuentasPorCobrar() {
                     <Button size="sm" variant="secondary" onClick={() => setPagoCuenta(row)}>
                         <Wallet className="h-4 w-4" /> Pagos
                     </Button>
+                    {puede('tesoreria.letras-cambio.crear') && ['pendiente', 'parcial'].includes(row.estado) && (
+                        <button
+                            type="button"
+                            aria-label="Emitir letra de cambio"
+                            title="Emitir letra de cambio"
+                            onClick={() => setLetraCuenta(row)}
+                            className="rounded-md p-1.5 text-primary-600 transition hover:bg-primary-50"
+                        >
+                            <FileSignature className="h-4 w-4" />
+                        </button>
+                    )}
                     {puede('tesoreria.estado-cuenta') && (
                         <button
                             type="button"
@@ -176,6 +192,24 @@ export default function CuentasPorCobrar() {
                         )}
                     </div>
                 }
+            />
+
+            <LetraCambioModal
+                open={!!letraCuenta}
+                cuenta={letraCuenta}
+                onClose={() => setLetraCuenta(null)}
+                onEmitida={(letra) => setLetraEmitida(letra)}
+            />
+
+            {/* Recién emitida: se abre su PDF para imprimirla. */}
+            <PdfViewerModal
+                open={Boolean(letraEmitida)}
+                onClose={() => setLetraEmitida(null)}
+                tipo="letra-cambio"
+                id={letraEmitida?.id}
+                nombre={letraEmitida ? `Letra ${letraEmitida.numero}` : ''}
+                titulo="Letra de cambio"
+                formatos={['a4']}
             />
 
             <PagosCuentaModal

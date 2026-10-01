@@ -45,6 +45,7 @@ return [
         'etiqueta-rollo' => \App\Pdf\Documentos\EtiquetaRolloPdf::class,
         'orden-venta' => \App\Pdf\Documentos\OrdenVentaPdf::class,
         'requerimiento-almacen' => \App\Pdf\Documentos\RequerimientoAlmacenPdf::class,
+        'letra-cambio' => \App\Pdf\Documentos\LetraCambioPdf::class,
         // El {id} es el cliente; el rango va en ?desde=&hasta=.
         'estado-cuenta' => \App\Pdf\Documentos\EstadoCuentaPdf::class,
     ],

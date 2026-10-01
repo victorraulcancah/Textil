@@ -244,6 +244,12 @@ Route::middleware('auth:api')->group(function () {
     Route::post('mi-caja/cerrar', [MiCajaController::class, 'cerrar']);
     Route::get('movimientos-caja', [MovimientoCajaController::class, 'index']);
 Route::post('movimientos-caja', [MovimientoCajaController::class, 'store']);
+    // Letras de cambio: se emiten desde una cuenta por cobrar; aquí se consultan y se anulan.
+    Route::get('letras-cambio/prellenar', [\App\Http\Controllers\LetraCambioController::class, 'prellenar']);
+    Route::get('letras-cambio', [\App\Http\Controllers\LetraCambioController::class, 'index']);
+    Route::post('letras-cambio', [\App\Http\Controllers\LetraCambioController::class, 'store']);
+    Route::get('letras-cambio/{letras_cambio}', [\App\Http\Controllers\LetraCambioController::class, 'show']);
+    Route::post('letras-cambio/{letras_cambio}/anular', [\App\Http\Controllers\LetraCambioController::class, 'anular']);
     Route::get('cuentas-por-cobrar', [CuentaPorCobrarController::class, 'index']);
     Route::get('cuentas-por-cobrar/{cuenta}', [CuentaPorCobrarController::class, 'show']);
     Route::post('cuentas-por-cobrar/{cuenta}/pagos', [CuentaPorCobrarController::class, 'registrarPago']);

@@ -581,6 +581,25 @@ export default function CrearCompra() {
     const setItem = (i, patch) =>
         setItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
 
+    /**
+     * Enter en el color code de un color: pasa al siguiente y, si ese está vacío, le propone el
+     * mismo código con el número siguiente (DTY-001 → DTY-002; sin número, el mismo). Enter otra
+     * vez y sigue con el que viene.
+     */
+    const enterColorCode = (e, actual, siguiente) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        if (!siguiente) return;
+        const codigo = (actual.it.color_code ?? '').trim();
+        if (codigo && !(siguiente.it.color_code ?? '').trim()) {
+            const proximo = codigo.replace(/(\d+)(\D*)$/, (_, n, resto) => String(Number(n) + 1).padStart(n.length, '0') + resto);
+            setItem(siguiente.i, { color_code: proximo });
+        }
+        const campo = document.querySelector(`[data-color-code="${siguiente.i}"]`);
+        campo?.focus();
+        campo?.select();
+    };
+
     /** Cambiar la unidad de una fila trae el precio de compra de esa presentación. */
     const cambiarUnidadItem = (i, presentacionId) =>
         setItem(i, {
@@ -1123,7 +1142,7 @@ export default function CrearCompra() {
                                                                             <span className="text-right">Subtotal</span>
                                                                             <span />
                                                                         </div>
-                                                                        {colores.map(({ it, i }) => {
+                                                                        {colores.map(({ it, i }, n) => {
                                                                             const color = colorDe(it);
                                                                             const rollosIt = Number(it.rollos) || 0;
                                                                             const factor = rollosIt > 0 ? Math.round(((Number(it.cantidad) || 0) / rollosIt) * 100) / 100 : 0;
@@ -1132,6 +1151,8 @@ export default function CrearCompra() {
                                                                                     <Input
                                                                                         value={it.color_code ?? ''}
                                                                                         onChange={(e) => setItem(i, { color_code: e.target.value })}
+                                                                                        onKeyDown={(e) => enterColorCode(e, colores[n], colores[n + 1])}
+                                                                                        data-color-code={i}
                                                                                         placeholder="Código"
                                                                                         maxLength={50}
                                                                                         aria-label={`Color code de ${producto?.nombre} ${color?.nombre ?? ''}`}

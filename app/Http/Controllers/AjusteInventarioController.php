@@ -27,7 +27,8 @@ class AjusteInventarioController extends Controller
         'usuarioSolicita:id,name',
         'detalles.presentacion.producto.marca',
         'detalles.presentacion.producto.unidadMedida',
-        'detalles.color:id,nombre,codigo',
+        'detalles.color:id,nombre,codigo,proveedor_id',
+        'detalles.color.proveedor:id,nombre',
         'detalles.rollo:id,codigo',
     ];
 

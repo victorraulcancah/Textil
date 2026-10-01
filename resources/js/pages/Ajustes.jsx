@@ -25,6 +25,15 @@ const estadoInfo = {
     rechazado: { label: 'Rechazado', variant: 'red' },
 };
 
+/**
+ * El proveedor de una línea del ajuste: el del color de la tela (cada color tiene el suyo) y, si no, el que se
+ * puso en el ajuste. Los ajustes de rollos no llevan proveedor propio.
+ */
+const proveedorDeLinea = (ajuste, linea) => linea?.color?.proveedor?.nombre ?? ajuste?.proveedor?.nombre ?? '';
+
+/** Los proveedores de un ajuste (sin repetir): el suyo y los de sus líneas. */
+const proveedoresDe = (ajuste) => [...new Set([ajuste?.proveedor?.nombre, ...(ajuste?.detalles ?? []).map((d) => d.color?.proveedor?.nombre)].filter(Boolean))];
+
 /** El día (aaaa-mm-dd) en la hora local, para comparar con los filtros de fecha. */
 const diaLocal = (fecha) => {
     if (!fecha) return '';
@@ -291,7 +300,7 @@ export default function Ajustes() {
                 { value: '__sin__', label: 'Sin origen' },
                 ...[...new Set(motivos.map((m) => m.origen).filter(Boolean))].sort((a, b) => a.localeCompare(b)).map((o) => ({ value: o, label: o })),
             ],
-            proveedores: lista(distintos((a) => a.proveedor?.nombre)),
+            proveedores: lista([...new Set(ajustes.flatMap(proveedoresDe))].sort((a, b) => a.localeCompare(b))),
             usuarios: lista(distintos((a) => a.usuario_solicita?.name)),
         };
     }, [ajustes, motivos]);
@@ -303,7 +312,7 @@ export default function Ajustes() {
         if (activeFilters.motivo && a.motivo !== activeFilters.motivo) return false;
         if (activeFilters.origen === '__sin__' && origenDe(a)) return false;
         if (activeFilters.origen && activeFilters.origen !== '__sin__' && origenDe(a) !== activeFilters.origen) return false;
-        if (activeFilters.proveedor && a.proveedor?.nombre !== activeFilters.proveedor) return false;
+        if (activeFilters.proveedor && !proveedoresDe(a).includes(activeFilters.proveedor)) return false;
         if (activeFilters.registra && a.usuario_solicita?.name !== activeFilters.registra) return false;
         const dia = diaLocal(a.fecha);
         if (activeFilters.desde && (!dia || dia < activeFilters.desde)) return false;
@@ -317,22 +326,37 @@ export default function Ajustes() {
             toast.error('No hay ajustes con esos filtros para exportar.');
             return;
         }
-        const headers = ['#', 'Fecha', 'Número', 'Almacén', 'Proveedor', 'Motivo', 'Origen del motivo', 'Observación', 'Registra', 'Estado', 'Tipo', 'Ítems', 'Total'];
-        const rows = filtered.map((a, i) => [
-            i + 1,
-            a.fecha ? new Date(a.fecha).toLocaleDateString('es-PE') : '',
-            a.documento ?? `#${a.id}`,
-            a.almacen?.nombre ?? '',
-            a.proveedor?.nombre ?? '',
-            a.motivo ?? '',
-            origenDe(a),
-            a.observaciones ?? '',
-            a.usuario_solicita?.name ?? '',
-            estadoInfo[a.estado]?.label ?? a.estado ?? '',
-            tipoInfo[a.tipo]?.label ?? a.tipo ?? '',
-            a.detalles_count ?? '',
-            Number(a.total) || 0,
-        ]);
+        // El formato del reporte de ajustes: una fila por cada línea del ajuste (rollo, descripción, cantidad)
+        // con los datos del ajuste al lado.
+        const headers = [
+            '#', 'Fecha', 'Número', 'Almacén', 'ROLLO', 'DESCRIPCIÓN', 'CANTIDAD', 'Proveedor', 'Motivo', 'Origen del motivo',
+            'Observación', 'Registra', 'Estado', 'Tipo', 'Ítems', 'Total',
+        ];
+        const rows = filtered.flatMap((a, i) => {
+            const lineas = a.detalles?.length ? a.detalles : [null];
+            return lineas.map((d) => {
+                const producto = d?.presentacion?.producto;
+                return [
+                    i + 1,
+                    a.fecha ? new Date(a.fecha).toLocaleDateString('es-PE') : '',
+                    a.documento ?? `#${a.id}`,
+                    a.almacen?.nombre ?? '',
+                    // Una salida de tela trae el rollo; una entrada, cuántos rollos creó.
+                    d?.rollo?.codigo ?? (d?.rollos ? `${d.rollos} rollos` : ''),
+                    d ? [producto?.nombre, d.color?.nombre].filter(Boolean).join(' - ') : '',
+                    d ? Number(d.cantidad) || 0 : '',
+                    proveedorDeLinea(a, d),
+                    a.motivo ?? '',
+                    origenDe(a),
+                    a.observaciones ?? '',
+                    a.usuario_solicita?.name ?? '',
+                    estadoInfo[a.estado]?.label ?? a.estado ?? '',
+                    tipoInfo[a.tipo]?.label ?? a.tipo ?? '',
+                    a.detalles?.length ?? 0,
+                    d ? Number(d.subtotal) || 0 : Number(a.total) || 0,
+                ];
+            });
+        });
         descargarExcel(`ajustes_${diaLocal(new Date())}.xls`, headers, rows);
     };
 
@@ -525,10 +549,10 @@ export default function Ajustes() {
             key: 'proveedor',
             label: 'Proveedor',
             width: '150px',
-            getSearchValue: (row) => row.proveedor?.nombre,
+            getSearchValue: (row) => proveedoresDe(row).join(' '),
             render: (row) => (
-                <span className="block truncate text-warm-500" title={row.proveedor?.nombre ?? ''}>
-                    {row.proveedor?.nombre ?? '—'}
+                <span className="block truncate text-warm-500" title={proveedoresDe(row).join(', ')}>
+                    {proveedoresDe(row).join(', ') || '—'}
                 </span>
             ),
         },
@@ -792,7 +816,7 @@ export default function Ajustes() {
                                         <DetalleCard
                                             key={d.id}
                                             titulo={producto?.nombre ?? '—'}
-                                            subtitulo={[producto?.codigo, d.presentacion?.nombre, producto?.marca?.nombre].filter(Boolean).join(' · ')}
+                                            subtitulo={[producto?.codigo, d.presentacion?.nombre, producto?.marca?.nombre, proveedorDeLinea(seleccionado, d)].filter(Boolean).join(' · ')}
                                             campos={[
                                                 { label: 'Cantidad', value: num(d.cantidad) },
                                                 { label: 'Costo', value: money(d.costo_unitario) },
@@ -822,13 +846,14 @@ export default function Ajustes() {
                             )}
                         </div>
                         <div className="overflow-x-auto">
-                            <table className="w-full min-w-[820px] text-sm">
+                            <table className="w-full min-w-[960px] text-sm">
                                 <thead>
                                     <tr className="bg-primary-600 text-left text-xs font-semibold uppercase tracking-wide text-white">
                                         <th className="w-12 px-3 py-2.5 text-center">#</th>
                                         <th className="w-28 px-3 py-2.5">Código</th>
                                         <th className="px-3 py-2.5">Descripción</th>
                                         <th className="w-32 px-3 py-2.5">Marca</th>
+                                        <th className="w-40 px-3 py-2.5">Proveedor</th>
                                         <th className="w-24 px-3 py-2.5 text-right">Cantidad</th>
                                         <th className="w-32 px-3 py-2.5">U. Medida</th>
                                         <th className="w-28 px-3 py-2.5 text-right">Costo</th>
@@ -838,7 +863,7 @@ export default function Ajustes() {
                                 <tbody className="divide-y divide-gray-100">
                                     {detalleSeleccionado.length === 0 && (
                                         <tr>
-                                            <td colSpan={8} className="px-3 py-10 text-center text-sm text-warm-500">
+                                            <td colSpan={9} className="px-3 py-10 text-center text-sm text-warm-500">
                                                 {seleccionado
                                                     ? 'Este ajuste no tiene productos.'
                                                     : 'Selecciona un ajuste arriba para ver su detalle.'}
@@ -866,6 +891,9 @@ export default function Ajustes() {
                                                 </td>
                                                 <td className="px-3 py-2 text-warm-500">
                                                     {producto?.marca?.nombre ?? '—'}
+                                                </td>
+                                                <td className="px-3 py-2 text-warm-700">
+                                                    {proveedorDeLinea(seleccionado, d) || '—'}
                                                 </td>
                                                 <td className="px-3 py-2 text-right font-medium text-warm-900">
                                                     {num(d.cantidad)}

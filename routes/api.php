@@ -251,6 +251,7 @@ Route::post('movimientos-caja', [MovimientoCajaController::class, 'store']);
     Route::get('letras-cambio/{letras_cambio}', [\App\Http\Controllers\LetraCambioController::class, 'show']);
     Route::post('letras-cambio/{letras_cambio}/anular', [\App\Http\Controllers\LetraCambioController::class, 'anular']);
     Route::post('letras-cambio/{letras_cambio}/cobrar', [\App\Http\Controllers\LetraCambioController::class, 'cobrar']);
+    Route::post('letras-cambio/{letras_cambio}/renovar', [\App\Http\Controllers\LetraCambioController::class, 'renovar']);
     Route::post('letras-cambio/{letras_cambio}/sub-estado', [\App\Http\Controllers\LetraCambioController::class, 'cambiarSubEstado']);
     Route::get('cuentas-por-cobrar', [CuentaPorCobrarController::class, 'index']);
     Route::get('cuentas-por-cobrar/{cuenta}', [CuentaPorCobrarController::class, 'show']);

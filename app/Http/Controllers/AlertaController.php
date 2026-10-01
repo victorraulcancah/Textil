@@ -57,7 +57,7 @@ class AlertaController extends Controller
         $aviso = now()->addDays(EstadoCuentaService::DIAS_AVISO)->toDateString();
 
         CuentaPorCobrar::with(['cliente:id,nombre', 'notaVenta:id,serie,numero'])
-            ->withSum(['letras as en_letras' => fn ($q) => $q->where('estado', 'emitida')], 'importe')
+            ->withSum(['letras as en_letras' => fn ($q) => $q->where('estado', 'emitida')], 'saldo')
             ->whereIn('estado', ['pendiente', 'parcial'])
             ->whereDate('fecha_vencimiento', '<=', $aviso)
             ->orderBy('fecha_vencimiento')

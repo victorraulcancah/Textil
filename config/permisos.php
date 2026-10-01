@@ -256,6 +256,8 @@ return [
                         // Cobrar una letra es editarla: queda pagada y entra a caja.
                         'letras-cambio/*/cobrar' => 'editar',
                         'letras-cambio/*/sub-estado' => 'editar',
+                        // Renovar gira una letra nueva: es crear.
+                        'letras-cambio/*/renovar' => 'crear',
                     ],
                 ],
                 'estado-cuenta' => [

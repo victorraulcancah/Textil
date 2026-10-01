@@ -21,9 +21,9 @@ class CuentaPorCobrarController extends Controller
             CuentaPorCobrar::with([
                 'cliente:id,nombre', 'notaVenta:id,serie,numero,fecha_emision', 'pagos.cuentaBancaria:id,alias,numero_cuenta', 'pagos.billetera:id,nombre',
                 // Las letras vigentes que se emitieron desde la cuenta: la relación se ve en la lista.
-                'letras' => fn ($q) => $q->where('estado', 'emitida')->select('id', 'numero', 'cuenta_por_cobrar_id', 'importe', 'moneda', 'fecha_vencimiento')->orderBy('numero'),
+                'letras' => fn ($q) => $q->where('estado', 'emitida')->select('id', 'numero', 'cuenta_por_cobrar_id', 'importe', 'saldo', 'moneda', 'fecha_vencimiento')->orderBy('numero'),
             ])
-                ->withSum(['letras as en_letras' => fn ($q) => $q->where('estado', 'emitida')], 'importe')
+                ->withSum(['letras as en_letras' => fn ($q) => $q->where('estado', 'emitida')], 'saldo')
                 ->latest('id')
                 ->get()
         );

@@ -126,7 +126,7 @@ export default function CuentasPorCobrar() {
             key: 'canje',
             label: 'Concepto',
             // Qué proforma se cambió por qué letra: solo si de esta cuenta se giró una letra.
-            getSearchValue: (row) => (row.letras ?? []).map((l) => `letra ${l.numero}`).join(' '),
+            getSearchValue: (row) => (row.letras ?? []).map((l) => `letra ${l.codigo}`).join(' '),
             render: (row) => {
                 return row.letras?.length ? (
                     <span className="whitespace-nowrap text-sm text-warm-800">Canje proforma x letra</span>
@@ -146,11 +146,11 @@ export default function CuentasPorCobrar() {
                             <button
                                 key={l.id}
                                 type="button"
-                                title={`Letra N° ${l.numero} · ${money(l.importe, l.moneda)} · vence ${fecha(l.fecha_vencimiento)}`}
+                                title={`Letra ${l.codigo} · ${money(l.importe, l.moneda)} · vence ${fecha(l.fecha_vencimiento)}`}
                                 onClick={() => setLetraEmitida(l)}
                                 className="inline-flex"
                             >
-                                <Badge variant="blue">Letra N° {l.numero}</Badge>
+                                <Badge variant="blue">{l.codigo}</Badge>
                             </button>
                         ))}
                     </span>
@@ -267,7 +267,7 @@ export default function CuentasPorCobrar() {
                 onClose={() => setLetraEmitida(null)}
                 tipo="letra-cambio"
                 id={letraEmitida?.id}
-                nombre={letraEmitida ? `Letra ${letraEmitida.numero}` : ''}
+                nombre={letraEmitida ? `Letra ${letraEmitida.codigo}` : ''}
                 titulo="Letra de cambio"
                 formatos={['a4']}
             />

@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="utf-8">
-    <title>Letra de cambio {{ $letra->numero }}</title>
+    <title>Letra de cambio {{ $letra->codigo }}</title>
     <style>
         @page { margin: 22px; }
         * { box-sizing: border-box; }
@@ -42,7 +42,7 @@
                         <td class="cab" style="width: 143px;">Moneda e importe</td>
                     </tr>
                     <tr>
-                        <td class="valor" rowspan="2" style="font-size: 12px;">{{ $letra->numero }}</td>
+                        <td class="valor" rowspan="2" style="font-size: 8.5px;">{{ $letra->codigo }}</td>
                         <td class="valor" rowspan="2">{{ $letra->referencia }}</td>
                         <td class="peq celda" style="border-bottom: 0;">DÍA / MES / AÑO</td>
                         <td class="valor" rowspan="2" style="font-size: 8.5px;">{{ $letra->lugar_giro }}</td>

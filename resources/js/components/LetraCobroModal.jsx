@@ -26,6 +26,8 @@ export default function LetraCobroModal({ open, letra, onClose, onCobrada }) {
     const [billeteras, setBilleteras] = useState([]);
     const [metodo, setMetodo] = useState({ tipo: 'efectivo', cuentaId: '', billeteraId: '' });
     const [fecha, setFecha] = useState(hoy());
+    /** Lo que se cobra, en la moneda de la letra: todo el saldo o una parte. */
+    const [monto, setMonto] = useState('');
     const [referencia, setReferencia] = useState('');
     const [enSoles, setEnSoles] = useState(false);
     const [tipoCambio, setTipoCambio] = useState('');
@@ -38,6 +40,7 @@ export default function LetraCobroModal({ open, letra, onClose, onCobrada }) {
         if (!open) return;
         setMetodo({ tipo: 'efectivo', cuentaId: '', billeteraId: '' });
         setFecha(hoy());
+        setMonto(letra ? String(Number(letra.saldo)) : '');
         setReferencia('');
         setEnSoles(false);
         setTipoCambio('');
@@ -48,7 +51,7 @@ export default function LetraCobroModal({ open, letra, onClose, onCobrada }) {
                 setBilleteras(asList(b));
             })
             .catch(() => {});
-    }, [open]);
+    }, [open, letra]);
 
     // Al cobrar con soles se propone el tipo de cambio del día del cobro (el comercial, si ya se usó uno).
     useEffect(() => {
@@ -62,8 +65,10 @@ export default function LetraCobroModal({ open, letra, onClose, onCobrada }) {
         };
     }, [open, enSoles, fecha]);
 
-    const importe = Number(letra?.importe) || 0;
-    const soles = enSoles && Number(tipoCambio) > 0 ? redondear(importe * Number(tipoCambio)) : null;
+    const saldo = Number(letra?.saldo) || 0;
+    const cobrado = Number(monto) || 0;
+    const parcial = cobrado > 0 && cobrado < saldo - 0.005;
+    const soles = enSoles && Number(tipoCambio) > 0 ? redondear(cobrado * Number(tipoCambio)) : null;
 
     const cobrar = async () => {
         setGuardando(true);
@@ -71,13 +76,14 @@ export default function LetraCobroModal({ open, letra, onClose, onCobrada }) {
         try {
             await api.post(`/letras-cambio/${letra.id}/cobrar`, {
                 fecha,
+                monto: cobrado,
                 forma_pago: metodo.tipo,
                 cuenta_bancaria_id: metodo.tipo === 'transferencia' ? metodo.cuentaId || null : null,
                 billetera_id: metodo.tipo === 'billetera' ? metodo.billeteraId || null : null,
                 referencia: referencia.trim() || null,
                 ...(enSoles ? { moneda: 'PEN', tipo_cambio: Number(tipoCambio) } : {}),
             });
-            toast.success(`Letra N° ${letra.numero} cobrada.`);
+            toast.success(parcial ? `Letra ${letra.codigo}: cobro parcial registrado. Falta ${money(saldo - cobrado, letra.moneda)}.` : `Letra ${letra.codigo} cobrada.`);
             onCobrada?.();
             onClose();
         } catch (err) {
@@ -93,15 +99,15 @@ export default function LetraCobroModal({ open, letra, onClose, onCobrada }) {
             open={open}
             onClose={onClose}
             title="Cobrar letra de cambio"
-            description={letra ? `Letra N° ${letra.numero} · ${letra.aceptante_nombre}` : ''}
+            description={letra ? `Letra ${letra.codigo} · ${letra.aceptante_nombre}` : ''}
             footer={
                 <>
                     <Button variant="secondary" onClick={onClose}>
                         Cancelar
                     </Button>
-                    <Button onClick={cobrar} loading={guardando} disabled={enSoles && !(Number(tipoCambio) > 0)}>
+                    <Button onClick={cobrar} loading={guardando} disabled={!(cobrado > 0) || cobrado > saldo + 0.005 || (enSoles && !(Number(tipoCambio) > 0))}>
                         <Wallet className="h-4 w-4" />
-                        Cobrar {enSoles && soles ? money(soles, 'PEN') : money(importe, letra?.moneda)}
+                        Cobrar {enSoles && soles ? money(soles, 'PEN') : money(cobrado, letra?.moneda)}
                     </Button>
                 </>
             }
@@ -111,10 +117,20 @@ export default function LetraCobroModal({ open, letra, onClose, onCobrada }) {
 
                 <div className="grid grid-cols-2 gap-3">
                     <div className="rounded-lg border border-edge bg-gray-50 px-3 py-2">
-                        <p className="text-xs uppercase tracking-wide text-warm-500">Importe de la letra</p>
-                        <p className="text-lg font-semibold text-warm-900">{money(importe, letra?.moneda)}</p>
+                        <p className="text-xs uppercase tracking-wide text-warm-500">Saldo de la letra</p>
+                        <p className="text-lg font-semibold text-warm-900">{money(saldo, letra?.moneda)}</p>
                     </div>
                     <Input label="Fecha del cobro" type="date" max={hoy()} value={fecha} onChange={(e) => setFecha(e.target.value)} />
+                </div>
+
+                <div>
+                    <Input label={`Monto a cobrar (${letra?.moneda === 'USD' ? 'US$' : 'S/'})`} type="number" min="0" step="any" value={monto} onChange={(e) => setMonto(e.target.value)} className="text-right" />
+                    {parcial && (
+                        <p className="mt-1 text-xs text-warm-500">
+                            Cobro parcial: la letra queda con un saldo de {money(saldo - cobrado, letra?.moneda)}, que puedes cobrar después o renovar en una letra nueva.
+                        </p>
+                    )}
+                    {cobrado > saldo + 0.005 && <p className="mt-1 text-xs text-red-600">El monto excede el saldo de la letra.</p>}
                 </div>
 
                 <MetodoCajaPicker

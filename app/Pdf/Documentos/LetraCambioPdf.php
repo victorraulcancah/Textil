@@ -56,7 +56,7 @@ class LetraCambioPdf implements DocumentoPdf
 
     public function archivo(int $id): string
     {
-        return 'letra-cambio-' . LetraCambio::findOrFail($id)->numero;
+        return 'letra-cambio-' . LetraCambio::findOrFail($id)->codigo;
     }
 
     /** "ACEPTANTE" girado 90° (se lee de abajo hacia arriba), centrado en su recuadro. */

@@ -22,7 +22,7 @@ class LetraCambioController extends Controller
     {
         return response()->json(
             // La proforma (venta) que se canjea por la letra: sale de la cuenta por cobrar de la que se giró.
-            LetraCambio::with('cliente:id,nombre', 'cuentaPorCobrar:id,nota_venta_id,numero_cuota,total_cuotas', 'cuentaPorCobrar.notaVenta:id,serie,numero,fecha_emision')->latest('id')->get(),
+            LetraCambio::with('cliente:id,nombre', 'anterior:id,numero', 'renovacion:id,numero,letra_anterior_id', 'cuentaPorCobrar:id,nota_venta_id,numero_cuota,total_cuotas', 'cuentaPorCobrar.notaVenta:id,serie,numero,fecha_emision')->latest('id')->get(),
         );
     }
 
@@ -45,7 +45,7 @@ class LetraCambioController extends Controller
         $empresa = Empresa::query()->where('activa', true)->first() ?? Empresa::first();
 
         // Lo que ya se emitió en letras de esta cuenta no se puede volver a girar.
-        $enLetras = (float) LetraCambio::where('cuenta_por_cobrar_id', $cuenta->id)->where('estado', 'emitida')->sum('importe');
+        $enLetras = (float) LetraCambio::where('cuenta_por_cobrar_id', $cuenta->id)->where('estado', 'emitida')->sum('saldo');
 
         return response()->json([
             'cuenta_por_cobrar_id' => $cuenta->id,
@@ -103,7 +103,7 @@ class LetraCambioController extends Controller
             }
 
             // La suma de las letras vigentes no puede pasar de lo que se debe.
-            $enLetras = (float) LetraCambio::where('cuenta_por_cobrar_id', $cuenta->id)->where('estado', 'emitida')->sum('importe');
+            $enLetras = (float) LetraCambio::where('cuenta_por_cobrar_id', $cuenta->id)->where('estado', 'emitida')->sum('saldo');
             if ($enLetras + (float) $data['importe'] > (float) $cuenta->saldo + 0.01) {
                 abort(422, 'El importe excede lo que falta por girar de esta cuenta (saldo '.number_format((float) $cuenta->saldo - $enLetras, 2).').');
             }
@@ -115,6 +115,7 @@ class LetraCambioController extends Controller
                 'cliente_id' => $cuenta->cliente_id,
                 'numero' => $this->siguienteNumero(),
                 'estado' => 'emitida',
+                'saldo' => $data['importe'],
                 'sub_estado' => 'en_cartera',
                 'usuario_id' => auth('api')->id(),
             ]);
@@ -124,14 +125,18 @@ class LetraCambioController extends Controller
     }
 
     /**
-     * Cobra la letra completa: queda "pagada" y el cobro se registra como un pago de la
-     * cuenta por cobrar de la que salió (con su movimiento de caja). Una letra en dólares
-     * se puede cobrar con soles, al tipo de cambio que se indique.
+     * Cobra la letra, completa o una parte: el cobro se registra como un pago de la cuenta
+     * por cobrar de la que salió (con su movimiento de caja). Si se cobra todo el saldo,
+     * la letra queda "pagada"; si se cobra una parte, queda por cobrar con el saldo que falta
+     * (que se puede cobrar después o renovar en una letra nueva). Una letra en dólares se
+     * puede cobrar con soles, al tipo de cambio que se indique.
      */
     public function cobrar(Request $request, LetraCambio $letrasCambio)
     {
         $data = $request->validate([
             'fecha' => 'required|date|before_or_equal:'.now()->toDateString(),
+            // Lo que se cobra, en la moneda de la letra; sin decir nada, todo el saldo.
+            'monto' => 'nullable|numeric|min:0.01',
             'forma_pago' => 'required|in:efectivo,transferencia,billetera',
             'cuenta_bancaria_id' => 'nullable|exists:cuentas_bancarias,id',
             'billetera_id' => 'nullable|exists:billeteras_digitales,id',
@@ -141,7 +146,11 @@ class LetraCambioController extends Controller
         ]);
 
         if ($letrasCambio->estado !== 'emitida') {
-            return response()->json(['message' => $letrasCambio->estado === 'pagada' ? 'La letra ya está pagada.' : 'La letra está anulada.'], 422);
+            return response()->json(['message' => match ($letrasCambio->estado) {
+                'pagada' => 'La letra ya está pagada.',
+                'cancelada' => 'La letra está cancelada: su saldo pasó a una letra nueva.',
+                default => 'La letra está anulada.',
+            }], 422);
         }
 
         $cuenta = $letrasCambio->cuentaPorCobrar;
@@ -149,7 +158,16 @@ class LetraCambioController extends Controller
             return response()->json(['message' => 'La letra no tiene una cuenta por cobrar asociada.'], 422);
         }
 
-        $importe = (float) $letrasCambio->importe;
+        $saldo = (float) $letrasCambio->saldo;
+        $cobrado = round((float) ($data['monto'] ?? $saldo), 2);
+        if ($cobrado > $saldo + 0.01) {
+            return response()->json(['message' => 'El monto excede el saldo de la letra ('.number_format($saldo, 2).').'], 422);
+        }
+        $completo = $cobrado >= $saldo - 0.01;
+        if ($completo) {
+            $cobrado = $saldo;
+        }
+
         $enSoles = ($cuenta->moneda ?: 'PEN') !== 'PEN' && ($data['moneda'] ?? null) === 'PEN';
         if ($enSoles && empty($data['tipo_cambio'])) {
             return response()->json(['message' => 'Para cobrar en soles una letra en dólares, pon el tipo de cambio.'], 422);
@@ -160,13 +178,16 @@ class LetraCambioController extends Controller
             'cuenta_bancaria_id' => $data['cuenta_bancaria_id'] ?? null,
             'billetera_id' => $data['billetera_id'] ?? null,
             'referencia' => $data['referencia'] ?? null,
-            'monto' => $enSoles ? round($importe * (float) $data['tipo_cambio'], 2) : $importe,
+            'monto' => $enSoles ? round($cobrado * (float) $data['tipo_cambio'], 2) : $cobrado,
         ] + ($enSoles ? ['moneda' => 'PEN', 'tipo_cambio' => (float) $data['tipo_cambio']] : []);
 
         DB::beginTransaction();
         try {
-            // Primero deja de contar como "en letras": ese importe es el que se cobra ahora.
-            $letrasCambio->update(['estado' => 'pagada', 'fecha_pago' => $data['fecha']]);
+            // Primero baja el saldo de la letra: lo que se cobra deja de contar como "en letras".
+            $letrasCambio->update([
+                'saldo' => $completo ? 0 : round($saldo - $cobrado, 2),
+                'monto_pagado' => round((float) $letrasCambio->monto_pagado + $cobrado, 2),
+            ] + ($completo ? ['estado' => 'pagada', 'fecha_pago' => $data['fecha']] : []));
 
             $peticion = Request::create('/', 'POST', ['fecha' => $data['fecha'], 'pagos' => [$pago]]);
             $respuesta = app(CuentaPorCobrarController::class)->registrarPago($peticion, $cuenta->fresh());
@@ -183,6 +204,65 @@ class LetraCambioController extends Controller
         }
 
         return response()->json($letrasCambio->fresh()->load('cliente:id,nombre'));
+    }
+
+    /**
+     * Renueva la letra: gira una letra nueva por lo que falta cobrar (su saldo) y la letra
+     * anterior queda cancelada, porque lo que debía ya se cobró o pasó a la nueva. Los datos del
+     * aceptante, el aval y la cuenta a debitar se copian; se indican las fechas de la nueva.
+     */
+    public function renovar(Request $request, LetraCambio $letrasCambio)
+    {
+        $data = $request->validate([
+            'fecha_giro' => 'required|date',
+            'fecha_vencimiento' => 'required|date|after_or_equal:fecha_giro',
+            'lugar_giro' => 'nullable|string|max:120',
+        ], [
+            'fecha_vencimiento.after_or_equal' => 'El vencimiento no puede ser anterior a la fecha de giro.',
+        ]);
+
+        if ($letrasCambio->estado !== 'emitida' || (float) $letrasCambio->saldo <= 0.005) {
+            return response()->json(['message' => 'Solo se renueva una letra por cobrar con saldo.'], 422);
+        }
+
+        $nueva = DB::transaction(function () use ($letrasCambio, $data) {
+            $saldo = (float) $letrasCambio->saldo;
+
+            // La anterior se cancela primero: su saldo pasa a la nueva, así la cuenta no cuenta doble.
+            $letrasCambio->update(['estado' => 'cancelada', 'saldo' => 0]);
+
+            return LetraCambio::create([
+                'numero' => $this->siguienteNumero(),
+                'cuenta_por_cobrar_id' => $letrasCambio->cuenta_por_cobrar_id,
+                'letra_anterior_id' => $letrasCambio->id,
+                'cliente_id' => $letrasCambio->cliente_id,
+                'referencia' => $letrasCambio->referencia,
+                'fecha_giro' => $data['fecha_giro'],
+                'lugar_giro' => $data['lugar_giro'] ?? $letrasCambio->lugar_giro,
+                'fecha_vencimiento' => $data['fecha_vencimiento'],
+                'moneda' => $letrasCambio->moneda,
+                'importe' => $saldo,
+                'saldo' => $saldo,
+                'aceptante_nombre' => $letrasCambio->aceptante_nombre,
+                'aceptante_documento' => $letrasCambio->aceptante_documento,
+                'aceptante_domicilio' => $letrasCambio->aceptante_domicilio,
+                'aceptante_localidad' => $letrasCambio->aceptante_localidad,
+                'aceptante_telefono' => $letrasCambio->aceptante_telefono,
+                'aval_nombre' => $letrasCambio->aval_nombre,
+                'aval_documento' => $letrasCambio->aval_documento,
+                'aval_domicilio' => $letrasCambio->aval_domicilio,
+                'aval_localidad' => $letrasCambio->aval_localidad,
+                'banco' => $letrasCambio->banco,
+                'oficina' => $letrasCambio->oficina,
+                'cuenta' => $letrasCambio->cuenta,
+                'dc' => $letrasCambio->dc,
+                'estado' => 'emitida',
+                'sub_estado' => 'en_cartera',
+                'usuario_id' => auth('api')->id(),
+            ]);
+        });
+
+        return response()->json($nueva->load('cliente:id,nombre', 'anterior:id,numero'), 201);
     }
 
     /** Cambia dónde está la letra mientras se cobra: cartera, cobranza libre, cobranza banco o descuento. */
@@ -204,8 +284,8 @@ class LetraCambioController extends Controller
     /** La letra queda anulada (no se borra: el número ya existió y hay que poder rastrearlo). */
     public function anular(LetraCambio $letrasCambio)
     {
-        if ($letrasCambio->estado === 'pagada') {
-            return response()->json(['message' => 'La letra ya está pagada: no se puede anular.'], 422);
+        if (in_array($letrasCambio->estado, ['pagada', 'cancelada'], true) || (float) $letrasCambio->monto_pagado > 0) {
+            return response()->json(['message' => 'La letra ya tiene cobros o fue renovada: no se puede anular.'], 422);
         }
 
         if ($letrasCambio->estado !== 'anulada') {

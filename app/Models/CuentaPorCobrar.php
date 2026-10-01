@@ -61,13 +61,13 @@ class CuentaPorCobrar extends Model
      */
     public function cargarEnLetras(): static
     {
-        return $this->loadSum(['letras as en_letras' => fn ($q) => $q->where('estado', 'emitida')], 'importe');
+        return $this->loadSum(['letras as en_letras' => fn ($q) => $q->where('estado', 'emitida')], 'saldo');
     }
 
     /** Lo que todavía se puede cobrar aquí: el saldo menos lo que pasó a letras. */
     public function saldoCobrable(): float
     {
-        $enLetras = (float) ($this->en_letras ?? $this->letras()->where('estado', 'emitida')->sum('importe'));
+        $enLetras = (float) ($this->en_letras ?? $this->letras()->where('estado', 'emitida')->sum('saldo'));
 
         return max(round((float) $this->saldo - $enLetras, 2), 0);
     }

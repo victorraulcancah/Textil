@@ -7,7 +7,8 @@ import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import ActionsMenu from '../components/ActionsMenu';
 import LetraCobroModal from '../components/LetraCobroModal';
-import PageHeader from '../components/PageHeader';
+import LetraRenovarModal from '../components/LetraRenovarModal';
+import PageHeader, { CreateButton } from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
 import { Alert, Badge, Button, DataTable, Modal, Select } from '../components/ui';
 
@@ -19,18 +20,18 @@ const hoy = () => {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
-/** Dónde está la letra mientras se cobra. Nace "en cartera" y se cambia desde la lista. */
+/** Dónde está la letra mientras se cobra (son tres). Nace "en cartera" y se cambia desde la lista. */
 const SUB_ESTADOS = [
     { value: 'en_cartera', label: 'En cartera', variant: 'gray' },
-    { value: 'cobranza_libre', label: 'Cobranza libre', variant: 'blue' },
-    { value: 'cobranza_banco', label: 'Cobranza banco', variant: 'blue' },
-    { value: 'en_descuento', label: 'Letras en descuento', variant: 'amber' },
+    { value: 'cobranza_libre', label: 'Cobranza libre - Banco', variant: 'blue' },
+    { value: 'en_descuento', label: 'Letras en descuento - Bancos', variant: 'amber' },
 ];
 
 const ESTADOS = [
     { value: '', label: 'Todas' },
     { value: 'emitida', label: 'Por cobrar' },
     { value: 'pagada', label: 'Pagadas' },
+    { value: 'cancelada', label: 'Canceladas (renovadas)' },
     { value: 'anulada', label: 'Anuladas' },
 ];
 
@@ -47,6 +48,8 @@ export default function LetrasCambio() {
     const [fEstado, setFEstado] = useState('');
     const [pdf, setPdf] = useState(null);
     const [cobro, setCobro] = useState(null);
+    /** Abre la ventana de nueva letra por renovación. */
+    const [renovando, setRenovando] = useState(false);
     /** La letra cuyo sub estado se está cambiando, el valor elegido y si se está guardando. */
     const [cambioSub, setCambioSub] = useState(null);
     const [subElegido, setSubElegido] = useState('en_cartera');
@@ -79,7 +82,7 @@ export default function LetrasCambio() {
         setGuardandoSub(true);
         try {
             await api.post(`/letras-cambio/${cambioSub.id}/sub-estado`, { sub_estado: subElegido });
-            toast.success(`Letra ${cambioSub.numero}: ${SUB_ESTADOS.find((x) => x.value === subElegido)?.label}.`);
+            toast.success(`Letra ${cambioSub.codigo}: ${SUB_ESTADOS.find((x) => x.value === subElegido)?.label}.`);
             setCambioSub(null);
             await load();
         } catch (err) {
@@ -93,7 +96,7 @@ export default function LetrasCambio() {
         setAnulando(true);
         try {
             await api.post(`/letras-cambio/${anular.id}/anular`);
-            toast.success(`Letra N° ${anular.numero} anulada.`);
+            toast.success(`Letra ${anular.codigo} anulada.`);
             setAnular(null);
             await load();
         } catch (err) {
@@ -106,7 +109,9 @@ export default function LetrasCambio() {
     const columns = [
         // El orden de las columnas es el de la hoja de control: letra, giro, vencimiento, cliente,
         // importe, saldo, estado, sub estado y concepto.
-        { key: 'numero', label: 'Letra Nro', render: (row) => <span className="font-semibold text-warm-900">{row.numero}</span> },
+        // La serie del documento (LT-001) es aparte del número de la letra, que es el identificador de la fila.
+        { key: 'serie', label: 'Serie', width: '96px', getSearchValue: (row) => row.codigo, render: (row) => <span className="whitespace-nowrap font-medium text-warm-800">{row.codigo}</span> },
+        { key: 'numero', label: 'Letra Nro', width: '84px', render: (row) => <span className="font-semibold text-warm-900">{row.numero}</span> },
         { key: 'fecha_giro', label: 'Fecha de giro', render: (row) => fecha(row.fecha_giro) },
         {
             key: 'fecha_vencimiento',
@@ -128,10 +133,10 @@ export default function LetrasCambio() {
             key: 'saldo',
             label: 'Saldo',
             align: 'right',
-            // Lo que falta cobrar de la letra: todo el importe mientras esté por cobrar; 0 si ya se pagó o se anuló.
+            // Lo que falta cobrar de la letra (baja con cada cobro parcial); 0 si ya se pagó, se renovó o se anuló.
             render: (row) => (
                 <span className={row.estado === 'emitida' ? 'font-medium text-red-600' : 'text-gray-400'}>
-                    {money(row.estado === 'emitida' ? row.importe : 0, row.moneda)}
+                    {money(row.estado === 'emitida' ? row.saldo : 0, row.moneda)}
                 </span>
             ),
         },
@@ -139,8 +144,15 @@ export default function LetrasCambio() {
             key: 'estado',
             label: 'Estado',
             render: (row) => {
-                const info = { emitida: ['amber', 'Por cobrar'], pagada: ['green', 'Pagada'], anulada: ['gray', 'Anulada'] }[row.estado] ?? ['gray', row.estado];
-                return <Badge variant={info[0]}>{info[1]}</Badge>;
+                const info = { emitida: ['amber', 'Por cobrar'], pagada: ['green', 'Pagada'], cancelada: ['blue', 'Cancelada'], anulada: ['gray', 'Anulada'] }[row.estado] ?? ['gray', row.estado];
+                return (
+                    <span className="inline-flex flex-col items-start gap-0.5">
+                        <Badge variant={info[0]}>{info[1]}</Badge>
+                        {/* Una letra cancelada pasó a la nueva: se dice a cuál. */}
+                        {row.estado === 'cancelada' && row.renovacion && <span className="text-[11px] text-warm-500">→ letra {row.renovacion.codigo}</span>}
+                        {row.estado === 'emitida' && Number(row.monto_pagado) > 0 && <span className="text-[11px] text-green-600">cobrado {money(row.monto_pagado, row.moneda)}</span>}
+                    </span>
+                );
             },
         },
         {
@@ -149,7 +161,7 @@ export default function LetrasCambio() {
             getSearchValue: (row) => (SUB_ESTADOS.find((x) => x.value === (row.sub_estado ?? 'en_cartera'))?.label ?? ''),
             // Donde está la letra mientras se cobra (en cartera al crearla); una anulada ya no tiene.
             render: (row) => {
-                if (row.estado === 'anulada') return <span className="text-gray-300">—</span>;
+                if (row.estado === 'anulada' || row.estado === 'cancelada') return <span className="text-gray-300">—</span>;
                 const info = SUB_ESTADOS.find((x) => x.value === (row.sub_estado ?? 'en_cartera')) ?? SUB_ESTADOS[0];
                 return <Badge variant={info.variant}>{info.label}</Badge>;
             },
@@ -159,7 +171,9 @@ export default function LetrasCambio() {
             label: 'Concepto',
             getSearchValue: (row) => (row.cuenta_por_cobrar?.nota_venta ? `${row.cuenta_por_cobrar.nota_venta.serie}-${row.cuenta_por_cobrar.nota_venta.numero}` : ''),
             render: (row) =>
-                row.cuenta_por_cobrar?.nota_venta ? (
+                row.anterior ? (
+                    <span className="whitespace-nowrap text-sm text-warm-800">Renovación letra {row.anterior.codigo}</span>
+                ) : row.cuenta_por_cobrar?.nota_venta ? (
                     <span className="whitespace-nowrap text-sm text-warm-800">Canje proforma x letra</span>
                 ) : (
                     <span className="text-gray-300">—</span>
@@ -179,7 +193,7 @@ export default function LetrasCambio() {
                             { label: 'Imprimir / PDF', icon: FileText, color: 'text-warm-600', hidden: !puede('tesoreria.letras-cambio.imprimir'), onClick: () => setPdf(row) },
                             { label: 'Cambiar sub estado', icon: ArrowLeftRight, color: 'text-primary-600', hidden: !porCobrar || !puede('tesoreria.letras-cambio.editar'), onClick: () => abrirSubEstado(row) },
                             { label: 'Cobrar', icon: Wallet, color: 'text-green-600', hidden: !porCobrar || !puede('tesoreria.letras-cambio.editar'), onClick: () => setCobro(row) },
-                            { label: 'Anular', icon: Ban, color: 'text-red-600', hidden: !porCobrar || !puede('tesoreria.letras-cambio.eliminar'), onClick: () => setAnular(row) },
+                            { label: 'Anular', icon: Ban, color: 'text-red-600', hidden: !porCobrar || Number(row.monto_pagado) > 0 || !puede('tesoreria.letras-cambio.eliminar'), onClick: () => setAnular(row) },
                         ]}
                     />
                 );
@@ -189,7 +203,16 @@ export default function LetrasCambio() {
 
     return (
         <Layout>
-            <PageHeader title="Letras de cambio" description="Las letras emitidas desde Cuentas por cobrar: aquí se cobran, se imprimen y se anulan" />
+            <PageHeader
+                title="Letras de cambio"
+                description="Las letras emitidas desde Cuentas por cobrar: aquí se cobran, se imprimen y se anulan"
+                actions={
+                    puede('tesoreria.letras-cambio.crear') && (
+                        // Una letra nueva por renovación: se elige la letra y se gira otra por lo que le falta cobrar.
+                        <CreateButton onClick={() => setRenovando(true)}>Nueva letra</CreateButton>
+                    )
+                }
+            />
 
             {error && <Alert variant="error" className="mb-4">{error}</Alert>}
 
@@ -209,7 +232,7 @@ export default function LetrasCambio() {
                 onClose={() => setPdf(null)}
                 tipo="letra-cambio"
                 id={pdf?.id}
-                nombre={pdf ? `Letra ${pdf.numero}` : ''}
+                nombre={pdf ? `Letra ${pdf.codigo}` : ''}
                 titulo="Letra de cambio"
                 formatos={['a4']}
             />
@@ -218,7 +241,7 @@ export default function LetrasCambio() {
                 open={Boolean(cambioSub)}
                 onClose={() => setCambioSub(null)}
                 title="Cambiar sub estado"
-                description={cambioSub ? `Letra ${cambioSub.numero} · ${cambioSub.cliente?.nombre ?? cambioSub.aceptante_nombre}` : ''}
+                description={cambioSub ? `Letra ${cambioSub.codigo} · ${cambioSub.cliente?.nombre ?? cambioSub.aceptante_nombre}` : ''}
                 size="sm"
                 footer={
                     <>
@@ -254,11 +277,22 @@ export default function LetrasCambio() {
 
             <LetraCobroModal open={Boolean(cobro)} letra={cobro} onClose={() => setCobro(null)} onCobrada={load} />
 
+            {/* Renovar: la nueva letra se abre en PDF para imprimirla. */}
+            <LetraRenovarModal
+                open={renovando}
+                letras={rows.filter((r) => r.estado === 'emitida' && Number(r.saldo) > 0.005)}
+                onClose={() => setRenovando(false)}
+                onRenovada={(nueva) => {
+                    load();
+                    setPdf(nueva);
+                }}
+            />
+
             <Modal
                 open={Boolean(anular)}
                 onClose={() => setAnular(null)}
                 title="Anular letra de cambio"
-                description={anular ? `Letra N° ${anular.numero} de ${anular.aceptante_nombre}` : ''}
+                description={anular ? `Letra ${anular.codigo} de ${anular.aceptante_nombre}` : ''}
                 size="sm"
                 footer={
                     <>

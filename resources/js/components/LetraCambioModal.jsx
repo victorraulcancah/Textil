@@ -69,7 +69,7 @@ export default function LetraCambioModal({ open, cuenta, onClose, onEmitida }) {
                 cuenta_por_cobrar_id: cuenta.id,
                 importe: Number(form.importe),
             });
-            toast.success(`Letra N° ${data.numero} emitida.`);
+            toast.success(`Letra ${data.codigo} emitida.`);
             onEmitida?.(data);
             onClose();
         } catch (err) {

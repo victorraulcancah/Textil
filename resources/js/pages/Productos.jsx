@@ -18,6 +18,7 @@ import {
 import api, { asList } from '../lib/api';
 import { calcularPresentaciones, describirContenido } from '../lib/unidades';
 import { DOC_LABEL, ORIGEN_LABEL } from '../lib/movimientos';
+import { cargarTipoCambio } from '../lib/moneda';
 import { useToast } from '../lib/toast';
 import { useAuth } from '../lib/auth';
 import Layout from '../components/Layout';
@@ -458,6 +459,23 @@ export default function Productos() {
     // convertirlo antes de aplicarle el % de ganancia, o se suman dólares con soles.
     const monedasDistintas = form.moneda_compra !== form.moneda_venta;
     const tipoCambio = Number(form.tipo_cambio) > 0 ? Number(form.tipo_cambio) : null;
+
+    // Con monedas distintas y sin tipo de cambio puesto, se propone el de SUNAT (venta) de hoy;
+    // si el producto ya tiene uno guardado, o el usuario lo escribió, no se toca.
+    const faltaTipoCambio = monedasDistintas && !form.tipo_cambio;
+    useEffect(() => {
+        if (!faltaTipoCambio) return undefined;
+        let vigente = true;
+        cargarTipoCambio()
+            .then((tc) => {
+                if (!vigente || !tc?.venta) return;
+                setForm((prev) => (prev.tipo_cambio ? prev : { ...prev, tipo_cambio: String(tc.venta) }));
+            })
+            .catch(() => {});
+        return () => {
+            vigente = false;
+        };
+    }, [faltaTipoCambio]);
     // Cuánto vale 1 de la moneda de compra en la moneda de venta; null = falta el dato.
     const tasa = !monedasDistintas
         ? 1

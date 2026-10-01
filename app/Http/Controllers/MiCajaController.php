@@ -49,7 +49,7 @@ class MiCajaController extends Controller
             'billetera:id,nombre',
         ])
             ->where('apertura_caja_id', $apertura->id)
-            ->latest('fecha')->latest('id')
+            ->latest('created_at')->latest('id')
             ->get();
     }
 

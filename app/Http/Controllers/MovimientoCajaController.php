@@ -32,7 +32,7 @@ class MovimientoCajaController extends Controller
                 $user?->caja_id && ! $user->hasRole('super-admin'),
                 fn ($q) => $q->whereHas('apertura', fn ($a) => $a->where('caja_id', $user->caja_id))
             )
-            ->latest('fecha')
+            ->latest('created_at')
             ->latest('id')
             ->limit(500);
 

@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
     ArrowLeft,
     CalendarClock,
+    ChevronRight,
     Package,
     Pencil,
     Plus,
@@ -38,6 +39,7 @@ import {
     SearchSelect,
     Select,
     Spinner,
+    cn,
 } from "../components/ui";
 
 const num = (n) =>
@@ -875,6 +877,82 @@ export default function CrearVenta() {
     const quitarItem = (i) =>
         setItems((prev) => prev.filter((_, idx) => idx !== i));
 
+    /** El selector de unidad de una fila (metro, rollo…). */
+    const selectorUnidad = (it, i) => (
+                <SearchSelect
+                    value={unidadDe(it)}
+                    clearable={false}
+                    emptyText="Sin unidades"
+                    onChange={(id) =>
+                        id &&
+                        String(id) !==
+                            String(unidadDe(it)) &&
+                        cambiarUnidadItem(
+                            i,
+                            id,
+                        )
+                    }
+                    options={(() => {
+                        const opciones = unidadesDe(it.producto_id);
+                        // Una venta antigua en un formato que ya no se
+                        // ofrece (un "Rollo 50 m"): se sigue viendo el suyo.
+                        if (
+                            it.modo !== ROLLOS &&
+                            !opciones.some((o) => o.value === String(it.producto_presentacion_id))
+                        ) {
+                            const actual = presentacionDe(it.producto_id, it.producto_presentacion_id);
+                            if (actual) opciones.push({ value: String(actual.id), label: actual.nombre });
+                        }
+                        return opciones;
+                    })()}
+                    className="min-w-[120px]"
+                />
+    );
+
+    /** Quita de una vez todos los rollos de una tela. */
+    const quitarVarias = (indices) =>
+        setItems((prev) => prev.filter((_, j) => !indices.includes(j)));
+
+    /** Un solo precio por metro para todos los rollos de una tela. */
+    const precioDeTela = (indices, valor) =>
+        setItems((prev) =>
+            prev.map((it, j) =>
+                indices.includes(j) ? { ...it, precio_unitario: valor, precio_manual: true } : it,
+            ),
+        );
+
+    /** Las telas desplegadas (sus rollos a la vista). */
+    const [abiertas, setAbiertas] = useState({});
+    const alternar = (clave) =>
+        setAbiertas((prev) => ({ ...prev, [clave]: !prev[clave] }));
+
+    /**
+     * Lo que se ve en la tabla, igual que en el pedido y la orden de compra: cada tela es una
+     * sola fila (sus rollos se despliegan debajo); lo demás va línea por línea.
+     */
+    const filasTabla = useMemo(() => {
+        const filas = [];
+        const telas = new Map();
+
+        items.forEach((it, i) => {
+            const esTela = Boolean(presentacionMetroDe(productoDe(it.producto_id)));
+            if (!esTela) {
+                filas.push({ tipo: "linea", clave: `l${i}`, it, i });
+                return;
+            }
+            const clave = String(it.producto_id);
+            if (!telas.has(clave)) {
+                const tela = { tipo: "tela", clave, producto_id: it.producto_id, indices: [] };
+                telas.set(clave, tela);
+                filas.push(tela);
+            }
+            telas.get(clave).indices.push(i);
+        });
+
+        return filas;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [items, productos]);
+
     const setPago = (i, patch) =>
         setPagos((prev) =>
             prev.map((p, idx) => (idx === i ? { ...p, ...patch } : p)),
@@ -1379,12 +1457,6 @@ export default function CrearVenta() {
                                         <th className="w-36 px-3 py-2.5">
                                             Unidad
                                         </th>
-                                        {/* De qué rollo sale la tela: así el
-                                            color queda en el kardex y los rollos
-                                            no se descuadran del stock. */}
-                                        <th className="w-64 px-3 py-2.5">
-                                            Rollo
-                                        </th>
                                         <th className="w-24 px-3 py-2.5 text-right">
                                             Disp.
                                         </th>
@@ -1398,7 +1470,7 @@ export default function CrearVenta() {
                                             Subtotal
                                         </th>
                                         <th className="w-16 px-3 py-2.5 text-center">
-                                            —
+                                            Acciones
                                         </th>
                                     </tr>
                                 </thead>
@@ -1406,7 +1478,7 @@ export default function CrearVenta() {
                                     {items.length === 0 && (
                                         <tr>
                                             <td
-                                                colSpan={10}
+                                                colSpan={9}
                                                 className="px-3 py-10 text-center text-sm text-warm-500"
                                             >
                                                 Busca un producto arriba para
@@ -1415,7 +1487,176 @@ export default function CrearVenta() {
                                         </tr>
                                     )}
 
-                                    {items.map((it, i) => {
+                                    {filasTabla.map((fila, n) => {
+                                        // Una tela: una fila y, al desplegarla, sus rollos con color, cantidad y precio.
+                                        if (fila.tipo === "tela") {
+                                            const producto = productoDe(fila.producto_id);
+                                            const hijos = fila.indices.map((i) => ({ it: items[i], i }));
+                                            const metros = hijos.reduce((t, { it }) => t + (Number(it.cantidad) || 0), 0);
+                                            const importe = hijos.reduce(
+                                                (t, { it }) => t + (Number(it.cantidad) || 0) * (Number(it.precio_unitario) || 0),
+                                                0,
+                                            );
+                                            const precios = [...new Set(hijos.map(({ it }) => String(it.precio_unitario)))];
+                                            const abierta = Boolean(abiertas[fila.clave]);
+                                            const enRollos = hijos.every(({ it }) => it.modo === ROLLOS);
+                                            const colorDe = (it) =>
+                                                (producto?.colores ?? []).find((c) => String(c.id) === String(it.producto_color_id));
+
+                                            return (
+                                                <Fragment key={fila.clave}>
+                                                    <tr className="cursor-pointer transition hover:bg-gray-50" onClick={() => alternar(fila.clave)}>
+                                                        <td className="px-3 py-2 text-center text-warm-500">{n + 1}</td>
+                                                        <td className="px-3 py-2 font-medium text-warm-900">{producto?.codigo ?? "—"}</td>
+                                                        <td className="px-3 py-2">
+                                                            <span className="flex items-center gap-2">
+                                                                <button
+                                                                    type="button"
+                                                                    aria-expanded={abierta}
+                                                                    aria-label={abierta ? "Ocultar rollos" : "Ver rollos"}
+                                                                    className="rounded p-0.5 text-warm-500 hover:bg-gray-100"
+                                                                >
+                                                                    <ChevronRight className={cn("h-4 w-4 transition-transform duration-300", abierta && "rotate-90")} />
+                                                                </button>
+                                                                <span className="font-semibold text-warm-900">{producto?.nombre ?? "—"}</span>
+                                                                <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-warm-700">
+                                                                    {hijos.length} {hijos.length === 1 ? "rollo" : "rollos"}
+                                                                </span>
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-3 py-2 text-warm-700">{enRollos ? "Rollo" : "Metro"}</td>
+                                                        <td className="px-3 py-2" />
+                                                        <td className="px-3 py-2 text-right font-medium text-warm-900">{metros ? `${num(metros)} m` : ""}</td>
+                                                        {/* Un precio por metro para toda la tela; cada rollo puede llevar el suyo. */}
+                                                        <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                                                            <Input
+                                                                type="number"
+                                                                min="0"
+                                                                step="any"
+                                                                value={precios.length === 1 ? precios[0] : ""}
+                                                                placeholder={precios.length === 1 ? undefined : "varios"}
+                                                                onChange={(e) => precioDeTela(fila.indices, e.target.value)}
+                                                                aria-label={`Precio por metro de ${producto?.nombre}`}
+                                                                className="text-right"
+                                                            />
+                                                            <span className="mt-0.5 block text-right text-[11px] text-warm-500">por metro</span>
+                                                        </td>
+                                                        <td className="px-3 py-2 text-right font-semibold text-primary-600">{m(importe)}</td>
+                                                        <td className="px-3 py-2 text-center" onClick={(e) => e.stopPropagation()}>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => quitarVarias(fila.indices)}
+                                                                aria-label={`Quitar ${producto?.nombre}`}
+                                                                className="rounded-md p-1.5 text-red-600 transition hover:bg-red-50"
+                                                            >
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                    {/* Los rollos se despliegan con una animación de altura. */}
+                                                    <tr className="border-b-0">
+                                                        <td colSpan={9} className="p-0">
+                                                            <div className={cn("grid transition-[grid-template-rows] duration-300 ease-out", abierta ? "grid-rows-[1fr]" : "grid-rows-[0fr]")}>
+                                                                <div className="overflow-hidden">
+                                                                    <div className={cn("bg-gray-50/70 py-1 pl-14 pr-3 transition-opacity duration-300", abierta ? "border-b border-gray-100 opacity-100" : "opacity-0")}>
+                                                                        <div className="grid grid-cols-[1fr_8rem_15rem_5rem_7rem_7rem_7rem_2.5rem] items-center gap-3 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-warm-500">
+                                                                            <span>Color</span>
+                                                                            <span>Unidad</span>
+                                                                            {/* De qué rollo sale la tela: así el color queda en el kardex y los rollos no se descuadran del stock. */}
+                                                                            <span>Rollo</span>
+                                                                            <span className="text-right">Disp.</span>
+                                                                            <span className="text-right">Cant</span>
+                                                                            <span className="text-right">Precio por metro</span>
+                                                                            <span className="text-right">Subtotal</span>
+                                                                            <span />
+                                                                        </div>
+                                                                        {hijos.map(({ it, i }) => {
+                                                                            const color = colorDe(it);
+                                                                            const u = disponibleDe(it.producto_id, unidadDe(it));
+                                                                            // Con rollo elegido: se va entero o es un corte.
+                                                                            const entero = it.rollo_id && it.rollo_metros ? Number(it.cantidad) + 0.001 >= it.rollo_metros : null;
+                                                                            const excede = u && Number(it.cantidad) > u.disponible;
+                                                                            const sub = (Number(it.cantidad) || 0) * (Number(it.precio_unitario) || 0);
+
+                                                                            return (
+                                                                                <div key={i} className="grid grid-cols-[1fr_8rem_15rem_5rem_7rem_7rem_7rem_2.5rem] items-start gap-3 px-2 py-1.5">
+                                                                                    <span className="inline-flex items-center gap-2 pt-2 font-medium uppercase text-warm-800">
+                                                                                        <span className="h-3 w-3 shrink-0 rounded-full ring-1 ring-black/10" style={{ backgroundColor: color?.hex || "#9ca3af" }} />
+                                                                                        {color?.nombre ?? "Sin color"}
+                                                                                    </span>
+                                                                                    <div>{selectorUnidad(it, i)}</div>
+                                                                                    <div>
+                                                                                        <SelectorRollo
+                                                                                            productoId={it.producto_id}
+                                                                                            almacenId={form.almacen_id}
+                                                                                            colorId={it.producto_color_id ?? ""}
+                                                                                            value={it.rollo_id}
+                                                                                            // Un rollo no puede estar en dos filas.
+                                                                                            excluir={items.filter((x, j) => j !== i && x.rollo_id).map((x) => x.rollo_id)}
+                                                                                            onChange={(v, rollo) => elegirRollo(i, v, rollo)}
+                                                                                        />
+                                                                                        {it.modo === ROLLOS && !it.rollo_id && (
+                                                                                            <span className="mt-0.5 block text-[11px] font-medium text-amber-600">Elige o escanea el rollo</span>
+                                                                                        )}
+                                                                                    </div>
+                                                                                    <span className="pt-2 text-right text-warm-500">{u ? num(u.disponible) : "—"}</span>
+                                                                                    <div>
+                                                                                        <Input
+                                                                                            type="number"
+                                                                                            min="0"
+                                                                                            step="any"
+                                                                                            value={it.cantidad}
+                                                                                            onChange={(e) =>
+                                                                                                setItem(i, {
+                                                                                                    cantidad: e.target.value,
+                                                                                                    // Puede entrar en un precio por cantidad.
+                                                                                                    ...(it.precio_manual
+                                                                                                        ? {}
+                                                                                                        : { precio_unitario: precioDeLista(it.producto_id, it.producto_presentacion_id, e.target.value) }),
+                                                                                                })
+                                                                                            }
+                                                                                            aria-label="Cantidad"
+                                                                                            error={excede ? "Sin stock" : undefined}
+                                                                                            className="text-right"
+                                                                                        />
+                                                                                        {entero !== null && (
+                                                                                            <span className={`mt-0.5 block text-right text-[11px] font-medium ${entero ? "text-green-700" : "text-amber-600"}`}>
+                                                                                                {entero ? "Rollo entero" : `Corte · quedan ${num(it.rollo_metros - Number(it.cantidad || 0))} m`}
+                                                                                            </span>
+                                                                                        )}
+                                                                                    </div>
+                                                                                    <Input
+                                                                                        type="number"
+                                                                                        min="0"
+                                                                                        step="any"
+                                                                                        value={it.precio_unitario}
+                                                                                        onChange={(e) => setItem(i, { precio_unitario: e.target.value, precio_manual: true })}
+                                                                                        aria-label="Precio por metro"
+                                                                                        className="text-right"
+                                                                                    />
+                                                                                    <span className="pt-2 text-right font-medium text-warm-900">{m(sub)}</span>
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        aria-label={`Quitar ${color?.nombre ?? "rollo"}`}
+                                                                                        onClick={() => quitarItem(i)}
+                                                                                        className="rounded-md p-1.5 text-red-600 transition hover:bg-red-50"
+                                                                                    >
+                                                                                        <Trash2 className="h-4 w-4" />
+                                                                                    </button>
+                                                                                </div>
+                                                                            );
+                                                                        })}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                </Fragment>
+                                            );
+                                        }
+
+                                        // Lo demás (hilos, cierres…): una línea por producto.
+                                        const { it, i } = fila;
                                         const producto = productoDe(
                                             it.producto_id,
                                         );
@@ -1438,7 +1679,7 @@ export default function CrearVenta() {
                                         return (
                                             <tr key={i}>
                                                 <td className="px-3 py-2 text-center text-warm-500">
-                                                    {i + 1}
+                                                    {n + 1}
                                                 </td>
                                                 <td className="px-3 py-2 font-medium text-warm-900">
                                                     {producto?.codigo ?? "—"}
@@ -1454,58 +1695,7 @@ export default function CrearVenta() {
                                                     )}
                                                 </td>
                                                 <td className="px-3 py-2">
-                                                    <SearchSelect
-                                                        value={unidadDe(it)}
-                                                        clearable={false}
-                                                        emptyText="Sin unidades"
-                                                        onChange={(id) =>
-                                                            id &&
-                                                            String(id) !==
-                                                                String(unidadDe(it)) &&
-                                                            cambiarUnidadItem(
-                                                                i,
-                                                                id,
-                                                            )
-                                                        }
-                                                        options={(() => {
-                                                            const opciones = unidadesDe(it.producto_id);
-                                                            // Una venta antigua en un formato que ya no se
-                                                            // ofrece (un "Rollo 50 m"): se sigue viendo el suyo.
-                                                            if (
-                                                                it.modo !== ROLLOS &&
-                                                                !opciones.some((o) => o.value === String(it.producto_presentacion_id))
-                                                            ) {
-                                                                const actual = presentacionDe(it.producto_id, it.producto_presentacion_id);
-                                                                if (actual) opciones.push({ value: String(actual.id), label: actual.nombre });
-                                                            }
-                                                            return opciones;
-                                                        })()}
-                                                        className="min-w-[120px]"
-                                                    />
-                                                </td>
-                                                <td className="px-3 py-2">
-                                                    <SelectorRollo
-                                                        productoId={
-                                                            it.producto_id
-                                                        }
-                                                        almacenId={
-                                                            form.almacen_id
-                                                        }
-                                                        colorId={it.producto_color_id ?? ""}
-                                                        value={it.rollo_id}
-                                                        // Un rollo no puede estar en dos filas.
-                                                        excluir={items
-                                                            .filter((x, j) => j !== i && x.rollo_id)
-                                                            .map((x) => x.rollo_id)}
-                                                        onChange={(v, rollo) =>
-                                                            elegirRollo(i, v, rollo)
-                                                        }
-                                                    />
-                                                    {it.modo === ROLLOS && !it.rollo_id && (
-                                                        <span className="mt-0.5 block text-[11px] font-medium text-amber-600">
-                                                            Elige o escanea el rollo
-                                                        </span>
-                                                    )}
+                                                    {selectorUnidad(it, i)}
                                                 </td>
                                                 <td className="px-3 py-2 text-right text-warm-500">
                                                     {u

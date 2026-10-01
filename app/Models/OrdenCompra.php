@@ -99,6 +99,33 @@ class OrdenCompra extends Model
         return (int) $serie->numero_actual;
     }
 
+    /**
+     * El número de una orden que pasa a otro proveedor: la siguiente a la última que ya tiene ese
+     * proveedor (la primera, 001, si no tiene ninguna). No consume el contador cada vez que se
+     * cambia de proveedor —así no se inflaba a 004 tras editar—, y libera el número en el de antes.
+     */
+    public static function numeroAlCambiarProveedor(self $orden, int $proveedorNuevo): int
+    {
+        $nuevo = 1 + (int) static::where('proveedor_id', $proveedorNuevo)->where('id', '!=', $orden->id)->max('numero_proveedor');
+
+        // El contador del proveedor anterior retrocede si esta orden era la última que emitió.
+        SerieDocumento::where('tipo_documento', 'orden_compra_proveedor')
+            ->where('serie', 'PROV'.$orden->proveedor_id)
+            ->where('numero_actual', $orden->numero_proveedor)
+            ->decrement('numero_actual');
+
+        // El del nuevo nunca queda por debajo del número que se le acaba de dar.
+        $serie = SerieDocumento::firstOrCreate(
+            ['tipo_documento' => 'orden_compra_proveedor', 'serie' => 'PROV'.$proveedorNuevo],
+            ['numero_actual' => 0, 'activo' => true],
+        );
+        if ($serie->numero_actual < $nuevo) {
+            $serie->update(['numero_actual' => $nuevo]);
+        }
+
+        return $nuevo;
+    }
+
     /** ¿Es una compra de importación? Solo ahí aplican los campos de embarque. */
     public function esExterior(): bool
     {

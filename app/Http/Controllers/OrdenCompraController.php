@@ -291,7 +291,7 @@ class OrdenCompraController extends Controller
             }
             // Con otro proveedor, la orden pasa a ser la siguiente de ese proveedor.
             if (isset($data['proveedor_id']) && (int) $data['proveedor_id'] !== (int) $ordenesCompra->proveedor_id) {
-                $data['numero_proveedor'] = OrdenCompra::siguienteNumeroProveedor((int) $data['proveedor_id']);
+                $data['numero_proveedor'] = OrdenCompra::numeroAlCambiarProveedor($ordenesCompra, (int) $data['proveedor_id']);
             }
 
             $ordenesCompra->update(collect($data)->except('detalles')->all());

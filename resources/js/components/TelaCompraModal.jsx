@@ -72,6 +72,22 @@ export default function TelaCompraModal({ producto, moneda = 'PEN', costo = fals
     const poner = (c, campo, valor) =>
         setFilas((prev) => ({ ...prev, [clave(c)]: { ...prev[clave(c)], [campo]: valor } }));
 
+    /**
+     * Enter en los rollos de un color: pasa al siguiente y, si ese está vacío, le copia los mismos
+     * rollos (con su factor salen los mismos metros). Enter otra vez y sigue con el que viene.
+     */
+    const enterRollos = (e, i) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        const siguiente = base[i + 1];
+        if (!siguiente) return;
+        const valor = filas[clave(base[i])].rollos;
+        if (Number(valor) > 0 && !(Number(filas[clave(siguiente)].rollos) > 0)) poner(siguiente, 'rollos', valor);
+        const campo = e.currentTarget.closest('table')?.querySelector(`[data-rollos="${i + 1}"]`);
+        campo?.focus();
+        campo?.select();
+    };
+
     /** Cada fila con sus metros, su precio y su total. */
     const calculo = useMemo(
         () =>
@@ -179,7 +195,7 @@ export default function TelaCompraModal({ producto, moneda = 'PEN', costo = fals
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
-                                {calculo.map((x) => {
+                                {calculo.map((x, i) => {
                                     const f = filas[clave(x.c)];
                                     const activa = x.rollos > 0;
                                     return (
@@ -205,6 +221,8 @@ export default function TelaCompraModal({ producto, moneda = 'PEN', costo = fals
                                                     placeholder="0"
                                                     value={f.rollos}
                                                     onChange={(e) => poner(x.c, 'rollos', entero(e.target.value))}
+                                                    onKeyDown={(e) => enterRollos(e, i)}
+                                                    data-rollos={i}
                                                     aria-label={`Rollos de ${x.c.nombre}`}
                                                     className={inputCls}
                                                 />

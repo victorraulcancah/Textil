@@ -39,6 +39,7 @@ export default function PdfViewerModal({
     nombre,
     titulo = 'Documento',
     formatos = ['a4'],
+    impresionDistinta = false,
 }) {
     const toast = useToast();
     const iframeRef = useRef(null);
@@ -98,7 +99,33 @@ export default function PdfViewerModal({
 
     const abrir = () => url && window.open(url, '_blank', 'noopener');
 
+    /** Imprime la versión para papel (`?impresion=1`) desde un marco oculto, sin cambiar lo que se ve en pantalla. */
+    const imprimirVersionPapel = async () => {
+        const blobUrl = await obtenerPdf(tipo, id, { formato, impresion: true });
+        const oculto = document.createElement('iframe');
+        oculto.style.cssText = 'position:fixed;width:0;height:0;border:0;visibility:hidden';
+        oculto.onload = () => {
+            try {
+                oculto.contentWindow.focus();
+                oculto.contentWindow.print();
+            } finally {
+                // Se libera al rato: el diálogo de impresión sigue usando el archivo.
+                setTimeout(() => {
+                    oculto.remove();
+                    URL.revokeObjectURL(blobUrl);
+                }, 60000);
+            }
+        };
+        oculto.src = blobUrl;
+        document.body.appendChild(oculto);
+    };
+
     const imprimir = () => {
+        // Hay documentos que al imprimirse llevan menos columnas que en pantalla.
+        if (impresionDistinta && tipo && id != null && incrustable) {
+            imprimirVersionPapel().catch(() => toast.error('No se pudo preparar la impresión.'));
+            return;
+        }
         // En móvil se abre en el visor del sistema, que ya ofrece imprimir.
         if (!incrustable) return abrir();
 

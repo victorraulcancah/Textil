@@ -2,12 +2,12 @@
 
 namespace App\Pdf\Documentos;
 
-use App\Models\Empresa;
 use App\Models\OrdenCompra;
 use App\Pdf\DocumentoPdf;
 use App\Pdf\MontoEnLetras;
 use App\Pdf\PlanillaTela;
 use App\Pdf\ProductoConColor;
+use App\Pdf\PurchaseIngles;
 
 class OrdenCompraPdf implements DocumentoPdf
 {
@@ -61,7 +61,9 @@ class OrdenCompraPdf implements DocumentoPdf
             'moneda' => $moneda,
             'enLetras' => MontoEnLetras::convertir($total, $orden->moneda === 'USD' ? 'DÓLARES' : 'SOLES'),
             // La cabecera en inglés de la Purchase Order (solo compras al exterior).
-            'ingles' => $orden->tipo === 'exterior' ? $this->ingles($orden) : null,
+            'ingles' => $orden->tipo === 'exterior'
+                ? PurchaseIngles::armar($orden, 'precio_unitario', (string) $orden->moneda, $orden->numero_contenedor, $orden->fecha_emision, $orden->fecha_emision)
+                : null,
             // Solo tienen sentido en una compra al exterior; el blade los
             // omite del todo cuando la orden es nacional.
             'datosExterior' => $orden->tipo === 'exterior' ? [
@@ -77,80 +79,6 @@ class OrdenCompraPdf implements DocumentoPdf
                 'Elaborado por' => $orden->elaborado_por ?: '—',
                 'Aprobado por' => $orden->aprobado_por ?: '—',
             ] : null,
-        ];
-    }
-
-    /**
-     * La cabecera de la Purchase Order, en inglés y con los datos que ya tiene el
-     * sistema: el proveedor es el vendedor (Shipper / Seller), la empresa es el
-     * comprador (Consignee / Buyer) y el embarque sale de la orden. La mercadería
-     * se describe por tela con su ficha técnica.
-     */
-    private function ingles(OrdenCompra $orden): array
-    {
-        $proveedor = $orden->proveedor;
-        $empresa = Empresa::query()->where('activa', true)->first() ?? Empresa::first();
-        $simbolo = $orden->moneda === 'USD' ? '$' : 'S/';
-
-        $mayus = fn ($v) => mb_strtoupper(trim((string) $v));
-        $limpio = fn (array $partes) => collect($partes)->filter(fn ($p) => filled($p))->implode(', ');
-
-        // Una ficha por tela (el color no cambia la ficha): precio pactado y metros de cada rollo.
-        $bienes = $orden->detalles
-            ->groupBy(fn ($d) => $d->presentacion?->producto?->id)
-            ->map(function ($lineas) use ($simbolo, $mayus) {
-                $producto = $lineas->first()->presentacion?->producto;
-                $precios = $lineas->pluck('precio_unitario')->map(fn ($p) => (float) $p)->unique()->values();
-                $factores = $lineas
-                    ->filter(fn ($d) => (int) $d->rollos > 0)
-                    ->map(fn ($d) => round((float) $d->cantidad / (int) $d->rollos, 2))
-                    ->unique()->sort()->values();
-                $fmt = fn ($n) => rtrim(rtrim(number_format((float) $n, 2, '.', ''), '0'), '.');
-
-                return [
-                    'name' => $mayus($producto?->nombre_tecnico ?: $producto?->nombre),
-                    // Como en la hoja del proveedor: el gramaje con su mínimo y el ancho medido de orillo a orillo.
-                    'weight' => $producto?->gramaje ? $fmt($producto->gramaje).' GSM (NO LESS THAN '.$fmt($producto->gramaje).'GSM)' : '—',
-                    'width' => $producto?->ancho_cm ? $fmt($producto->ancho_cm).' CM (HOLE TO HOLE)' : '—',
-                    'specification' => $mayus($producto?->composicion) ?: '—',
-                    'price' => $precios->map(fn ($p) => $simbolo.number_format($p, 2))->implode(' / '),
-                    'hs_code' => $producto?->codigo_arancelario ?: '—',
-                    'roll' => $factores->isNotEmpty()
-                        ? $factores->map($fmt)->implode(' - ')
-                        : ($producto?->metros_por_rollo ? $fmt($producto->metros_por_rollo) : '—'),
-                ];
-            })
-            ->values()
-            ->all();
-
-        return [
-            'shipper' => [
-                'name' => $mayus($proveedor?->nombre),
-                'address' => $mayus($proveedor?->direccion) ?: '—',
-                'tax_id' => $proveedor?->tax_id ?: ($proveedor?->ruc ?: '—'),
-                'telephone' => $proveedor?->telefono ?: '—',
-                'fax' => $proveedor?->fax ?: null,
-            ],
-            'consignee' => [
-                'name' => $mayus($empresa?->razon_social),
-                'address' => $mayus($limpio([$empresa?->direccion, $empresa?->distrito, $empresa?->provincia, $empresa?->departamento])) ?: '—',
-                'ruc' => $empresa?->ruc ?: '—',
-                'telephone' => $empresa?->telefono ?: '—',
-            ],
-            'cargo_type' => $mayus($orden->cargo_type) ?: '—',
-            'container' => $mayus($orden->numero_contenedor) ?: '—',
-            'shipment' => $mayus($orden->medio_transporte) ?: '—',
-            'origin' => $mayus($orden->pais_origen) ?: '—',
-            'destination' => $mayus($orden->pais_destino) ?: '—',
-            'incoterms' => $mayus($orden->incoterm) ?: '—',
-            'port_departure' => $mayus($orden->puerto_embarque) ?: '—',
-            'port_arrival' => $mayus($orden->puerto_destino) ?: '—',
-            'date_of_agreement' => optional($orden->fecha_emision)->format('d/m/Y') ?: '—',
-            'bienes' => $bienes,
-            'shipping_date' => optional($orden->fecha_embarque_estimada)->format('d/m/Y') ?: '—',
-            'prepared_by' => $orden->elaborado_por ?: '',
-            'approved_by' => $orden->aprobado_por ?: '',
-            'note' => $orden->observaciones ?: '',
         ];
     }
 

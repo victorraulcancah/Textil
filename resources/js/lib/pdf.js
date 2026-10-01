@@ -8,10 +8,11 @@ import api from './api';
  *   tipo    → clave registrada en config/pdf.php (ej. 'nota-venta')
  *   id      → id del documento
  *   formato → 'a4' | 'ticket'
+ *   impresion → la versión para papel (algunos documentos omiten columnas al imprimirse)
  */
-export async function obtenerPdf(tipo, id, { formato = 'a4', descargar = false } = {}) {
+export async function obtenerPdf(tipo, id, { formato = 'a4', descargar = false, impresion = false } = {}) {
     const { data } = await api.get(`/pdf/${tipo}/${id}`, {
-        params: { formato, descargar: descargar ? 1 : undefined },
+        params: { formato, descargar: descargar ? 1 : undefined, impresion: impresion ? 1 : undefined },
         responseType: 'blob',
     });
     return URL.createObjectURL(data);

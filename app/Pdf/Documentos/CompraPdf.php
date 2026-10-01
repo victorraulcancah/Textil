@@ -24,7 +24,7 @@ class CompraPdf implements DocumentoPdf
     {
         $compra = Compra::with([
             'proveedor',
-            'ordenCompra:id,codigo',
+            'ordenCompra.proveedor:id,codigo_corto',
             'usuario:id,name',
             'detalles.presentacion.producto:id,codigo,nombre',
             'detalles.presentacion.unidadBase:id,abreviatura',
@@ -50,8 +50,12 @@ class CompraPdf implements DocumentoPdf
         // Sin serie (comprobante no domiciliado) es solo el número, sin guion delante.
         $docProveedor = implode('-', array_filter([$compra->serie, $compra->numero]));
 
+        $orden = $compra->ordenCompra;
+
         return [
             'compra' => $compra,
+            // El número de la orden de compra de la que salió (HLS-001-26): "PO" bajo el logo.
+            'po' => $orden?->codigoDocumento(),
             'documento' => $compra->numero_compra ?? ('#' . $compra->id),
             'tipoDocLabel' => $tipoDoc[$compra->tipo_documento] ?? ucfirst((string) $compra->tipo_documento),
             'docProveedor' => $docProveedor !== '' ? $docProveedor : '—',

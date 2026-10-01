@@ -395,6 +395,8 @@ export default function OrdenesCompra() {
                 nombre={pdfTarget?.codigo}
                 titulo="Orden de compra"
                 formatos={['a4', 'ticket']}
+                // Al imprimir, la planilla va sin Color code ni Factor; en pantalla se ven.
+                impresionDistinta
             />
         </Layout>
     );

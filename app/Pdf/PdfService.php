@@ -26,13 +26,13 @@ class PdfService
      * Genera el PDF. Devuelve la instancia de dompdf lista para ->stream()
      * (inline) o ->download().
      */
-    public function generar(DocumentoPdf $documento, int $id, string $formato)
+    public function generar(DocumentoPdf $documento, int $id, string $formato, array $extra = [])
     {
         if (!in_array($formato, $documento->formatos(), true)) {
             $formato = $documento->formatos()[0];
         }
 
-        $datos = $documento->datos($id) + [
+        $datos = $documento->datos($id) + $extra + [
             'empresa' => Empresa::query()->where('activa', true)->first() ?? Empresa::first(),
             'formato' => $formato,
             'pieLegal' => config('pdf.pie_legal'),

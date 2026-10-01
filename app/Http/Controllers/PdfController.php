@@ -13,7 +13,7 @@ class PdfController extends Controller
     }
 
     /**
-     * GET /api/pdf/{tipo}/{id}?formato=a4|ticket&descargar=1
+     * GET /api/pdf/{tipo}/{id}?formato=a4|ticket&descargar=1&impresion=1
      * Genera el PDF de un documento. inline por defecto; descarga con ?descargar=1.
      */
     public function show(Request $request, string $tipo, int $id)
@@ -26,7 +26,8 @@ class PdfController extends Controller
         $formato = $request->query('formato', 'a4');
 
         try {
-            $pdf = $this->pdf->generar($documento, $id, $formato);
+            // `impresion`: la versión para papel (hay documentos que omiten columnas al imprimirse).
+            $pdf = $this->pdf->generar($documento, $id, $formato, ['impresion' => $request->boolean('impresion')]);
         } catch (ModelNotFoundException) {
             return response()->json(['message' => 'El documento no existe.'], 404);
         }

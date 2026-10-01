@@ -32,7 +32,7 @@
             formato="ticket" />
         @if ($compra->observaciones)<div class="muted">Obs.: {{ $compra->observaciones }}</div>@endif
     @else
-        <x-pdf.encabezado :empresa="$empresa" titulo="COMPRA" :numero="$documento" />
+        <x-pdf.encabezado :empresa="$empresa" titulo="COMPRA" :numero="$documento" :bajoLogo="$po ? 'PO: ' . $po : null" />
         <x-pdf.meta
             :items="[
                 'Proveedor' => $compra->proveedor?->nombre ?: '—',
@@ -46,7 +46,7 @@
                 'Estado' => $estado,
             ]" />
         {{-- La planilla: una tabla por tela, con el color code que se escribió en la compra. --}}
-        <x-pdf.planilla :grupos="$planilla['grupos']" :totales="$planilla['totales']" :moneda="$moneda" :colorCode="true" />
+        <x-pdf.planilla :grupos="$planilla['grupos']" :totales="$planilla['totales']" :moneda="$moneda" :colorCode="! ($impresion ?? false)" :conFactor="! ($impresion ?? false)" />
         <x-pdf.cierre
             :observaciones="$compra->observaciones"
             :lineas="[

@@ -109,18 +109,20 @@ export default function StockPorRollo() {
                 nombre: f.tipo_tela ?? 'Sin tipo de tela',
                 familia: f.familia ?? null,
                 telas: new Set(),
+                nombres: new Set(),
                 rollos: 0,
                 metros: 0,
                 valor: 0,
             };
             g.telas.add(f.producto_id);
+            if (f.producto) g.nombres.add(f.producto);
             g.rollos += Number(f.rollos) || 0;
             g.metros += Number(f.metros) || 0;
             g.valor += Number(f.valor) || 0;
             grupos.set(clave, g);
         });
         return [...grupos.values()]
-            .map((g) => ({ ...g, telas: g.telas.size }))
+            .map((g) => ({ ...g, telas: g.telas.size, nombres: [...g.nombres].sort().join(', ') }))
             .sort((a, b) => a.nombre.localeCompare(b.nombre));
     }, [resumen]);
 
@@ -174,6 +176,11 @@ export default function StockPorRollo() {
                     {row.familia && <span className="text-xs font-normal text-warm-400">{row.familia}</span>}
                 </span>
             ),
+        },
+        {
+            key: 'nombres',
+            label: 'Nombre comercial',
+            render: (row) => <span className="text-warm-800">{row.nombres || '—'}</span>,
         },
         { key: 'telas', label: 'Telas', align: 'right', searchable: false, render: (row) => row.telas },
         { key: 'rollos', label: 'Rollos', align: 'right', searchable: false, render: (row) => <span className="font-medium">{row.rollos}</span> },

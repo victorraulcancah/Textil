@@ -26,13 +26,18 @@ const estadoInfo = {
 };
 
 /**
- * El proveedor de una línea del ajuste: el del color de la tela (cada color tiene el suyo) y, si no, el que se
- * puso en el ajuste. Los ajustes de rollos no llevan proveedor propio.
+ * El proveedor de una línea del ajuste. Una salida de un rollo toma el de donde vino el rollo (su recepción o su
+ * importación); si no, el del color de la tela y, al final, el que se puso en el ajuste.
  */
-const proveedorDeLinea = (ajuste, linea) => linea?.color?.proveedor?.nombre ?? ajuste?.proveedor?.nombre ?? '';
+const proveedorDeLinea = (ajuste, linea) =>
+    linea?.rollo?.recepcion?.proveedor?.nombre
+    ?? linea?.rollo?.importacion?.proveedor?.nombre
+    ?? linea?.color?.proveedor?.nombre
+    ?? ajuste?.proveedor?.nombre
+    ?? '';
 
 /** Los proveedores de un ajuste (sin repetir): el suyo y los de sus líneas. */
-const proveedoresDe = (ajuste) => [...new Set([ajuste?.proveedor?.nombre, ...(ajuste?.detalles ?? []).map((d) => d.color?.proveedor?.nombre)].filter(Boolean))];
+const proveedoresDe = (ajuste) => [...new Set([ajuste?.proveedor?.nombre, ...(ajuste?.detalles ?? []).map((d) => proveedorDeLinea(null, d))].filter(Boolean))];
 
 /** El día (aaaa-mm-dd) en la hora local, para comparar con los filtros de fecha. */
 const diaLocal = (fecha) => {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Coins, Printer } from 'lucide-react';
 import api, { asList } from '../lib/api';
+import { destinoDe, useCatalogoDestinos } from '../lib/destinosCaja';
 import Layout from '../components/Layout';
 import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
 import PageHeader from '../components/PageHeader';
@@ -14,9 +15,6 @@ const fechaHora = (v) => (v ? new Date(v).toLocaleString('es-PE') : '—');
 const fechaCorta = (v) => (v ? new Date(v).toLocaleDateString('es-PE') : '—');
 
 const esDigital = (m) => Boolean(m.cuenta_bancaria || m.billetera);
-
-/** Método real del movimiento, deducido de la cuenta o billetera asociada. */
-const metodoDe = (m) => (m.cuenta_bancaria ? 'transferencia' : m.billetera ? 'billetera' : 'efectivo');
 
 const metodoLabel = (m) => {
     if (m.cuenta_bancaria) return `Transf. · ${m.cuenta_bancaria.alias || m.cuenta_bancaria.numero_cuenta}`;
@@ -43,8 +41,13 @@ export default function CierresCaja() {
     /** Filtro de los movimientos del cierre: '' (todos), 'efectivo' o 'digital' (transferencia, Yape, billetera). */
     const [filtroTipoMov, setFiltroTipoMov] = useState('');
     const [tipoMovActivo, setTipoMovActivo] = useState('');
-    const [filtroMetodo, setFiltroMetodo] = useState('');
-    const [metodoActivo, setMetodoActivo] = useState('');
+    const [filtroCuenta, setFiltroCuenta] = useState('');
+    const [cuentaActiva, setCuentaActiva] = useState('');
+
+    // Al cambiar de cierre, los filtros de movimientos empiezan de cero (la cuenta elegida puede no existir en el otro).
+    useEffect(() => {
+        setFiltroTipoMov(''); setTipoMovActivo(''); setFiltroCuenta(''); setCuentaActiva('');
+    }, [seleccionado?.id]);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -280,16 +283,20 @@ export default function CierresCaja() {
     const movimientosVisibles = movimientos.filter((m) => {
         if (tipoMovActivo === 'efectivo' && esDigital(m)) return false;
         if (tipoMovActivo === 'digital' && !esDigital(m)) return false;
-        if (metodoActivo && metodoDe(m) !== metodoActivo) return false;
+        if (cuentaActiva && destinoDe(m) !== cuentaActiva) return false;
         return true;
     });
+
+    /** Efectivo, cuentas bancarias y billeteras de la sucursal, según el tipo de movimiento elegido. */
+    const opcionesDestino = useCatalogoDestinos();
+    const destinos = opcionesDestino(filtroTipoMov, movimientos);
 
     const filtrosMov = (
         <div className="flex flex-wrap items-end gap-3">
             <Select
                 label="Tipo de movimiento"
                 value={filtroTipoMov}
-                onChange={(e) => setFiltroTipoMov(e.target.value)}
+                onChange={(e) => { setFiltroTipoMov(e.target.value); setFiltroCuenta(''); }}
                 options={[
                     { value: '', label: 'Todos' },
                     { value: 'efectivo', label: 'Efectivo' },
@@ -298,25 +305,20 @@ export default function CierresCaja() {
                 className="w-52"
             />
             <Select
-                label="Método"
-                value={filtroMetodo}
-                onChange={(e) => setFiltroMetodo(e.target.value)}
-                options={[
-                    { value: '', label: 'Todos' },
-                    { value: 'efectivo', label: 'Efectivo' },
-                    { value: 'transferencia', label: 'Transferencia' },
-                    { value: 'billetera', label: 'Billetera' },
-                ]}
-                className="w-48"
+                label="Cuenta / billetera"
+                value={filtroCuenta}
+                onChange={(e) => setFiltroCuenta(e.target.value)}
+                options={[{ value: '', label: 'Todas' }, ...destinos]}
+                className="w-64"
             />
         </div>
     );
     const propsFiltroMov = {
         filterable: true,
         filters: filtrosMov,
-        filterCount: (tipoMovActivo ? 1 : 0) + (metodoActivo ? 1 : 0),
-        onApplyFilters: () => { setTipoMovActivo(filtroTipoMov); setMetodoActivo(filtroMetodo); },
-        onClearFilters: () => { setFiltroTipoMov(''); setTipoMovActivo(''); setFiltroMetodo(''); setMetodoActivo(''); },
+        filterCount: (tipoMovActivo ? 1 : 0) + (cuentaActiva ? 1 : 0),
+        onApplyFilters: () => { setTipoMovActivo(filtroTipoMov); setCuentaActiva(filtroCuenta); },
+        onClearFilters: () => { setFiltroTipoMov(''); setTipoMovActivo(''); setFiltroCuenta(''); setCuentaActiva(''); },
     };
 
     const movColumns = [

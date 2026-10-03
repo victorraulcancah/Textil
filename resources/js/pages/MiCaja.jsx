@@ -3,6 +3,7 @@ import { ArrowDownCircle, ArrowUpCircle, FileSignature, Lock, LockOpen, PiggyBan
 import api from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
+import { destinoDe, useCatalogoDestinos } from '../lib/destinosCaja';
 import PagosCuentaModal from '../components/PagosCuentaModal';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
@@ -45,6 +46,7 @@ function Stat({ icon: Icon, label, value, accent = 'text-warm-900', bg = 'bg-gra
 export default function MiCaja() {
     const toast = useToast();
     const { puede } = useAuth();
+    const opcionesDestino = useCatalogoDestinos();
     /** Amortización de documentos desde la caja, separada: 'cobrar' (ingreso) o 'pagar' (egreso). */
     const [amortizar, setAmortizar] = useState(null);
     const [data, setData] = useState(null);
@@ -67,7 +69,7 @@ export default function MiCaja() {
     const [filtroTipoMov, setFiltroTipoMov] = useState('');
     const [filtroTipo, setFiltroTipo] = useState('');
     const [filtroMotivo, setFiltroMotivo] = useState('');
-    const [filtroMetodo, setFiltroMetodo] = useState('');
+    const [filtroCuenta, setFiltroCuenta] = useState('');
     const [filtrosActivos, setFiltrosActivos] = useState({});
 
 
@@ -185,7 +187,7 @@ export default function MiCaja() {
         if (filtroTipoMov) next.tipoMov = filtroTipoMov;
         if (filtroTipo) next.tipo = filtroTipo;
         if (filtroMotivo) next.motivo = filtroMotivo;
-        if (filtroMetodo) next.metodo = filtroMetodo;
+        if (filtroCuenta) next.cuenta = filtroCuenta;
         setFiltrosActivos(next);
     };
 
@@ -193,7 +195,7 @@ export default function MiCaja() {
         setFiltroTipoMov('');
         setFiltroTipo('');
         setFiltroMotivo('');
-        setFiltroMetodo('');
+        setFiltroCuenta('');
         setFiltrosActivos({});
     };
 
@@ -202,7 +204,7 @@ export default function MiCaja() {
         if (filtrosActivos.tipoMov === 'digital' && metodoDe(r) === 'efectivo') return false;
         if (filtrosActivos.tipo && r.tipo !== filtrosActivos.tipo) return false;
         if (filtrosActivos.motivo && String(r.motivo_movimiento_id) !== filtrosActivos.motivo) return false;
-        if (filtrosActivos.metodo && metodoDe(r) !== filtrosActivos.metodo) return false;
+        if (filtrosActivos.cuenta && destinoDe(r) !== filtrosActivos.cuenta) return false;
         return true;
     });
 
@@ -224,7 +226,7 @@ export default function MiCaja() {
             <Select
                 label="Tipo de movimiento"
                 value={filtroTipoMov}
-                onChange={(e) => setFiltroTipoMov(e.target.value)}
+                onChange={(e) => { setFiltroTipoMov(e.target.value); setFiltroCuenta(''); }}
                 options={[
                     { value: '', label: 'Todos' },
                     { value: 'efectivo', label: 'Efectivo' },
@@ -253,16 +255,11 @@ export default function MiCaja() {
                 className="w-56"
             />
             <Select
-                label="Método"
-                value={filtroMetodo}
-                onChange={(e) => setFiltroMetodo(e.target.value)}
-                options={[
-                    { value: '', label: 'Todos' },
-                    { value: 'efectivo', label: 'Efectivo' },
-                    { value: 'transferencia', label: 'Transferencia' },
-                    { value: 'billetera', label: 'Billetera' },
-                ]}
-                className="w-48"
+                label="Cuenta / billetera"
+                value={filtroCuenta}
+                onChange={(e) => setFiltroCuenta(e.target.value)}
+                options={[{ value: '', label: 'Todas' }, ...opcionesDestino(filtroTipoMov, movimientos)]}
+                className="w-64"
             />
         </div>
     );

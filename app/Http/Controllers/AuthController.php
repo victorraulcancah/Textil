@@ -26,7 +26,7 @@ class AuthController extends Controller
     {
         $user = auth('api')->user()->load('empresa', 'roles', 'almacen:id,nombre,numero_serie');
 
-        return $user->toArray() + ['permisos' => $this->permisosDe($user)];
+        return $this->conAlmacenes($user) + ['permisos' => $this->permisosDe($user)];
     }
 
     public function register(RegisterRequest $request): JsonResponse
@@ -44,8 +44,19 @@ class AuthController extends Controller
         $user = auth('api')->user()->load('empresa', 'roles', 'almacen:id,nombre,numero_serie');
 
         return response()->json(
-            $user->toArray() + ['permisos' => $this->permisosDe($user)],
+            $this->conAlmacenes($user) + ['permisos' => $this->permisosDe($user)],
         );
+    }
+
+    /**
+     * El usuario con los almacenes donde puede trabajar (para elegir en el menú) y el id de la caja con la que opera
+     * en el almacén actual.
+     */
+    private function conAlmacenes(User $user): array
+    {
+        $almacenes = \App\Models\Almacen::whereIn('id', $user->almacenesIds())->orderBy('id')->get(['id', 'nombre', 'numero_serie']);
+
+        return $user->toArray() + ['almacenes' => $almacenes, 'caja_id' => $user->cajaActual()?->id];
     }
 
     /**

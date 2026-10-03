@@ -16,6 +16,8 @@ class Caja extends Model
     protected $fillable = [
         // Cada caja es de una sucursal; su código es CJ + número del almacén + correlativo (CJ002-001).
         'almacen_id',
+        // La caja es de un usuario; un usuario tiene una por almacén.
+        'usuario_id',
         'codigo',
         'nombre',
         'acepta_efectivo',
@@ -76,6 +78,6 @@ class Caja extends Model
 
     public function usuario()
     {
-        return $this->belongsTo(User::class, 'id', 'caja_id');
+        return $this->belongsTo(User::class, 'usuario_id');
     }
 }

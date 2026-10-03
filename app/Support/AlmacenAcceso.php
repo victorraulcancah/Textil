@@ -25,11 +25,18 @@ class AlmacenAcceso
      */
     private static function almacenDe(User $usuario): ?int
     {
-        if (! $usuario->esSuperAdmin()) {
-            return $usuario->almacen_id ? (int) $usuario->almacen_id : null;
-        }
-
         $pedido = (int) request()->header('X-Almacen-Id');
+
+        // Un usuario trabaja en su almacén o en cualquiera de los que tiene (por ejemplo donde tiene caja): el que
+        // elige en el menú de arriba, y por defecto el suyo.
+        if (! $usuario->esSuperAdmin()) {
+            $permitidos = $usuario->almacenesIds();
+            if ($pedido && in_array($pedido, $permitidos, true)) {
+                return $pedido;
+            }
+
+            return $usuario->almacen_id ? (int) $usuario->almacen_id : ($permitidos[0] ?? null);
+        }
 
         return $pedido && Almacen::whereKey($pedido)->where('activo', true)->exists() ? $pedido : null;
     }

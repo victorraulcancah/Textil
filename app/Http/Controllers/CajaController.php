@@ -16,7 +16,7 @@ class CajaController extends Controller
         'cuentasBancarias:id,banco_id,alias,numero_cuenta,titular',
         'cuentasBancarias.banco:id,nombre',
         'billeteras:id,nombre,numero_asociado,titular',
-        'usuario:id,name,email,caja_id',
+        'usuario:id,name,email',
     ];
 
     /** Cada sucursal ve las cajas de su almacén; el Super Admin ve todas (o las de un almacén si lo pide). */
@@ -89,7 +89,7 @@ class CajaController extends Controller
     public function destroy(Caja $caja)
     {
         AlmacenAcceso::exigir($caja->almacen_id);
-        User::where('caja_id', $caja->id)->update(['caja_id' => null]);
+        $this->assignUsuario($caja, null);
         $caja->delete();
         return response()->json(['message' => 'Eliminado']);
     }
@@ -117,16 +117,27 @@ class CajaController extends Controller
 
     private function assignUsuario(Caja $caja, ?int $usuarioId): void
     {
-        User::where('caja_id', $caja->id)->update(['caja_id' => null]);
+        $anterior = $caja->usuario_id ? User::find($caja->usuario_id) : null;
+
         if ($usuarioId) {
-            // El usuario trabaja en un almacén: su caja tiene que ser de ese mismo almacén.
+            // Un usuario tiene una sola caja por almacén (puede tener otra en cada uno de los demás).
             $usuario = User::findOrFail($usuarioId);
-            if ($usuario->almacen_id && (int) $usuario->almacen_id !== (int) $caja->almacen_id) {
+            $otra = Caja::where('usuario_id', $usuario->id)->where('almacen_id', $caja->almacen_id)->where('id', '!=', $caja->id)->first();
+            if ($otra) {
                 throw ValidationException::withMessages([
-                    'usuario_id' => "{$usuario->name} trabaja en otro almacén: solo puede tener una caja de su almacén.",
+                    'usuario_id' => "{$usuario->name} ya tiene la caja {$otra->codigo} en este almacén: cada usuario tiene una por almacén.",
                 ]);
             }
-            $usuario->update(['caja_id' => $caja->id]);
+            $caja->update(['usuario_id' => $usuario->id]);
+            // Con una caja en este almacén, el usuario puede trabajar en él.
+            $usuario->almacenes()->syncWithoutDetaching([$caja->almacen_id]);
+        } else {
+            $caja->update(['usuario_id' => null]);
+        }
+
+        // Si cambia de usuario, el anterior deja de poder trabajar aquí (salvo que sea su almacén principal).
+        if ($anterior && (int) $anterior->id !== (int) $usuarioId && (int) $anterior->almacen_id !== (int) $caja->almacen_id) {
+            $anterior->almacenes()->detach($caja->almacen_id);
         }
     }
 

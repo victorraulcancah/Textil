@@ -26,12 +26,13 @@ class MovimientoCajaController extends Controller
     public function index(Request $request)
     {
         $user = auth('api')->user();
+        $cajaPropia = $user?->cajaActual()?->id;
 
         $query = MovimientoCaja::with(self::WITH)
             ->when($request->filled('caja_id'), fn ($q) => $q->whereHas('apertura', fn ($a) => $a->where('caja_id', $request->integer('caja_id'))))
             ->when(
-                $user?->caja_id && ! $user->hasRole('super-admin'),
-                fn ($q) => $q->whereHas('apertura', fn ($a) => $a->where('caja_id', $user->caja_id))
+                $cajaPropia && ! $user->hasRole('super-admin'),
+                fn ($q) => $q->whereHas('apertura', fn ($a) => $a->where('caja_id', $cajaPropia))
             )
             // Tesorería por sucursal: cada almacén ve los movimientos de sus cajas.
             ->whereHas('apertura.caja', fn ($c) => AlmacenAcceso::limitar($c))
@@ -58,7 +59,7 @@ class MovimientoCajaController extends Controller
             'descripcion' => 'nullable|string|max:255',
         ]);
 
-        $cajaId = $data['caja_id'] ?? $user?->caja_id;
+        $cajaId = $data['caja_id'] ?? $user?->cajaActual()?->id;
         if (! $cajaId) {
             throw ValidationException::withMessages(['caja_id' => 'No tienes una caja asignada.']);
         }

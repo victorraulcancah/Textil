@@ -127,11 +127,6 @@ class LimpiarDatos extends Command
 
         $this->borrar($aBorrar->keys()->all());
 
-        // Los usuarios quedan sin caja asignada: esas cajas ya no existen.
-        if ($aBorrar->has('cajas') && Schema::hasColumn('users', 'caja_id')) {
-            DB::table('users')->whereNotNull('caja_id')->update(['caja_id' => null]);
-        }
-
         $this->call('db:seed', ['--class' => CatalogosBaseSeeder::class, '--force' => true]);
 
         // Sembrar los catálogos también deja su rastro en la auditoría: se

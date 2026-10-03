@@ -19,9 +19,9 @@ class CajaService
     {
         $usuario ??= auth('api')->user() ?? auth()->user();
 
-        if ($usuario?->caja_id) {
+        if ($caja = $usuario?->cajaActual()) {
             $propia = AperturaCaja::where('estado', 'abierta')
-                ->where('caja_id', $usuario->caja_id)
+                ->where('caja_id', $caja->id)
                 ->latest('fecha_apertura')
                 ->first();
 
@@ -39,13 +39,13 @@ class CajaService
     {
         $usuario ??= auth('api')->user() ?? auth()->user();
 
-        if (! $usuario?->caja_id) {
-            $this->negar('No tienes una caja asignada: pide que te asignen una para poder cobrar o pagar.');
+        if (! $usuario?->cajaActual()) {
+            $this->negar('No tienes una caja asignada en este almacén: pide que te asignen una para poder cobrar o pagar.');
         }
 
         $apertura = $this->aperturaPara($usuario);
         if (! $apertura) {
-            $nombre = $usuario->caja?->nombre;
+            $nombre = $usuario->cajaActual()?->nombre;
             $this->negar('Tu caja'.($nombre ? " ({$nombre})" : '').' está cerrada: ábrela en Mi Caja para poder cobrar o pagar.');
         }
 

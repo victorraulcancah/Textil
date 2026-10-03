@@ -19,7 +19,8 @@ class MiCajaController extends Controller
     public function show()
     {
         $user = auth('api')->user();
-        if (! $user?->caja_id) {
+        $cajaId = $user?->cajaActual()?->id;
+        if (! $cajaId) {
             return response()->json(['caja' => null, 'apertura' => null, 'resumen' => null]);
         }
 
@@ -27,8 +28,8 @@ class MiCajaController extends Controller
             'cuentasBancarias:id,banco_id,alias,numero_cuenta,titular',
             'cuentasBancarias.banco:id,nombre',
             'billeteras:id,nombre,numero_asociado,titular',
-        ])->find($user->caja_id);
-        $apertura = AperturaCaja::where('caja_id', $user->caja_id)
+        ])->find($cajaId);
+        $apertura = AperturaCaja::where('caja_id', $cajaId)
             ->where('estado', 'abierta')
             ->latest('fecha_apertura')
             ->first();
@@ -56,19 +57,20 @@ class MiCajaController extends Controller
     public function abrir(Request $request)
     {
         $user = auth('api')->user();
-        if (! $user?->caja_id) {
-            throw ValidationException::withMessages(['caja' => 'No tienes una caja asignada.']);
+        $cajaId = $user?->cajaActual()?->id;
+        if (! $cajaId) {
+            throw ValidationException::withMessages(['caja' => 'No tienes una caja asignada en este almacén.']);
         }
 
         $data = $request->validate(['monto_inicial' => 'required|numeric|min:0']);
 
-        $abierta = AperturaCaja::where('caja_id', $user->caja_id)->where('estado', 'abierta')->exists();
+        $abierta = AperturaCaja::where('caja_id', $cajaId)->where('estado', 'abierta')->exists();
         if ($abierta) {
             throw ValidationException::withMessages(['caja' => 'La caja ya está abierta.']);
         }
 
         AperturaCaja::create([
-            'caja_id' => $user->caja_id,
+            'caja_id' => $cajaId,
             'usuario_id' => $user->id,
             'monto_inicial' => $data['monto_inicial'],
             'fecha_apertura' => now(),
@@ -87,7 +89,7 @@ class MiCajaController extends Controller
             'monto_contado_usd' => 'nullable|numeric|min:0',
         ]);
 
-        $apertura = AperturaCaja::where('caja_id', $user?->caja_id)
+        $apertura = AperturaCaja::where('caja_id', $user?->cajaActual()?->id)
             ->where('estado', 'abierta')
             ->latest('fecha_apertura')
             ->first();

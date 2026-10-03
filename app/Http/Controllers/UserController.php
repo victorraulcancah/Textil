@@ -18,7 +18,7 @@ class UserController extends Controller
 
     public function index(): JsonResponse
     {
-        return response()->json(User::with('empresa', 'caja', 'almacen:id,nombre,numero_serie', 'roles')->latest('id')->get());
+        return response()->json(User::with('empresa', 'cajas:id,usuario_id,almacen_id,codigo,nombre', 'almacen:id,nombre,numero_serie', 'almacenes:id,nombre,numero_serie', 'roles')->latest('id')->get());
     }
 
     /**
@@ -48,12 +48,22 @@ class UserController extends Controller
             return $user;
         });
 
-        return response()->json($user->load('empresa', 'caja', 'almacen:id,nombre,numero_serie', 'roles'), 201);
+        $this->incluirAlmacenPrincipal($user);
+
+        return response()->json($user->load('empresa', 'cajas:id,usuario_id,almacen_id,codigo,nombre', 'almacen:id,nombre,numero_serie', 'almacenes:id,nombre,numero_serie', 'roles'), 201);
+    }
+
+    /** Su almacén principal siempre está entre los que puede usar. */
+    private function incluirAlmacenPrincipal(User $user): void
+    {
+        if ($user->almacen_id) {
+            $user->almacenes()->syncWithoutDetaching([$user->almacen_id]);
+        }
     }
 
     public function show(int $id): JsonResponse
     {
-        return response()->json(User::with('empresa', 'caja', 'almacen:id,nombre,numero_serie', 'roles')->findOrFail($id));
+        return response()->json(User::with('empresa', 'cajas:id,usuario_id,almacen_id,codigo,nombre', 'almacen:id,nombre,numero_serie', 'almacenes:id,nombre,numero_serie', 'roles')->findOrFail($id));
     }
 
     public function update(UpdateUserRequest $request, int $id): JsonResponse
@@ -68,13 +78,7 @@ class UserController extends Controller
                 $user->update($data);
             }
 
-            // Su caja es de su almacén: si lo cambian de sucursal, la caja de la anterior se le quita.
-            if ($user->caja_id && $user->almacen_id) {
-                $cajaAlmacen = $user->caja()->value('almacen_id');
-                if ($cajaAlmacen && (int) $cajaAlmacen !== (int) $user->almacen_id) {
-                    $user->update(['caja_id' => null]);
-                }
-            }
+            $this->incluirAlmacenPrincipal($user);
 
             // Sus permisos son la unión de los de todos sus roles.
             if ($roles) {
@@ -82,7 +86,7 @@ class UserController extends Controller
             }
         });
 
-        return response()->json($user->load('empresa', 'caja', 'almacen:id,nombre,numero_serie', 'roles'));
+        return response()->json($user->load('empresa', 'cajas:id,usuario_id,almacen_id,codigo,nombre', 'almacen:id,nombre,numero_serie', 'almacenes:id,nombre,numero_serie', 'roles'));
     }
 
     public function destroy(int $id): JsonResponse

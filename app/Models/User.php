@@ -12,7 +12,7 @@ use Illuminate\Notifications\Notifiable;
 use Spatie\Permission\Traits\HasRoles;
 use Tymon\JWTAuth\Contracts\JWTSubject;
 
-#[Fillable(['name', 'dni', 'email', 'password', 'empresa_id', 'caja_id', 'almacen_id'])]
+#[Fillable(['name', 'dni', 'email', 'password', 'empresa_id', 'almacen_id'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable implements JWTSubject
 {
@@ -48,9 +48,37 @@ class User extends Authenticatable implements JWTSubject
         return $this->belongsTo(Empresa::class);
     }
 
-    public function caja()
+    /** Sus cajas: una por cada almacén donde trabaja. */
+    public function cajas()
     {
-        return $this->belongsTo(Caja::class);
+        return $this->hasMany(Caja::class, 'usuario_id');
+    }
+
+    /**
+     * La caja con la que opera ahora: la que tiene en el almacén en que trabaja (o en el que se pida). null si en
+     * ese almacén no tiene una.
+     */
+    public function cajaActual(?int $almacenId = null): ?Caja
+    {
+        $almacenId ??= \App\Support\AlmacenAcceso::propio();
+
+        return $this->cajas()->where('activo', true)
+            ->when($almacenId, fn ($q) => $q->where('almacen_id', $almacenId))
+            ->first();
+    }
+
+    /** Los almacenes donde puede trabajar (el suyo y los de sus cajas); elige uno a la vez. */
+    public function almacenes()
+    {
+        return $this->belongsToMany(Almacen::class, 'almacen_user')->withTimestamps();
+    }
+
+    /** Ids de los almacenes donde puede trabajar, el principal incluido. */
+    public function almacenesIds(): array
+    {
+        return collect($this->almacenes()->pluck('almacenes.id'))
+            ->when($this->almacen_id, fn ($c) => $c->push((int) $this->almacen_id))
+            ->map(fn ($id) => (int) $id)->unique()->values()->all();
     }
 
     /** El almacén (sucursal) donde trabaja: solo ahí vende y opera. Super Admin no lleva uno. */

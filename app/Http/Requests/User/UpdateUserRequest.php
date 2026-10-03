@@ -24,7 +24,6 @@ class UpdateUserRequest extends FormRequest
             // igual que al crear. Exigir la confirmación hacía fallar toda edición.
             'password' => 'sometimes|string|min:6',
             'empresa_id' => 'nullable|exists:empresas,id',
-            'caja_id' => 'nullable|exists:cajas,id',
             'almacen_id' => 'nullable|exists:almacenes,id',
             'role' => 'sometimes|string|exists:roles,name',
             'roles' => 'sometimes|array|min:1',

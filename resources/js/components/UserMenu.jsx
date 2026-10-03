@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, ChevronsUpDown, LogOut, Warehouse } from 'lucide-react';
+import { Check, ChevronDown, ChevronsUpDown, LogOut, Warehouse } from 'lucide-react';
+import api, { asList } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useAlmacenPropio } from '../lib/almacenes';
-import { olvidarAlmacenActivo } from '../lib/almacenActivo';
+import { guardarAlmacenActivo, leerAlmacenActivo } from '../lib/almacenActivo';
 import { cn } from './ui';
 
 function Avatar({ user, size = 'md' }) {
@@ -33,12 +34,19 @@ export default function UserMenu({ compact = false, barra = false }) {
     const { user, logout } = useAuth();
     const { esSuperAdmin, almacenNombre } = useAlmacenPropio();
     const almacen = almacenNombre ?? (esSuperAdmin ? 'Todos los almacenes' : 'Sin almacén asignado');
-    /** El Super Admin vuelve a la pantalla donde se elige almacén. */
-    const cambiarAlmacen = () => {
-        olvidarAlmacenActivo();
+    const [open, setOpen] = useState(false);
+    /** Los almacenes entre los que el Super Admin puede cambiar (se piden al abrir el menú). */
+    const [almacenes, setAlmacenes] = useState([]);
+    useEffect(() => {
+        if (!open || !esSuperAdmin || almacenes.length) return;
+        api.get('/almacenes').then((res) => setAlmacenes(asList(res).filter((a) => a.activo !== false))).catch(() => {});
+    }, [open, esSuperAdmin, almacenes.length]);
+    const cambiarAlmacen = (a) => {
+        if (String(a.id) === String(leerAlmacenActivo()?.id)) return setOpen(false);
+        guardarAlmacenActivo(a);
+        // Lo que está en pantalla es del almacén anterior: se recarga todo.
         window.location.reload();
     };
-    const [open, setOpen] = useState(false);
     const menuRef = useRef(null);
 
     useEffect(() => {
@@ -83,15 +91,30 @@ export default function UserMenu({ compact = false, barra = false }) {
                             </p>
                         </div>
                         <div className="p-1.5">
-                            {esSuperAdmin && (
-                                <button
-                                    role="menuitem"
-                                    onClick={cambiarAlmacen}
-                                    className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-primary-700 transition hover:bg-primary-50"
-                                >
-                                    <Warehouse className="h-4 w-4" />
-                                    Cambiar de almacén
-                                </button>
+                            {/* El Super Admin cambia de almacén eligiendo otro de la lista. */}
+                            {esSuperAdmin && almacenes.length > 0 && (
+                                <div className="mb-1.5 border-b border-edge pb-1.5">
+                                    <p className="px-3 pb-1 pt-0.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400">Almacenes</p>
+                                    {almacenes.map((a) => {
+                                        const actual = String(a.id) === String(leerAlmacenActivo()?.id);
+                                        return (
+                                            <button
+                                                key={a.id}
+                                                role="menuitemradio"
+                                                aria-checked={actual}
+                                                onClick={() => cambiarAlmacen(a)}
+                                                className={cn(
+                                                    'flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition',
+                                                    actual ? 'bg-primary-50 font-semibold text-primary-700' : 'text-warm-700 hover:bg-gray-50',
+                                                )}
+                                            >
+                                                <Warehouse className="h-4 w-4 shrink-0" />
+                                                <span className="min-w-0 flex-1 truncate text-left">{a.nombre}</span>
+                                                {actual && <Check className="h-4 w-4 shrink-0" />}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
                             )}
                             <button
                                 role="menuitem"

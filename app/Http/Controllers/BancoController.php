@@ -3,13 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Models\Banco;
+use App\Support\AlmacenAcceso;
 use Illuminate\Http\Request;
 
 class BancoController extends Controller
 {
     public function index()
     {
-        return response()->json(Banco::withCount('cuentas')->orderBy('nombre')->get());
+        return response()->json(Banco::withCount(['cuentas' => fn ($q) => AlmacenAcceso::limitar($q)])->orderBy('nombre')->get());
     }
 
     public function store(Request $request)

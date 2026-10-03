@@ -105,6 +105,12 @@ class CajaController extends Controller
 
     private function syncRelaciones(Caja $caja, array $data): void
     {
+        $ajenas = \App\Models\CuentaBancaria::whereIn('id', $data['cuentas_bancarias'] ?? [])->where('almacen_id', '!=', $caja->almacen_id)->exists()
+            || \App\Models\BilleteraDigital::whereIn('id', $data['billeteras'] ?? [])->where('almacen_id', '!=', $caja->almacen_id)->exists();
+        if ($ajenas) {
+            throw ValidationException::withMessages(['cuentas_bancarias' => 'Solo puedes asignar cuentas y billeteras del mismo almacén de la caja.']);
+        }
+
         $caja->cuentasBancarias()->sync($data['cuentas_bancarias'] ?? []);
         $caja->billeteras()->sync($data['billeteras'] ?? []);
     }

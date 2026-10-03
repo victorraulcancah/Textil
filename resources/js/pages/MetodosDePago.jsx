@@ -12,6 +12,7 @@ import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import PageHeader, { CreateButton } from '../components/PageHeader';
+import FiltroAlmacen from '../components/FiltroAlmacen';
 import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select, Tabs } from '../components/ui';
 
 const TABS = [
@@ -233,8 +234,13 @@ export default function MetodosDePago() {
         <Layout>
             <PageHeader
                 title="Cuentas y Medios de Pago"
-                description="Bancos, cuentas, tarjetas y billeteras digitales del negocio"
-                actions={<CreateButton onClick={openCreate}>{createLabels[tab]}</CreateButton>}
+                description="Los bancos son comunes; las cuentas, tarjetas y billeteras son del almacén en el que trabajas"
+                actions={
+                    <div className="flex items-center gap-3">
+                        <FiltroAlmacen />
+                        <CreateButton onClick={openCreate}>{createLabels[tab]}</CreateButton>
+                    </div>
+                }
             />
 
             {error && <Alert variant="error" className="mb-4">{error}</Alert>}

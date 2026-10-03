@@ -14,6 +14,7 @@ class BilleteraDigital extends Model
     protected $table = 'billeteras_digitales';
 
     protected $fillable = [
+        'almacen_id',
         'nombre',
         'numero_asociado',
         'cuenta_bancaria_id',
@@ -31,6 +32,11 @@ class BilleteraDigital extends Model
             'requiere_numero_operacion' => 'boolean',
             'activo' => 'boolean',
         ];
+    }
+
+    public function almacen()
+    {
+        return $this->belongsTo(Almacen::class);
     }
 
     public function cuentaBancaria()

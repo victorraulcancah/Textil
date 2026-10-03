@@ -14,6 +14,8 @@ class CuentaBancaria extends Model
     protected $table = 'cuentas_bancarias';
 
     protected $fillable = [
+        // Cada cuenta es de una sucursal (los bancos, en cambio, son un catálogo compartido).
+        'almacen_id',
         'banco_id',
         'alias',
         'numero_cuenta',
@@ -32,6 +34,11 @@ class CuentaBancaria extends Model
     public function banco()
     {
         return $this->belongsTo(Banco::class);
+    }
+
+    public function almacen()
+    {
+        return $this->belongsTo(Almacen::class);
     }
 
     public function tarjetas()

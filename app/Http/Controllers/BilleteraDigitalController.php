@@ -3,23 +3,33 @@
 namespace App\Http\Controllers;
 
 use App\Models\BilleteraDigital;
+use App\Models\CuentaBancaria;
+use App\Support\AlmacenAcceso;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class BilleteraDigitalController extends Controller
 {
     public function index()
     {
+        // Tesorería por sucursal: cada almacén ve las billeteras del suyo.
         return response()->json(
-            BilleteraDigital::with('cuentaBancaria.banco:id,nombre')->latest('id')->get()
+            AlmacenAcceso::limitar(BilleteraDigital::with('cuentaBancaria.banco:id,nombre', 'almacen:id,nombre'))
+                ->latest('id')->get()
         );
     }
 
     public function store(Request $request)
     {
         $data = $this->validated($request);
+        $data['almacen_id'] = AlmacenAcceso::resolver($request->integer('almacen_id') ?: null);
+        if (! $data['almacen_id']) {
+            throw ValidationException::withMessages(['almacen_id' => 'Elige el almacén de la billetera.']);
+        }
+        $this->exigirCuentaDelAlmacen($data['cuenta_bancaria_id'] ?? null, $data['almacen_id']);
         $data['qr'] = $this->handleQr($request);
         return response()->json(
-            BilleteraDigital::create($data)->load('cuentaBancaria.banco:id,nombre'),
+            BilleteraDigital::create($data)->load('cuentaBancaria.banco:id,nombre', 'almacen:id,nombre'),
             201
         );
     }
@@ -31,7 +41,9 @@ class BilleteraDigitalController extends Controller
 
     public function update(Request $request, BilleteraDigital $billeteras_digitale)
     {
+        AlmacenAcceso::exigir($billeteras_digitale->almacen_id);
         $data = $this->validated($request);
+        $this->exigirCuentaDelAlmacen($data['cuenta_bancaria_id'] ?? null, $billeteras_digitale->almacen_id);
         $qr = $this->handleQr($request);
         if ($qr !== null) {
             $data['qr'] = $qr;
@@ -42,8 +54,17 @@ class BilleteraDigitalController extends Controller
 
     public function destroy(BilleteraDigital $billeteras_digitale)
     {
+        AlmacenAcceso::exigir($billeteras_digitale->almacen_id);
         $billeteras_digitale->delete();
         return response()->json(['message' => 'Eliminado']);
+    }
+
+    /** La cuenta a la que se asocia una billetera tiene que ser del mismo almacén. */
+    private function exigirCuentaDelAlmacen(?int $cuentaId, ?int $almacenId): void
+    {
+        if ($cuentaId && (int) CuentaBancaria::whereKey($cuentaId)->value('almacen_id') !== (int) $almacenId) {
+            throw ValidationException::withMessages(['cuenta_bancaria_id' => 'Esa cuenta es de otro almacén.']);
+        }
     }
 
     private function validated(Request $request): array

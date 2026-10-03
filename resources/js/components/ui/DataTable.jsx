@@ -224,6 +224,8 @@ export default function DataTable({
     height = null,
     /** Filas más bajas (menos padding vertical). */
     dense = false,
+    /** Contenido a la izquierda de la barra (título, resumen…): comparte fila con la búsqueda y los filtros. */
+    encabezado = null,
 }) {
     const [search, setSearch] = useState('');
     const debouncedSearch = useDebounce(search, 300);
@@ -423,8 +425,9 @@ export default function DataTable({
 
     return (
         <div className="relative">
-            {(searchable || filterable || toggleableColumns) && (
-                <div className="mb-2 flex flex-nowrap items-center justify-end gap-2">
+            {(encabezado || searchable || filterable || toggleableColumns) && (
+                <div className={`mb-2 flex items-center gap-2 ${encabezado ? 'flex-wrap justify-between' : 'flex-nowrap justify-end'}`}>
+                    {encabezado && <div className="min-w-0 flex-1">{encabezado}</div>}
                     {searchable && (
                         <div className="relative min-w-0 flex-1 sm:w-64 sm:flex-none">
                             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />

@@ -359,6 +359,50 @@ export default function CierresCaja() {
         },
     ];
 
+    const encabezadoMov = (
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+            <h2 className="text-sm font-semibold text-warm-900">
+                Movimientos
+                {seleccionado?.apertura?.caja?.nombre ? ` · ${seleccionado.apertura.caja.nombre}` : ''}
+                {seleccionado ? ` · ${fechaCorta(seleccionado.fecha_cierre)}` : ''}
+            </h2>
+            {seleccionado && (
+                <span className="flex flex-wrap items-center gap-3 text-xs text-warm-500">
+                    <span>
+                        {movimientos.length}{' '}
+                        {movimientos.length === 1 ? 'movimiento' : 'movimientos'}
+                    </span>
+                    <span>
+                        Efectivo:{' '}
+                        <strong className="text-warm-900">
+                            {money(
+                                Number(seleccionado.apertura?.monto_inicial ?? 0) +
+                                    Number(seleccionado.efectivo_ingresos ?? 0) -
+                                    Number(seleccionado.efectivo_egresos ?? 0),
+                            )}
+                        </strong>
+                    </span>
+                    <span>
+                        Transferencias:{' '}
+                        <strong className="text-warm-900">{money(seleccionado.transferencias)}</strong>
+                    </span>
+                    <span>
+                        Billeteras:{' '}
+                        <strong className="text-warm-900">{money(seleccionado.billeteras)}</strong>
+                    </span>
+                    {seleccionado.ingresos_usd != null && (
+                        <span>
+                            Dólares:{' '}
+                            <strong className="text-warm-900">
+                                +{money(seleccionado.ingresos_usd, 'USD')} / -{money(seleccionado.egresos_usd, 'USD')}
+                            </strong>
+                        </span>
+                    )}
+                </span>
+            )}
+        </div>
+    );
+
     return (
         <Layout>
             <PageHeader
@@ -404,48 +448,6 @@ export default function CierresCaja() {
 
             {/* Movimientos entre la apertura y el cierre seleccionado (escritorio) */}
             <div className="mt-6 hidden md:block">
-                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                    <h2 className="text-sm font-semibold text-warm-900">
-                        Movimientos
-                        {seleccionado?.apertura?.caja?.nombre ? ` · ${seleccionado.apertura.caja.nombre}` : ''}
-                        {seleccionado ? ` · ${fechaCorta(seleccionado.fecha_cierre)}` : ''}
-                    </h2>
-                    {seleccionado && (
-                        <span className="flex flex-wrap items-center gap-3 text-xs text-warm-500">
-                            <span>
-                                {movimientos.length}{' '}
-                                {movimientos.length === 1 ? 'movimiento' : 'movimientos'}
-                            </span>
-                            <span>
-                                Efectivo:{' '}
-                                <strong className="text-warm-900">
-                                    {money(
-                                        Number(seleccionado.apertura?.monto_inicial ?? 0) +
-                                            Number(seleccionado.efectivo_ingresos ?? 0) -
-                                            Number(seleccionado.efectivo_egresos ?? 0),
-                                    )}
-                                </strong>
-                            </span>
-                            <span>
-                                Transferencias:{' '}
-                                <strong className="text-warm-900">{money(seleccionado.transferencias)}</strong>
-                            </span>
-                            <span>
-                                Billeteras:{' '}
-                                <strong className="text-warm-900">{money(seleccionado.billeteras)}</strong>
-                            </span>
-                            {seleccionado.ingresos_usd != null && (
-                                <span>
-                                    Dólares:{' '}
-                                    <strong className="text-warm-900">
-                                        +{money(seleccionado.ingresos_usd, 'USD')} / -{money(seleccionado.egresos_usd, 'USD')}
-                                    </strong>
-                                </span>
-                            )}
-                        </span>
-                    )}
-                </div>
-
                 {/* Mismo componente que la tabla de arriba: así en móvil se ven igual. */}
                 <DataTable
                     columns={movColumns}
@@ -454,6 +456,7 @@ export default function CierresCaja() {
                     searchable={false}
                     toggleableColumns={false}
                     {...propsFiltroMov}
+                    encabezado={encabezadoMov}
                     height="350px"
                     emptyMessage={
                         seleccionado

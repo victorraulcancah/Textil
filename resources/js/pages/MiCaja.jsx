@@ -45,12 +45,8 @@ function Stat({ icon: Icon, label, value, accent = 'text-warm-900', bg = 'bg-gra
 export default function MiCaja() {
     const toast = useToast();
     const { puede } = useAuth();
-    /** Amortización de un documento desde la caja (cobrar o pagar, se elige dentro del modal). */
-    const [amortizar, setAmortizar] = useState(false);
-    const permitidosAmortizar = [
-        puede('tesoreria.cuentas-por-cobrar.crear') && 'cobrar',
-        puede('tesoreria.cuentas-por-pagar.crear') && 'pagar',
-    ].filter(Boolean);
+    /** Amortización de documentos desde la caja, separada: 'cobrar' (ingreso) o 'pagar' (egreso). */
+    const [amortizar, setAmortizar] = useState(null);
     const [data, setData] = useState(null);
     const [motivos, setMotivos] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -312,9 +308,12 @@ export default function MiCaja() {
                             <div className="mb-4 flex flex-wrap gap-2">
                                 <Button variant="success" onClick={() => openReg('ingreso')}><ArrowUpCircle className="h-4 w-4" /> Nuevo ingreso</Button>
                                 <Button variant="danger" onClick={() => openReg('egreso')}><ArrowDownCircle className="h-4 w-4" /> Nuevo gasto</Button>
-                                {/* Amortizar un documento pendiente (cobrarlo o pagarlo) con esta caja abierta: un solo modal. */}
-                                {permitidosAmortizar.length > 0 && (
-                                    <Button variant="secondary" onClick={() => setAmortizar(true)}><FileSignature className="h-4 w-4" /> Amortizar documento</Button>
+                                {/* Cobrar (ingreso) o pagar (egreso) un documento pendiente con esta caja abierta: dos accesos separados. */}
+                                {puede('tesoreria.cuentas-por-cobrar.crear') && (
+                                    <Button variant="secondary" onClick={() => setAmortizar('cobrar')}><FileSignature className="h-4 w-4" /> Cobrar documento</Button>
+                                )}
+                                {puede('tesoreria.cuentas-por-pagar.crear') && (
+                                    <Button variant="secondary" onClick={() => setAmortizar('pagar')}><FileSignature className="h-4 w-4" /> Pagar documento</Button>
                                 )}
                                 <Button variant="secondary" onClick={() => { setCerrarOpen(true); setMontoContado(''); setMontoContadoUsd(''); }}><Lock className="h-4 w-4" /> Cerrar caja</Button>
                             </div>
@@ -366,11 +365,11 @@ export default function MiCaja() {
 
             {/* Amortización de documentos: elige el documento y abona; el movimiento queda en esta caja. */}
             <PagosCuentaModal
-                open={amortizar}
-                onClose={() => setAmortizar(false)}
-                tipo="cobrar"
+                open={Boolean(amortizar)}
+                onClose={() => setAmortizar(null)}
+                tipo={amortizar ?? 'cobrar'}
                 cuenta={null}
-                permitidos={permitidosAmortizar.length ? permitidosAmortizar : ['cobrar']}
+                permitidos={[amortizar ?? 'cobrar']}
                 elegir
                 cerrarAlGuardar
                 onSaved={() => load()}

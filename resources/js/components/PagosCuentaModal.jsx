@@ -5,7 +5,7 @@ import { useAuth } from '../lib/auth';
 import { cargarTipoCambio } from '../lib/moneda';
 import { useToast } from '../lib/toast';
 import MetodoCajaPicker from './MetodoCajaPicker';
-import { Alert, Badge, Button, Input, Modal, SearchSelect, cn } from './ui';
+import { Alert, Badge, Button, Input, Modal, SearchSelect, Select, cn } from './ui';
 
 const money = (n, moneda = 'PEN') =>
     new Intl.NumberFormat('es-PE', { style: 'currency', currency: moneda || 'PEN' }).format(Number(n) || 0);
@@ -38,6 +38,16 @@ const NOMBRE_MONEDA = { PEN: 'Soles', USD: 'Dólares', CNY: 'Yuanes', EUR: 'Euro
 
 /** Antes de elegir el documento (Mi Caja) la ventana se ve completa, con todo en blanco. */
 const CUENTA_VACIA = { saldo: 0, monto_total: 0, monto_pagado: 0, pagos: [], estado: null, moneda: 'PEN' };
+
+const TIPOS_COMPRA = { factura: 'Factura', boleta: 'Boleta', no_domiciliado: 'Comprobante no domiciliado' };
+const TIPOS_VENTA = { PF: 'Proforma', NV: 'Nota de venta' };
+
+/** Tipo de documento de una cuenta pendiente: de la compra (por pagar) o por la serie de la venta (por cobrar). */
+const tipoDeDocumento = (c, esCobrar) => {
+    if (!esCobrar) return TIPOS_COMPRA[c.compra?.tipo_documento] ?? 'Compra';
+    const prefijo = String(c.nota_venta?.serie ?? '').replace(/\d+/g, '');
+    return TIPOS_VENTA[prefijo] ?? (prefijo || 'Venta');
+};
 
 const redondear = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
@@ -87,6 +97,8 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo: tipoProp
     const [state, setState] = useState(cuenta);
     /** Desde Mi Caja no se llega con un documento: se elige aquí entre los que tienen saldo. */
     const [pendientes, setPendientes] = useState([]);
+    const [filtroNombre, setFiltroNombre] = useState('');
+    const [filtroTipoDoc, setFiltroTipoDoc] = useState('');
     const [cargandoPendientes, setCargandoPendientes] = useState(false);
     const [cuentas, setCuentas] = useState([]);
     const [billeteras, setBilleteras] = useState([]);
@@ -121,6 +133,8 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo: tipoProp
     useEffect(() => {
         if (!open || !elegir) return;
         setState(null);
+        setFiltroNombre('');
+        setFiltroTipoDoc('');
         setCargandoPendientes(true);
         api.get(basePath)
             .then((res) =>
@@ -434,22 +448,41 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo: tipoProp
                 {/* ── Referencia ────────────────────────────────────────── */}
                 <Bloque titulo="Referencia">
                     {/* Desde Mi Caja el documento se elige aquí mismo: por cobrar o por pagar, y luego cuál. */}
+                    {elegir && permitidos.length > 1 && (
+                        <div className="inline-flex rounded-lg border border-edge bg-gray-50 p-0.5">
+                            {[['cobrar', 'Por cobrar'], ['pagar', 'Por pagar']].filter(([k]) => permitidos.includes(k)).map(([k, t]) => (
+                                <button
+                                    key={k}
+                                    type="button"
+                                    onClick={() => { setTipoElegido(k); setState(null); setFiltroNombre(''); setFiltroTipoDoc(''); }}
+                                    className={`rounded-md px-4 py-1.5 text-sm font-semibold transition ${tipo === k ? 'bg-white text-primary-700 shadow-sm' : 'text-warm-500 hover:text-warm-700'}`}
+                                >
+                                    {t}
+                                </button>
+                            ))}
+                        </div>
+                    )}
                     {elegir && (
-                        <div className="grid gap-3 pt-2 sm:grid-cols-[auto_1fr] sm:items-end">
-                            {permitidos.length > 1 && (
-                                <div className="inline-flex rounded-lg border border-edge bg-gray-50 p-0.5">
-                                    {[['cobrar', 'Por cobrar'], ['pagar', 'Por pagar']].filter(([k]) => permitidos.includes(k)).map(([k, t]) => (
-                                        <button
-                                            key={k}
-                                            type="button"
-                                            onClick={() => { setTipoElegido(k); setState(null); }}
-                                            className={`rounded-md px-4 py-1.5 text-sm font-semibold transition ${tipo === k ? 'bg-white text-primary-700 shadow-sm' : 'text-warm-500 hover:text-warm-700'}`}
-                                        >
-                                            {t}
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
+                        <div className="grid gap-3 pt-2 sm:grid-cols-3">
+                            <SearchSelect
+                                label={esCobrar ? 'Cliente' : 'Proveedor'}
+                                value={filtroNombre}
+                                onChange={(v) => { setFiltroNombre(v ?? ''); setState(null); }}
+                                placeholder="Todos"
+                                emptyText="Sin resultados"
+                                options={[...new Set(pendientes.map((c) => (esCobrar ? c.cliente?.nombre : c.proveedor?.nombre)).filter(Boolean))]
+                                    .sort((a, b) => a.localeCompare(b))
+                                    .map((nom) => ({ value: nom, label: nom }))}
+                            />
+                            <Select
+                                label="Tipo de documento"
+                                value={filtroTipoDoc}
+                                onChange={(e) => { setFiltroTipoDoc(e.target.value); setState(null); }}
+                                options={[
+                                    { value: '', label: 'Todos' },
+                                    ...[...new Set(pendientes.map((c) => tipoDeDocumento(c, esCobrar)))].sort().map((t) => ({ value: t, label: t })),
+                                ]}
+                            />
                             <SearchSelect
                                 label="N.° documento / nombre"
                                 value={state ? String(state.id) : ''}
@@ -465,7 +498,10 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo: tipoProp
                                 }}
                                 placeholder={cargandoPendientes ? 'Cargando…' : 'Busca por documento o por nombre…'}
                                 emptyText={cargandoPendientes ? 'Cargando…' : 'No hay documentos con saldo'}
-                                options={pendientes.map((c) => {
+                                options={pendientes.filter((c) => (
+                                    (!filtroNombre || (esCobrar ? c.cliente?.nombre : c.proveedor?.nombre) === filtroNombre)
+                                    && (!filtroTipoDoc || tipoDeDocumento(c, esCobrar) === filtroTipoDoc)
+                                )).map((c) => {
                                     const doc = esCobrar
                                         ? c.nota_venta ? `${c.nota_venta.serie}-${c.nota_venta.numero}` : `#${c.id}`
                                         : (c.compra?.numero_compra ?? `#${c.id}`);

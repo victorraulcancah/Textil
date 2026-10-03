@@ -15,6 +15,9 @@ const fechaCorta = (v) => (v ? new Date(v).toLocaleDateString('es-PE') : '—');
 
 const esDigital = (m) => Boolean(m.cuenta_bancaria || m.billetera);
 
+/** Método real del movimiento, deducido de la cuenta o billetera asociada. */
+const metodoDe = (m) => (m.cuenta_bancaria ? 'transferencia' : m.billetera ? 'billetera' : 'efectivo');
+
 const metodoLabel = (m) => {
     if (m.cuenta_bancaria) return `Transf. · ${m.cuenta_bancaria.alias || m.cuenta_bancaria.numero_cuenta}`;
     if (m.billetera) return m.billetera.nombre;
@@ -40,6 +43,8 @@ export default function CierresCaja() {
     /** Filtro de los movimientos del cierre: '' (todos), 'efectivo' o 'digital' (transferencia, Yape, billetera). */
     const [filtroTipoMov, setFiltroTipoMov] = useState('');
     const [tipoMovActivo, setTipoMovActivo] = useState('');
+    const [filtroMetodo, setFiltroMetodo] = useState('');
+    const [metodoActivo, setMetodoActivo] = useState('');
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -273,8 +278,9 @@ export default function CierresCaja() {
     ];
 
     const movimientosVisibles = movimientos.filter((m) => {
-        if (tipoMovActivo === 'efectivo') return !esDigital(m);
-        if (tipoMovActivo === 'digital') return esDigital(m);
+        if (tipoMovActivo === 'efectivo' && esDigital(m)) return false;
+        if (tipoMovActivo === 'digital' && !esDigital(m)) return false;
+        if (metodoActivo && metodoDe(m) !== metodoActivo) return false;
         return true;
     });
 
@@ -291,14 +297,26 @@ export default function CierresCaja() {
                 ]}
                 className="w-52"
             />
+            <Select
+                label="Método"
+                value={filtroMetodo}
+                onChange={(e) => setFiltroMetodo(e.target.value)}
+                options={[
+                    { value: '', label: 'Todos' },
+                    { value: 'efectivo', label: 'Efectivo' },
+                    { value: 'transferencia', label: 'Transferencia' },
+                    { value: 'billetera', label: 'Billetera' },
+                ]}
+                className="w-48"
+            />
         </div>
     );
     const propsFiltroMov = {
         filterable: true,
         filters: filtrosMov,
-        filterCount: tipoMovActivo ? 1 : 0,
-        onApplyFilters: () => setTipoMovActivo(filtroTipoMov),
-        onClearFilters: () => { setFiltroTipoMov(''); setTipoMovActivo(''); },
+        filterCount: (tipoMovActivo ? 1 : 0) + (metodoActivo ? 1 : 0),
+        onApplyFilters: () => { setTipoMovActivo(filtroTipoMov); setMetodoActivo(filtroMetodo); },
+        onClearFilters: () => { setFiltroTipoMov(''); setTipoMovActivo(''); setFiltroMetodo(''); setMetodoActivo(''); },
     };
 
     const movColumns = [

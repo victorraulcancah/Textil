@@ -210,6 +210,13 @@ return [
                         'ordenes-venta/*/quitar-rollo' => 'editar',
                         'ordenes-venta/*/separar' => 'editar',
                         'ordenes-venta/*/despachar' => 'editar',
+                        // Atender un requerimiento de traslado es el mismo trabajo del almacenero que despachar un pedido:
+                        // escanear, separar y despachar. Pedirlo es crear en Traslados.
+                        'transferencias/requerimientos/*/escanear' => 'editar',
+                        'transferencias/requerimientos/*/quitar-rollo' => 'editar',
+                        'transferencias/requerimientos/*/separar' => 'editar',
+                        'transferencias/requerimientos/*/despachar' => 'editar',
+                        'transferencias/requerimientos/*/rechazar' => 'editar',
                     ],
                     'acciones' => ['ver', 'editar', 'asignar'],
                 ],

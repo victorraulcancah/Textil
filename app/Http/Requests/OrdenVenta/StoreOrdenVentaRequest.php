@@ -40,6 +40,8 @@ class StoreOrdenVentaRequest extends FormRequest
             // cantidad la estima el servicio con el metraje promedio.
             'detalles.*.modo' => 'nullable|in:metros,rollos',
             'detalles.*.rollos_pedidos' => 'required_if:detalles.*.modo,rollos|nullable|integer|min:1|max:9999',
+            // Un metraje por rollo ("1 rollo de 50 m"): si el almacén no tiene uno así, corta la tela de otro.
+            'detalles.*.metros_por_rollo' => 'nullable|numeric|min:0.01|max:9999',
             'detalles.*.cantidad' => 'required_unless:detalles.*.modo,rollos|nullable|numeric|min:0.01',
             'detalles.*.precio_unitario' => 'nullable|numeric|min:0',
             'detalles.*.descuento' => 'nullable|numeric|min:0',

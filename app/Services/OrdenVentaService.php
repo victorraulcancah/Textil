@@ -327,10 +327,17 @@ class OrdenVentaService
                 $orden = $this->empezarPreparacion($orden, $rollo->almacen_id);
             }
 
-            // Por rollos, el rollo sale entero, mida lo que mida. Por metros se
-            // toma lo que falte, sin pasarse de lo que da el rollo.
+            // Por rollos, el rollo sale entero, mida lo que mida. Si se pidió un metraje ("1 rollo de 50 m"), sale esa
+            // medida: el rollo de justo ese largo se va entero y, si es más grande, se le corta la tela. Por metros
+            // se toma lo que falte, sin pasarse de lo que da el rollo.
             $metrosRollo = (float) $rollo->metros_actual;
-            $metros = $linea->esPorRollos() ? $metrosRollo : min($linea->metrosPendientes(), $metrosRollo);
+            $pedido = $linea->esPorRollos() && $linea->metros_por_rollo ? (float) $linea->metros_por_rollo : null;
+            if ($pedido !== null && $metrosRollo + 0.01 < $pedido) {
+                throw new \DomainException(
+                    "El rollo {$codigo} tiene {$metrosRollo} m y el pedido pide rollos de {$pedido} m: busca uno de ese largo o más grande para cortarlo."
+                );
+            }
+            $metros = $pedido ?? ($linea->esPorRollos() ? $metrosRollo : min($linea->metrosPendientes(), $metrosRollo));
 
             $linea->rollos()->create([
                 'rollo_id' => $rollo->id,
@@ -821,10 +828,12 @@ class OrdenVentaService
      * Los rollos que se pueden prometer de una tela (y color): los disponibles
      * menos los que otros pedidos ya pidieron y el almacén aún no asigna.
      */
-    public function rollosLibres(int $productoId, ?int $colorId, ?int $excluirOrdenId = null, ?int $almacenId = null): int
+    public function rollosLibres(int $productoId, ?int $colorId, ?int $excluirOrdenId = null, ?int $almacenId = null, ?float $metrosMinimos = null): int
     {
         $disponibles = Rollo::where('producto_id', $productoId)
             ->when($colorId, fn ($q) => $q->where('producto_color_id', $colorId))
+            // Si se pidió un metraje, sirven los rollos que midan eso o más (se cortan).
+            ->when($metrosMinimos, fn ($q) => $q->where('metros_actual', '>=', $metrosMinimos - 0.01))
             // Un pedido es de un almacén: solo cuentan sus rollos.
             ->when($almacenId, fn ($q) => $q->where('almacen_id', $almacenId))
             ->where('estado', Rollo::DISPONIBLE)
@@ -852,6 +861,7 @@ class OrdenVentaService
             $linea->producto_color_id ? (int) $linea->producto_color_id : null,
             $orden->id,
             $orden->almacen_id ? (int) $orden->almacen_id : null,
+            $linea->metros_por_rollo ? (float) $linea->metros_por_rollo : null,
         );
 
         // Los que ya escaneó el almacén (un pedido que vuelve de preparación) cuentan.
@@ -1039,6 +1049,7 @@ class OrdenVentaService
                 'producto_color_id' => $linea['producto_color_id'] ?? null,
                 'modo' => $porRollos ? OrdenVentaDetalle::MODO_ROLLOS : OrdenVentaDetalle::MODO_METROS,
                 'rollos_pedidos' => $rollosPedidos,
+                'metros_por_rollo' => $porRollos && ! empty($linea['metros_por_rollo']) ? round((float) $linea['metros_por_rollo'], 2) : null,
                 'cantidad' => $cantidad,
                 'descripcion' => $linea['descripcion'] ?? null,
                 'metros' => $this->aMetros($presentacion, $cantidad),

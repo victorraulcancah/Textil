@@ -175,6 +175,8 @@ export function gruposDePedido(detalles = []) {
         const faltan = Number(d.rollos_pendientes) || 0;
         if (faltan > 0 || (!asignados.length && !(Number(d.rollos_asignados) > 0))) {
             const cuantos = faltan > 0 ? faltan : Number(d.rollos_pedidos) || 0;
+            // Se pidió un metraje por rollo ("1 rollo de 50 m"): ya se sabe cuánto es, aunque aún no se corte.
+            const porRollo = Number(d.metros_por_rollo) || 0;
             lineas.push({
                 grupo,
                 titulo,
@@ -184,11 +186,11 @@ export function gruposDePedido(detalles = []) {
                     color,
                     hex,
                     rollo: `${cuantos}R`,
-                    factor: PENDIENTE,
-                    metros: PENDIENTE,
+                    factor: porRollo > 0 ? porRollo : PENDIENTE,
+                    metros: porRollo > 0 ? redondear(porRollo * cuantos) : PENDIENTE,
                     precio,
-                    total: PENDIENTE,
-                    detalle: null,
+                    total: porRollo > 0 ? importe(redondear(porRollo * cuantos)) : PENDIENTE,
+                    detalle: porRollo > 0 ? `pedido de ${porRollo} m por rollo` : null,
                 },
             });
         }

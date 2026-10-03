@@ -35,6 +35,8 @@ class OrdenVentaDetalle extends Model
         'modo',
         // Cuántos rollos enteros se pidieron (solo en modo "rollos").
         'rollos_pedidos',
+        // Si se pidió un metraje por rollo ("1 rollo de 50 m"): cuánto debe medir lo que sale. Vacío = rollo entero.
+        'metros_por_rollo',
         'cantidad',
         'descripcion',
         'metros',

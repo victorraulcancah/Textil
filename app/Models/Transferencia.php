@@ -19,6 +19,12 @@ class Transferencia extends Model
     protected $fillable = [
         'serie',
         'numero',
+        // Requerimiento: RQ + número del almacén pedido (RQ002-001 = se pide al almacén 2).
+        'requerimiento_serie',
+        'requerimiento_numero',
+        'usuario_solicita_id',
+        'fecha_solicitud',
+        'fecha_separacion',
         'almacen_origen_id',
         'almacen_destino_id',
         'motivo_traslado',
@@ -41,13 +47,15 @@ class Transferencia extends Model
         'motivo_rechazo',
     ];
 
-    protected $appends = ['documento'];
+    protected $appends = ['documento', 'requerimiento'];
 
     protected function casts(): array
     {
         return [
             'fecha_envio' => 'datetime',
             'fecha_recepcion' => 'datetime',
+            'fecha_solicitud' => 'datetime',
+            'fecha_separacion' => 'datetime',
             'fecha_inicio_traslado' => 'date',
             'peso_bruto_kg' => 'decimal:3',
         ];
@@ -57,6 +65,30 @@ class Transferencia extends Model
     public function getDocumentoAttribute(): ?string
     {
         return $this->serie && $this->numero ? "{$this->serie}-{$this->numero}" : null;
+    }
+
+    /** Número del requerimiento, ej. "RQ002-001" (null si es un traslado directo). */
+    public function getRequerimientoAttribute(): ?string
+    {
+        return $this->requerimiento_serie && $this->requerimiento_numero
+            ? "{$this->requerimiento_serie}-{$this->requerimiento_numero}"
+            : null;
+    }
+
+    public function esRequerimiento(): bool
+    {
+        return $this->requerimiento_serie !== null;
+    }
+
+    /** Serie de los requerimientos que se piden a un almacén: RQ + su número de 3 cifras. */
+    public static function serieRequerimiento(Almacen $almacen): string
+    {
+        return 'RQ'.str_pad((string) ($almacen->numero_serie ?: $almacen->id), 3, '0', STR_PAD_LEFT);
+    }
+
+    public function usuarioSolicita()
+    {
+        return $this->belongsTo(User::class, 'usuario_solicita_id');
     }
 
     /** Motivo del catálogo administrable (referenciado por código). */

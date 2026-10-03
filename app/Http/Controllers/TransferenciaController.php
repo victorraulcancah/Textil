@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Almacen;
+use App\Support\AlmacenAcceso;
 use App\Models\ProductoPresentacion;
 use App\Models\Rollo;
 use App\Models\SerieDocumento;
@@ -18,6 +19,9 @@ class TransferenciaController extends Controller
     {
         return response()->json(
             Transferencia::with('almacenOrigen', 'almacenDestino')
+                // Un requerimiento entra a Traslados recién cuando se despacha (ahí se vuelve un traslado con su guía);
+                // mientras se prepara vive en su propia bandeja.
+                ->where(fn ($q) => $q->whereNull('requerimiento_serie')->orWhereIn('estado', ['en_transito', 'recibida']))
                 ->with(['usuarioEnvio:id,name', 'usuarioRecepcion:id,name', 'detalles.presentacion.producto.marca', 'detalles.color'])
                 ->withCount('detalles')
                 ->latest('id')
@@ -273,6 +277,11 @@ class TransferenciaController extends Controller
     /** Recibir: ingresa el stock al almacén de destino y pasa a "recibida". */
     public function recibir(Transferencia $transferencia)
     {
+        // Un requerimiento lo recibe el almacén que lo pidió.
+        if ($transferencia->esRequerimiento()) {
+            AlmacenAcceso::exigir($transferencia->almacen_destino_id);
+        }
+
         if ($transferencia->estado !== 'en_transito') {
             return response()->json(['message' => 'Solo se pueden recibir traslados en tránsito.'], 422);
         }

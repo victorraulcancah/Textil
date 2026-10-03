@@ -49,6 +49,7 @@ use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SubMarcaController;
 use App\Http\Controllers\TipoTelaController;
 use App\Http\Controllers\TomaInventarioController;
+use App\Http\Controllers\RequerimientoTrasladoController;
 use App\Http\Controllers\TransferenciaController;
 use App\Http\Controllers\UnidadMedidaController;
 use App\Http\Controllers\UserController;
@@ -154,6 +155,16 @@ Route::middleware('auth:api')->group(function () {
     Route::put('almacen-ubicaciones/{ubicacione}', [AlmacenUbicacionController::class, 'update']);
     Route::delete('almacen-ubicaciones/{ubicacione}', [AlmacenUbicacionController::class, 'destroy']);
     Route::get('movimientos', [MovimientoInventarioController::class, 'index']);
+    // Requerimientos de traslado (un almacén le pide mercadería a otro). Antes de {transferencia}.
+    Route::get('transferencias/requerimientos', [RequerimientoTrasladoController::class, 'index']);
+    Route::post('transferencias/requerimientos', [RequerimientoTrasladoController::class, 'store']);
+    Route::get('transferencias/requerimientos/{transferencia}', [RequerimientoTrasladoController::class, 'show']);
+    Route::post('transferencias/requerimientos/{transferencia}/escanear', [RequerimientoTrasladoController::class, 'escanear']);
+    Route::post('transferencias/requerimientos/{transferencia}/quitar-rollo', [RequerimientoTrasladoController::class, 'quitarRollo']);
+    Route::post('transferencias/requerimientos/{transferencia}/separar', [RequerimientoTrasladoController::class, 'separar']);
+    Route::post('transferencias/requerimientos/{transferencia}/despachar', [RequerimientoTrasladoController::class, 'despachar']);
+    Route::post('transferencias/requerimientos/{transferencia}/rechazar', [RequerimientoTrasladoController::class, 'rechazar']);
+    Route::post('transferencias/requerimientos/{transferencia}/anular', [RequerimientoTrasladoController::class, 'anular']);
     Route::apiResource('transferencias', TransferenciaController::class);
     Route::apiResource('motivos-traslado', MotivoTrasladoController::class)->except(['show']);
     // Catálogos chicos de la orden de compra al exterior, que se administran desde su formulario.

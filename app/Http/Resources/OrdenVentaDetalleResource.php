@@ -39,6 +39,7 @@ class OrdenVentaDetalleResource extends JsonResource
             // "metros": X metros, cortando si hace falta.
             'modo' => $this->modo ?? 'metros',
             'rollos_pedidos' => $this->rollos_pedidos !== null ? (int) $this->rollos_pedidos : null,
+            'metros_por_rollo' => $this->metros_por_rollo !== null ? (float) $this->metros_por_rollo : null,
             'cantidad' => (float) $this->cantidad,
             'descripcion' => $this->descripcion,
             'metros' => (float) $this->metros,

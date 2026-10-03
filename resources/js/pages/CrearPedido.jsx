@@ -120,6 +120,9 @@ export default function CrearPedido() {
         precio_unitario: '',
         // Escrito a mano: ya no se reemplaza con el precio de lista.
         precioManual: false,
+        // Una tela puede pedirse con un metraje por rollo ("1 rollo de 50 m").
+        conMetraje: false,
+        metros_por_rollo: '',
     });
 
     /* ------------------------------ carga ------------------------------ */
@@ -175,6 +178,7 @@ export default function CrearPedido() {
                             color: d.color?.nombre ?? '',
                             modo: d.modo ?? 'metros',
                             rollos_pedidos: d.rollos_pedidos ? String(d.rollos_pedidos) : '',
+                            metros_por_rollo: d.metros_por_rollo ? String(d.metros_por_rollo) : '',
                             presentacion: d.modo === ROLLOS ? 'Rollo' : d.presentacion,
                             descripcion: d.descripcion ?? '',
                             cantidad: String(d.cantidad),
@@ -411,16 +415,19 @@ export default function CrearPedido() {
         // Una tela: rollos enteros y, si tiene colores, el color (cada rollo es de uno).
         (!esTelaNueva ||
             (Number.isInteger(Number(nueva.cantidad)) &&
+                (!nueva.conMetraje || Number(nueva.metros_por_rollo) > 0) &&
                 (!(producto?.colores?.length > 0) || Boolean(nueva.producto_color_id))));
 
     /** Suma rollos de un color de una tela a las líneas: si ya estaba pedido, se le suman. */
-    const conRollos = (lista, { producto: prod, metro, color, rollos, descripcion = '', precio = null, manual = false }) => {
+    const conRollos = (lista, { producto: prod, metro, color, rollos, descripcion = '', precio = null, manual = false, metrosPorRollo = '' }) => {
         const next = [...lista];
         const j = next.findIndex(
             (l) =>
                 l.modo === ROLLOS &&
                 String(l.producto_presentacion_id) === String(metro.id) &&
-                String(l.producto_color_id || '') === String(color?.id ?? ''),
+                String(l.producto_color_id || '') === String(color?.id ?? '') &&
+                // Rollos de otro metraje son otra línea (no se suman a los de 50 m).
+                String(l.metros_por_rollo || '') === String(metrosPorRollo || ''),
         );
 
         if (j !== -1) {
@@ -435,9 +442,10 @@ export default function CrearPedido() {
             color: color?.nombre ?? '',
             modo: ROLLOS,
             rollos_pedidos: String(rollos),
+            metros_por_rollo: metrosPorRollo ? String(metrosPorRollo) : '',
             presentacion: 'Rollo',
             descripcion,
-            // No se sabe cuánto mide cada rollo: el almacén lo define al separar.
+            // Sin metraje pedido no se sabe cuánto mide cada rollo: el almacén lo define al separar.
             cantidad: '0',
             precio_unitario: precio ?? precioDeLista(metro, 1),
             precio_oculto: false,
@@ -464,6 +472,7 @@ export default function CrearPedido() {
                     descripcion: nueva.descripcion.trim(),
                     precio: nueva.precio_unitario,
                     manual: Boolean(nueva.precioManual),
+                    metrosPorRollo: nueva.conMetraje ? nueva.metros_por_rollo : '',
                 }),
             );
         } else {
@@ -505,6 +514,8 @@ export default function CrearPedido() {
             cantidad: '',
             precio_unitario: '',
             precioManual: false,
+            conMetraje: false,
+            metros_por_rollo: '',
         });
 
     /**
@@ -697,6 +708,7 @@ export default function CrearPedido() {
                     producto_color_id: l.producto_color_id ? Number(l.producto_color_id) : null,
                     modo: l.modo === ROLLOS ? ROLLOS : 'metros',
                     rollos_pedidos: l.modo === ROLLOS ? Number(l.rollos_pedidos) || 0 : null,
+                    metros_por_rollo: l.modo === ROLLOS && Number(l.metros_por_rollo) > 0 ? Number(l.metros_por_rollo) : null,
                     // En rollos no hay metros: los define el almacén al separar.
                     cantidad: l.modo === ROLLOS ? null : Number(l.cantidad) || 0,
                     precio_unitario: Number(l.precio_unitario) || 0,
@@ -749,7 +761,7 @@ export default function CrearPedido() {
                             {id ? 'Editar pedido' : 'Nuevo pedido'}
                         </h1>
                         <p className="text-sm text-warm-500">
-                            Lo que pide el cliente. El almacén decide después con qué rollos lo cubre.
+                            Lo que pide el cliente. Sale de tu almacén; el almacenero decide con qué rollos lo cubre.
                         </p>
                     </div>
                 </div>
@@ -857,15 +869,45 @@ export default function CrearPedido() {
                             />
                         </div>
 
-                        {/* Una tela: cuánto mide cada rollo no lo pone el vendedor. */}
+                        {/* Una tela: rollos enteros, o rollos de un metraje que el almacén corta si no lo tiene. */}
                         {esTelaNueva && (
-                            <p className="-mt-2 text-xs text-warm-500">
-                                {producto?.colores?.length > 0 && !nueva.producto_color_id
-                                    ? 'Elige el color de la tela. '
-                                    : ''}
-                                Se piden rollos enteros. Cuánto mide cada uno lo define el almacén al separarlo y se
-                                cobra por sus metros reales.
-                            </p>
+                            <div className="-mt-2 space-y-2">
+                                <div className="flex flex-wrap items-end gap-4">
+                                    <label className="flex cursor-pointer items-center gap-2 pb-2 text-sm font-medium text-warm-700">
+                                        <input
+                                            type="checkbox"
+                                            checked={nueva.conMetraje}
+                                            onChange={(e) =>
+                                                setNueva((prev) => ({ ...prev, conMetraje: e.target.checked, metros_por_rollo: e.target.checked ? prev.metros_por_rollo : '' }))
+                                            }
+                                            className="h-4 w-4 rounded border-gray-300 accent-primary-600"
+                                        />
+                                        Pedir un metraje por rollo
+                                    </label>
+                                    {nueva.conMetraje && (
+                                        <div className="w-44">
+                                            <Input
+                                                label="Metros por rollo"
+                                                type="number"
+                                                step="0.01"
+                                                min="0"
+                                                placeholder="Ej.: 50"
+                                                value={nueva.metros_por_rollo}
+                                                onChange={(e) => setNueva((prev) => ({ ...prev, metros_por_rollo: e.target.value }))}
+                                                className="text-right"
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                                <p className="text-xs text-warm-500">
+                                    {producto?.colores?.length > 0 && !nueva.producto_color_id
+                                        ? 'Elige el color de la tela. '
+                                        : ''}
+                                    {nueva.conMetraje
+                                        ? 'Cada rollo sale con ese metraje: si el almacén no tiene uno de ese largo, corta la tela de otro más grande. Se cobra por los metros que salgan.'
+                                        : 'Se piden rollos enteros. Cuánto mide cada uno lo define el almacén al separarlo y se cobra por sus metros reales.'}
+                                </p>
+                            </div>
                         )}
 
                         <div className="flex flex-wrap items-center gap-2">
@@ -1005,6 +1047,11 @@ export default function CrearPedido() {
                                                                                     style={{ backgroundColor: hexDe(l) || '#9ca3af' }}
                                                                                 />
                                                                                 {l.color || 'Cualquier color'}
+                                                                                {Number(l.metros_por_rollo) > 0 && (
+                                                                                    <span className="text-xs font-semibold normal-case text-primary-700">
+                                                                                        · rollos de {num(l.metros_por_rollo)} m
+                                                                                    </span>
+                                                                                )}
                                                                             </span>
                                                                             <Input
                                                                                 type="number"
@@ -1253,8 +1300,7 @@ export default function CrearPedido() {
                         </div>
 
                         <Alert variant="info" className="mt-4">
-                            El almacén no se elige aquí: lo define el almacenero al preparar el pedido,
-                            según dónde estén los rollos que use.
+                            El pedido sale del almacén que ves arriba: el almacenero lo prepara con los rollos de ese almacén.
                         </Alert>
                     </section>
 

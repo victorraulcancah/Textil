@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Plus, PlusCircle, Repeat, Trash2, Truck } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { opcionesAlmacen } from '../lib/almacenes';
@@ -44,6 +44,11 @@ export default function CrearTransferencia() {
     const navigate = useNavigate();
     const { id } = useParams();
     const editando = Boolean(id);
+    // Viene de "Despachar" en Atender requerimientos: el traslado ya trae el requerimiento (origen, destino y los
+    // rollos separados) y se le pueden agregar más cosas antes de crearlo.
+    const [searchParams] = useSearchParams();
+    const rqId = searchParams.get('requerimiento');
+    const [requerimiento, setRequerimiento] = useState(null);
 
     const [documento, setDocumento] = useState('');
     const [estadoActual, setEstadoActual] = useState('pendiente');
@@ -106,18 +111,32 @@ export default function CrearTransferencia() {
                     peso_bruto_kg: t.peso_bruto_kg ?? '',
                     observaciones: t.observaciones ?? '',
                 });
+            } else if (rqId) {
+                const { data: rq } = await api.get(`/transferencias/requerimientos/${rqId}`);
+                if (rq.estado !== 'separada') {
+                    toast.error('Ese requerimiento no está separado: termina de prepararlo primero.');
+                    navigate('/requerimientos/atender');
+                    return;
+                }
+                setRequerimiento(rq);
+                setForm({
+                    ...emptyForm,
+                    almacen_origen_id: String(rq.origen?.id ?? ''),
+                    almacen_destino_id: String(rq.destino?.id ?? ''),
+                    observaciones: rq.observaciones ?? '',
+                });
             }
         } catch {
             toast.error('No se pudo cargar la información.');
         } finally {
             setLoading(false);
         }
-    }, [id, toast]);
+    }, [id, rqId, toast]);
 
     useEffect(() => {
         load();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [id]);
+    }, [id, rqId]);
 
     // ── Stock del almacén de origen (en unidad base) ──
     const stockOrigen = useMemo(() => {
@@ -336,8 +355,19 @@ export default function CrearTransferencia() {
             if (editando) {
                 await api.put(`/transferencias/${id}`, transporte);
                 toast.success('Guía actualizada.');
+            } else if (requerimiento) {
+                // El requerimiento sale con sus rollos y con lo que se haya agregado aquí.
+                const { data } = await api.post(`/transferencias/requerimientos/${requerimiento.id}/despachar`, {
+                    ...transporte,
+                    extras: items.map((it) => ({
+                        producto_presentacion_id: it.producto_presentacion_id,
+                        producto_color_id: it.producto_color_id || null,
+                        cantidad_enviada: it.cantidad,
+                    })),
+                });
+                toast.success(`Traslado creado desde ${requerimiento.requerimiento}: guía ${data.guia}. Quedó en tránsito.`);
             } else {
-                if (items.length === 0) {
+                if (items.length === 0 && !requerimiento) {
                     setFormErrors({ detalles: 'Agrega al menos un producto.' });
                     setSaving(false);
                     return;
@@ -407,14 +437,16 @@ export default function CrearTransferencia() {
                 </div>
                 <div>
                     <h1 className="text-xl font-bold tracking-tight text-warm-900">
-                        {editando ? `Editar guía ${documento}` : 'Nueva guía de traslado'}
+                        {editando ? `Editar guía ${documento}` : requerimiento ? `Nuevo traslado · ${requerimiento.requerimiento}` : 'Nueva guía de traslado'}
                     </h1>
                     <p className="text-sm text-warm-500">
                         {editando
                             ? soloTransporte
                                 ? 'Ya fue aprobada: solo se pueden cambiar las observaciones.'
                                 : 'Puedes completar los datos del transporte hasta que se apruebe.'
-                            : 'Documento interno numerado para mover mercadería entre almacenes.'}
+                            : requerimiento
+                              ? `Trae el requerimiento ${requerimiento.requerimiento} con sus rollos separados. Agrega más productos si quieres mandar algo más.`
+                              : 'Documento interno numerado para mover mercadería entre almacenes.'}
                     </p>
                 </div>
             </div>
@@ -422,9 +454,41 @@ export default function CrearTransferencia() {
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_400px] *:min-w-0">
                 {/* Columna izquierda: productos (alta) o el detalle ya fijo (edición) */}
                 <div className="space-y-6">
+                    {/* Lo que ya viene del requerimiento: sus rollos separados salen tal cual. */}
+                    {requerimiento && (
+                        <div className="rounded-xl border border-edge bg-white p-5 shadow-sm">
+                            <h2 className="mb-1 text-sm font-semibold text-warm-900">Del requerimiento {requerimiento.requerimiento}</h2>
+                            <p className="mb-3 text-xs text-warm-500">Lo pidió {requerimiento.destino?.nombre}. Estos rollos ya están separados y salen con el traslado.</p>
+                            <div className="space-y-2">
+                                {requerimiento.detalles.map((d) => (
+                                    <div key={d.id} className="rounded-lg border border-edge">
+                                        <div className="flex flex-wrap items-center justify-between gap-2 bg-gray-50 px-3 py-2 text-sm">
+                                            <span className="font-semibold text-warm-900">
+                                                {d.producto}{d.color && <span className="font-normal text-warm-600"> · {d.color}</span>}
+                                            </span>
+                                            <span className="text-warm-700">
+                                                {d.rollos.length > 0 ? `${d.rollos.length} rollo${d.rollos.length === 1 ? '' : 's'} · ${num(d.metros_asignados)} m` : `${num(d.cantidad_enviada)} ${d.presentacion ?? ''}`}
+                                            </span>
+                                        </div>
+                                        {d.rollos.length > 0 && (
+                                            <ul className="divide-y divide-edge/60">
+                                                {d.rollos.map((x) => (
+                                                    <li key={x.rollo_id} className="flex items-center justify-between gap-2 px-3 py-1.5 text-sm">
+                                                        <span className="font-mono text-warm-800">{x.codigo}</span>
+                                                        <span className="text-warm-600">{num(x.metros)} m {x.entero ? 'entero' : `· corte de ${num(x.metros_rollo)} m`}</span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                     {!editando && (
                         <div className="rounded-xl border border-edge bg-white p-5 shadow-sm">
-                            <h2 className="mb-3 text-sm font-semibold text-warm-900">Productos a trasladar</h2>
+                            <h2 className="mb-3 text-sm font-semibold text-warm-900">{requerimiento ? 'Agregar más productos (opcional)' : 'Productos a trasladar'}</h2>
                             {!form.almacen_origen_id ? (
                                 <Alert variant="info">Elige el almacén de origen para ver sus productos con stock.</Alert>
                             ) : (
@@ -574,12 +638,12 @@ export default function CrearTransferencia() {
                     <div className="rounded-xl border border-edge bg-white p-5 shadow-sm">
                         <h3 className="mb-3 text-xs font-bold uppercase tracking-wide text-warm-500">Traslado</h3>
                         <div className="space-y-3">
-                            <SearchSelect label="Almacén origen" value={form.almacen_origen_id} disabled={editando}
+                            <SearchSelect label="Almacén origen" value={form.almacen_origen_id} disabled={editando || Boolean(requerimiento)}
                                 onChange={(v) => { setField('almacen_origen_id', v ?? ''); setItems([]); setPanel({ ...panelVacio }); }}
                                 placeholder="Selecciona…" emptyText="Sin coincidencias"
                                 options={opcionesAlmacen(almacenes, form.almacen_origen_id)}
                                 error={formErrors.almacen_origen_id} />
-                            <SearchSelect label="Almacén destino" value={form.almacen_destino_id} disabled={editando}
+                            <SearchSelect label="Almacén destino" value={form.almacen_destino_id} disabled={editando || Boolean(requerimiento)}
                                 onChange={(v) => setField('almacen_destino_id', v ?? '')}
                                 placeholder="Selecciona…" emptyText="Sin coincidencias"
                                 options={opcionesAlmacen(almacenes, form.almacen_destino_id).filter((o) => o.value !== String(form.almacen_origen_id))}
@@ -627,7 +691,7 @@ export default function CrearTransferencia() {
                             onChange={(e) => setField('observaciones', e.target.value)} />
                         <div className="mt-4 flex flex-col gap-2">
                             <Button onClick={guardar} loading={saving} className="w-full justify-center">
-                                {editando ? 'Guardar cambios' : 'Crear guía'}
+                                {editando ? 'Guardar cambios' : requerimiento ? 'Crear traslado y despachar' : 'Crear guía'}
                             </Button>
                             <Button variant="secondary" onClick={() => navigate('/transferencias')} className="w-full justify-center">
                                 Cancelar

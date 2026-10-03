@@ -137,9 +137,25 @@ class RequerimientoTrasladoController extends Controller
             'conductor_licencia' => 'nullable|string|max:15',
             'numero_bultos' => 'nullable|integer|min:0',
             'peso_bruto_kg' => 'nullable|numeric|min:0',
+            // Lo que se completó al armar el traslado en "Nueva guía de traslado".
+            'motivo_traslado' => 'nullable|string|exists:motivos_traslado,codigo',
+            'fecha_inicio_traslado' => 'nullable|date',
+            'observaciones' => 'nullable|string|max:500',
+            // Más productos que se mandan junto con el requerimiento (por stock, como una guía directa).
+            'extras' => 'nullable|array',
+            'extras.*.producto_presentacion_id' => 'required|exists:producto_presentaciones,id',
+            'extras.*.producto_color_id' => 'nullable|exists:producto_colores,id',
+            'extras.*.cantidad_enviada' => 'required|numeric|min:0.01',
         ]);
 
-        return response()->json($this->formato($this->servicio->despachar($transferencia, array_filter($transporte, fn ($v) => $v !== null))));
+        $extras = $transporte['extras'] ?? [];
+        unset($transporte['extras']);
+
+        return response()->json($this->formato($this->servicio->despachar(
+            $transferencia,
+            array_filter($transporte, fn ($v) => $v !== null),
+            $extras,
+        )));
     }
 
     /** El almacén pedido no puede atenderlo. */

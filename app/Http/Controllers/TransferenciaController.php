@@ -221,71 +221,10 @@ class TransferenciaController extends Controller
         return response()->json($transferencia->fresh());
     }
 
-    /**
-     * Mueve al almacén destino los rollos que cubren la cantidad enviada.
-     *
-     * Los toma del más antiguo al más nuevo. Si sobran metros del último
-     * rollo, se parte: el trozo enviado viaja, el resto se queda donde
-     * estaba. Un producto que no se maneja por rollos (no tiene ninguno en
-     * este almacén) no tiene nada que mover aquí: ya lo cubrió el stock.
-     */
+    /** Mueve al almacén destino los rollos que cubren la cantidad enviada (ver TrasladoRollosService). */
     private function moverRollos(RolloService $rollos, $detalle, int $almacenOrigenId, int $almacenDestinoId): void
     {
-        $factor = (float) ($detalle->presentacion->factor_conversion ?: 1);
-        $basePorMetro = max((float) ($detalle->presentacion->producto?->factorBasePorMetro() ?? 1), 0.0001);
-        $metrosPorMover = round((float) $detalle->cantidad_enviada * $factor / $basePorMetro, 2);
-
-        // Si esta tela no maneja rollos en absoluto (mercería, insumos), no
-        // hay nada que mover aquí: ya lo cubrió el stock de arriba.
-        $usaRollos = Rollo::where('producto_id', $detalle->presentacion->producto_id)->exists();
-        if (! $usaRollos) {
-            return;
-        }
-
-        $candidatos = Rollo::disponibles()
-            ->where('producto_id', $detalle->presentacion->producto_id)
-            ->where('almacen_id', $almacenOrigenId)
-            ->where('producto_color_id', $detalle->producto_color_id)
-            ->orderBy('numero')
-            ->get();
-
-        foreach ($candidatos as $rollo) {
-            if ($metrosPorMover <= 0.001) {
-                break;
-            }
-
-            $metrosRollo = (float) $rollo->metros_actual;
-
-            if ($metrosRollo <= $metrosPorMover + 0.001) {
-                $viaja = $rollos->trasladar($rollo, ['almacen_id' => $almacenDestinoId], auth()->id());
-                $enviado = $metrosRollo;
-                $metrosPorMover = round($metrosPorMover - $metrosRollo, 2);
-            } else {
-                $viaja = $rollos->dividir($rollo, $metrosPorMover, $almacenDestinoId, auth()->id());
-                $enviado = $metrosPorMover;
-                $metrosPorMover = 0;
-            }
-
-            // Viaja en tránsito y queda registrado para poder recepcionarlo escaneando su QR en el destino.
-            $rollos->cambiarEstado($viaja, Rollo::EN_TRANSITO, \App\Models\RolloMovimiento::TRASLADO, 'transferencia', $detalle->transferencia_id);
-            $detalle->rollos()->create([
-                'rollo_id' => $rollo->id,
-                'rollo_viaja_id' => $viaja->id,
-                'metros' => $enviado,
-                'metros_rollo' => $metrosRollo,
-                'entero' => $viaja->id === $rollo->id,
-                'escaneado_at' => now(),
-                'usuario_escanea_id' => auth()->id(),
-            ]);
-        }
-
-        if ($metrosPorMover > 0.001) {
-            $color = $detalle->producto_color_id ? ' de ese color' : '';
-            throw new \RuntimeException(
-                "No hay rollos{$color} suficientes de \"{$detalle->presentacion->producto?->nombre}\" en el almacén de origen "
-                ."para cubrir {$detalle->cantidad_enviada} {$detalle->presentacion->nombre}."
-            );
-        }
+        app(\App\Services\TrasladoRollosService::class)->mover($detalle, $almacenOrigenId, $almacenDestinoId);
     }
 
     /** Recibir: ingresa el stock al almacén de destino y pasa a "recibida". */

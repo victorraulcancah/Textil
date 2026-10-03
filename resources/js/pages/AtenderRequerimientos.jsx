@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Camera, Check, ClipboardList, PackageCheck, ScanLine, TriangleAlert, Truck, X } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
@@ -6,15 +7,13 @@ import EscanerCamara from '../components/EscanerCamara';
 import FiltroAlmacen from '../components/FiltroAlmacen';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
-import PdfViewerModal from '../components/PdfViewerModal';
-import { Alert, Badge, Button, Input, Modal, Select, Spinner, cn } from '../components/ui';
+import { Alert, Badge, Button, Input, Modal, Spinner, cn } from '../components/ui';
 import { ESTADOS_RQ, pedidoTexto } from './Requerimientos';
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
 
 const ABIERTOS = ['solicitada', 'preparando', 'separada'];
 
-const transporteVacio = { modalidad_transporte: 'privado', transportista_razon_social: '', transportista_ruc: '', vehiculo_placa: '', conductor_nombre: '', conductor_documento: '', conductor_licencia: '', numero_bultos: '', peso_bruto_kg: '' };
 
 /** Avance de una línea: "1/2 rollos", "12/30 m". */
 const avanceDe = (d) =>
@@ -31,6 +30,7 @@ const avanceDe = (d) =>
  */
 export default function AtenderRequerimientos() {
     const toast = useToast();
+    const navigate = useNavigate();
     const [lista, setLista] = useState([]);
     const [almacenId, setAlmacenId] = useState('');
     const [cargando, setCargando] = useState(true);
@@ -40,10 +40,7 @@ export default function AtenderRequerimientos() {
     const [ultimo, setUltimo] = useState(null);
     const [codigo, setCodigo] = useState('');
     const [separando, setSeparando] = useState(false);
-    const [despacho, setDespacho] = useState(null); // formulario de transporte (null = cerrado)
-    const [despachando, setDespachando] = useState(false);
     const [rechazo, setRechazo] = useState(null); // motivo (null = cerrado)
-    const [pdf, setPdf] = useState(null);
     const inputRef = useRef(null);
 
     const cargar = useCallback(
@@ -151,25 +148,6 @@ export default function AtenderRequerimientos() {
         }
     };
 
-    const despachar = async () => {
-        setDespachando(true);
-        try {
-            const cuerpo = Object.fromEntries(Object.entries(despacho).filter(([, v]) => v !== ''));
-            const { data } = await api.post(`/transferencias/requerimientos/${detalle.id}/despachar`, cuerpo);
-            toast.success(`${data.requerimiento} despachado: guía ${data.guia}.`);
-            setDespacho(null);
-            setDetalle(null);
-            setSeleccionado(null);
-            setPdf({ id: data.id, nombre: data.guia });
-            await cargar();
-        } catch (err) {
-            const e = err.response?.data;
-            toast.error(e?.message ?? Object.values(e?.errors ?? {})?.[0]?.[0] ?? 'No se pudo despachar.');
-        } finally {
-            setDespachando(false);
-        }
-    };
-
     const rechazar = async () => {
         try {
             await api.post(`/transferencias/requerimientos/${detalle.id}/rechazar`, { motivo: rechazo || undefined });
@@ -247,7 +225,7 @@ export default function AtenderRequerimientos() {
                                             <X className="h-4 w-4" /> Rechazar
                                         </Button>
                                         {separado ? (
-                                            <Button size="sm" onClick={() => setDespacho({ ...transporteVacio })}>
+                                            <Button size="sm" onClick={() => navigate(`/transferencias/nueva?requerimiento=${detalle.id}`)}>
                                                 <Truck className="h-4 w-4" /> Despachar
                                             </Button>
                                         ) : (
@@ -266,7 +244,7 @@ export default function AtenderRequerimientos() {
                                 )}
                                 {separado && (
                                     <div className="border-b border-edge bg-green-50 px-4 py-2.5 text-sm text-green-800">
-                                        Separado y verificado. Pulsa <strong>Despachar</strong> cuando salga: se genera la guía de traslado y la mercadería queda en tránsito.
+                                        Separado y verificado. Pulsa <strong>Despachar</strong>: se abre el traslado con todo esto ya cargado, para completar el transporte o agregar más productos antes de crearlo.
                                     </div>
                                 )}
 
@@ -368,37 +346,6 @@ export default function AtenderRequerimientos() {
                 <Input label="Motivo" value={rechazo ?? ''} onChange={(e) => setRechazo(e.target.value)} placeholder="Ej.: sin stock de ese color" />
             </Modal>
 
-            <Modal
-                open={despacho !== null}
-                onClose={() => setDespacho(null)}
-                size="xl"
-                title={`Despachar ${detalle?.requerimiento ?? ''}`}
-                description="Se genera la guía de traslado y sale la mercadería. Los datos de transporte son opcionales."
-                footer={<><Button variant="secondary" onClick={() => setDespacho(null)}>Volver</Button><Button loading={despachando} onClick={despachar}><Truck className="h-4 w-4" /> Despachar</Button></>}
-            >
-                {despacho && (
-                    <div className="grid gap-3 sm:grid-cols-2">
-                        <Select label="Transporte" value={despacho.modalidad_transporte} onChange={(e) => setDespacho((f) => ({ ...f, modalidad_transporte: e.target.value }))} options={[{ value: 'privado', label: 'Privado' }, { value: 'publico', label: 'Público' }]} />
-                        <Input label="N.º de bultos" type="number" min="0" value={despacho.numero_bultos} onChange={(e) => setDespacho((f) => ({ ...f, numero_bultos: e.target.value }))} />
-                        {despacho.modalidad_transporte === 'publico' ? (
-                            <>
-                                <Input label="Transportista" value={despacho.transportista_razon_social} onChange={(e) => setDespacho((f) => ({ ...f, transportista_razon_social: e.target.value }))} />
-                                <Input label="RUC transportista" maxLength={11} value={despacho.transportista_ruc} onChange={(e) => setDespacho((f) => ({ ...f, transportista_ruc: e.target.value }))} />
-                            </>
-                        ) : (
-                            <>
-                                <Input label="Placa del vehículo" value={despacho.vehiculo_placa} onChange={(e) => setDespacho((f) => ({ ...f, vehiculo_placa: e.target.value }))} />
-                                <Input label="Conductor" value={despacho.conductor_nombre} onChange={(e) => setDespacho((f) => ({ ...f, conductor_nombre: e.target.value }))} />
-                                <Input label="Documento del conductor" value={despacho.conductor_documento} onChange={(e) => setDespacho((f) => ({ ...f, conductor_documento: e.target.value }))} />
-                                <Input label="Licencia" value={despacho.conductor_licencia} onChange={(e) => setDespacho((f) => ({ ...f, conductor_licencia: e.target.value }))} />
-                            </>
-                        )}
-                        <Input label="Peso bruto (kg)" type="number" min="0" step="0.001" value={despacho.peso_bruto_kg} onChange={(e) => setDespacho((f) => ({ ...f, peso_bruto_kg: e.target.value }))} />
-                    </div>
-                )}
-            </Modal>
-
-            <PdfViewerModal open={Boolean(pdf)} onClose={() => setPdf(null)} tipo="guia-traslado" id={pdf?.id} nombre={pdf?.nombre} titulo="Guía de traslado" formatos={['a4', 'ticket']} />
         </Layout>
     );
 }

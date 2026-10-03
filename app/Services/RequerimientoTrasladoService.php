@@ -233,13 +233,28 @@ class RequerimientoTrasladoService
      * Sale la mercadería: se genera la guía, los rollos cambian de almacén (los cortes se parten) y se descuenta el
      * stock del origen. Queda en tránsito hasta que el destino la reciba.
      */
-    public function despachar(Transferencia $t, array $transporte = []): Transferencia
+    /**
+     * @param  array  $transporte  motivo, fecha, transporte y observaciones de la guía
+     * @param  list<array{producto_presentacion_id: int, producto_color_id?: ?int, cantidad_enviada: float}>  $extras
+     *         lo que se agregó al requerimiento al armar el traslado: va por stock, igual que una guía directa
+     */
+    public function despachar(Transferencia $t, array $transporte = [], array $extras = []): Transferencia
     {
         if ($t->estado !== self::SEPARADA) {
             throw new \DomainException('Primero hay que dar el requerimiento por separado.');
         }
 
-        return DB::transaction(function () use ($t, $transporte) {
+        return DB::transaction(function () use ($t, $transporte, $extras) {
+            foreach ($extras as $extra) {
+                $t->detalles()->create([
+                    'producto_presentacion_id' => $extra['producto_presentacion_id'],
+                    'producto_color_id' => $extra['producto_color_id'] ?? null,
+                    'modo' => 'cantidad',
+                    'cantidad_enviada' => $extra['cantidad_enviada'],
+                ]);
+            }
+            $t->unsetRelation('detalles');
+
             $t->load('detalles.rollos.rollo', 'detalles.presentacion.producto', 'almacenOrigen');
             $destinoId = (int) $t->almacen_destino_id;
 
@@ -278,6 +293,11 @@ class RequerimientoTrasladoService
                         auth()->id(),
                         colorId: $linea->producto_color_id,
                     );
+
+                    // Lo que se manda por cantidad (lo agregado al armar el traslado) también mueve sus rollos.
+                    if (! $linea->esTela()) {
+                        app(TrasladoRollosService::class)->mover($linea, (int) $t->almacen_origen_id, $destinoId);
+                    }
                 } catch (\RuntimeException $e) {
                     throw new \DomainException($e->getMessage());
                 }

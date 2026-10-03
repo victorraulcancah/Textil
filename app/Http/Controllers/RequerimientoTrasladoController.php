@@ -212,7 +212,7 @@ class RequerimientoTrasladoController extends Controller
     /** La forma que consume la pantalla. */
     private function formato(Transferencia $t): array
     {
-        $t->loadMissing('detalles.rollos.rollo:id,codigo,metros_actual', 'detalles.presentacion.producto', 'detalles.color');
+        $t->loadMissing('detalles.rollos.rollo.color', 'detalles.presentacion.producto', 'detalles.color');
         $completo = $t->detalles->every(fn ($d) => $d->estaCubierta());
 
         return [
@@ -234,9 +234,12 @@ class RequerimientoTrasladoController extends Controller
                 'id' => $d->id,
                 'modo' => $d->modo,
                 'producto' => $d->presentacion?->producto?->nombre,
+                'producto_codigo' => $d->presentacion?->producto?->codigo,
                 'presentacion' => $d->presentacion?->nombre,
                 'color' => $d->color?->nombre,
-                'color_hex' => $d->color?->codigo_hex ?? null,
+                'color_codigo' => $d->color?->codigo,
+                'color_hex' => $d->color?->hex ?? $d->color?->codigo_hex ?? null,
+                'rollos_pendientes' => $d->esPorRollos() ? $d->rollosPendientes() : 0,
                 'rollos_pedidos' => $d->rollos_pedidos,
                 'metros_por_rollo' => $d->metros_por_rollo !== null ? (float) $d->metros_por_rollo : null,
                 'metros_pedidos' => $d->metros_pedidos !== null ? (float) $d->metros_pedidos : null,
@@ -252,6 +255,11 @@ class RequerimientoTrasladoController extends Controller
                     'metros' => (float) $r->metros,
                     'metros_rollo' => $r->metros_rollo !== null ? (float) $r->metros_rollo : null,
                     'entero' => (bool) $r->entero,
+                    'es_parcial' => ! $r->entero,
+                    // El color real del rollo (puede ser distinto del pedido si el pedido no pedía color).
+                    'color' => $r->rollo?->color?->nombre,
+                    'color_codigo' => $r->rollo?->color?->codigo,
+                    'color_hex' => $r->rollo?->color?->hex ?? $r->rollo?->color?->codigo_hex ?? null,
                 ])->values(),
             ])->values(),
         ];

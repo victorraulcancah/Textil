@@ -45,6 +45,29 @@ function agrupar(lineas) {
     return [...grupos.values()].map((g) => ({ ...g, metros: redondear(g.metros), total: redondear(g.total) }));
 }
 
+/**
+ * Un requerimiento de traslado (lo que atiende el almacén pedido): el mismo desglose del despacho, una tabla por tela y
+ * una fila por rollo escaneado, sin precios. Se arma con la misma lógica del pedido.
+ */
+export function gruposDeRequerimiento(detalles = []) {
+    return gruposDePedido(
+        detalles.map((d) => ({
+            ...d,
+            // Lo que no es tela va por cantidad; una tela pedida por metros se trata como rollos por cubrir.
+            modo: d.modo === 'cantidad' ? 'cantidad' : 'rollos',
+            rollos_pedidos: d.modo === 'metros' ? Math.max(1, d.rollos?.length ?? 0) : d.rollos_pedidos,
+            rollos_pendientes: d.modo === 'metros' ? (d.cubierta ? 0 : 1) : d.rollos_pendientes,
+            color: d.color ? { nombre: d.color, codigo: d.color_codigo, hex: d.color_hex } : null,
+            precio_oculto: true,
+            rollos: (d.rollos ?? []).map((r) => ({
+                ...r,
+                color_codigo: r.color_codigo,
+                color_hex: r.color_hex,
+            })),
+        })),
+    );
+}
+
 /** Lo de todos los grupos juntos: la fila TOTAL del final. */
 export const totalesDe = (grupos) => ({
     rollos: grupos.reduce((s, g) => s + g.rollos, 0),

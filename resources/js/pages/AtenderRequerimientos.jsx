@@ -7,6 +7,8 @@ import EscanerCamara from '../components/EscanerCamara';
 import FiltroAlmacen from '../components/FiltroAlmacen';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
+import PlanillaTela from '../components/PlanillaTela';
+import { gruposDeRequerimiento } from '../lib/planilla';
 import { Alert, Badge, Button, Input, Modal, Spinner, cn } from '../components/ui';
 import { ESTADOS_RQ, pedidoTexto } from './Requerimientos';
 
@@ -291,42 +293,33 @@ export default function AtenderRequerimientos() {
                                     </div>
                                 )}
 
-                                <div className="space-y-3 p-4">
-                                    {lineas.map((d) => (
-                                        <div key={d.id} className="rounded-lg border border-edge">
-                                            <div className="flex flex-wrap items-center justify-between gap-2 bg-gray-50 px-3 py-2 text-sm">
-                                                <span className="font-semibold text-warm-900">
-                                                    {d.producto}
-                                                    {d.color && <span className="font-normal text-warm-600"> · {d.color}</span>}
-                                                </span>
-                                                <span className="flex items-center gap-2 text-warm-700">
-                                                    Pide {pedidoTexto(d)}
-                                                    {d.modo !== 'cantidad' && <Badge variant={d.cubierta ? 'green' : 'amber'}>{avanceDe(d)}</Badge>}
-                                                </span>
-                                            </div>
-                                            {d.modo === 'cantidad' ? (
-                                                <p className="px-3 py-2 text-xs text-warm-500">Sale por cantidad: no se escanea.</p>
-                                            ) : d.rollos.length === 0 ? (
-                                                <p className="px-3 py-2 text-xs text-warm-400">Aún sin rollos.</p>
-                                            ) : (
-                                                <ul className="divide-y divide-edge/60">
-                                                    {d.rollos.map((x) => (
-                                                        <li key={x.rollo_id} className="flex items-center justify-between gap-2 px-3 py-1.5 text-sm">
-                                                            <span className="font-mono text-warm-800">{x.codigo}</span>
-                                                            <span className="text-warm-600">
-                                                                {num(x.metros)} m {x.entero ? 'entero' : `· corte de ${num(x.metros_rollo)} m`}
-                                                            </span>
-                                                            {(escaneando || separado) && (
-                                                                <button type="button" aria-label={`Quitar ${x.codigo}`} title="Quitar este rollo" onClick={() => quitarRollo(x.rollo_id)} className="rounded p-0.5 text-red-600 transition hover:bg-red-50">
-                                                                    <X className="h-3.5 w-3.5" />
-                                                                </button>
-                                                            )}
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            )}
-                                        </div>
-                                    ))}
+                                {/* Lo que piden y con qué se va cubriendo, en el mismo formato del despacho: una tabla por tela, rollo
+                                    por rollo (1R = rollo entero), sin precios. */}
+                                <div className="p-4">
+                                    <PlanillaTela
+                                        grupos={gruposDeRequerimiento(detalle.detalles ?? [])}
+                                        precios={false}
+                                        pendiente={!completo}
+                                        completa={(f) => Boolean(f.hecho)}
+                                        accion={
+                                            // La X se puede dar mientras se prepara y también ya separado (hasta despacharlo):
+                                            // quitar un rollo lo devuelve a preparación.
+                                            escaneando || separado
+                                                ? (f) =>
+                                                      f.rolloId ? (
+                                                          <button
+                                                              type="button"
+                                                              aria-label={`Quitar ${f.detalle ?? 'rollo'}`}
+                                                              title={separado ? 'Quitar este rollo: el requerimiento vuelve a preparación' : 'Quitar este rollo'}
+                                                              onClick={() => quitarRollo(f.rolloId)}
+                                                              className="rounded p-0.5 text-red-600 transition hover:bg-red-50"
+                                                          >
+                                                              <X className="h-3.5 w-3.5" />
+                                                          </button>
+                                                      ) : null
+                                                : null
+                                        }
+                                    />
                                 </div>
                             </>
                         )}

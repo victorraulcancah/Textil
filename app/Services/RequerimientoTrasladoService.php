@@ -354,7 +354,7 @@ class RequerimientoTrasladoService
             'usuarioRecepcion:id,name',
             'detalles.presentacion.producto.marca',
             'detalles.color',
-            'detalles.rollos.rollo:id,codigo,metros_actual',
+            'detalles.rollos.rollo.color',
         ]);
     }
 

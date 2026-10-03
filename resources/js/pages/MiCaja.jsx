@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowDownCircle, ArrowUpCircle, FileSignature, Lock, LockOpen, PiggyBank, Wallet } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, FileSignature, Lock, LockOpen, PiggyBank, Smartphone, Wallet } from 'lucide-react';
 import api from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
@@ -318,11 +318,13 @@ export default function MiCaja() {
                                 <Button variant="secondary" onClick={() => { setCerrarOpen(true); setMontoContado(''); setMontoContadoUsd(''); }}><Lock className="h-4 w-4" /> Cerrar caja</Button>
                             </div>
 
-                            <div className="mb-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
+                            <div className="mb-4 grid grid-cols-2 gap-2 lg:grid-cols-5">
                                 <Stat icon={PiggyBank} label="Monto inicial" value={money(resumen?.monto_inicial)} />
                                 <Stat icon={ArrowUpCircle} label="Ingresos" value={money(resumen?.ingresos)} accent="text-green-600" bg="bg-green-50" />
                                 <Stat icon={ArrowDownCircle} label="Gastos" value={money(resumen?.egresos)} accent="text-red-600" bg="bg-red-50" />
                                 <Stat icon={Wallet} label="Efectivo esperado" value={money(esperado)} accent="text-primary-600" bg="bg-primary-50" />
+                                {/* Lo cobrado por transferencia, Yape o billetera: queda registrado pero no está en el cajón. */}
+                                <Stat icon={Smartphone} label="Cobros digitales" value={money(resumen?.otros_ingresos)} accent="text-violet-600" bg="bg-violet-50" />
                             </div>
                             {dolares && (
                                 <div className="mb-4 grid grid-cols-2 gap-2 lg:grid-cols-4">

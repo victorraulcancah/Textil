@@ -1,20 +1,28 @@
 import { useCallback, useEffect, useState } from 'react';
-import { BadgeCheck, Edit, MapPin, Power, PowerOff, Star, Tag, Trash2, Warehouse, X } from 'lucide-react';
+import { BadgeCheck, Edit, MapPin, Power, PowerOff, Star, Tag, Trash2, Warehouse } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import { Alert, Badge, Button, DataTable, Input, Modal, Select, Tabs } from '../components/ui';
+import SelectorUbigeo from '../components/SelectorUbigeo';
 import UbicacionesAlmacen from '../components/UbicacionesAlmacen';
+import { cargarUbigeos, esPeru } from '../lib/ubigeos';
 
 const emptyForm = {
     nombre: '',
     codigo: '',
     tipo: 'principal',
-    // Unidades en las que vende este local (ids de unidades_medida).
-    // Vacío = vende en todas.
+    // Las unidades de venta del local ya no se piden en el formulario; las que tenga se conservan.
     unidades_venta: [],
     direccion: '',
+    referencia: '',
+    pais: 'Perú',
+    departamento: '',
+    provincia: '',
+    distrito: '',
+    ubigeo: '',
+    codigo_postal: '',
     activo: true,
     // El almacén con el que se trabaja a diario: viene ya elegido al crear
     // una proforma. Solo uno puede estarlo.
@@ -26,8 +34,8 @@ const emptyForm = {
 export default function Almacenes() {
     const toast = useToast();
     const [almacenes, setAlmacenes] = useState([]);
-    /** Unidades de medida del sistema, para las reglas de venta del local. */
-    const [unidades, setUnidades] = useState([]);
+    /** Distritos del Perú con su ubigeo, para la dirección detallada. */
+    const [ubigeos, setUbigeos] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
@@ -52,12 +60,8 @@ export default function Almacenes() {
         setLoading(true);
         setError(null);
         try {
-            const [almacenesRes, unidadesRes] = await Promise.all([
-                api.get('/almacenes'),
-                api.get('/unidades-medida'),
-            ]);
+            const almacenesRes = await api.get('/almacenes');
             setAlmacenes(asList(almacenesRes));
-            setUnidades(asList(unidadesRes));
         } catch {
             setError('No se pudieron cargar los almacenes.');
         } finally {
@@ -76,8 +80,24 @@ export default function Almacenes() {
         setForm(emptyForm);
         setFormErrors({});
         setModalTab('general');
+        cargarLugares();
         setModalOpen(true);
     };
+
+    /** Los distritos se piden una sola vez, al abrir el formulario. */
+    const cargarLugares = () => {
+        cargarUbigeos()
+            .then(setUbigeos)
+            .catch(() => toast.error('No se pudo cargar la lista de distritos.'));
+    };
+
+    /** Pasar de Perú al extranjero (o al revés) cambia cómo se escribe el lugar. */
+    const cambiarPais = (pais) =>
+        setForm((prev) =>
+            esPeru(pais) === esPeru(prev.pais)
+                ? { ...prev, pais }
+                : { ...prev, pais, departamento: '', provincia: '', distrito: '', ubigeo: '' },
+        );
 
     const openEdit = (almacen) => {
         setEditing(almacen);
@@ -87,11 +107,19 @@ export default function Almacenes() {
             tipo: almacen.tipo ?? 'principal',
             unidades_venta: (almacen.unidades_venta ?? []).map((u) => u.id),
             direccion: almacen.direccion ?? '',
+            referencia: almacen.referencia ?? '',
+            pais: almacen.pais ?? 'Perú',
+            departamento: almacen.departamento ?? '',
+            provincia: almacen.provincia ?? '',
+            distrito: almacen.distrito ?? '',
+            ubigeo: almacen.ubigeo ?? '',
+            codigo_postal: almacen.codigo_postal ?? '',
             activo: Boolean(almacen.activo),
             predeterminado: Boolean(almacen.predeterminado),
         });
         setFormErrors({});
         setModalTab('general');
+        cargarLugares();
         setModalOpen(true);
     };
 
@@ -314,15 +342,22 @@ export default function Almacenes() {
         {
             key: 'direccion',
             label: 'Dirección',
-            render: (row) =>
-                row.direccion ? (
-                    <span className="inline-flex items-center gap-1.5 text-gray-700">
-                        <MapPin className="h-3.5 w-3.5 text-gray-400" />
-                        {row.direccion}
+            getSearchValue: (row) => [row.direccion, row.distrito, row.provincia, row.departamento].filter(Boolean).join(' '),
+            render: (row) => {
+                // La calle y, debajo, distrito · provincia · departamento.
+                const lugar = [row.distrito, row.provincia, row.departamento].filter(Boolean).join(' · ');
+                return row.direccion || lugar ? (
+                    <span className="inline-flex items-start gap-1.5 text-gray-700">
+                        <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gray-400" />
+                        <span>
+                            {row.direccion}
+                            {lugar && <span className="block text-xs text-gray-500">{lugar}</span>}
+                        </span>
                     </span>
                 ) : (
                     <span className="text-gray-400">—</span>
-                ),
+                );
+            },
         },
         {
             key: 'activo',
@@ -483,68 +518,48 @@ export default function Almacenes() {
                                 { value: 'tienda', label: 'Tienda' },
                             ]}
                         />
-                        <div>
-                            <Select
-                                label="¿En qué unidades vende este local?"
-                                value=""
-                                onChange={(e) => {
-                                    const id = Number(e.target.value);
-                                    if (!id) return;
-                                    setForm((prev) => ({
-                                        ...prev,
-                                        unidades_venta: [...prev.unidades_venta, id],
-                                    }));
-                                }}
-                                options={[
-                                    { value: '', label: 'Agregar unidad…' },
-                                    // Solo las que faltan: las ya elegidas se ven abajo.
-                                    ...unidades
-                                        .filter((u) => !form.unidades_venta.includes(u.id))
-                                        .map((u) => ({ value: String(u.id), label: u.nombre })),
-                                ]}
-                            />
-
-                            {form.unidades_venta.length === 0 ? (
-                                <p className="mt-1.5 text-xs text-warm-500">
-                                    Sin unidades elegidas: este local vende en todas.
-                                </p>
-                            ) : (
-                                <div className="mt-2 flex flex-wrap gap-1.5">
-                                    {form.unidades_venta.map((id) => {
-                                        const unidad = unidades.find((u) => u.id === id);
-                                        return (
-                                            <span
-                                                key={id}
-                                                className="inline-flex items-center gap-1.5 rounded-full bg-primary-50 py-1 pl-3 pr-1.5 text-xs font-medium text-primary-700 ring-1 ring-inset ring-primary-200"
-                                            >
-                                                {unidad?.nombre ?? id}
-                                                <button
-                                                    type="button"
-                                                    aria-label={`Quitar ${unidad?.nombre ?? ''}`}
-                                                    onClick={() =>
-                                                        setForm((prev) => ({
-                                                            ...prev,
-                                                            unidades_venta: prev.unidades_venta.filter((x) => x !== id),
-                                                        }))
-                                                    }
-                                                    className="rounded-full p-0.5 transition hover:bg-primary-100"
-                                                >
-                                                    <X className="h-3 w-3" />
-                                                </button>
-                                            </span>
-                                        );
-                                    })}
+                        {/* La dirección detallada, como la de un cliente. */}
+                        <div className="rounded-lg border border-edge p-3">
+                            <p className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-warm-900">
+                                <MapPin className="h-4 w-4 text-primary-600" />
+                                Dirección
+                            </p>
+                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                <div className="sm:col-span-2">
+                                    <Input
+                                        label="Dirección"
+                                        name="direccion"
+                                        placeholder="Av., Jr., Calle… número, urbanización"
+                                        value={form.direccion}
+                                        onChange={(e) => setForm((prev) => ({ ...prev, direccion: e.target.value }))}
+                                        error={formErrors.direccion}
+                                    />
                                 </div>
-                            )}
+                                <Input label="País" value={form.pais} onChange={(e) => cambiarPais(e.target.value)} error={formErrors.pais} />
+                                <SelectorUbigeo
+                                    lista={ubigeos}
+                                    pais={form.pais}
+                                    valor={form}
+                                    onChange={(cambios) => setForm((prev) => ({ ...prev, ...cambios }))}
+                                    errores={formErrors}
+                                />
+                                <Input
+                                    label="Código postal"
+                                    value={form.codigo_postal}
+                                    onChange={(e) => setForm((prev) => ({ ...prev, codigo_postal: e.target.value }))}
+                                    error={formErrors.codigo_postal}
+                                />
+                                <div className="sm:col-span-2">
+                                    <Input
+                                        label="Referencia"
+                                        placeholder="Opcional: frente a…, cerca de…"
+                                        value={form.referencia}
+                                        onChange={(e) => setForm((prev) => ({ ...prev, referencia: e.target.value }))}
+                                        error={formErrors.referencia}
+                                    />
+                                </div>
+                            </div>
                         </div>
-                        <Input
-                            label="Dirección"
-                            name="direccion"
-                            placeholder="Opcional"
-                            value={form.direccion}
-                            onChange={(e) => setForm((prev) => ({ ...prev, direccion: e.target.value }))}
-                            error={formErrors.direccion}
-                        />
                         <label className="flex items-center gap-2 text-sm text-gray-700">
                             <input
                                 type="checkbox"

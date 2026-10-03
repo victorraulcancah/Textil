@@ -229,6 +229,11 @@ class NotaVentaService
                 ->first()
             : null;
 
+        // Una venta de contado cobra en el acto: el vendedor necesita su caja abierta (sin ella no hay dónde anotarlo).
+        if ($data['tipo_pago'] === 'contado' && ! empty($cobros) && ! $apertura) {
+            app(CajaService::class)->exigirApertura(User::find($data['vendedor_id']));
+        }
+
         if ($apertura && $data['tipo_pago'] === 'contado') {
             // Sin motivo, el movimiento aparece con "—" en Mi Caja.
             $motivoVentaId = MotivoMovimiento::where('tipo', 'entrada')

@@ -4,7 +4,7 @@ import api, { asList } from '../lib/api';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import PagosCuentaModal from '../components/PagosCuentaModal';
-import { Alert, Badge, Button, DataTable, SearchSelect, Select } from '../components/ui';
+import { Alert, Badge, DataTable, SearchSelect, Select } from '../components/ui';
 
 const ESTADOS = [
     { value: '', label: 'Todos los estados' },
@@ -79,11 +79,18 @@ export default function CuentasPorPagar() {
             key: 'acciones',
             label: 'Acciones',
             type: 'actions',
+            width: '90px',
             align: 'right',
             actions: (row) => (
-                <Button size="sm" variant="secondary" onClick={() => setPagoCuenta(row)}>
-                    <Wallet className="h-4 w-4" /> Pagos
-                </Button>
+                <button
+                    type="button"
+                    aria-label="Pagos"
+                    title="Pagos"
+                    onClick={() => setPagoCuenta(row)}
+                    className="rounded-md bg-emerald-50 p-1.5 text-emerald-600 ring-1 ring-inset ring-emerald-200 transition hover:bg-emerald-100 hover:text-emerald-700"
+                >
+                    <Wallet className="h-4 w-4" />
+                </button>
             ),
         },
     ];

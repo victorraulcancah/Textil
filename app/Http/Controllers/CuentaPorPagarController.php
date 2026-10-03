@@ -35,6 +35,9 @@ class CuentaPorPagarController extends Controller
             return response()->json(['message' => 'La cuenta no admite más pagos.'], 422);
         }
 
+        // Pagar mueve dinero: hace falta tener caja y que esté abierta.
+        app(\App\Services\CajaService::class)->exigirApertura();
+
         $data = $request->validate([
             // El día en que se cobró/pagó de verdad: puede ser uno pasado, nunca futuro.
             'fecha' => 'nullable|date|before_or_equal:'.now()->toDateString(),

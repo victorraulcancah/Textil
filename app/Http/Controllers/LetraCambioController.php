@@ -216,6 +216,9 @@ class LetraCambioController extends Controller
 
         // Una letra suelta (sin cuenta por cobrar, como las de préstamos): lo cobrado entra a caja.
         if (! $cuenta) {
+            // Cobrar mueve dinero: hace falta tener caja y que esté abierta.
+            app(CajaService::class)->exigirApertura();
+
             DB::transaction(function () use ($letrasCambio, $completo, $saldo, $cobrado, $data, $pago, $enSoles) {
                 $letrasCambio->update([
                     'saldo' => $completo ? 0 : round($saldo - $cobrado, 2),

@@ -162,6 +162,8 @@ export default function CuentasPorCobrar() {
             key: 'acciones',
             label: 'Acciones',
             type: 'actions',
+            // Solo iconos (y "Ver letras" cuando la deuda pasó a letras): con 120 px por defecto se cortaba.
+            width: '170px',
             align: 'right',
             actions: (row) => (
                 <>
@@ -172,9 +174,15 @@ export default function CuentasPorCobrar() {
                             </Button>
                         )
                     ) : (
-                        <Button size="sm" variant="secondary" onClick={() => setPagoCuenta(row)}>
-                            <Wallet className="h-4 w-4" /> Pagos
-                        </Button>
+                        <button
+                            type="button"
+                            aria-label="Pagos"
+                            title="Pagos"
+                            onClick={() => setPagoCuenta(row)}
+                            className="rounded-md bg-emerald-50 p-1.5 text-emerald-600 ring-1 ring-inset ring-emerald-200 transition hover:bg-emerald-100 hover:text-emerald-700"
+                        >
+                            <Wallet className="h-4 w-4" />
+                        </button>
                     )}
                     {puede('tesoreria.letras-cambio.crear') && ['pendiente', 'parcial'].includes(row.estado) && !enLetrasTotal(row) && (
                         <button

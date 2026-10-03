@@ -414,10 +414,11 @@ class CompraController extends Controller
         }
 
         $cajas = app(CajaService::class);
-        $apertura = $cajas->aperturaPara();
-        if (! $apertura) {
+        // Una compra de contado con pagos saca el dinero de la caja de quien la registra: debe estar abierta.
+        if (! $compra->pagos()->exists()) {
             return;
         }
+        $apertura = $cajas->exigirApertura();
 
         $motivo = $cajas->motivo('Salida por pago de compra');
         $documento = $compra->numero_compra ?? "#{$compra->id}";

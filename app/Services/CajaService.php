@@ -5,13 +5,13 @@ namespace App\Services;
 use App\Models\AperturaCaja;
 use App\Models\MotivoMovimiento;
 use App\Models\User;
+use Illuminate\Validation\ValidationException;
 
 /**
  * La caja donde se anota lo que entra y sale por un cobro o un pago.
  *
- * Se anota en la caja abierta de quien opera (la que ve en Mi Caja). Si esa
- * persona no tiene caja abierta, en la última que esté abierta, para que el
- * movimiento no se pierda; y si no hay ninguna, no se anota nada.
+ * Cada usuario tiene UNA caja (la que ve en Mi Caja) y solo opera con dinero si esa caja está abierta. Sin caja
+ * asignada, o con la caja cerrada, no se puede cobrar ni pagar: nunca se anota en la caja de otro.
  */
 class CajaService
 {
@@ -25,12 +25,36 @@ class CajaService
                 ->latest('fecha_apertura')
                 ->first();
 
-            if ($propia) {
-                return $propia;
-            }
+            return $propia;
         }
 
-        return AperturaCaja::where('estado', 'abierta')->latest('fecha_apertura')->first();
+        return null;
+    }
+
+    /**
+     * La caja abierta del usuario o, si no la tiene, un 422 que dice por qué no puede cobrar ni pagar: no tiene
+     * caja asignada o su caja está cerrada.
+     */
+    public function exigirApertura(?User $usuario = null): AperturaCaja
+    {
+        $usuario ??= auth('api')->user() ?? auth()->user();
+
+        if (! $usuario?->caja_id) {
+            $this->negar('No tienes una caja asignada: pide que te asignen una para poder cobrar o pagar.');
+        }
+
+        $apertura = $this->aperturaPara($usuario);
+        if (! $apertura) {
+            $nombre = $usuario->caja?->nombre;
+            $this->negar('Tu caja'.($nombre ? " ({$nombre})" : '').' está cerrada: ábrela en Mi Caja para poder cobrar o pagar.');
+        }
+
+        return $apertura;
+    }
+
+    private function negar(string $mensaje): never
+    {
+        throw ValidationException::withMessages(['caja' => [$mensaje]]);
     }
 
     /** El id de un motivo de caja del sistema (por su nombre), o null si no existe. */

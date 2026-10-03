@@ -5,8 +5,7 @@ import api, { asList } from '../lib/api';
 import { opcionesAlmacen } from '../lib/almacenes';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
-import ColorSelect from '../components/ColorSelect';
-import ProductoPickerModal from '../components/ProductoPickerModal';
+import LineasRollos, { aDetallesTraslado } from '../components/LineasRollos';
 import { Alert, Button, Input, Modal, SearchSelect, Select, Spinner } from '../components/ui';
 
 const hoy = () => new Date().toISOString().slice(0, 10);
@@ -27,8 +26,6 @@ const emptyForm = {
     peso_bruto_kg: '',
     observaciones: '',
 };
-
-const panelVacio = { producto_id: '', producto_presentacion_id: '', producto_color_id: '', cantidad: '1' };
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
 
@@ -63,9 +60,7 @@ export default function CrearTransferencia() {
     const [formErrors, setFormErrors] = useState({});
 
     const [form, setForm] = useState(emptyForm);
-    const [panel, setPanel] = useState({ ...panelVacio });
     const [items, setItems] = useState([]);
-    const [picker, setPicker] = useState({ open: false, query: '' });
 
     /** Modal rápido de motivo, para no tener que ir a la otra pantalla. */
     const [motivoModal, setMotivoModal] = useState(false);
@@ -138,16 +133,18 @@ export default function CrearTransferencia() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [id, rqId]);
 
-    // ── Stock del almacén de origen (en unidad base) ──
-    const stockOrigen = useMemo(() => {
-        if (!form.almacen_origen_id) return {};
-        return existencias
-            .filter((e) => String(e.almacen_id) === String(form.almacen_origen_id))
-            .reduce((acc, e) => {
-                acc[String(e.producto_id)] = Number(e.stock_actual) || 0;
-                return acc;
-            }, {});
-    }, [existencias, form.almacen_origen_id]);
+    /** Las existencias del almacén de origen: de ahí sale la mercadería y se limita lo que se agrega. */
+    const existenciasOrigen = useMemo(
+        () => (form.almacen_origen_id ? existencias.filter((e) => String(e.almacen_id) === String(form.almacen_origen_id)) : []),
+        [existencias, form.almacen_origen_id],
+    );
+    /** Solo se traslada lo que hay en el origen. */
+    const productosConStock = useMemo(() => {
+        const conStock = new Set(
+            existenciasOrigen.filter((e) => Number(e.stock_actual) > 0).map((e) => String(e.producto_id ?? e.producto?.id)),
+        );
+        return productos.filter((p) => conStock.has(String(p.id)));
+    }, [productos, existenciasOrigen]);
 
     const productoDe = useCallback((pid) => productos.find((p) => String(p.id) === String(pid)) ?? null, [productos]);
 
@@ -178,158 +175,10 @@ export default function CrearTransferencia() {
         }
     };
 
-    /** Solo se traslada lo que hay en el origen. */
-    const productosOptions = useMemo(
-        () =>
-            productos
-                .filter((p) => (stockOrigen[String(p.id)] ?? 0) > 0)
-                .map((p) => ({
-                    value: String(p.id),
-                    label: p.nombre,
-                    keywords: `${p.codigo ?? ''} ${p.codigo_barras ?? ''}`,
-                })),
-        [productos, stockOrigen],
-    );
-
-    const unidadesDe = useCallback(
-        (productoId) => {
-            const p = productoDe(productoId);
-            if (!p) return [];
-            const base = stockOrigen[String(p.id)] ?? 0;
-            return (p.presentaciones ?? [])
-                .filter((pres) => pres.activo !== false)
-                .map((pres) => {
-                    const factor = Number(pres.factor_conversion) || 1;
-                    return {
-                        value: String(pres.id),
-                        label: pres.nombre,
-                        disponible: Math.floor((base / factor) * 100) / 100,
-                    };
-                });
-        },
-        [productoDe, stockOrigen],
-    );
-
-    const disponibleDe = (productoId, presId) =>
-        unidadesDe(productoId).find((u) => String(u.value) === String(presId))?.disponible ?? 0;
-
-    const coloresOrigenDe = useCallback(
-        (productoId) => {
-            if (!productoId || !form.almacen_origen_id) return [];
-            const fila = existencias.find(
-                (e) =>
-                    String(e.producto_id ?? e.producto?.id) === String(productoId) &&
-                    String(e.almacen_id) === String(form.almacen_origen_id),
-            );
-            return fila?.colores ?? [];
-        },
-        [existencias, form.almacen_origen_id],
-    );
-
     const setField = (name, value) => {
         setForm((prev) => ({ ...prev, [name]: value }));
         if (formErrors[name]) setFormErrors((prev) => ({ ...prev, [name]: undefined }));
     };
-
-    const elegirProducto = (productoId) => {
-        const us = unidadesDe(productoId);
-        setPanel({
-            producto_id: productoId,
-            producto_presentacion_id: us.length === 1 ? us[0].value : '',
-            producto_color_id: '',
-            cantidad: '1',
-        });
-    };
-
-    /**
-     * Disponible para lo que hay elegido ahora mismo en el panel: si el
-     * color tiene su propio saldo, ese manda (los rollos son los que de
-     * verdad viajan); si no, el total del producto en esa unidad. Se
-     * muestra en el campo "Disponible" y también limita al agregar.
-     */
-    const colorPanel = coloresOrigenDe(panel.producto_id).find((c) => String(c.id) === String(panel.producto_color_id));
-    const disponiblePanel = colorPanel
-        ? Math.floor(
-              (Number(colorPanel.metros) /
-                  (Number(
-                      productoDe(panel.producto_id)?.presentaciones?.find((p) => String(p.id) === String(panel.producto_presentacion_id))
-                          ?.factor_conversion,
-                  ) || 1)) *
-                  100,
-          ) / 100
-        : disponibleDe(panel.producto_id, panel.producto_presentacion_id);
-
-    /**
-     * La presentación más fina de este producto (menor factor de conversión,
-     * casi siempre el metro). El campo "Disponible" siempre se muestra en
-     * esa unidad —no en la que esté elegida en "Unidad"— para no perder de
-     * vista, por redondear a rollos enteros, la tela suelta que sí hay.
-     */
-    const unidadMenorPanel = (productoDe(panel.producto_id)?.presentaciones ?? [])
-        .filter((p) => p.activo !== false)
-        .reduce(
-            (menor, p) => (!menor || (Number(p.factor_conversion) || 1) < (Number(menor.factor_conversion) || 1) ? p : menor),
-            null,
-        );
-    const disponibleMenorPanel = colorPanel
-        ? Math.floor((Number(colorPanel.metros) / (Number(unidadMenorPanel?.factor_conversion) || 1)) * 100) / 100
-        : disponibleDe(panel.producto_id, unidadMenorPanel?.id);
-
-    const agregarProducto = () => {
-        if (!form.almacen_origen_id) return toast.error('Elige primero el almacén de origen.');
-        if (!panel.producto_id) return toast.error('Busca y elige un producto.');
-        if (!panel.producto_presentacion_id) return toast.error('Elige la unidad.');
-        const colores = coloresOrigenDe(panel.producto_id);
-        if (colores.length > 0 && !panel.producto_color_id) return toast.error('Elige el color.');
-        const cant = Number(panel.cantidad) || 0;
-        if (cant <= 0) return toast.error('La cantidad debe ser mayor a 0.');
-
-        if (cant > disponiblePanel) {
-            return toast.error(`Solo hay ${num(disponiblePanel)} disponibles en el origen${colorPanel ? ` de ${colorPanel.nombre}` : ''}.`);
-        }
-
-        setItems((prev) => {
-            const i = prev.findIndex(
-                (it) =>
-                    String(it.producto_presentacion_id) === String(panel.producto_presentacion_id) &&
-                    String(it.producto_color_id || '') === String(panel.producto_color_id || ''),
-            );
-            if (i !== -1) {
-                return prev.map((it, idx) =>
-                    idx === i ? { ...it, cantidad: String((Number(it.cantidad) || 0) + cant) } : it,
-                );
-            }
-            return [
-                ...prev,
-                {
-                    producto_id: panel.producto_id,
-                    producto_presentacion_id: panel.producto_presentacion_id,
-                    producto_color_id: panel.producto_color_id || '',
-                    cantidad: String(cant),
-                },
-            ];
-        });
-        setPanel({ ...panelVacio });
-    };
-
-    const agregarDesdePicker = (seleccionados) => {
-        const utiles = seleccionados.filter((sel) => sel.presentacion && sel.cantidad > 0);
-        if (utiles.length === 0) return;
-        setItems((prev) => {
-            const next = [...prev];
-            utiles.forEach(({ producto, presentacion, cantidad }) => {
-                const i = next.findIndex((it) => String(it.producto_presentacion_id) === String(presentacion.id));
-                if (i !== -1) next[i] = { ...next[i], cantidad: String((Number(next[i].cantidad) || 0) + cantidad) };
-                else next.push({ producto_id: String(producto.id), producto_presentacion_id: String(presentacion.id), cantidad: String(cantidad) });
-            });
-            return next;
-        });
-        toast.success(utiles.length === 1 ? 'Producto agregado.' : `${utiles.length} productos agregados.`);
-        setPanel({ ...panelVacio });
-    };
-
-    const setItem = (i, patch) => setItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
-    const quitarItem = (i) => setItems((prev) => prev.filter((_, idx) => idx !== i));
 
     const guardar = async (e) => {
         e?.preventDefault?.();
@@ -359,11 +208,7 @@ export default function CrearTransferencia() {
                 // El requerimiento sale con sus rollos y con lo que se haya agregado aquí.
                 const { data } = await api.post(`/transferencias/requerimientos/${requerimiento.id}/despachar`, {
                     ...transporte,
-                    extras: items.map((it) => ({
-                        producto_presentacion_id: it.producto_presentacion_id,
-                        producto_color_id: it.producto_color_id || null,
-                        cantidad_enviada: it.cantidad,
-                    })),
+                    extras: aDetallesTraslado(items),
                 });
                 toast.success(`Traslado creado desde ${requerimiento.requerimiento}: guía ${data.guia}. Quedó en tránsito.`);
             } else {
@@ -376,11 +221,7 @@ export default function CrearTransferencia() {
                     almacen_origen_id: form.almacen_origen_id,
                     almacen_destino_id: form.almacen_destino_id,
                     ...transporte,
-                    detalles: items.map((it) => ({
-                        producto_presentacion_id: it.producto_presentacion_id,
-                        producto_color_id: it.producto_color_id || null,
-                        cantidad_enviada: it.cantidad,
-                    })),
+                    detalles: aDetallesTraslado(items),
                 });
                 toast.success('Guía de traslado creada. Apruébala desde la bandeja para descontar el stock del origen.');
             }
@@ -486,115 +327,22 @@ export default function CrearTransferencia() {
                         </div>
                     )}
 
+                    {/* Mismo diseño y misma forma de agregar productos que Nuevo pedido. */}
                     {!editando && (
-                        <div className="rounded-xl border border-edge bg-white p-5 shadow-sm">
-                            <h2 className="mb-3 text-sm font-semibold text-warm-900">{requerimiento ? 'Agregar más productos (opcional)' : 'Productos a trasladar'}</h2>
-                            {!form.almacen_origen_id ? (
-                                <Alert variant="info">Elige el almacén de origen para ver sus productos con stock.</Alert>
-                            ) : (
-                                <>
-                                    <div className="space-y-3">
-                                        <SearchSelect
-                                            label="Producto"
-                                            value={panel.producto_id}
-                                            onChange={elegirProducto}
-                                            options={productosOptions}
-                                            placeholder="Buscar producto con stock en el origen…"
-                                            emptyText="Sin productos con stock en este almacén"
-                                            searchTitle="Buscador avanzado con filtros"
-                                            onSearch={(q) => setPicker({ open: true, query: q })}
-                                        />
-
-                                        {/* Su propia fila: junto al resto se desalineaba el resto de la grilla. */}
-                                        {coloresOrigenDe(panel.producto_id).length > 0 && (
-                                            <ColorSelect
-                                                colores={coloresOrigenDe(panel.producto_id)}
-                                                value={panel.producto_color_id}
-                                                onChange={(cid) => setPanel((p) => ({ ...p, producto_color_id: cid }))}
-                                                placeholder="Elige…"
-                                                describir={(c) =>
-                                                    c.codigo
-                                                        ? `${c.nombre} (${c.codigo}) · ${num(c.metros)} m`
-                                                        : `${c.nombre} · ${num(c.metros)} m`
-                                                }
-                                            />
-                                        )}
-
-                                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                                            <Input
-                                                label="Disponible"
-                                                value={panel.producto_id ? `${num(disponibleMenorPanel)} ${unidadMenorPanel?.nombre ?? ''}`.trim() : ''}
-                                                readOnly
-                                                disabled
-                                            />
-                                            <SearchSelect
-                                                label="Unidad"
-                                                value={panel.producto_presentacion_id}
-                                                disabled={!panel.producto_id}
-                                                clearable={false}
-                                                placeholder={panel.producto_id ? 'Elegir…' : '—'}
-                                                emptyText="Sin unidades"
-                                                onChange={(pid) => pid && setPanel((p) => ({ ...p, producto_presentacion_id: pid }))}
-                                                options={unidadesDe(panel.producto_id).map((u) => ({ value: u.value, label: u.label }))}
-                                            />
-                                            <Input label="Cantidad" type="number" min="0" step="any" value={panel.cantidad}
-                                                onChange={(e) => setPanel((p) => ({ ...p, cantidad: e.target.value }))} />
-                                        </div>
-
-                                        <Button type="button" onClick={agregarProducto}>
-                                            <Plus className="h-4 w-4" /> Agregar producto
-                                        </Button>
-                                    </div>
-
-                                    <div className="mt-3 overflow-x-auto rounded-lg border border-edge">
-                                        <table className="w-full min-w-[560px] text-sm">
-                                            <thead>
-                                                <tr className="bg-primary-600 text-left text-xs font-semibold uppercase tracking-wide text-white">
-                                                    <th className="px-3 py-2">Producto</th>
-                                                    <th className="w-32 px-3 py-2">Unidad</th>
-                                                    <th className="w-24 px-3 py-2 text-right">Disp.</th>
-                                                    <th className="w-28 px-3 py-2 text-right">Cantidad</th>
-                                                    <th className="w-12 px-3 py-2" />
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-gray-100">
-                                                {items.length === 0 && (
-                                                    <tr><td colSpan={5} className="px-3 py-6 text-center text-warm-500">Agrega productos arriba</td></tr>
-                                                )}
-                                                {items.map((it, i) => {
-                                                    const p = productoDe(it.producto_id);
-                                                    const u = unidadesDe(it.producto_id).find((x) => String(x.value) === String(it.producto_presentacion_id));
-                                                    const excede = u && Number(it.cantidad) > u.disponible;
-                                                    const color = coloresOrigenDe(it.producto_id).find((c) => String(c.id) === String(it.producto_color_id));
-                                                    return (
-                                                        <tr key={i}>
-                                                            <td className="px-3 py-2 font-medium text-warm-900">
-                                                                {p?.nombre ?? '—'}
-                                                                {color && <span className="ml-1 text-xs text-warm-500">· {color.nombre}</span>}
-                                                            </td>
-                                                            <td className="px-3 py-2 text-warm-500">{u?.label ?? '—'}</td>
-                                                            <td className="px-3 py-2 text-right text-warm-500">{u ? num(u.disponible) : '—'}</td>
-                                                            <td className="px-3 py-2">
-                                                                <Input type="number" min="0" step="any" value={it.cantidad}
-                                                                    onChange={(e) => setItem(i, { cantidad: e.target.value })}
-                                                                    error={excede ? 'Supera el stock' : undefined} className="text-right" />
-                                                            </td>
-                                                            <td className="px-3 py-2 text-center">
-                                                                <button type="button" onClick={() => quitarItem(i)} aria-label="Quitar"
-                                                                    className="rounded-md p-1.5 text-red-600 transition hover:bg-red-50">
-                                                                    <Trash2 className="h-4 w-4" />
-                                                                </button>
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                    {formErrors.detalles && <p className="mt-1 text-xs text-red-600">{formErrors.detalles}</p>}
-                                </>
-                            )}
-                        </div>
+                        <>
+                            <LineasRollos
+                                titulo={requerimiento ? 'Agregar más productos (opcional)' : 'Productos a trasladar'}
+                                productos={productosConStock}
+                                existencias={existenciasOrigen}
+                                lineas={items}
+                                setLineas={setItems}
+                                validarStock
+                                deshabilitado={!form.almacen_origen_id}
+                                avisoDeshabilitado="Elige el almacén de origen para ver sus productos con stock."
+                                errores={formErrors}
+                            />
+                            {formErrors.detalles && <p className="-mt-3 text-xs text-red-600">{formErrors.detalles}</p>}
+                        </>
                     )}
 
                     {/* Al editar los productos ya quedaron fijos: se muestran solo de referencia. */}
@@ -639,7 +387,7 @@ export default function CrearTransferencia() {
                         <h3 className="mb-3 text-xs font-bold uppercase tracking-wide text-warm-500">Traslado</h3>
                         <div className="space-y-3">
                             <SearchSelect label="Almacén origen" value={form.almacen_origen_id} disabled={editando || Boolean(requerimiento)}
-                                onChange={(v) => { setField('almacen_origen_id', v ?? ''); setItems([]); setPanel({ ...panelVacio }); }}
+                                onChange={(v) => { setField('almacen_origen_id', v ?? ''); setItems([]); }}
                                 placeholder="Selecciona…" emptyText="Sin coincidencias"
                                 options={opcionesAlmacen(almacenes, form.almacen_origen_id)}
                                 error={formErrors.almacen_origen_id} />
@@ -700,18 +448,6 @@ export default function CrearTransferencia() {
                     </div>
                 </div>
             </div>
-
-            <ProductoPickerModal
-                open={picker.open}
-                onClose={() => setPicker((p) => ({ ...p, open: false }))}
-                onSelect={agregarDesdePicker}
-                initialQuery={picker.query}
-                multiple
-                stockFilter
-                productos={productos.filter((p) => (stockOrigen[String(p.id)] ?? 0) > 0)}
-                stockPorProducto={stockOrigen}
-                title="Buscar productos"
-            />
 
             <Modal open={motivoModal} onClose={() => setMotivoModal(false)} title="Nuevo motivo de traslado"
                 description="Aparecerá en el selector de la guía." size="md"

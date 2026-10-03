@@ -48,10 +48,10 @@ class User extends Authenticatable implements JWTSubject
         return $this->belongsTo(Empresa::class);
     }
 
-    /** Sus cajas: una por cada almacén donde trabaja. */
+    /** Sus cajas: una por cada almacén donde trabaja (una caja puede compartirse con otros usuarios, por turnos). */
     public function cajas()
     {
-        return $this->hasMany(Caja::class, 'usuario_id');
+        return $this->belongsToMany(Caja::class, 'caja_usuario', 'usuario_id', 'caja_id')->withTimestamps();
     }
 
     /**
@@ -62,8 +62,8 @@ class User extends Authenticatable implements JWTSubject
     {
         $almacenId ??= \App\Support\AlmacenAcceso::propio();
 
-        return $this->cajas()->where('activo', true)
-            ->when($almacenId, fn ($q) => $q->where('almacen_id', $almacenId))
+        return $this->cajas()->where('cajas.activo', true)
+            ->when($almacenId, fn ($q) => $q->where('cajas.almacen_id', $almacenId))
             ->first();
     }
 

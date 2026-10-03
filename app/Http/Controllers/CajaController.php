@@ -16,7 +16,7 @@ class CajaController extends Controller
         'cuentasBancarias:id,banco_id,alias,numero_cuenta,titular',
         'cuentasBancarias.banco:id,nombre',
         'billeteras:id,nombre,numero_asociado,titular',
-        'usuario:id,name,email',
+        'usuarios:id,name,email',
     ];
 
     /** Cada sucursal ve las cajas de su almacén; el Super Admin ve todas (o las de un almacén si lo pide). */
@@ -47,7 +47,7 @@ class CajaController extends Controller
                 'codigo' => Caja::siguienteCodigo($almacenId),
             ]);
             $this->syncRelaciones($caja, $data);
-            $this->assignUsuario($caja, $data['usuario_id'] ?? null);
+            $this->asignarUsuarios($caja, $data['usuarios'] ?? []);
 
             return $caja;
         });
@@ -80,7 +80,10 @@ class CajaController extends Controller
 
             $caja->update($cambios);
             $this->syncRelaciones($caja, $data);
-            $this->assignUsuario($caja, $data['usuario_id'] ?? null);
+            // Si no se manda la lista, los usuarios no se tocan.
+            if (array_key_exists('usuarios', $data)) {
+                $this->asignarUsuarios($caja, $data['usuarios'] ?? []);
+            }
         });
 
         return response()->json($caja->fresh()->load(self::WITH));
@@ -89,7 +92,10 @@ class CajaController extends Controller
     public function destroy(Caja $caja)
     {
         AlmacenAcceso::exigir($caja->almacen_id);
-        $this->assignUsuario($caja, null);
+        if ($caja->aperturaAbierta()) {
+            throw ValidationException::withMessages(['caja' => 'La caja está abierta: ciérrala antes de eliminarla.']);
+        }
+        $this->asignarUsuarios($caja, []);
         $caja->delete();
         return response()->json(['message' => 'Eliminado']);
     }
@@ -115,29 +121,44 @@ class CajaController extends Controller
         $caja->billeteras()->sync($data['billeteras'] ?? []);
     }
 
-    private function assignUsuario(Caja $caja, ?int $usuarioId): void
+    /**
+     * Los usuarios que gestionan la caja (turnos). Cada usuario tiene una sola caja por almacén; con una caja en un
+     * almacén puede trabajar en él. Quien tiene la caja abierta en este momento no se puede quitar.
+     *
+     * @param  list<int>  $ids
+     */
+    private function asignarUsuarios(Caja $caja, array $ids): void
     {
-        $anterior = $caja->usuario_id ? User::find($caja->usuario_id) : null;
+        $ids = array_values(array_unique(array_map('intval', $ids)));
+        $actuales = $caja->usuarios()->pluck('users.id')->map(fn ($i) => (int) $i)->all();
 
-        if ($usuarioId) {
-            // Un usuario tiene una sola caja por almacén (puede tener otra en cada uno de los demás).
-            $usuario = User::findOrFail($usuarioId);
-            $otra = Caja::where('usuario_id', $usuario->id)->where('almacen_id', $caja->almacen_id)->where('id', '!=', $caja->id)->first();
+        foreach (array_diff($ids, $actuales) as $nuevoId) {
+            $usuario = User::findOrFail($nuevoId);
+            $otra = $usuario->cajas()->where('cajas.almacen_id', $caja->almacen_id)->where('cajas.id', '!=', $caja->id)->first();
             if ($otra) {
                 throw ValidationException::withMessages([
-                    'usuario_id' => "{$usuario->name} ya tiene la caja {$otra->codigo} en este almacén: cada usuario tiene una por almacén.",
+                    'usuarios' => "{$usuario->name} ya tiene la caja {$otra->codigo} en este almacén: cada usuario tiene una por almacén.",
                 ]);
             }
-            $caja->update(['usuario_id' => $usuario->id]);
-            // Con una caja en este almacén, el usuario puede trabajar en él.
-            $usuario->almacenes()->syncWithoutDetaching([$caja->almacen_id]);
-        } else {
-            $caja->update(['usuario_id' => null]);
         }
 
-        // Si cambia de usuario, el anterior deja de poder trabajar aquí (salvo que sea su almacén principal).
-        if ($anterior && (int) $anterior->id !== (int) $usuarioId && (int) $anterior->almacen_id !== (int) $caja->almacen_id) {
-            $anterior->almacenes()->detach($caja->almacen_id);
+        $quitados = array_diff($actuales, $ids);
+        $abierta = $caja->aperturaAbierta();
+        if ($abierta && in_array((int) $abierta->usuario_id, $quitados, true)) {
+            throw ValidationException::withMessages(['usuarios' => 'Ese usuario tiene la caja abierta ahora: que la cierre antes de quitársela.']);
+        }
+
+        $caja->usuarios()->sync($ids);
+
+        // Con una caja en este almacén, el usuario puede trabajar en él; sin ella, deja de poder (salvo su almacén principal).
+        foreach (array_diff($ids, $actuales) as $nuevoId) {
+            User::find($nuevoId)?->almacenes()->syncWithoutDetaching([$caja->almacen_id]);
+        }
+        foreach ($quitados as $quitadoId) {
+            $u = User::find($quitadoId);
+            if ($u && (int) $u->almacen_id !== (int) $caja->almacen_id) {
+                $u->almacenes()->detach($caja->almacen_id);
+            }
         }
     }
 
@@ -148,7 +169,8 @@ class CajaController extends Controller
             'almacen_id' => 'nullable|exists:almacenes,id',
             'acepta_efectivo' => 'boolean',
             'activo' => 'boolean',
-            'usuario_id' => 'nullable|exists:users,id',
+            'usuarios' => 'nullable|array',
+            'usuarios.*' => 'integer|exists:users,id',
             'cuentas_bancarias' => 'nullable|array',
             'cuentas_bancarias.*' => 'exists:cuentas_bancarias,id',
             'billeteras' => 'nullable|array',

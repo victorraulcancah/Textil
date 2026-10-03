@@ -287,6 +287,14 @@ export default function MiCaja() {
                         {apertura ? <Badge variant="green">Abierta</Badge> : <Badge variant="gray">Cerrada</Badge>}
                     </Card>
 
+                    {/* Una caja compartida la tiene abierta otro usuario: se ve cuál y desde cuándo, y no se opera. */}
+                    {data?.ocupada_por && (
+                        <Alert variant="warning" className="mb-4">
+                            <strong>La caja está en uso.</strong> La tiene abierta <strong>{data.ocupada_por.name ?? 'otro usuario'}</strong>
+                            {data.ocupada_por.desde ? ` desde ${fechaHora(data.ocupada_por.desde)}` : ''}. Podrás abrirla cuando la cierre.
+                        </Alert>
+                    )}
+
                     {apertura ? (
                         <>
                             <div className="mb-4 flex flex-wrap gap-2">
@@ -331,8 +339,10 @@ export default function MiCaja() {
                     ) : (
                         <Card className="flex flex-col items-center gap-3 py-10 text-center">
                             <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gray-100 text-warm-500"><Lock className="h-7 w-7" /></div>
-                            <p className="text-warm-600">Tu caja está cerrada. Ábrela para registrar movimientos.</p>
-                            <Button onClick={() => { setAbrirOpen(true); setMontoInicial(''); }}><LockOpen className="h-4 w-4" /> Abrir caja</Button>
+                            <p className="text-warm-600">
+                                {data?.ocupada_por ? 'La caja la está usando otro usuario.' : 'Tu caja está cerrada. Ábrela para registrar movimientos.'}
+                            </p>
+                            <Button disabled={Boolean(data?.ocupada_por)} onClick={() => { setAbrirOpen(true); setMontoInicial(''); }}><LockOpen className="h-4 w-4" /> Abrir caja</Button>
                         </Card>
                     )}
                 </>

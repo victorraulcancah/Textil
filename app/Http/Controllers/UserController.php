@@ -18,7 +18,7 @@ class UserController extends Controller
 
     public function index(): JsonResponse
     {
-        return response()->json(User::with('empresa', 'cajas:id,usuario_id,almacen_id,codigo,nombre', 'almacen:id,nombre,numero_serie', 'almacenes:id,nombre,numero_serie', 'roles')->latest('id')->get());
+        return response()->json(User::with('empresa', 'cajas:id,almacen_id,codigo,nombre', 'almacen:id,nombre,numero_serie', 'almacenes:id,nombre,numero_serie', 'roles')->latest('id')->get());
     }
 
     /**
@@ -50,7 +50,7 @@ class UserController extends Controller
 
         $this->incluirAlmacenPrincipal($user);
 
-        return response()->json($user->load('empresa', 'cajas:id,usuario_id,almacen_id,codigo,nombre', 'almacen:id,nombre,numero_serie', 'almacenes:id,nombre,numero_serie', 'roles'), 201);
+        return response()->json($user->load('empresa', 'cajas:id,almacen_id,codigo,nombre', 'almacen:id,nombre,numero_serie', 'almacenes:id,nombre,numero_serie', 'roles'), 201);
     }
 
     /** Su almacén principal siempre está entre los que puede usar. */
@@ -63,7 +63,7 @@ class UserController extends Controller
 
     public function show(int $id): JsonResponse
     {
-        return response()->json(User::with('empresa', 'cajas:id,usuario_id,almacen_id,codigo,nombre', 'almacen:id,nombre,numero_serie', 'almacenes:id,nombre,numero_serie', 'roles')->findOrFail($id));
+        return response()->json(User::with('empresa', 'cajas:id,almacen_id,codigo,nombre', 'almacen:id,nombre,numero_serie', 'almacenes:id,nombre,numero_serie', 'roles')->findOrFail($id));
     }
 
     public function update(UpdateUserRequest $request, int $id): JsonResponse
@@ -86,7 +86,7 @@ class UserController extends Controller
             }
         });
 
-        return response()->json($user->load('empresa', 'cajas:id,usuario_id,almacen_id,codigo,nombre', 'almacen:id,nombre,numero_serie', 'almacenes:id,nombre,numero_serie', 'roles'));
+        return response()->json($user->load('empresa', 'cajas:id,almacen_id,codigo,nombre', 'almacen:id,nombre,numero_serie', 'almacenes:id,nombre,numero_serie', 'roles'));
     }
 
     public function destroy(int $id): JsonResponse

@@ -34,11 +34,23 @@ class MiCajaController extends Controller
             ->latest('fecha_apertura')
             ->first();
 
+        // Caja compartida: si la abrió otro usuario, aquí solo se avisa que está en uso (no se ve ni se opera).
+        if ($apertura && (int) $apertura->usuario_id !== (int) $user->id) {
+            return response()->json([
+                'caja' => $caja,
+                'apertura' => null,
+                'resumen' => null,
+                'movimientos' => [],
+                'ocupada_por' => ['id' => $apertura->usuario_id, 'name' => $apertura->usuario?->name, 'desde' => $apertura->fecha_apertura],
+            ]);
+        }
+
         return response()->json([
             'caja' => $caja,
             'apertura' => $apertura,
             'resumen' => $apertura ? $this->resumen($apertura) : null,
             'movimientos' => $apertura ? $this->movimientos($apertura) : [],
+            'ocupada_por' => null,
         ]);
     }
 
@@ -64,18 +76,26 @@ class MiCajaController extends Controller
 
         $data = $request->validate(['monto_inicial' => 'required|numeric|min:0']);
 
-        $abierta = AperturaCaja::where('caja_id', $cajaId)->where('estado', 'abierta')->exists();
-        if ($abierta) {
-            throw ValidationException::withMessages(['caja' => 'La caja ya está abierta.']);
-        }
+        // Entra uno a la vez: el bloqueo evita que dos usuarios de la misma caja la abran en el mismo instante.
+        DB::transaction(function () use ($cajaId, $user, $data) {
+            Caja::whereKey($cajaId)->lockForUpdate()->first();
 
-        AperturaCaja::create([
-            'caja_id' => $cajaId,
-            'usuario_id' => $user->id,
-            'monto_inicial' => $data['monto_inicial'],
-            'fecha_apertura' => now(),
-            'estado' => 'abierta',
-        ]);
+            $abierta = AperturaCaja::where('caja_id', $cajaId)->where('estado', 'abierta')->with('usuario:id,name')->first();
+            if ($abierta) {
+                $mensaje = (int) $abierta->usuario_id === (int) $user->id
+                    ? 'La caja ya está abierta.'
+                    : 'La caja está en uso: la tiene abierta '.($abierta->usuario?->name ?? 'otro usuario').'. Espera a que la cierre.';
+                throw ValidationException::withMessages(['caja' => $mensaje]);
+            }
+
+            AperturaCaja::create([
+                'caja_id' => $cajaId,
+                'usuario_id' => $user->id,
+                'monto_inicial' => $data['monto_inicial'],
+                'fecha_apertura' => now(),
+                'estado' => 'abierta',
+            ]);
+        });
 
         return $this->show();
     }
@@ -89,8 +109,10 @@ class MiCajaController extends Controller
             'monto_contado_usd' => 'nullable|numeric|min:0',
         ]);
 
+        // Solo cierra la caja quien la abrió.
         $apertura = AperturaCaja::where('caja_id', $user?->cajaActual()?->id)
             ->where('estado', 'abierta')
+            ->where('usuario_id', $user?->id)
             ->latest('fecha_apertura')
             ->first();
 

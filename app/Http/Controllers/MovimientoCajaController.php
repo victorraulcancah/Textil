@@ -76,6 +76,12 @@ class MovimientoCajaController extends Controller
             throw ValidationException::withMessages(['caja_id' => 'La caja no tiene una apertura abierta.']);
         }
 
+        // Una caja compartida la opera solo quien la abrió.
+        if ($user && (int) $apertura->usuario_id !== (int) $user->id && ! AlmacenAcceso::irrestricto()) {
+            $quien = $apertura->usuario?->name ?? 'otro usuario';
+            throw ValidationException::withMessages(['caja_id' => "La caja está en uso: la tiene abierta {$quien}. Espera a que la cierre."]);
+        }
+
         // El motivo debe corresponder al tipo (ingreso→entrada, egreso→salida).
         $motivo = MotivoMovimiento::findOrFail($data['motivo_movimiento_id']);
         $tipoMotivo = $data['tipo'] === 'ingreso' ? 'entrada' : 'salida';

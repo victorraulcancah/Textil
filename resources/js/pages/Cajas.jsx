@@ -10,7 +10,7 @@ import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select } f
 const emptyForm = {
     nombre: '',
     almacen_id: '',
-    usuario_id: '',
+    usuarios: [],
     activo: true,
     acepta_efectivo: true,
     cuentas_bancarias: [],
@@ -79,7 +79,7 @@ export default function Cajas() {
         setForm({
             nombre: caja.nombre,
             almacen_id: caja.almacen_id ? String(caja.almacen_id) : '',
-            usuario_id: caja.usuario?.id ?? '',
+            usuarios: (caja.usuarios ?? []).map((u) => u.id),
             activo: Boolean(caja.activo),
             acepta_efectivo: Boolean(caja.acepta_efectivo),
             cuentas_bancarias: (caja.cuentas_bancarias ?? []).map((c) => c.id),
@@ -103,7 +103,7 @@ export default function Cajas() {
         const payload = {
             nombre: form.nombre,
             almacen_id: form.almacen_id || null,
-            usuario_id: form.usuario_id || null,
+            usuarios: form.usuarios,
             activo: form.activo,
             acepta_efectivo: form.acepta_efectivo,
             cuentas_bancarias: form.cuentas_bancarias,
@@ -170,13 +170,19 @@ export default function Cajas() {
             ),
         },
         {
-            key: 'usuario',
-            label: 'Usuario',
+            key: 'usuarios',
+            label: 'Usuarios',
+            getSearchValue: (row) => (row.usuarios ?? []).map((u) => `${u.name} ${u.email}`).join(' '),
+            // Una caja puede tener varios usuarios (turnos); la usa uno a la vez.
             render: (row) =>
-                row.usuario ? (
-                    <span className="text-sm">
-                        {row.usuario.name}
-                        <span className="block text-xs text-gray-400">{row.usuario.email}</span>
+                (row.usuarios ?? []).length ? (
+                    <span className="block space-y-0.5 text-sm">
+                        {row.usuarios.map((u) => (
+                            <span key={u.id} className="block">
+                                {u.name}
+                                <span className="ml-1 text-xs text-gray-400">{u.email}</span>
+                            </span>
+                        ))}
                     </span>
                 ) : (
                     <span className="text-gray-400">—</span>
@@ -294,29 +300,39 @@ export default function Cajas() {
                         value={form.almacen_id}
                         disabled={!superAdmin}
                         clearable={false}
-                        onChange={(v) => setForm((prev) => ({ ...prev, almacen_id: v ?? '', usuario_id: '' }))}
+                        onChange={(v) => setForm((prev) => ({ ...prev, almacen_id: v ?? '', usuarios: [] }))}
                         placeholder="Elegir almacén…"
                         options={opcionesAlmacen(almacenes, form.almacen_id, propioId)}
                         error={formErrors.almacen_id}
                     />
                     {editing?.codigo && <p className="-mt-2 text-xs text-warm-500">Código: <strong>{editing.codigo}</strong></p>}
-                    <SearchSelect
-                        label="Usuario asignado"
-                        value={form.usuario_id}
-                        onChange={(v) => setForm((prev) => ({ ...prev, usuario_id: v ?? '' }))}
-                        placeholder="Sin usuario"
-                        emptyText="Sin coincidencias"
-                        options={usuarios
-                            // Cualquier usuario puede tener caja aquí (una por almacén): al asignarla, también puede trabajar en
-                            // este almacén. Salen solo los que todavía no tienen una en este almacén.
-                            .filter(
-                                (u) =>
-                                    String(u.id) === String(form.usuario_id) ||
-                                    !(u.cajas ?? []).some((c) => String(c.almacen_id) === String(form.almacen_id)),
-                            )
-                            .map((u) => ({ value: String(u.id), label: `${u.name} (${u.email})` }))}
-                        error={formErrors.usuario_id}
-                    />
+                    {/* Varios usuarios pueden gestionar la misma caja (turnos), pero la usa uno a la vez: mientras uno la
+                        tiene abierta, los demás ven que está en uso. Cada usuario tiene una sola caja por almacén. */}
+                    <div>
+                        <label className="mb-1 block text-sm font-medium text-gray-700">Usuarios de la caja</label>
+                        <div className="max-h-44 space-y-1 overflow-y-auto rounded-md border border-edge p-2">
+                            {usuarios
+                                .filter(
+                                    (u) =>
+                                        form.usuarios.includes(u.id) ||
+                                        !(u.cajas ?? []).some((c) => String(c.almacen_id) === String(form.almacen_id)),
+                                )
+                                .map((u) => (
+                                    <label key={u.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm text-gray-700 hover:bg-gray-50">
+                                        <input
+                                            type="checkbox"
+                                            checked={form.usuarios.includes(u.id)}
+                                            onChange={() => toggleId('usuarios', u.id)}
+                                            className="h-4 w-4 rounded border-gray-300 accent-primary-600"
+                                        />
+                                        <span className="flex-1">{u.name} <span className="text-xs text-gray-400">{u.email}</span></span>
+                                    </label>
+                                ))}
+                            {!usuarios.length && <p className="px-2 py-1 text-xs text-gray-400">No hay usuarios.</p>}
+                        </div>
+                        <p className="mt-1 text-xs text-gray-400">Solo salen quienes aún no tienen una caja en este almacén. Al asignarla, pueden trabajar en él.</p>
+                        {formErrors.usuarios && <p className="mt-1 text-xs text-red-600">{formErrors.usuarios}</p>}
+                    </div>
 
                     <div>
                         <label className="mb-2 block text-sm font-medium text-gray-700">Métodos de pago aceptados</label>

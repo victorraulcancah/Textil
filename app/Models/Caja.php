@@ -16,8 +16,6 @@ class Caja extends Model
     protected $fillable = [
         // Cada caja es de una sucursal; su código es CJ + número del almacén + correlativo (CJ002-001).
         'almacen_id',
-        // La caja es de un usuario; un usuario tiene una por almacén.
-        'usuario_id',
         'codigo',
         'nombre',
         'acepta_efectivo',
@@ -76,8 +74,15 @@ class Caja extends Model
         return $this->hasMany(AperturaCaja::class);
     }
 
-    public function usuario()
+    /** Los usuarios que gestionan esta caja (turnos): todos la usan, pero solo uno a la vez la tiene abierta. */
+    public function usuarios()
     {
-        return $this->belongsTo(User::class, 'usuario_id');
+        return $this->belongsToMany(User::class, 'caja_usuario', 'caja_id', 'usuario_id')->withTimestamps();
+    }
+
+    /** La apertura que está abierta ahora, de quien sea. */
+    public function aperturaAbierta(): ?AperturaCaja
+    {
+        return $this->aperturas()->where('estado', 'abierta')->latest('fecha_apertura')->first();
     }
 }

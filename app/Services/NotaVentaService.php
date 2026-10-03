@@ -221,17 +221,14 @@ class NotaVentaService
         }
 
         // El ingreso de caja va a la caja del vendedor (una caja pertenece a un usuario).
-        $cajaId = User::find($data['vendedor_id'])?->cajaActual($nota->almacen_id ? (int) $nota->almacen_id : null)?->id;
-        $apertura = $cajaId
-            ? AperturaCaja::where('estado', 'abierta')
-                ->where('caja_id', $cajaId)
-                ->latest('fecha_apertura')
-                ->first()
-            : null;
+        $vendedor = User::find($data['vendedor_id']);
+        $almacenVenta = $nota->almacen_id ? (int) $nota->almacen_id : null;
+        // Solo la caja que el vendedor tiene abierta (una caja compartida la usa una persona a la vez).
+        $apertura = app(CajaService::class)->aperturaPara($vendedor, $almacenVenta);
 
         // Una venta de contado cobra en el acto: el vendedor necesita su caja abierta (sin ella no hay dónde anotarlo).
         if ($data['tipo_pago'] === 'contado' && ! empty($cobros) && ! $apertura) {
-            app(CajaService::class)->exigirApertura(User::find($data['vendedor_id']));
+            app(CajaService::class)->exigirApertura($vendedor, $almacenVenta);
         }
 
         if ($apertura && $data['tipo_pago'] === 'contado') {

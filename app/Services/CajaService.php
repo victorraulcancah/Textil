@@ -15,17 +15,21 @@ use Illuminate\Validation\ValidationException;
  */
 class CajaService
 {
-    public function aperturaPara(?User $usuario = null): ?AperturaCaja
+    /**
+     * La apertura con la que el usuario puede operar: la de SU caja, y solo si la abrió él. Una caja compartida la
+     * puede tener abierta un solo usuario a la vez: el otro no la usa hasta que se cierre.
+     */
+    public function aperturaPara(?User $usuario = null, ?int $almacenId = null): ?AperturaCaja
     {
         $usuario ??= auth('api')->user() ?? auth()->user();
 
-        if ($caja = $usuario?->cajaActual()) {
-            $propia = AperturaCaja::where('estado', 'abierta')
+        if ($caja = $usuario?->cajaActual($almacenId)) {
+            $abierta = AperturaCaja::where('estado', 'abierta')
                 ->where('caja_id', $caja->id)
                 ->latest('fecha_apertura')
                 ->first();
 
-            return $propia;
+            return $abierta && (int) $abierta->usuario_id === (int) $usuario->id ? $abierta : null;
         }
 
         return null;
@@ -35,18 +39,24 @@ class CajaService
      * La caja abierta del usuario o, si no la tiene, un 422 que dice por qué no puede cobrar ni pagar: no tiene
      * caja asignada o su caja está cerrada.
      */
-    public function exigirApertura(?User $usuario = null): AperturaCaja
+    public function exigirApertura(?User $usuario = null, ?int $almacenId = null): AperturaCaja
     {
         $usuario ??= auth('api')->user() ?? auth()->user();
 
-        if (! $usuario?->cajaActual()) {
+        $caja = $usuario?->cajaActual($almacenId);
+        if (! $caja) {
             $this->negar('No tienes una caja asignada en este almacén: pide que te asignen una para poder cobrar o pagar.');
         }
 
-        $apertura = $this->aperturaPara($usuario);
+        $apertura = $this->aperturaPara($usuario, $almacenId);
         if (! $apertura) {
-            $nombre = $usuario->cajaActual()?->nombre;
-            $this->negar('Tu caja'.($nombre ? " ({$nombre})" : '').' está cerrada: ábrela en Mi Caja para poder cobrar o pagar.');
+            // Una caja compartida: si la tiene abierta otro usuario, esa persona la sigue usando.
+            $abierta = $caja->aperturaAbierta();
+            if ($abierta && (int) $abierta->usuario_id !== (int) $usuario->id) {
+                $quien = $abierta->usuario?->name ?? 'otro usuario';
+                $this->negar("La caja {$caja->codigo} está en uso: la tiene abierta {$quien}. Espera a que la cierre para usarla.");
+            }
+            $this->negar("Tu caja ({$caja->nombre}) está cerrada: ábrela en Mi Caja para poder cobrar o pagar.");
         }
 
         return $apertura;

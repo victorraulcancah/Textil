@@ -11,6 +11,8 @@ import PdfViewerModal from '../components/PdfViewerModal';
 import ActionsMenu from '../components/ActionsMenu';
 import DetalleRecepcionCompra from '../components/DetalleRecepcionCompra';
 import RecepcionarCompraModal from '../components/RecepcionarCompraModal';
+import PlanillaTela from '../components/PlanillaTela';
+import { gruposDeCompra } from '../lib/planilla';
 import { Alert, Badge, Button, DataTable, DateRangePicker, Input, Modal, SearchSelect, Select } from '../components/ui';
 
 const estadoCompra = {
@@ -366,59 +368,31 @@ export default function Compras() {
                         {detalles.length} {detalles.length === 1 ? 'producto' : 'productos'}
                     </span>
                 </div>
-                {/* Alto fijo: el detalle siempre ocupa lo mismo, haya 1 o 20 productos. */}
-                <div className="overflow-auto" style={{ height: '30vh' }}>
-                    <table className="w-full min-w-[900px] text-sm">
-                        <thead className="sticky top-0 z-10">
-                            <tr className="bg-primary-600 text-left text-xs font-semibold uppercase tracking-wide text-white">
-                                <th className="w-12 px-3 py-1.5 text-center">#</th>
-                                <th className="w-28 px-3 py-1.5">Código</th>
-                                <th className="px-3 py-1.5">Producto</th>
-                                <th className="w-32 px-3 py-1.5">Marca</th>
-                                <th className="w-28 px-3 py-1.5">Unidad</th>
-                                <th className="w-20 px-3 py-1.5 text-right">Cant.</th>
-                                <th className="w-24 px-3 py-1.5 text-right">Costo</th>
-                                <th className="w-28 px-3 py-1.5 text-right">Subtotal</th>
-                                <th className="w-24 px-3 py-1.5 text-right" title="Cantidad recepcionada">Recib.</th>
-                                <th className="w-24 px-3 py-1.5 text-right">Pend.</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                            {detalles.length === 0 && (
-                                <tr>
-                                    <td colSpan={10} className="px-3 py-10 text-center text-sm text-warm-500">
-                                        {seleccionada
-                                            ? 'Esta compra no tiene productos.'
-                                            : 'Selecciona una compra arriba para ver su detalle.'}
-                                    </td>
-                                </tr>
-                            )}
-
-                            {detalles.map((d, i) => {
-                                const producto = d.presentacion?.producto;
-                                return (
-                                    <tr key={d.id}>
-                                        <td className="px-3 py-2 text-center text-warm-500">{i + 1}</td>
-                                        <td className="px-3 py-2 text-warm-500">{producto?.codigo ?? '—'}</td>
-                                        <td className="px-3 py-2 font-semibold text-warm-900">{producto?.nombre ?? '—'}</td>
-                                        <td className="px-3 py-2 text-warm-500">{producto?.marca?.nombre ?? '—'}</td>
-                                        <td className="px-3 py-2 text-warm-500">{d.presentacion?.nombre ?? '—'}</td>
-                                        <td className="px-3 py-2 text-right text-warm-900">{num(d.cantidad)}</td>
-                                        <td className="px-3 py-2 text-right text-warm-900">{money(d.costo_unitario, seleccionada?.moneda_origen)}</td>
-                                        <td className="px-3 py-2 text-right font-semibold text-primary-600">{money(d.subtotal, seleccionada?.moneda_origen)}</td>
-                                        <td className="px-3 py-2 text-right text-green-600">{num(d.recibido)}</td>
-                                        <td
-                                            className={`px-3 py-1.5 text-right font-medium ${
-                                                Number(d.pendiente) > 0 ? 'text-amber-600' : 'text-warm-500'
-                                            }`}
-                                        >
-                                            {num(d.pendiente)}
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
+                {/* El mismo formato del pedido: una tabla por tela, con cada color, sus rollos y el factor (metros por rollo). */}
+                <div className="max-h-[60vh] overflow-auto p-4">
+                    {detalles.length === 0 ? (
+                        <p className="px-3 py-10 text-center text-sm text-warm-500">
+                            {seleccionada ? 'Esta compra no tiene productos.' : 'Selecciona una compra arriba para ver su detalle.'}
+                        </p>
+                    ) : (
+                        <>
+                            <PlanillaTela
+                                grupos={gruposDeCompra(detalles, 'costo_unitario')}
+                                moneda={seleccionada?.moneda_origen || 'PEN'}
+                                colorCode
+                            />
+                            {/* Lo que ya llegó al almacén, por producto. */}
+                            <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-warm-600">
+                                {detalles.map((d) => (
+                                    <span key={d.id}>
+                                        {d.presentacion?.producto?.nombre}{d.color ? ` · ${d.color.nombre}` : ''}:
+                                        {' '}recibido <strong className="text-green-600">{num(d.recibido)}</strong>
+                                        {' · '}pendiente <strong className={Number(d.pendiente) > 0 ? 'text-amber-600' : 'text-warm-500'}>{num(d.pendiente)}</strong>
+                                    </span>
+                                ))}
+                            </div>
+                        </>
+                    )}
                 </div>
             </div>
 

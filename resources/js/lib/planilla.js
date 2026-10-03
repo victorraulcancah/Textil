@@ -233,7 +233,11 @@ export function gruposDeCompra(detalles = [], campoPrecio = 'precio_unitario') {
             const producto = d.presentacion?.producto;
             const rollos = Number(d.rollos) || 0;
             const cantidad = Number(d.cantidad) || 0;
-            const esTela = rollos > 0 || Boolean(d.color) || (d.presentacion?.unidad_base?.abreviatura ?? '').toLowerCase() === 'm';
+            const esTela =
+                rollos > 0 ||
+                Boolean(d.color) ||
+                (d.presentacion?.unidad_base?.abreviatura ?? '').toLowerCase() === 'm' ||
+                (d.presentacion?.nombre ?? '').toLowerCase() === 'metro';
 
             return {
                 grupo: String(d.presentacion?.producto_id ?? producto?.id ?? producto?.codigo ?? 'sin'),

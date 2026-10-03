@@ -233,6 +233,8 @@ return [
                         'transferencias/*/aprobar' => 'aprobar',
                         'transferencias/*/rechazar' => 'aprobar',
                         'transferencias/*/recibir' => 'editar',
+                        // Recepcionar escaneando los rollos es recibir: lo hace el almacén destino.
+                        'transferencias/*/recepcion/*' => 'editar',
                     ],
                     'acciones' => ['ver', 'crear', 'editar', 'eliminar', 'aprobar'],
                 ],

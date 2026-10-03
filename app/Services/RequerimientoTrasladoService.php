@@ -254,11 +254,13 @@ class RequerimientoTrasladoService
                         $this->rollos->cambiarEstado($rollo, Rollo::DISPONIBLE, RolloMovimiento::CANCELACION, 'transferencia', $t->id);
                         $rollo = $rollo->fresh();
 
-                        if ((float) $asignado->metros + 0.001 >= (float) $rollo->metros_actual) {
-                            $this->rollos->trasladar($rollo, ['almacen_id' => $destinoId], auth()->id());
-                        } else {
-                            $this->rollos->dividir($rollo, (float) $asignado->metros, $destinoId, auth()->id());
-                        }
+                        $viaja = (float) $asignado->metros + 0.001 >= (float) $rollo->metros_actual
+                            ? $this->rollos->trasladar($rollo, ['almacen_id' => $destinoId], auth()->id())
+                            : $this->rollos->dividir($rollo, (float) $asignado->metros, $destinoId, auth()->id());
+
+                        // Viaja en tránsito: queda disponible en el destino recién cuando lo reciben.
+                        $this->rollos->cambiarEstado($viaja, Rollo::EN_TRANSITO, RolloMovimiento::TRASLADO, 'transferencia', $t->id);
+                        $asignado->update(['rollo_viaja_id' => $viaja->id]);
                     }
 
                     $linea->update(['cantidad_enviada' => $linea->presentacion->desdeMetros($linea->metrosAsignados())]);

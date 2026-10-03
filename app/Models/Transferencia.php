@@ -45,6 +45,8 @@ class Transferencia extends Model
         'usuario_recepcion_id',
         'observaciones',
         'motivo_rechazo',
+        // Lo que se anotó al recepcionar con diferencias (rollos que no llegaron).
+        'observacion_recepcion',
     ];
 
     protected $appends = ['documento', 'requerimiento'];

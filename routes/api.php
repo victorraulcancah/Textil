@@ -175,6 +175,11 @@ Route::middleware('auth:api')->group(function () {
     Route::post('transferencias/{transferencia}/aprobar', [TransferenciaController::class, 'aprobar']);
     Route::post('transferencias/{transferencia}/rechazar', [TransferenciaController::class, 'rechazar']);
     Route::post('transferencias/{transferencia}/recibir', [TransferenciaController::class, 'recibir']);
+    // Recepcionar escaneando el QR de cada rollo que llegó (la alternativa a "recibir todo").
+    Route::get('transferencias/{transferencia}/recepcion', [\App\Http\Controllers\RecepcionTrasladoController::class, 'show']);
+    Route::post('transferencias/{transferencia}/recepcion/escanear', [\App\Http\Controllers\RecepcionTrasladoController::class, 'escanear']);
+    Route::post('transferencias/{transferencia}/recepcion/quitar', [\App\Http\Controllers\RecepcionTrasladoController::class, 'quitar']);
+    Route::post('transferencias/{transferencia}/recepcion/confirmar', [\App\Http\Controllers\RecepcionTrasladoController::class, 'confirmar']);
     Route::post('transferencias/{transferencia}/anular', [TransferenciaController::class, 'anular']);
     Route::apiResource('ajustes', AjusteInventarioController::class);
     Route::apiResource('tomas-inventario', TomaInventarioController::class);

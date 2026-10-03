@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Ban, Edit, Inbox, ListChecks, Lock, PackageCheck, Printer, Repeat, ShieldCheck, ShieldX, Trash2 } from 'lucide-react';
+import { ArrowRight, Ban, Edit, Inbox, ListChecks, Lock, PackageCheck, Printer, Repeat, ScanLine, ShieldCheck, ShieldX, Trash2 } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
@@ -9,6 +9,7 @@ import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
 import DetalleCard from '../components/ui/DetalleCard';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
+import RecepcionarTrasladoModal from '../components/RecepcionarTrasladoModal';
 import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select, Tabs } from '../components/ui';
 
 const estadoInfo = {
@@ -50,6 +51,8 @@ export default function Transferencias() {
     const [actionId, setActionId] = useState(null);
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [pdfTarget, setPdfTarget] = useState(null);
+    /** El traslado que se recepciona escaneando sus rollos. */
+    const [recepcion, setRecepcion] = useState(null);
     const [deleting, setDeleting] = useState(false);
 
     /** Guía que se está por rechazar: pide un motivo antes de confirmar. */
@@ -325,11 +328,18 @@ export default function Transferencias() {
                         </button>
                     )}
                     {row.estado === 'en_transito' && (
-                        <button aria-label="Recibir" title="Recibir (ingresa stock al destino)" disabled={actionId === row.id}
-                            onClick={(e) => { e.stopPropagation(); runAccion(row, 'recibir', 'Guía recibida. Stock ingresado al destino.'); }}
-                            className="rounded-md p-1.5 text-green-600 transition hover:bg-green-50 disabled:opacity-40">
-                            <PackageCheck className="h-4 w-4" />
-                        </button>
+                        <>
+                            <button aria-label="Recepcionar" title="Recepcionar: escanea el QR de cada rollo que llegó" disabled={actionId === row.id}
+                                onClick={(e) => { e.stopPropagation(); setRecepcion(row); }}
+                                className="rounded-md p-1.5 text-primary-600 transition hover:bg-primary-50 disabled:opacity-40">
+                                <ScanLine className="h-4 w-4" />
+                            </button>
+                            <button aria-label="Recibir todo" title="Recibir todo (ingresa el stock al destino sin escanear)" disabled={actionId === row.id}
+                                onClick={(e) => { e.stopPropagation(); runAccion(row, 'recibir', 'Guía recibida. Stock ingresado al destino.'); }}
+                                className="rounded-md p-1.5 text-green-600 transition hover:bg-green-50 disabled:opacity-40">
+                                <PackageCheck className="h-4 w-4" />
+                            </button>
+                        </>
                     )}
                     {row.estado === 'pendiente' && (
                         <button aria-label="Anular" title="Anular" disabled={actionId === row.id}
@@ -624,6 +634,8 @@ export default function Transferencias() {
                 </>}>
                 <Alert variant="warning">Si alguna guía ya lo usa, se desactivará en lugar de eliminarse.</Alert>
             </Modal>
+
+            <RecepcionarTrasladoModal traslado={recepcion} onClose={() => setRecepcion(null)} onRecibido={load} />
 
             <PdfViewerModal
                 open={Boolean(pdfTarget)}

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, PackageCheck, Plus, X } from 'lucide-react';
+import { FileText, PackageCheck, Plus, ScanLine, X } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
@@ -8,6 +8,7 @@ import { useAlmacenPropio } from '../lib/almacenes';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
+import RecepcionarTrasladoModal from '../components/RecepcionarTrasladoModal';
 import { Alert, Badge, Button, DataTable, Modal } from '../components/ui';
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
@@ -49,6 +50,8 @@ export default function Requerimientos() {
     const [loading, setLoading] = useState(true);
     const [detalle, setDetalle] = useState(null);
     const [pdf, setPdf] = useState(null);
+    /** El traslado que se recepciona escaneando sus rollos. */
+    const [recepcion, setRecepcion] = useState(null);
 
     const cargar = useCallback(async () => {
         setLoading(true);
@@ -116,14 +119,20 @@ export default function Requerimientos() {
             key: 'acciones',
             label: 'Acciones',
             type: 'actions',
-            width: '150px',
+            width: '280px',
             align: 'right',
             actions: (r) => (
                 <>
                     {r.estado === 'en_transito' && puede('inventario.transferencias.editar') && (
-                        <Button size="sm" onClick={() => recibir(r)}>
-                            <PackageCheck className="h-4 w-4" /> Recibir
-                        </Button>
+                        <>
+                            {/* Dos formas de recibir: escaneando el QR de cada rollo, o todo de golpe. */}
+                            <Button size="sm" onClick={() => setRecepcion(r)} title="Escanear el QR de cada rollo que llegó">
+                                <ScanLine className="h-4 w-4" /> Recepcionar
+                            </Button>
+                            <Button size="sm" variant="secondary" onClick={() => recibir(r)} title="Recibir todo lo enviado, sin escanear">
+                                <PackageCheck className="h-4 w-4" /> Recibir todo
+                            </Button>
+                        </>
                     )}
                     {r.guia && (
                         <button
@@ -180,6 +189,8 @@ export default function Requerimientos() {
             />
 
             <DetalleModal r={detalle} onClose={() => setDetalle(null)} />
+
+            <RecepcionarTrasladoModal traslado={recepcion} onClose={() => setRecepcion(null)} onRecibido={cargar} />
 
             <PdfViewerModal
                 open={Boolean(pdf)}

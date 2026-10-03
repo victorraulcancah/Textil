@@ -257,12 +257,26 @@ class TransferenciaController extends Controller
             $metrosRollo = (float) $rollo->metros_actual;
 
             if ($metrosRollo <= $metrosPorMover + 0.001) {
-                $rollos->trasladar($rollo, ['almacen_id' => $almacenDestinoId], auth()->id());
+                $viaja = $rollos->trasladar($rollo, ['almacen_id' => $almacenDestinoId], auth()->id());
+                $enviado = $metrosRollo;
                 $metrosPorMover = round($metrosPorMover - $metrosRollo, 2);
             } else {
-                $rollos->dividir($rollo, $metrosPorMover, $almacenDestinoId, auth()->id());
+                $viaja = $rollos->dividir($rollo, $metrosPorMover, $almacenDestinoId, auth()->id());
+                $enviado = $metrosPorMover;
                 $metrosPorMover = 0;
             }
+
+            // Viaja en tránsito y queda registrado para poder recepcionarlo escaneando su QR en el destino.
+            $rollos->cambiarEstado($viaja, Rollo::EN_TRANSITO, \App\Models\RolloMovimiento::TRASLADO, 'transferencia', $detalle->transferencia_id);
+            $detalle->rollos()->create([
+                'rollo_id' => $rollo->id,
+                'rollo_viaja_id' => $viaja->id,
+                'metros' => $enviado,
+                'metros_rollo' => $metrosRollo,
+                'entero' => $viaja->id === $rollo->id,
+                'escaneado_at' => now(),
+                'usuario_escanea_id' => auth()->id(),
+            ]);
         }
 
         if ($metrosPorMover > 0.001) {
@@ -309,6 +323,9 @@ class TransferenciaController extends Controller
                     colorId: $detalle->producto_color_id,
                 );
             }
+
+            // Los rollos que viajaban quedan disponibles en este almacén.
+            app(\App\Services\RecepcionTrasladoService::class)->liberar($transferencia);
 
             $transferencia->update([
                 'estado' => 'recibida',

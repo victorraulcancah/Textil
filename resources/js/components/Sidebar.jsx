@@ -43,6 +43,12 @@ function Accento({ className }) {
 }
 
 /** Punto de la derecha: marca discreta de cada módulo. */
+/**
+ * ¿Su ruta es prefijo de la de un hermano (ej. /requerimientos y /requerimientos/atender)? Entonces solo se marca
+ * cuando la ruta es exactamente la suya, no al estar dentro de la otra.
+ */
+const soloExacta = (child, hermanos) => hermanos.some((h) => h.to !== child.to && h.to.startsWith(child.to + '/'));
+
 function Punto({ activo }) {
     return (
         <span
@@ -371,6 +377,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse }) {
                                                     <NavLink
                                                         key={child.to}
                                                         to={child.to}
+                                                        end={soloExacta(child, item.children)}
                                                         onClick={() => setMobileOpen(false)}
                                                         className={({ isActive }) =>
                                                             cn(
@@ -438,6 +445,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse }) {
                             <NavLink
                                 key={child.to}
                                 to={child.to}
+                                end={soloExacta(child, flyout.children)}
                                 onClick={cerrarFlyout}
                                 className={({ isActive }) =>
                                     cn(

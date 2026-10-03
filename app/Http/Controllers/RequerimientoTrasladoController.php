@@ -145,7 +145,8 @@ class RequerimientoTrasladoController extends Controller
             'extras' => 'nullable|array',
             'extras.*.producto_presentacion_id' => 'required|exists:producto_presentaciones,id',
             'extras.*.producto_color_id' => 'nullable|exists:producto_colores,id',
-            'extras.*.cantidad_enviada' => 'required|numeric|min:0.01',
+            'extras.*.cantidad_enviada' => 'required_without:extras.*.rollos|nullable|numeric|min:0.01',
+            'extras.*.rollos' => 'nullable|integer|min:1|max:9999',
         ]);
 
         $extras = $transporte['extras'] ?? [];

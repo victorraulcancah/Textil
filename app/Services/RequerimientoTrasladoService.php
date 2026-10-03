@@ -246,11 +246,22 @@ class RequerimientoTrasladoService
 
         return DB::transaction(function () use ($t, $transporte, $extras) {
             foreach ($extras as $extra) {
+                $cantidad = $extra['cantidad_enviada'] ?? null;
+                if (! empty($extra['rollos'])) {
+                    // "N rollos": se toman los más antiguos del color y se descuenta lo que pesan.
+                    $cantidad = app(TrasladoRollosService::class)->cantidadDeRollos(
+                        ProductoPresentacion::with('producto')->findOrFail($extra['producto_presentacion_id']),
+                        $extra['producto_color_id'] ?? null,
+                        (int) $t->almacen_origen_id,
+                        (int) $extra['rollos'],
+                    );
+                }
+
                 $t->detalles()->create([
                     'producto_presentacion_id' => $extra['producto_presentacion_id'],
                     'producto_color_id' => $extra['producto_color_id'] ?? null,
                     'modo' => 'cantidad',
-                    'cantidad_enviada' => $extra['cantidad_enviada'],
+                    'cantidad_enviada' => $cantidad,
                 ]);
             }
             $t->unsetRelation('detalles');

@@ -51,7 +51,9 @@ class TransferenciaController extends Controller
             'detalles.*.producto_presentacion_id' => 'required|exists:producto_presentaciones,id',
             // Cuál color viaja; solo aplica a lo que se lleva por rollos.
             'detalles.*.producto_color_id' => 'nullable|exists:producto_colores,id',
-            'detalles.*.cantidad_enviada' => 'required|numeric|min:0.01',
+            // O una cantidad, o N rollos enteros de la tela (el servidor toma los más antiguos del color).
+            'detalles.*.cantidad_enviada' => 'required_without:detalles.*.rollos|nullable|numeric|min:0.01',
+            'detalles.*.rollos' => 'nullable|integer|min:1|max:9999',
         ]);
 
         $transferencia = DB::transaction(function () use ($data) {
@@ -77,10 +79,20 @@ class TransferenciaController extends Controller
             ]);
 
             foreach ($data['detalles'] as $detalle) {
+                $cantidad = $detalle['cantidad_enviada'] ?? null;
+                if (! empty($detalle['rollos'])) {
+                    $cantidad = app(\App\Services\TrasladoRollosService::class)->cantidadDeRollos(
+                        ProductoPresentacion::with('producto')->findOrFail($detalle['producto_presentacion_id']),
+                        $detalle['producto_color_id'] ?? null,
+                        (int) $data['almacen_origen_id'],
+                        (int) $detalle['rollos'],
+                    );
+                }
+
                 $transferencia->detalles()->create([
                     'producto_presentacion_id' => $detalle['producto_presentacion_id'],
                     'producto_color_id' => $detalle['producto_color_id'] ?? null,
-                    'cantidad_enviada' => $detalle['cantidad_enviada'],
+                    'cantidad_enviada' => $cantidad,
                 ]);
             }
 

@@ -125,6 +125,8 @@ export default function ProductoPickerModal({
     moneda = 'PEN',
     /** Ajuste de inventario: la tabla por color pide el costo (del catálogo), no un precio de compra. */
     costo = false,
+    /** Traslados y requerimientos: no hay precio ni cobro, solo qué se manda y cuánto. */
+    sinPrecios = false,
     title = 'Buscar producto',
 }) {
     const [filtros, setFiltros] = useState(filtrosVacios);
@@ -621,7 +623,9 @@ export default function ProductoPickerModal({
                 modoTela
                     ? porColor === 'compra'
                         ? 'Elige una tela para poner los rollos, el factor y el precio de cada color; lo demás, con su unidad y cantidad.'
-                        : 'Elige una tela para marcar sus colores y cuántos rollos quieres de cada uno; cada rollo se cobra por sus metros reales.'
+                        : sinPrecios
+                          ? 'Elige una tela para marcar sus colores y cuántos rollos quieres de cada uno.'
+                          : 'Elige una tela para marcar sus colores y cuántos rollos quieres de cada uno; cada rollo se cobra por sus metros reales.'
                     : 'Filtra por tipo de tela, color, categoría o marca; mira cuánto hay disponible en cada almacén y ajusta unidad y cantidad.'
             }
             size="3xl"
@@ -842,12 +846,14 @@ export default function ProductoPickerModal({
                                             {producto.tipo_tela?.nombre && ` · ${producto.tipo_tela.nombre}`}
                                         </p>
                                         <div className="mt-1 flex flex-wrap items-center gap-2">
-                                            <span className="text-sm font-semibold text-primary-600">
-                                                {enCompra
-                                                    ? moneyEn(metro?.precio_compra, producto.moneda_compra || moneda)
-                                                    : moneyEn(metro?.precio_venta, producto.moneda_venta || 'PEN')}
-                                                <span className="ml-1 text-[11px] font-normal text-warm-500">por metro</span>
-                                            </span>
+                                            {!sinPrecios && (
+                                                <span className="text-sm font-semibold text-primary-600">
+                                                    {enCompra
+                                                        ? moneyEn(metro?.precio_compra, producto.moneda_compra || moneda)
+                                                        : moneyEn(metro?.precio_venta, producto.moneda_venta || 'PEN')}
+                                                    <span className="ml-1 text-[11px] font-normal text-warm-500">por metro</span>
+                                                </span>
+                                            )}
                                             <span className="text-[11px] text-warm-500">
                                                 {lineas.length} color{lineas.length === 1 ? '' : 'es'}
                                                 {conDesglose && !enCompra && ` · ${libres} rollo${libres === 1 ? '' : 's'} libre${libres === 1 ? '' : 's'}`}
@@ -932,9 +938,11 @@ export default function ProductoPickerModal({
                                                 Stock: {stock.texto}
                                             </span>
                                         )}
-                                        <span className="text-sm font-semibold text-primary-600">
-                                            {money(presentacion?.precio_compra ?? producto.precio_base)}
-                                        </span>
+                                        {!sinPrecios && (
+                                            <span className="text-sm font-semibold text-primary-600">
+                                                {money(presentacion?.precio_compra ?? producto.precio_base)}
+                                            </span>
+                                        )}
                                         {sinUnidades && (
                                             <span className="text-[11px] font-medium text-red-600">Sin unidades</span>
                                         )}
@@ -1069,9 +1077,9 @@ export default function ProductoPickerModal({
             open={Boolean(telaModal)}
             onClose={() => setTelaModal(null)}
             title={telaModal?.nombre}
-            description={`Marca los colores y cuántos rollos quieres de cada uno. Cada rollo se cobra por sus metros reales${
+            description={`Marca los colores y cuántos rollos quieres de cada uno.${sinPrecios ? '' : ` Cada rollo se cobra por sus metros reales${
                 telaPrecio ? ` a ${moneyEn(telaPrecio, telaModal?.moneda_venta || 'PEN')} por metro` : ''
-            }.`}
+            }`}.`}
             size="xl"
             footer={
                 <>

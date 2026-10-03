@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\ProductoPresentacion;
 use App\Models\Rollo;
 use App\Models\RolloMovimiento;
 use App\Models\TransferenciaDetalle;
@@ -15,6 +16,29 @@ class TrasladoRollosService
 {
     public function __construct(private readonly RolloService $rollos)
     {
+    }
+
+    /**
+     * Lo que pesan N rollos enteros de una tela y color en el origen, en la unidad de la presentación: se toman los más
+     * antiguos disponibles. Así una línea "3 rollos" se convierte en la cantidad que el traslado descuenta.
+     */
+    public function cantidadDeRollos(ProductoPresentacion $presentacion, ?int $colorId, int $almacenId, int $rollos): float
+    {
+        $candidatos = Rollo::disponibles()
+            ->where('producto_id', $presentacion->producto_id)
+            ->where('almacen_id', $almacenId)
+            // Igual que al mover: el color exacto (o los rollos sin color).
+            ->where('producto_color_id', $colorId)
+            ->orderBy('numero')
+            ->limit($rollos)
+            ->get();
+
+        if ($candidatos->count() < $rollos) {
+            $nombre = $presentacion->producto?->nombre ?? 'la tela';
+            throw new \DomainException("No hay {$rollos} rollo(s) disponibles de \"{$nombre}\" en el almacén de origen: hay {$candidatos->count()}.");
+        }
+
+        return round($presentacion->desdeMetros((float) $candidatos->sum('metros_actual')), 2);
     }
 
     /**

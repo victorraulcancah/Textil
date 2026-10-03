@@ -215,6 +215,7 @@ export default function LineasRollos({
         const cantidad = Number(nueva.cantidad);
 
         if (validarStock) {
+            if (producto.colores?.length > 0 && !nueva.producto_color_id) return toast.error('Elige el color.');
             if (esTelaNueva) {
                 const quedan = rollosLibres - yaAgregado(metroNueva.id, nueva.producto_color_id);
                 if (cantidad > quedan) {
@@ -582,6 +583,7 @@ export default function LineasRollos({
                 productos={productos}
                 stockPorProducto={stockPorProducto}
                 bloquearSinStock={validarStock}
+                sinPrecios
                 existencias={existencias}
                 title="Buscar productos"
             />

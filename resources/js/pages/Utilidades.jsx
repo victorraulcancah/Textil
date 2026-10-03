@@ -1,3 +1,4 @@
+import FiltroAlmacen from '../components/FiltroAlmacen';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Coins, Download, PackageOpen, Percent, PiggyBank, Receipt, TrendingUp } from 'lucide-react';
 import api from '../lib/api';
@@ -72,6 +73,7 @@ export default function Utilidades() {
     const { puede } = useAuth();
     const [[desde, hasta], setRango] = useState(() => rangoPreset('mes'));
     const [verPor, setVerPor] = useState('auto');
+    const [almacenId, setAlmacenId] = useState('');
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -80,14 +82,14 @@ export default function Utilidades() {
         setLoading(true);
         setError(null);
         try {
-            const res = await api.get(`/reportes/utilidades?desde=${desde}&hasta=${hasta}&agrupar=${verPor}`);
+            const res = await api.get(`/reportes/utilidades?desde=${desde}&hasta=${hasta}&agrupar=${verPor}${almacenId ? `&almacen_id=${almacenId}` : ''}`);
             setData(res.data);
         } catch {
             setError('No se pudo cargar el reporte de utilidades.');
         } finally {
             setLoading(false);
         }
-    }, [desde, hasta, verPor]);
+    }, [desde, hasta, verPor, almacenId]);
 
     useEffect(() => {
         load();
@@ -165,6 +167,7 @@ export default function Utilidades() {
                 <div className="w-52">
                     <Select label="Ver por" value={verPor} onChange={(e) => setVerPor(e.target.value)} options={VER_POR} />
                 </div>
+                <FiltroAlmacen value={almacenId} onChange={setAlmacenId} />
             </PeriodoPicker>
 
             {error && <Alert variant="error" className="mb-4">{error}</Alert>}

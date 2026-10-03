@@ -9,6 +9,7 @@ import ColorSelect from '../components/ColorSelect';
 import ProductoPickerModal from '../components/ProductoPickerModal';
 import { tipoUnidad } from '../lib/unidades';
 import { precioPara } from '../lib/precios';
+import { opcionesAlmacen, useAlmacenPropio } from '../lib/almacenes';
 import { cargarTipoCambio, convertir, money, MONEDAS } from '../lib/moneda';
 import { Alert, Button, Input, SearchSelect, Select, Spinner, cn } from '../components/ui';
 
@@ -53,9 +54,28 @@ export default function CrearPedido() {
     const [clientes, setClientes] = useState([]);
     const [productos, setProductos] = useState([]);
     /** Stock disponible por producto, en unidad base. */
-    const [stockPorProducto, setStockPorProducto] = useState({});
-    /** Filas de existencias (producto × almacén, con metros por color). */
-    const [existencias, setExistencias] = useState([]);
+    /** Filas de existencias de TODOS los almacenes (producto × almacén, con metros por color). */
+    const [todasExistencias, setTodasExistencias] = useState([]);
+    /** El almacén (sucursal) del pedido: un usuario de sucursal usa el suyo; el Super Admin elige. */
+    const { propioId, superAdmin } = useAlmacenPropio();
+    const [almacenes, setAlmacenes] = useState([]);
+    const [almacenId, setAlmacenId] = useState(propioId ? String(propioId) : '');
+
+    /** Solo lo del almacén del pedido: es de donde sale la mercadería. */
+    const existencias = useMemo(
+        () => todasExistencias.filter((f) => !almacenId || String(f.almacen_id ?? f.almacen?.id) === String(almacenId)),
+        [todasExistencias, almacenId],
+    );
+    /** Lo que se puede prometer de cada producto en ese almacén (lo disponible, no lo físico). */
+    const stockPorProducto = useMemo(() => {
+        const porProducto = {};
+        for (const fila of existencias) {
+            const pid = fila.producto?.id ?? fila.producto_id;
+            if (!pid) continue;
+            porProducto[pid] = (porProducto[pid] ?? 0) + Number(fila.stock_disponible ?? fila.stock_actual ?? 0);
+        }
+        return porProducto;
+    }, [existencias]);
     const [cargando, setCargando] = useState(true);
     const [guardando, setGuardando] = useState(false);
     const [errores, setErrores] = useState({});
@@ -112,23 +132,19 @@ export default function CrearPedido() {
                     api.get('/productos', { params: { per_page: 500 } }),
                     api.get('/existencias'),
                 ]);
+                // El Super Admin elige el almacén del pedido; los demás ya tienen el suyo.
+                if (superAdmin) {
+                    const almRes = await api.get('/almacenes');
+                    const lista = asList(almRes);
+                    setAlmacenes(lista);
+                    setAlmacenId((actual) => actual || String((lista.find((a) => a.predeterminado && a.activo !== false) ?? lista[0])?.id ?? ''));
+                }
 
                 setClientes(asList(clientesRes));
                 setProductos(asList(productosRes));
 
-                // Se suma el DISPONIBLE de todos los almacenes (físico menos lo
-                // que otros pedidos ya reservaron): el vendedor no elige desde
-                // cuál sale, así que lo que le importa es cuánto puede prometer.
-                const porProducto = {};
-                for (const fila of asList(existenciasRes)) {
-                    const pid = fila.producto?.id ?? fila.producto_id;
-                    if (!pid) continue;
-                    porProducto[pid] = (porProducto[pid] ?? 0) + Number(fila.stock_disponible ?? fila.stock_actual ?? 0);
-                }
-                setStockPorProducto(porProducto);
-                // Las filas completas, para que el buscador muestre el stock de
-                // cada almacén y por color.
-                setExistencias(asList(existenciasRes));
+                // Las filas de todos los almacenes: el stock que se muestra y se promete es el del almacén del pedido.
+                setTodasExistencias(asList(existenciasRes));
 
                 if (id) {
                     const { data } = await api.get(`/ordenes-venta/${id}`);
@@ -149,6 +165,7 @@ export default function CrearPedido() {
                         observaciones: p.observaciones ?? '',
                     });
                     setTcManual(Boolean(p.tipo_cambio));
+                    if (p.almacen_id) setAlmacenId(String(p.almacen_id));
 
                     setLineas(
                         (p.detalles ?? []).map((d) => ({
@@ -664,8 +681,13 @@ export default function CrearPedido() {
                 toast.error('Pon el tipo de cambio del pedido.');
                 return;
             }
+            if (!id && !almacenId) {
+                toast.error('Elige el almacén del pedido.');
+                return;
+            }
             const cuerpo = {
                 ...cabecera,
+                almacen_id: almacenId ? Number(almacenId) : null,
                 tipo_cambio: cabecera.moneda !== 'PEN' ? Number(cabecera.tipo_cambio) || null : null,
                 cliente_id: cabecera.cliente_id || null,
                 fecha_entrega: cabecera.fecha_entrega || null,
@@ -1149,6 +1171,22 @@ export default function CrearPedido() {
                         <h2 className="mb-4 text-base font-semibold text-warm-900">Pedido</h2>
 
                         <div className="space-y-4">
+                            {/* La sucursal del pedido: de su almacén sale la mercadería. */}
+                            {superAdmin ? (
+                                <SearchSelect
+                                    label="Almacén"
+                                    placeholder="Elige el almacén"
+                                    value={almacenId}
+                                    // Con líneas ya cargadas no se cambia: su stock se calculó con el almacén anterior.
+                                    disabled={lineas.length > 0}
+                                    onChange={(v) => setAlmacenId(v ?? '')}
+                                    options={opcionesAlmacen(almacenes, almacenId)}
+                                />
+                            ) : (
+                                <p className="rounded-md bg-primary-50 px-3 py-2 text-xs font-medium text-primary-700">
+                                    Pedido de tu almacén: {user?.almacen?.nombre ?? 'sin almacén asignado'}. La mercadería sale de ahí.
+                                </p>
+                            )}
                             <SearchSelect
                                 label="Cliente"
                                 placeholder="Buscar cliente…"

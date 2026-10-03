@@ -12,8 +12,22 @@ class NotaVenta extends Model
     /** Nombre del módulo en la bitácora de auditoría. */
     protected string $auditarModulo = 'Proforma';
 
-    /** La serie con la que se numeran las proformas nuevas: PF01-001, PF01-002… (las anteriores conservan NV01). */
+    /** La serie de las proformas sin almacén conocido: PF01. (Las anteriores conservan NV01.) */
     public const SERIE = 'PF01';
+
+    /** PF + el número de serie del almacén en dos dígitos: PF01, PF02… Cada almacén numera aparte (PF02-001). */
+    public static function serieDeProforma(?int $numeroSerie): string
+    {
+        return 'PF'.str_pad((string) ($numeroSerie ?: 1), 2, '0', STR_PAD_LEFT);
+    }
+
+    /** La serie que corresponde a las proformas de un almacén. */
+    public static function serieDeAlmacen(?int $almacenId): string
+    {
+        $numero = $almacenId ? Almacen::whereKey($almacenId)->value('numero_serie') : null;
+
+        return self::serieDeProforma($numero);
+    }
 
     protected $table = 'notas_venta';
 

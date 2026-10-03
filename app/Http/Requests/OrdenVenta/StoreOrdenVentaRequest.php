@@ -23,6 +23,8 @@ class StoreOrdenVentaRequest extends FormRequest
         return [
             'cliente_id' => 'nullable|exists:clientes,id',
             'vendedor_id' => 'required|exists:users,id',
+            // El almacén (sucursal) del pedido. Un usuario de sucursal siempre queda en el suyo.
+            'almacen_id' => 'nullable|exists:almacenes,id',
             'fecha_emision' => 'required|date',
             'fecha_entrega' => 'nullable|date|after_or_equal:fecha_emision',
             'moneda' => 'nullable|in:PEN,USD',

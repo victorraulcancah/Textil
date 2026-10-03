@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
+use App\Support\AlmacenAcceso;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -41,6 +42,7 @@ class ReporteController extends Controller
      */
     public function utilidades(Request $request)
     {
+        $this->almacenId = AlmacenAcceso::paraReporte($request->integer('almacen_id'));
         [$desde, $hasta] = $this->rango($request, now()->startOfMonth());
         $agrupar = $this->agruparTiempo($request, ['dia', 'mes', 'producto', 'categoria'], $desde, $hasta);
 
@@ -80,6 +82,7 @@ class ReporteController extends Controller
      */
     public function ganancias(Request $request)
     {
+        $this->almacenId = AlmacenAcceso::paraReporte($request->integer('almacen_id'));
         [$desde, $hasta] = $this->rango($request, now()->startOfMonth());
         $validos = ['producto', 'categoria', 'venta', 'cliente', 'vendedor'];
         $agrupar = in_array($request->input('agrupar'), $validos, true) ? $request->input('agrupar') : 'producto';
@@ -195,6 +198,9 @@ class ReporteController extends Controller
     /*  Consultas                                                          */
     /* ------------------------------------------------------------------ */
 
+    /** El almacén al que se limita el reporte (null = todos). Lo fija cada reporte según quién lo pide. */
+    private ?int $almacenId = null;
+
     /** Detalles de ventas emitidas en el rango, con el costo promedio del producto. */
     private function ventasBase(Carbon $desde, Carbon $hasta)
     {
@@ -204,6 +210,7 @@ class ReporteController extends Controller
             ->join('productos as p', 'p.id', '=', 'pp.producto_id')
             ->leftJoin(DB::raw('(' . self::COSTO_SUB . ') as c'), 'c.producto_id', '=', 'p.id')
             ->where('nv.estado', 'emitida')
+            ->when($this->almacenId !== null, fn ($q) => $q->where('nv.almacen_id', $this->almacenId))
             ->whereBetween('nv.fecha_emision', [$desde->toDateString(), $hasta->toDateString()]);
     }
 
@@ -214,6 +221,11 @@ class ReporteController extends Controller
             ->join('motivos_movimiento as mo', 'mo.id', '=', 'm.motivo_movimiento_id')
             ->where('m.tipo', 'egreso')
             ->where('mo.categoria_gasto', 'operativo')
+            // De una sucursal: los gastos que pagaron los cajeros de ese almacén.
+            ->when($this->almacenId !== null, fn ($q) => $q
+                ->join('aperturas_caja as ap', 'ap.id', '=', 'm.apertura_caja_id')
+                ->join('users as uc', 'uc.id', '=', 'ap.usuario_id')
+                ->where('uc.almacen_id', $this->almacenId))
             ->whereBetween('m.fecha', [$desde->toDateString(), $hasta->toDateString()]);
     }
 

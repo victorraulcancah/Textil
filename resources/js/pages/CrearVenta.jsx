@@ -22,7 +22,7 @@ import {
     NOMBRE_MONEDA,
     redondear,
 } from "../lib/moneda";
-import { opcionesAlmacen } from "../lib/almacenes";
+import { opcionesAlmacen, useAlmacenPropio } from "../lib/almacenes";
 import { useToast } from "../lib/toast";
 import { useAuth } from "../lib/auth";
 import Layout from "../components/Layout";
@@ -96,6 +96,7 @@ export default function CrearVenta() {
     const toast = useToast();
     const navigate = useNavigate();
     const { user } = useAuth();
+    const { propioId } = useAlmacenPropio();
     /** Con id en la URL se edita una venta existente; sin id, se crea una nueva. */
     const { id: ventaId } = useParams();
     const editando = Boolean(ventaId);
@@ -170,7 +171,9 @@ export default function CrearVenta() {
 
             // Almacén de arranque: el marcado como predeterminado en
             // /almacenes y, si no hay ninguno, el único que exista.
+            // Un usuario de sucursal vende desde la suya; el Super Admin parte del predeterminado.
             const porDefecto =
+                listaAlmacenes.find((a) => propioId && String(a.id) === String(propioId)) ??
                 listaAlmacenes.find((a) => a.predeterminado && a.activo !== false) ??
                 (listaAlmacenes.length === 1 ? listaAlmacenes[0] : null);
 
@@ -1196,7 +1199,6 @@ export default function CrearVenta() {
                 descuento_total: 0,
                 total,
                 observaciones: form.observaciones,
-                serie: "PF01",
                 detalles,
                 pagos: pagosPayload,
             };
@@ -1861,6 +1863,7 @@ export default function CrearVenta() {
                                 options={opcionesAlmacen(
                                     almacenes,
                                     form.almacen_id,
+                                    propioId,
                                 )}
                             />
                             <Select

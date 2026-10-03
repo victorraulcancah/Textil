@@ -20,6 +20,7 @@ class StoreUserRequest extends FormRequest
             'password' => 'required|string|min:6',
             'empresa_id' => 'nullable|exists:empresas,id',
             'caja_id' => 'nullable|exists:cajas,id',
+            'almacen_id' => 'nullable|exists:almacenes,id',
             'role' => 'nullable|string|exists:roles,name',
             // Varios roles: sus permisos se suman. El primero es el principal.
             'roles' => 'nullable|array|min:1',

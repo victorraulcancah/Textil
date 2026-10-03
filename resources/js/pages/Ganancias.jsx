@@ -1,3 +1,4 @@
+import FiltroAlmacen from '../components/FiltroAlmacen';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     Award, Coins, Contact, Download, Package, PackageOpen, Percent, PieChart, ReceiptText, Tags, TrendingUp, Users,
@@ -29,6 +30,7 @@ const SERIES = [
 export default function Ganancias() {
     const { puede } = useAuth();
     const [[desde, hasta], setRango] = useState(() => rangoPreset('mes'));
+    const [almacenId, setAlmacenId] = useState('');
     const [tab, setTab] = useState('producto');
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -38,14 +40,14 @@ export default function Ganancias() {
         setLoading(true);
         setError(null);
         try {
-            const res = await api.get(`/reportes/ganancias?desde=${desde}&hasta=${hasta}&agrupar=${tab}`);
+            const res = await api.get(`/reportes/ganancias?desde=${desde}&hasta=${hasta}&agrupar=${tab}${almacenId ? `&almacen_id=${almacenId}` : ''}`);
             setData(res.data);
         } catch {
             setError('No se pudo cargar el reporte de ganancias.');
         } finally {
             setLoading(false);
         }
-    }, [desde, hasta, tab]);
+    }, [desde, hasta, tab, almacenId]);
 
     useEffect(() => {
         load();
@@ -116,7 +118,9 @@ export default function Ganancias() {
                 }
             />
 
-            <PeriodoPicker desde={desde} hasta={hasta} onChange={(d, h) => setRango([d, h])} />
+            <PeriodoPicker desde={desde} hasta={hasta} onChange={(d, h) => setRango([d, h])}>
+                <FiltroAlmacen value={almacenId} onChange={setAlmacenId} />
+            </PeriodoPicker>
 
             {error && <Alert variant="error" className="mb-4">{error}</Alert>}
 

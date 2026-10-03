@@ -16,6 +16,8 @@ class Almacen extends Model
     protected $fillable = [
         'nombre',
         'codigo',
+        // El número de su serie de documentos: 1 → PF01-001, 2 → PF02-001…
+        'numero_serie',
         'direccion',
         // La dirección detallada, igual que la de un cliente.
         'referencia',
@@ -29,6 +31,20 @@ class Almacen extends Model
         'activo',
         'predeterminado',
     ];
+
+    protected static function booted(): void
+    {
+        // Un almacén nuevo toma el siguiente número de serie libre.
+        static::creating(function (self $almacen) {
+            $almacen->numero_serie ??= 1 + (int) static::max('numero_serie');
+        });
+    }
+
+    /** La serie de las proformas de este almacén: PF01, PF02… (dos dígitos). */
+    public function serieProforma(): string
+    {
+        return NotaVenta::serieDeProforma($this->numero_serie);
+    }
 
     /**
      * Unidades en las que este local vende (Metro, Rollo, Yarda…). Sin

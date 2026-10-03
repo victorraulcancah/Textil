@@ -47,16 +47,9 @@ class NotaVentaService
             $data = $this->conTipoCambio($data);
             $this->verificarCredito($data);
 
-            $serie = $data['serie'] ?? NotaVenta::SERIE;
-            $serieDoc = SerieDocumento::where('tipo_documento', 'nota_venta')
-                ->where('serie', $serie)
-                ->lockForUpdate()
-                ->firstOrCreate(
-                    ['tipo_documento' => 'nota_venta', 'serie' => $serie],
-                    ['numero_actual' => 0, 'activo' => true]
-                );
-            $serieDoc->increment('numero_actual');
-            $numero = str_pad($serieDoc->numero_actual, 3, '0', STR_PAD_LEFT);
+            // La serie sale del almacén que vende: PF01 en el 1, PF02 en el 2… cada uno con su propio correlativo.
+            $serie = $data['serie'] ?? NotaVenta::serieDeAlmacen($data['almacen_id'] ?? null);
+            $numero = $this->siguienteNumero($serie, $data['almacen_id'] ?? null);
 
             $nota = NotaVenta::create($this->cabecera($data) + [
                 'serie' => $serie,
@@ -68,6 +61,21 @@ class NotaVentaService
 
             return $this->conRelaciones($nota);
         });
+    }
+
+    /** El siguiente número de la serie (001, 002…). Cada serie —cada almacén— lleva su propio correlativo. */
+    public function siguienteNumero(string $serie, ?int $almacenId = null): string
+    {
+        $serieDoc = SerieDocumento::where('tipo_documento', 'nota_venta')
+            ->where('serie', $serie)
+            ->lockForUpdate()
+            ->firstOrCreate(
+                ['tipo_documento' => 'nota_venta', 'serie' => $serie],
+                ['numero_actual' => 0, 'activo' => true, 'almacen_id' => $almacenId]
+            );
+        $serieDoc->increment('numero_actual');
+
+        return str_pad($serieDoc->numero_actual, 3, '0', STR_PAD_LEFT);
     }
 
     /**

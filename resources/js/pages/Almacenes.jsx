@@ -340,6 +340,17 @@ export default function Almacenes() {
             ),
         },
         {
+            key: 'numero_serie',
+            label: 'Serie',
+            width: '90px',
+            searchable: false,
+            render: (row) => (
+                <Badge variant="blue" title="Las proformas de este almacén salen con esta serie">
+                    PF{String(row.numero_serie ?? 1).padStart(2, '0')}
+                </Badge>
+            ),
+        },
+        {
             key: 'direccion',
             label: 'Dirección',
             getSearchValue: (row) => [row.direccion, row.distrito, row.provincia, row.departamento].filter(Boolean).join(' '),

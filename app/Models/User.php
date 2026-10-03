@@ -12,7 +12,7 @@ use Illuminate\Notifications\Notifiable;
 use Spatie\Permission\Traits\HasRoles;
 use Tymon\JWTAuth\Contracts\JWTSubject;
 
-#[Fillable(['name', 'dni', 'email', 'password', 'empresa_id', 'caja_id'])]
+#[Fillable(['name', 'dni', 'email', 'password', 'empresa_id', 'caja_id', 'almacen_id'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable implements JWTSubject
 {
@@ -51,6 +51,18 @@ class User extends Authenticatable implements JWTSubject
     public function caja()
     {
         return $this->belongsTo(Caja::class);
+    }
+
+    /** El almacén (sucursal) donde trabaja: solo ahí vende y opera. Super Admin no lleva uno. */
+    public function almacen()
+    {
+        return $this->belongsTo(Almacen::class);
+    }
+
+    /** ¿Opera en todos los almacenes sin restricción? */
+    public function esSuperAdmin(): bool
+    {
+        return $this->hasRole(config('permisos.super_admin'));
     }
 
     /** Permisos que se le concedieron a esta persona por encima de sus roles. */

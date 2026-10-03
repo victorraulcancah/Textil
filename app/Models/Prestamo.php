@@ -13,8 +13,16 @@ class Prestamo extends Model
     protected string $auditarModulo = 'Préstamo';
     protected $table = 'prestamos';
 
-    /** Serie del correlativo del documento de préstamo. */
+    /** Serie del correlativo del documento de préstamo cuando no se sabe el almacén. */
     public const SERIE = 'PR01';
+
+    /** La serie de los préstamos de un almacén: PR01, PR02… (cada sucursal numera aparte). */
+    public static function serieDeAlmacen(?int $almacenId): string
+    {
+        $numero = $almacenId ? Almacen::whereKey($almacenId)->value('numero_serie') : null;
+
+        return 'PR'.str_pad((string) ($numero ?: 1), 2, '0', STR_PAD_LEFT);
+    }
 
     protected $fillable = [
         'serie',

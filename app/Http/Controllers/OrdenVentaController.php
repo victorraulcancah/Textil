@@ -12,6 +12,7 @@ use App\Http\Resources\OrdenVentaResource;
 use App\Models\MotivoMovimiento;
 use App\Models\OrdenVenta;
 use App\Services\OrdenVentaService;
+use App\Support\AlmacenAcceso;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -90,7 +91,13 @@ class OrdenVentaController extends Controller
 
     public function store(StoreOrdenVentaRequest $request)
     {
-        $orden = $this->pedidos->crear($request->validated());
+        // El pedido es del almacén de quien lo toma: ahí se reserva y ahí se prepara.
+        $datos = $request->validated();
+        $datos['almacen_id'] = AlmacenAcceso::resolver($request->filled('almacen_id') ? (int) $request->input('almacen_id') : null);
+        if (! $datos['almacen_id']) {
+            return response()->json(['message' => 'Elige el almacén del pedido: de ahí sale la mercadería.', 'errors' => ['almacen_id' => ['Elige el almacén del pedido.']]], 422);
+        }
+        $orden = $this->pedidos->crear($datos);
 
         return (new OrdenVentaResource($orden->load(self::RELACIONES)))
             ->response()
@@ -99,6 +106,7 @@ class OrdenVentaController extends Controller
 
     public function update(UpdateOrdenVentaRequest $request, OrdenVenta $ordenesVenta)
     {
+        AlmacenAcceso::exigir($ordenesVenta->almacen_id);
         $orden = $this->pedidos->actualizar($ordenesVenta, $request->validated());
 
         return new OrdenVentaResource($orden->load(self::RELACIONES));
@@ -110,6 +118,7 @@ class OrdenVentaController extends Controller
      */
     public function solicitar(OrdenVenta $ordenesVenta)
     {
+        AlmacenAcceso::exigir($ordenesVenta->almacen_id);
         return new OrdenVentaResource(
             $this->pedidos->solicitar($ordenesVenta)->load(self::RELACIONES)
         );
@@ -118,6 +127,7 @@ class OrdenVentaController extends Controller
     /** Devuelve el pedido a borrador y libera los rollos. */
     public function devolver(OrdenVenta $ordenesVenta)
     {
+        AlmacenAcceso::exigir($ordenesVenta->almacen_id);
         return new OrdenVentaResource(
             $this->pedidos->devolverABorrador($ordenesVenta)->load(self::RELACIONES)
         );
@@ -129,6 +139,7 @@ class OrdenVentaController extends Controller
      */
     public function separar(OrdenVenta $ordenesVenta)
     {
+        AlmacenAcceso::exigir($ordenesVenta->almacen_id);
         return new OrdenVentaResource(
             $this->pedidos->marcarSeparado($ordenesVenta)->load(self::RELACIONES)
         );
@@ -142,6 +153,7 @@ class OrdenVentaController extends Controller
      */
     public function escanear(EscanearRolloRequest $request, OrdenVenta $ordenesVenta): JsonResponse
     {
+        AlmacenAcceso::exigir($ordenesVenta->almacen_id);
         return response()->json(
             $this->pedidos->escanear($ordenesVenta, $request->validated()['codigo'])
         );
@@ -159,6 +171,7 @@ class OrdenVentaController extends Controller
      */
     public function asignar(Request $request, OrdenVenta $ordenesVenta)
     {
+        AlmacenAcceso::exigir($ordenesVenta->almacen_id);
         $datos = $request->validate([
             'usuarios' => 'present|array',
             'usuarios.*' => 'integer|exists:users,id',
@@ -172,6 +185,7 @@ class OrdenVentaController extends Controller
     /** Los rollos salen del almacén. Exige haberlos escaneado todos. */
     public function despachar(OrdenVenta $ordenesVenta)
     {
+        AlmacenAcceso::exigir($ordenesVenta->almacen_id);
         return new OrdenVentaResource(
             $this->pedidos->despachar($ordenesVenta)->load(self::RELACIONES)
         );
@@ -180,6 +194,7 @@ class OrdenVentaController extends Controller
     /** Anula el pedido y devuelve los rollos al stock disponible. */
     public function anular(AnularOrdenVentaRequest $request, OrdenVenta $ordenesVenta)
     {
+        AlmacenAcceso::exigir($ordenesVenta->almacen_id);
         return new OrdenVentaResource(
             $this->pedidos->anular($ordenesVenta, $request->validated()['motivo'])->load(self::RELACIONES)
         );
@@ -220,6 +235,7 @@ class OrdenVentaController extends Controller
     /** Descuenta metros de un rollo del pedido, como ajuste de sistema con su motivo. */
     public function descontarMetraje(Request $request, OrdenVenta $ordenesVenta)
     {
+        AlmacenAcceso::exigir($ordenesVenta->almacen_id);
         $datos = $request->validate([
             'rollo_id' => 'required|integer',
             'metros' => 'required|numeric|min:0.01',
@@ -242,6 +258,7 @@ class OrdenVentaController extends Controller
     /** Quita un rollo que se asignó por error. */
     public function quitarRollo(Request $request, OrdenVenta $ordenesVenta)
     {
+        AlmacenAcceso::exigir($ordenesVenta->almacen_id);
         $rolloId = (int) $request->validate(['rollo_id' => 'required|integer'])['rollo_id'];
 
         return new OrdenVentaResource(
@@ -255,6 +272,7 @@ class OrdenVentaController extends Controller
      */
     public function facturar(FacturarPedidoRequest $request, OrdenVenta $ordenesVenta)
     {
+        AlmacenAcceso::exigir($ordenesVenta->almacen_id);
         $nota = $this->pedidos->facturar($ordenesVenta, $request->validated());
 
         return (new NotaVentaResource($nota))->response()->setStatusCode(201);

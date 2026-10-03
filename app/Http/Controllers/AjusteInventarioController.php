@@ -14,6 +14,7 @@ use App\Models\RolloMovimiento;
 use App\Models\SerieDocumento;
 use App\Services\RolloService;
 use App\Services\StockService;
+use App\Support\AlmacenAcceso;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -40,7 +41,8 @@ class AjusteInventarioController extends Controller
     public function index()
     {
         return response()->json(
-            AjusteInventario::with(self::RELACIONES)->withCount('detalles')->latest('id')->get()
+            // Cada sucursal ve sus ajustes (el Super Admin, todos).
+            AlmacenAcceso::limitar(AjusteInventario::with(self::RELACIONES)->withCount('detalles'))->latest('id')->get()
         );
     }
 
@@ -86,11 +88,14 @@ class AjusteInventarioController extends Controller
             }
         }
 
+        $data['almacen_id'] = AlmacenAcceso::resolver((int) $data['almacen_id']);
+
         try {
             $ajuste = DB::transaction(function () use ($data) {
+                $serie = AjusteInventario::serieDeAlmacen($data['almacen_id']);
                 $ajuste = AjusteInventario::create([
-                    'serie' => AjusteInventario::SERIE,
-                    'numero' => $this->siguienteNumero(),
+                    'serie' => $serie,
+                    'numero' => $this->siguienteNumero($serie, $data['almacen_id']),
                     'almacen_id' => $data['almacen_id'],
                     'proveedor_id' => $data['proveedor_id'] ?? null,
                     'tipo' => $data['tipo'],
@@ -258,6 +263,8 @@ class AjusteInventarioController extends Controller
 
     public function update(Request $request, AjusteInventario $ajuste)
     {
+        AlmacenAcceso::exigir($ajuste->almacen_id);
+
         // El ajuste ya movió stock al crearse, así que solo se editan los datos
         // descriptivos. Cambiar almacén, tipo o cantidades exigiría revertir y
         // volver a aplicar: para eso se elimina y se crea de nuevo.
@@ -326,14 +333,14 @@ class AjusteInventarioController extends Controller
     }
 
     /** Correlativo formal del ajuste, ej. AJ01-0001. */
-    private function siguienteNumero(): string
+    private function siguienteNumero(string $serie, ?int $almacenId = null): string
     {
         $serieDoc = SerieDocumento::where('tipo_documento', 'ajuste_inventario')
-            ->where('serie', AjusteInventario::SERIE)
+            ->where('serie', $serie)
             ->lockForUpdate()
             ->firstOrCreate(
-                ['tipo_documento' => 'ajuste_inventario', 'serie' => AjusteInventario::SERIE],
-                ['numero_actual' => 0, 'activo' => true]
+                ['tipo_documento' => 'ajuste_inventario', 'serie' => $serie],
+                ['numero_actual' => 0, 'activo' => true, 'almacen_id' => $almacenId]
             );
 
         $serieDoc->increment('numero_actual');
@@ -347,6 +354,8 @@ class AjusteInventarioController extends Controller
      */
     public function destroy(AjusteInventario $ajuste)
     {
+        AlmacenAcceso::exigir($ajuste->almacen_id);
+
         try {
             DB::transaction(function () use ($ajuste) {
                 $ajuste->load('detalles');

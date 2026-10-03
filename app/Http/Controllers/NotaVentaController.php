@@ -8,6 +8,7 @@ use App\Http\Requests\NotaVenta\StoreNotaVentaRequest;
 use App\Http\Resources\NotaVentaResource;
 use App\Models\NotaVenta;
 use App\Services\NotaVentaService;
+use App\Support\AlmacenAcceso;
 
 class NotaVentaController extends Controller
 {
@@ -33,7 +34,10 @@ class NotaVentaController extends Controller
     public function store(StoreNotaVentaRequest $request)
     {
         try {
-            $nota = $this->notaVentaService->crear($request->validated());
+            // Vende desde su almacén: ahí se numera (PF01, PF02…) y de ahí sale el stock.
+            $datos = $request->validated();
+            $datos['almacen_id'] = AlmacenAcceso::resolver((int) $datos['almacen_id']);
+            $nota = $this->notaVentaService->crear($datos);
         } catch (ExcesoCreditoException $e) {
             return $this->excesoDeCredito($e);
         } catch (\DomainException|\RuntimeException|\InvalidArgumentException $e) {
@@ -50,7 +54,10 @@ class NotaVentaController extends Controller
     public function update(StoreNotaVentaRequest $request, NotaVenta $notaVenta)
     {
         try {
-            $nota = $this->notaVentaService->actualizar($notaVenta, $request->validated());
+            AlmacenAcceso::exigir($notaVenta->almacen_id);
+            $datos = $request->validated();
+            $datos['almacen_id'] = AlmacenAcceso::resolver((int) $datos['almacen_id']);
+            $nota = $this->notaVentaService->actualizar($notaVenta, $datos);
         } catch (ExcesoCreditoException $e) {
             return $this->excesoDeCredito($e);
         } catch (\DomainException|\RuntimeException|\InvalidArgumentException $e) {
@@ -69,6 +76,8 @@ class NotaVentaController extends Controller
 
     public function anular(AnularNotaVentaRequest $request, NotaVenta $notaVenta)
     {
+        AlmacenAcceso::exigir($notaVenta->almacen_id);
+
         try {
             $nota = $this->notaVentaService->anular($notaVenta, $request->validated()['motivo_anulacion']);
             return new NotaVentaResource($nota);
@@ -88,6 +97,7 @@ class NotaVentaController extends Controller
 
     public function destroy(NotaVenta $notaVenta)
     {
+        AlmacenAcceso::exigir($notaVenta->almacen_id);
         $notaVenta->delete();
         return response()->json(['message' => 'Proforma eliminada correctamente']);
     }

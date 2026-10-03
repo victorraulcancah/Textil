@@ -10,6 +10,7 @@ import {
 import api from '../lib/api';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
+import FiltroAlmacen from '../components/FiltroAlmacen';
 import { Alert, Badge, Card, Spinner } from '../components/ui';
 import { colors, CAT_COLORS, tooltipStyle } from '../theme/colors';
 
@@ -69,6 +70,7 @@ const EmptyChart = ({ text = 'Sin datos en este periodo' }) => (
 
 export default function Dashboard() {
     const [dias, setDias] = useState(30);
+    const [almacenId, setAlmacenId] = useState('');
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -77,14 +79,14 @@ export default function Dashboard() {
         setLoading(true);
         setError(null);
         try {
-            const res = await api.get(`/dashboard?dias=${dias}`);
+            const res = await api.get(`/dashboard?dias=${dias}${almacenId ? `&almacen_id=${almacenId}` : ''}`);
             setData(res.data);
         } catch {
             setError('No se pudo cargar el dashboard.');
         } finally {
             setLoading(false);
         }
-    }, [dias]);
+    }, [dias, almacenId]);
 
     useEffect(() => {
         load();
@@ -114,6 +116,9 @@ export default function Dashboard() {
                         {r.label}
                     </button>
                 ))}
+                <span className="ml-auto">
+                    <FiltroAlmacen value={almacenId} onChange={setAlmacenId} />
+                </span>
             </div>
 
             {error && <Alert variant="error" className="mb-4">{error}</Alert>}

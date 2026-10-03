@@ -37,8 +37,8 @@ class AjusteRolloService
         $almacen = $rollo->almacen;
 
         $ajuste = AjusteInventario::create([
-            'serie' => AjusteInventario::SERIE,
-            'numero' => $this->siguienteNumero(),
+            'serie' => $serie = AjusteInventario::serieDeAlmacen($almacen->id),
+            'numero' => $this->siguienteNumero($serie, $almacen->id),
             'almacen_id' => $almacen->id,
             'tipo' => 'salida',
             'motivo' => $motivo,
@@ -89,14 +89,14 @@ class AjusteRolloService
         return round($promedioBase * $factor, 4);
     }
 
-    private function siguienteNumero(): string
+    private function siguienteNumero(string $serie, ?int $almacenId = null): string
     {
         $serieDoc = SerieDocumento::where('tipo_documento', 'ajuste_inventario')
-            ->where('serie', AjusteInventario::SERIE)
+            ->where('serie', $serie)
             ->lockForUpdate()
             ->firstOrCreate(
-                ['tipo_documento' => 'ajuste_inventario', 'serie' => AjusteInventario::SERIE],
-                ['numero_actual' => 0, 'activo' => true]
+                ['tipo_documento' => 'ajuste_inventario', 'serie' => $serie],
+                ['numero_actual' => 0, 'activo' => true, 'almacen_id' => $almacenId]
             );
 
         $serieDoc->increment('numero_actual');

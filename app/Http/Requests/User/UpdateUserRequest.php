@@ -25,6 +25,7 @@ class UpdateUserRequest extends FormRequest
             'password' => 'sometimes|string|min:6',
             'empresa_id' => 'nullable|exists:empresas,id',
             'caja_id' => 'nullable|exists:cajas,id',
+            'almacen_id' => 'nullable|exists:almacenes,id',
             'role' => 'sometimes|string|exists:roles,name',
             'roles' => 'sometimes|array|min:1',
             'roles.*' => 'string|exists:roles,name',

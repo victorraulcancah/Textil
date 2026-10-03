@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ChevronRight, Plus, Scale, Trash2 } from 'lucide-react';
 import api, { asList } from '../lib/api';
-import { opcionesAlmacen } from '../lib/almacenes';
+import { opcionesAlmacen, useAlmacenPropio } from '../lib/almacenes';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import ColorSelect from '../components/ColorSelect';
@@ -55,7 +55,8 @@ export default function CrearAjuste() {
     const [proveedores, setProveedores] = useState([]);
     const [motivos, setMotivos] = useState([]);
 
-    const [form, setForm] = useState(emptyForm);
+    const { propioId } = useAlmacenPropio();
+    const [form, setForm] = useState(() => ({ ...emptyForm, almacen_id: propioId ? String(propioId) : '' }));
     const [panel, setPanel] = useState({ ...panelVacio });
     const [items, setItems] = useState([]);
     const [errors, setErrors] = useState({});
@@ -894,7 +895,7 @@ export default function CrearAjuste() {
                             }}
                             placeholder="Seleccione un almacén"
                             emptyText="Sin coincidencias"
-                            options={opcionesAlmacen(almacenes, form.almacen_id)}
+                            options={opcionesAlmacen(almacenes, form.almacen_id, propioId)}
                             error={errors.almacen_id}
                         />
                         <Select

@@ -24,7 +24,7 @@ class AuthController extends Controller
     /** Datos del usuario y sus permisos, para la respuesta del login. */
     private function usuarioConPermisos(): array
     {
-        $user = auth('api')->user()->load('empresa', 'roles');
+        $user = auth('api')->user()->load('empresa', 'roles', 'almacen:id,nombre,numero_serie');
 
         return $user->toArray() + ['permisos' => $this->permisosDe($user)];
     }
@@ -41,7 +41,7 @@ class AuthController extends Controller
 
     public function me(): JsonResponse
     {
-        $user = auth('api')->user()->load('empresa', 'roles');
+        $user = auth('api')->user()->load('empresa', 'roles', 'almacen:id,nombre,numero_serie');
 
         return response()->json(
             $user->toArray() + ['permisos' => $this->permisosDe($user)],

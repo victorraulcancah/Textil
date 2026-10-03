@@ -98,11 +98,12 @@ class AlmacenController extends Controller
         // Lo pedido en rollos enteros no reserva metros: cuántos rollos de cada
         // color piden pedidos en curso y el almacén aún no asigna (de toda la
         // empresa: todavía no se sabe de qué almacén saldrán).
+        // Por almacén: cada pedido le pide a su almacén. Los pedidos antiguos, sin almacén, restan en todos.
         $porAsignar = \App\Models\OrdenVentaDetalle::porAsignar()
             ->whereNotNull('producto_color_id')
-            ->with(['presentacion:id,producto_id', 'rollos:id,orden_venta_detalle_id'])
+            ->with(['presentacion:id,producto_id', 'rollos:id,orden_venta_detalle_id', 'ordenVenta:id,almacen_id'])
             ->get()
-            ->groupBy(fn ($d) => $d->presentacion?->producto_id.'-'.$d->producto_color_id)
+            ->groupBy(fn ($d) => $d->presentacion?->producto_id.'-'.$d->producto_color_id.'-'.($d->ordenVenta?->almacen_id ?? 'x'))
             ->map(fn ($grupo) => $grupo->sum(fn ($d) => $d->rollosPendientes()));
 
         $filas->each(function ($fila) use ($porColor, $pendientes, $porAsignar) {
@@ -118,7 +119,8 @@ class AlmacenController extends Controller
                     'rollos_disponibles' => (int) $r->rollos_disponibles,
                     // De este color, lo que otros pedidos piden y aún no tiene rollo
                     // (el mismo número en cada almacén): a restar una sola vez.
-                    'rollos_por_asignar' => (int) ($porAsignar[$fila->producto_id.'-'.$r->producto_color_id] ?? 0),
+                    'rollos_por_asignar' => (int) (($porAsignar[$fila->producto_id.'-'.$r->producto_color_id.'-'.$fila->almacen_id] ?? 0)
+                        + ($porAsignar[$fila->producto_id.'-'.$r->producto_color_id.'-x'] ?? 0)),
                     'metros' => round((float) $r->metros, 2),
                     'metros_disponibles' => round(max(
                         0,

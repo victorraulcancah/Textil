@@ -7,6 +7,7 @@ use App\Models\CuentaPorPagar;
 use App\Models\MovimientoCaja;
 use App\Models\NotaVenta;
 use App\Models\ProductoAlmacenStock;
+use App\Support\AlmacenAcceso;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -24,8 +25,12 @@ class DashboardController extends Controller
         $desde = now()->subDays($dias - 1)->startOfDay();
         $rango = [$desde->toDateString(), $hasta->toDateString()];
 
+        // Cada sucursal ve lo suyo; el Super Admin, el consolidado o el almacén que elija.
+        $almacenId = AlmacenAcceso::paraReporte($request->integer('almacen_id'));
+
         // ---- Base de ventas emitidas en el rango ----
-        $ventas = NotaVenta::where('estado', 'emitida')->whereBetween('fecha_emision', $rango);
+        $ventas = NotaVenta::where('estado', 'emitida')->whereBetween('fecha_emision', $rango)
+            ->when($almacenId !== null, fn ($q) => $q->where('almacen_id', $almacenId));
 
         // Las ventas en dólares se suman en soles, con el tipo de cambio de su día.
         $enSoles = "CASE WHEN moneda = 'USD' THEN total * COALESCE(tipo_cambio, 1) ELSE total END";
@@ -55,6 +60,7 @@ class DashboardController extends Controller
             ->join('productos as p', 'p.id', '=', 'pp.producto_id')
             ->leftJoin(DB::raw('(SELECT producto_id, AVG(NULLIF(costo_promedio,0)) AS costo FROM producto_almacen_stock GROUP BY producto_id) as c'), 'c.producto_id', '=', 'p.id')
             ->where('nv.estado', 'emitida')
+            ->when($almacenId !== null, fn ($q) => $q->where('nv.almacen_id', $almacenId))
             ->whereBetween('nv.fecha_emision', $rango)
             ->groupBy('p.id', 'p.nombre')
             ->selectRaw("p.id, p.nombre,
@@ -82,6 +88,7 @@ class DashboardController extends Controller
             ->join('productos as p', 'p.id', '=', 'pp.producto_id')
             ->leftJoin('categorias as cat', 'cat.id', '=', 'p.categoria_id')
             ->where('nv.estado', 'emitida')
+            ->when($almacenId !== null, fn ($q) => $q->where('nv.almacen_id', $almacenId))
             ->whereBetween('nv.fecha_emision', $rango)
             ->groupBy('cat.id', 'cat.nombre')
             ->selectRaw("COALESCE(cat.nombre, 'Sin categoría') as categoria, SUM(d.subtotal * {$fx}) as total")
@@ -90,7 +97,11 @@ class DashboardController extends Controller
 
         // ---- Caja: ingresos vs egresos en el rango ----
         // En soles: los movimientos en dólares no se suman con ellos.
+        // De una sucursal: lo que movieron los cajeros de ese almacén.
         $caja = MovimientoCaja::whereBetween('fecha', $rango)
+            ->when($almacenId !== null, fn ($q) => $q->whereIn('apertura_caja_id', fn ($s) => $s
+                ->select('ap.id')->from('aperturas_caja as ap')
+                ->join('users as uc', 'uc.id', '=', 'ap.usuario_id')->where('uc.almacen_id', $almacenId)))
             ->where('moneda', 'PEN')
             ->selectRaw('tipo, SUM(monto) as total')
             ->groupBy('tipo')->get()
@@ -100,14 +111,19 @@ class DashboardController extends Controller
         // Lo que se debe en dólares, en soles al tipo de cambio de hoy.
         $tipoCambioHoy = (float) (app(\App\Services\TipoCambioService::class)->venta() ?? 1);
         $porCobrar = round((float) CuentaPorCobrar::whereIn('estado', ['pendiente', 'parcial'])
+            // De una sucursal: las deudas de sus ventas.
+            ->when($almacenId !== null, fn ($q) => $q->whereIn('nota_venta_id', fn ($s) => $s->select('id')->from('notas_venta')->where('almacen_id', $almacenId)))
             ->selectRaw("SUM(CASE WHEN moneda = 'USD' THEN saldo * ? ELSE saldo END) as saldo", [$tipoCambioHoy])
             ->value('saldo'), 2);
         $porPagar = round((float) CuentaPorPagar::whereIn('estado', ['pendiente', 'parcial'])->sum('saldo'), 2);
-        $capitalInmovilizado = round((float) ProductoAlmacenStock::selectRaw('SUM(stock_actual * costo_promedio) as v')->value('v'), 2);
+        $capitalInmovilizado = round((float) ProductoAlmacenStock::query()
+            ->when($almacenId !== null, fn ($q) => $q->where('almacen_id', $almacenId))
+            ->selectRaw('SUM(stock_actual * costo_promedio) as v')->value('v'), 2);
 
         // Stock actual agregado por producto (sumando almacenes)
         $stockPorProducto = DB::table('producto_almacen_stock as s')
             ->join('productos as p', 'p.id', '=', 's.producto_id')
+            ->when($almacenId !== null, fn ($q) => $q->where('s.almacen_id', $almacenId))
             ->groupBy('p.id', 'p.nombre')
             ->selectRaw('p.id, p.nombre, SUM(s.stock_actual) as stock, MAX(s.stock_minimo) as minimo')
             ->get();
@@ -160,6 +176,7 @@ class DashboardController extends Controller
 
         return response()->json([
             'rango' => ['desde' => $rango[0], 'hasta' => $rango[1], 'dias' => $dias],
+            'almacen_id' => $almacenId,
             'kpis' => [
                 'ventas_total' => round($ventasTotal, 2),
                 'num_ventas' => $numVentas,

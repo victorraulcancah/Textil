@@ -62,6 +62,8 @@ class OrdenVentaService
             $orden = OrdenVenta::create($this->cabecera($data) + [
                 'serie' => $data['serie'] ?? 'OV',
                 'numero' => $this->siguienteNumero('orden_venta', $data['serie'] ?? 'OV'),
+                // La sucursal que toma el pedido: de ahí sale la mercadería.
+                'almacen_id' => $data['almacen_id'] ?? null,
                 'estado' => OrdenVenta::BORRADOR,
             ]);
 
@@ -138,7 +140,6 @@ class OrdenVentaService
                 'fecha_separacion' => null,
                 'fecha_preparacion' => null,
                 'usuario_prepara_id' => null,
-                'almacen_id' => null,
             ]);
 
             return $this->conRelaciones($orden->fresh());
@@ -274,7 +275,7 @@ class OrdenVentaService
         }
 
         // Con el pedido ya en preparación, todos los rollos salen del mismo almacén.
-        if ($orden->estado === OrdenVenta::PREPARANDO && $orden->almacen_id && $orden->almacen_id !== $rollo->almacen_id) {
+        if ($orden->almacen_id && (int) $orden->almacen_id !== (int) $rollo->almacen_id) {
             throw new \DomainException(
                 "El rollo {$codigo} está en otro almacén: este pedido se está preparando desde {$orden->almacen?->nombre}."
             );
@@ -574,7 +575,7 @@ class OrdenVentaService
             $total = round(collect($detalles)->sum('subtotal'), 2);
 
             $nota = $this->notasVenta->crear([
-                'serie' => $datos['serie'] ?? \App\Models\NotaVenta::SERIE,
+                'serie' => $datos['serie'] ?? \App\Models\NotaVenta::serieDeAlmacen($orden->almacen_id),
                 'orden_venta_id' => $orden->id,
                 'cliente_id' => $orden->cliente_id,
                 'almacen_id' => $orden->almacen_id,
@@ -792,6 +793,7 @@ class OrdenVentaService
 
             $stock = ProductoAlmacenStock::with('almacen')
                 ->where('producto_id', $presentacion->producto_id)
+                ->when($orden->almacen_id, fn ($q) => $q->where('almacen_id', $orden->almacen_id))
                 ->orderByDesc('stock_disponible')
                 ->first();
 
@@ -818,10 +820,12 @@ class OrdenVentaService
      * Los rollos que se pueden prometer de una tela (y color): los disponibles
      * menos los que otros pedidos ya pidieron y el almacén aún no asigna.
      */
-    public function rollosLibres(int $productoId, ?int $colorId, ?int $excluirOrdenId = null): int
+    public function rollosLibres(int $productoId, ?int $colorId, ?int $excluirOrdenId = null, ?int $almacenId = null): int
     {
         $disponibles = Rollo::where('producto_id', $productoId)
             ->when($colorId, fn ($q) => $q->where('producto_color_id', $colorId))
+            // Un pedido es de un almacén: solo cuentan sus rollos.
+            ->when($almacenId, fn ($q) => $q->where('almacen_id', $almacenId))
             ->where('estado', Rollo::DISPONIBLE)
             ->where('metros_actual', '>', 0)
             ->count();
@@ -830,6 +834,8 @@ class OrdenVentaService
             ->whereHas('presentacion', fn ($q) => $q->where('producto_id', $productoId))
             ->when($colorId, fn ($q) => $q->where('producto_color_id', $colorId))
             ->when($excluirOrdenId, fn ($q) => $q->where('orden_venta_id', '!=', $excluirOrdenId))
+            // Y los pedidos que ya le piden rollos a ese mismo almacén.
+            ->when($almacenId, fn ($q) => $q->whereHas('ordenVenta', fn ($o) => $o->where(fn ($w) => $w->where('almacen_id', $almacenId)->orWhereNull('almacen_id'))))
             ->with('rollos')
             ->get()
             ->sum(fn ($d) => $d->rollosPendientes());
@@ -844,6 +850,7 @@ class OrdenVentaService
             (int) $linea->presentacion->producto_id,
             $linea->producto_color_id ? (int) $linea->producto_color_id : null,
             $orden->id,
+            $orden->almacen_id ? (int) $orden->almacen_id : null,
         );
 
         // Los que ya escaneó el almacén (un pedido que vuelve de preparación) cuentan.

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Edit, HandCoins, Handshake, Plus, Printer, Trash2, Undo2 } from 'lucide-react';
 import api, { asList } from '../lib/api';
-import { opcionesAlmacen } from '../lib/almacenes';
+import { opcionesAlmacen, useAlmacenPropio } from '../lib/almacenes';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
@@ -39,6 +39,7 @@ const fecha = (f) => (f ? new Date(String(f).length === 10 ? `${f}T00:00:00` : f
 const vencido = (row) => row.estado !== 'devuelto' && row.fecha_devolucion_esperada && String(row.fecha_devolucion_esperada).slice(0, 10) < hoy();
 
 export default function Prestamos() {
+    const { propioId } = useAlmacenPropio();
     const toast = useToast();
     const [tab, setTab] = useState('prestado');
 
@@ -201,7 +202,7 @@ export default function Prestamos() {
     // ── Crear / editar ──
     const openCreate = () => {
         setEditing(null);
-        setForm({ ...emptyForm, tipo: tab, fecha_prestamo: hoy() });
+        setForm({ ...emptyForm, tipo: tab, fecha_prestamo: hoy(), almacen_id: propioId ? String(propioId) : '' });
         setPanel({ ...panelVacio });
         setItems([]);
         setFormErrors({});
@@ -616,7 +617,7 @@ export default function Prestamos() {
                             <SearchSelect label="Almacén" value={form.almacen_id} disabled={Boolean(editing)}
                                 onChange={(v) => { setField('almacen_id', v ?? ''); setItems([]); setPanel({ ...panelVacio }); }}
                                 placeholder="Selecciona…" emptyText="Sin coincidencias"
-                                options={opcionesAlmacen(almacenes, form.almacen_id)}
+                                options={opcionesAlmacen(almacenes, form.almacen_id, propioId)}
                                 error={formErrors.almacen_id} />
                             <Input label="Fecha del préstamo" type="date" value={form.fecha_prestamo} disabled={Boolean(editing)}
                                 onChange={(e) => setField('fecha_prestamo', e.target.value)} error={formErrors.fecha_prestamo} />

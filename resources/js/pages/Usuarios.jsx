@@ -10,6 +10,7 @@ export default function Usuarios() {
     const [users, setUsers] = useState([]);
     const [roles, setRoles] = useState([]);
     const [empresas, setEmpresas] = useState([]);
+    const [almacenes, setAlmacenes] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
@@ -22,6 +23,7 @@ export default function Usuarios() {
         password: '',
         role: '',
         empresa_id: '',
+        almacen_id: '',
     });
     const [errors, setErrors] = useState({});
     const [saving, setSaving] = useState(false);
@@ -36,14 +38,16 @@ export default function Usuarios() {
         setLoading(true);
         setError(null);
         try {
-            const [usersRes, rolesRes, empresasRes] = await Promise.all([
+            const [usersRes, rolesRes, empresasRes, almacenesRes] = await Promise.all([
                 api.get('/users'),
                 api.get('/roles'),
                 api.get('/empresas'),
+                api.get('/almacenes'),
             ]);
             setUsers(usersRes.data);
             setRoles(rolesRes.data);
             setEmpresas(empresasRes.data);
+            setAlmacenes(almacenesRes.data?.data ?? almacenesRes.data);
         } catch {
             setError('No se pudieron cargar los datos.');
         } finally {
@@ -57,7 +61,7 @@ export default function Usuarios() {
 
     const openCreate = () => {
         setEditing(null);
-        setForm({ name: '', dni: '', email: '', password: '', role: '', empresa_id: '' });
+        setForm({ name: '', dni: '', email: '', password: '', role: '', empresa_id: '', almacen_id: '' });
         setErrors({});
         setModalOpen(true);
     };
@@ -71,6 +75,7 @@ export default function Usuarios() {
             password: '',
             role: user.roles?.[0]?.name ?? '',
             empresa_id: user.empresa_id ?? '',
+            almacen_id: user.almacen_id ? String(user.almacen_id) : '',
         });
         setErrors({});
         setModalOpen(true);
@@ -87,6 +92,8 @@ export default function Usuarios() {
             email: form.email,
             role: form.role || undefined,
             empresa_id: form.empresa_id || undefined,
+            // Sin almacén queda libre (solo el Super Admin lo necesita así).
+            almacen_id: form.almacen_id || null,
         };
         if (form.password) payload.password = form.password;
 
@@ -197,6 +204,17 @@ export default function Usuarios() {
             key: 'caja',
             label: 'Caja',
             render: (row) => row.caja?.nombre ?? '—',
+        },
+        {
+            key: 'almacen',
+            label: 'Almacén',
+            getSearchValue: (row) => row.almacen?.nombre,
+            render: (row) =>
+                row.almacen ? (
+                    <Badge variant="blue">{row.almacen.nombre}</Badge>
+                ) : (
+                    <span className="text-warm-400" title="Sin almacén asignado: solo el Super Admin opera sin uno">—</span>
+                ),
         },
         {
             type: 'actions',
@@ -328,6 +346,20 @@ export default function Usuarios() {
                         }))}
                         error={errors.empresa_id}
                     />
+                    <SearchSelect
+                        label="Almacén (sucursal)"
+                        value={form.almacen_id}
+                        onChange={(v) => setForm((prev) => ({ ...prev, almacen_id: v ?? '' }))}
+                        placeholder="Sin almacén"
+                        emptyText="Sin coincidencias"
+                        options={almacenes
+                            .filter((a) => a.activo !== false)
+                            .map((a) => ({ value: String(a.id), label: a.nombre }))}
+                        error={errors.almacen_id}
+                    />
+                    <p className="-mt-2 text-xs text-warm-500">
+                        Solo vende y opera en este almacén; los demás los puede ver. El Super Admin no necesita uno.
+                    </p>
                 </form>
             </Modal>
 

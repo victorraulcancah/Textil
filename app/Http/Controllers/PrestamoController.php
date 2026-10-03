@@ -8,6 +8,7 @@ use App\Models\PrestamoDevolucion;
 use App\Models\ProductoPresentacion;
 use App\Models\SerieDocumento;
 use App\Services\StockService;
+use App\Support\AlmacenAcceso;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -24,7 +25,8 @@ class PrestamoController extends Controller
 
     public function index()
     {
-        $prestamos = Prestamo::with(self::WITH)->latest()->get()
+        // Separado por completo: cada sucursal ve sus préstamos (el Super Admin, todos).
+        $prestamos = AlmacenAcceso::limitar(Prestamo::with(self::WITH))->latest()->get()
             ->map(fn (Prestamo $p) => $this->conSaldos($p));
 
         return response()->json($prestamos);
@@ -46,16 +48,18 @@ class PrestamoController extends Controller
             'detalles.*.cantidad_prestada' => 'required|numeric|min:0.01',
         ]);
 
+        $data['almacen_id'] = AlmacenAcceso::resolver((int) $data['almacen_id']);
         $data['fecha_prestamo'] = $data['fecha_prestamo'] ?? now();
         $data['estado'] = 'prestado';
         $data['usuario_id'] = auth()->id();
 
         try {
             $prestamo = DB::transaction(function () use ($data) {
+                $serie = Prestamo::serieDeAlmacen($data['almacen_id']);
                 $prestamo = Prestamo::create([
                     ...$data,
-                    'serie' => Prestamo::SERIE,
-                    'numero' => $this->siguienteNumero(),
+                    'serie' => $serie,
+                    'numero' => $this->siguienteNumero($serie, $data['almacen_id']),
                 ]);
                 $almacen = Almacen::findOrFail($data['almacen_id']);
                 $stock = app(StockService::class);
@@ -90,6 +94,8 @@ class PrestamoController extends Controller
 
     public function update(Request $request, Prestamo $prestamo)
     {
+        AlmacenAcceso::exigir($prestamo->almacen_id);
+
         // Mientras no haya devoluciones se pueden corregir los datos del
         // tercero; después solo la fecha esperada y las observaciones.
         $reglas = [
@@ -114,6 +120,8 @@ class PrestamoController extends Controller
      */
     public function destroy(Prestamo $prestamo)
     {
+        AlmacenAcceso::exigir($prestamo->almacen_id);
+
         try {
             DB::transaction(function () use ($prestamo) {
                 $almacen = $prestamo->almacen()->firstOrFail();
@@ -145,6 +153,8 @@ class PrestamoController extends Controller
      */
     public function devolucion(Request $request, Prestamo $prestamo)
     {
+        AlmacenAcceso::exigir($prestamo->almacen_id);
+
         if ($request->has('items')) {
             $data = $request->validate([
                 'items' => 'required|array|min:1',
@@ -211,14 +221,14 @@ class PrestamoController extends Controller
     }
 
     /** Correlativo formal del préstamo, ej. PR01-0012. */
-    private function siguienteNumero(): string
+    private function siguienteNumero(string $serie, ?int $almacenId = null): string
     {
         $serieDoc = SerieDocumento::where('tipo_documento', 'prestamo')
-            ->where('serie', Prestamo::SERIE)
+            ->where('serie', $serie)
             ->lockForUpdate()
             ->firstOrCreate(
-                ['tipo_documento' => 'prestamo', 'serie' => Prestamo::SERIE],
-                ['numero_actual' => 0, 'activo' => true]
+                ['tipo_documento' => 'prestamo', 'serie' => $serie],
+                ['numero_actual' => 0, 'activo' => true, 'almacen_id' => $almacenId]
             );
         $serieDoc->increment('numero_actual');
 

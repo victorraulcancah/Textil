@@ -13,8 +13,16 @@ class AjusteInventario extends Model
     protected string $auditarModulo = 'Ajuste de inventario';
     protected $table = 'ajustes_inventario';
 
-    /** Serie del correlativo formal de ajustes. */
+    /** Serie del correlativo formal de ajustes cuando no se sabe el almacén. */
     public const SERIE = 'AJ01';
+
+    /** La serie de los ajustes de un almacén: AJ01, AJ02… (cada sucursal numera aparte). */
+    public static function serieDeAlmacen(?int $almacenId): string
+    {
+        $numero = $almacenId ? Almacen::whereKey($almacenId)->value('numero_serie') : null;
+
+        return 'AJ'.str_pad((string) ($numero ?: 1), 2, '0', STR_PAD_LEFT);
+    }
 
     protected $fillable = [
         'serie',

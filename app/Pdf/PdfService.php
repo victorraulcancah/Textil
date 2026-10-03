@@ -64,6 +64,8 @@ class PdfService
         match ($formato) {
             'ticket' => $pdf->setPaper($this->papelTicket())->setOption('dpi', 96),
             'etiqueta' => $pdf->setPaper($this->papelEtiqueta())->setOption('dpi', 96),
+            // A4 horizontal: los reportes con muchas columnas.
+            'a4h' => $pdf->setPaper('a4', 'landscape'),
             default => $pdf->setPaper('a4'),
         };
 

@@ -177,6 +177,11 @@ Route::middleware('auth:api')->group(function () {
     // Rollos: la unidad individual de inventario
     Route::get('rollos', [RolloController::class, 'index']);
     Route::get('rollos/resumen', [RolloController::class, 'resumen']);
+    // El reporte dinámico de stock de rollos: opciones de los filtros, datos, Excel y PDF.
+    Route::get('rollos/reporte/opciones', [\App\Http\Controllers\RolloReporteController::class, 'opciones']);
+    Route::get('rollos/reporte/excel', [\App\Http\Controllers\RolloReporteController::class, 'excel']);
+    Route::get('rollos/reporte/pdf', [\App\Http\Controllers\RolloReporteController::class, 'pdf']);
+    Route::get('rollos/reporte', [\App\Http\Controllers\RolloReporteController::class, 'datos']);
     Route::get('rollos/etiquetas', [RolloController::class, 'etiquetas']);
     // Antes que {rollo} para que "codigo" no se confunda con un id.
     Route::get('rollos/codigo/{codigo}', [RolloController::class, 'porCodigo']);

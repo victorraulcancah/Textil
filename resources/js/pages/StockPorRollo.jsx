@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
     ChevronRight,
+    FileSpreadsheet,
     Layers,
     MapPin,
     Package,
@@ -51,6 +53,7 @@ const ESTADOS = [
  */
 export default function StockPorRollo() {
     const toast = useToast();
+    const navigate = useNavigate();
 
     const [resumen, setResumen] = useState([]);
     const [almacenes, setAlmacenes] = useState([]);
@@ -407,6 +410,12 @@ export default function StockPorRollo() {
             <PageHeader
                 title="Stock por rollo"
                 description="Cada rollo con su metraje, su estado y dónde está"
+                actions={
+                    <Button variant="secondary" onClick={() => navigate('/stock-rollos/reporte')}>
+                        <FileSpreadsheet className="h-4 w-4" />
+                        Reporte
+                    </Button>
+                }
             />
 
             {error && <Alert variant="error" className="mb-4">{error}</Alert>}

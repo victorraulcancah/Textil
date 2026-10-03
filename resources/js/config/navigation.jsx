@@ -102,6 +102,8 @@ export const navigation = [
             { label: 'Preparación y despacho', icon: ScanLine, to: '/despacho', permiso: 'inventario.despacho' },
             { label: 'Kardex', icon: ArrowLeftRight, to: '/kardex', permiso: 'inventario.kardex' },
             { label: 'Traslados', icon: Repeat, to: '/transferencias', permiso: 'inventario.transferencias' },
+            { label: 'Requerimientos', icon: ClipboardList, to: '/requerimientos', permiso: 'inventario.transferencias' },
+            { label: 'Atender requerimientos', icon: PackageCheck, to: '/requerimientos/atender', permiso: 'inventario.despacho' },
             { label: 'Ajustes', icon: Scale, to: '/ajustes', permiso: 'inventario.ajustes' },
             { label: 'Tomas de inventario', icon: ClipboardCheck, to: '/tomas-inventario', permiso: 'inventario.tomas-inventario' },
             { label: 'Préstamos', icon: Handshake, to: '/prestamos', permiso: 'inventario.prestamos' },

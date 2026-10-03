@@ -1,15 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { FileText, PackageCheck, Plus, Trash2, X } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { FileText, PackageCheck, Plus, X } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
-import { opcionesAlmacen, useAlmacenPropio } from '../lib/almacenes';
-import { tipoUnidad } from '../lib/unidades';
+import { useAlmacenPropio } from '../lib/almacenes';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
-import ColorSelect from '../components/ColorSelect';
 import PdfViewerModal from '../components/PdfViewerModal';
-import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect } from '../components/ui';
+import { Alert, Badge, Button, DataTable, Modal } from '../components/ui';
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
 
@@ -35,7 +34,6 @@ export const pedidoTexto = (d) => {
 
 const fechaHora = (v) => (v ? new Date(v).toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' }) : '—');
 
-const lineaVacia = { producto_id: '', producto_presentacion_id: '', producto_color_id: '', modo: 'rollos', rollos: '', metros_por_rollo: '', metros: '', cantidad: '' };
 
 /**
  * Requerimientos de traslado: lo que MI almacén le pide a otro. El almacén pedido lo atiende (escanea, separa,
@@ -43,6 +41,7 @@ const lineaVacia = { producto_id: '', producto_presentacion_id: '', producto_col
  */
 export default function Requerimientos() {
     const toast = useToast();
+    const navigate = useNavigate();
     const { puede } = useAuth();
     const { propioId, superAdmin } = useAlmacenPropio();
 
@@ -50,7 +49,6 @@ export default function Requerimientos() {
     const [loading, setLoading] = useState(true);
     const [detalle, setDetalle] = useState(null);
     const [pdf, setPdf] = useState(null);
-    const [nuevo, setNuevo] = useState(false);
 
     const cargar = useCallback(async () => {
         setLoading(true);
@@ -161,7 +159,7 @@ export default function Requerimientos() {
                 description="Pídele mercadería a otro almacén: ellos escanean, separan y despachan; tú la recibes aquí"
                 actions={
                     puede('inventario.transferencias.crear') && (
-                        <Button onClick={() => setNuevo(true)}>
+                        <Button onClick={() => navigate('/requerimientos/nuevo')}>
                             <Plus className="h-4 w-4" /> Nuevo requerimiento
                         </Button>
                     )
@@ -182,16 +180,6 @@ export default function Requerimientos() {
             />
 
             <DetalleModal r={detalle} onClose={() => setDetalle(null)} />
-
-            <NuevoModal
-                open={nuevo}
-                onClose={() => setNuevo(false)}
-                onCreado={(r) => {
-                    setNuevo(false);
-                    toast.success(`Requerimiento ${r.requerimiento} enviado a ${r.origen?.nombre}.`);
-                    cargar();
-                }}
-            />
 
             <PdfViewerModal
                 open={Boolean(pdf)}
@@ -247,193 +235,6 @@ export function DetalleModal({ r, onClose }) {
                     </table>
                 </div>
             )}
-        </Modal>
-    );
-}
-
-function NuevoModal({ open, onClose, onCreado }) {
-    const toast = useToast();
-    const { propioId, superAdmin } = useAlmacenPropio();
-    const [almacenes, setAlmacenes] = useState([]);
-    const [productos, setProductos] = useState([]);
-    const [origen, setOrigen] = useState('');
-    const [pide, setPide] = useState('');
-    const [observaciones, setObservaciones] = useState('');
-    const [lineas, setLineas] = useState([]);
-    const [panel, setPanel] = useState(lineaVacia);
-    const [guardando, setGuardando] = useState(false);
-
-    useEffect(() => {
-        if (!open) return;
-        setOrigen('');
-        setPide('');
-        setObservaciones('');
-        setLineas([]);
-        setPanel(lineaVacia);
-        (async () => {
-            try {
-                const [a, p] = await Promise.all([api.get('/almacenes'), api.get('/productos', { params: { per_page: 500 } })]);
-                setAlmacenes(asList(a));
-                setProductos(asList(p));
-            } catch {
-                toast.error('No se pudieron cargar los almacenes y productos.');
-            }
-        })();
-    }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
-
-    const pideId = superAdmin ? pide : String(propioId ?? '');
-    const producto = useMemo(() => productos.find((p) => String(p.id) === String(panel.producto_id)) ?? null, [productos, panel.producto_id]);
-    const presentaciones = (producto?.presentaciones ?? []).filter((p) => p.activo !== false);
-    const metro = presentaciones.find((p) => tipoUnidad(p) === 'metro') ?? null;
-    const esTela = Boolean(metro);
-
-    const elegirProducto = (id) => {
-        const pr = productos.find((p) => String(p.id) === String(id));
-        const pres = (pr?.presentaciones ?? []).filter((p) => p.activo !== false);
-        const tela = pres.some((p) => tipoUnidad(p) === 'metro');
-        setPanel({
-            ...lineaVacia,
-            producto_id: id,
-            modo: tela ? 'rollos' : 'cantidad',
-            producto_presentacion_id: !tela && pres.length === 1 ? String(pres[0].id) : '',
-        });
-    };
-
-    const agregar = () => {
-        if (!producto) return toast.error('Elige un producto.');
-        const color = (producto.colores ?? []).find((c) => String(c.id) === String(panel.producto_color_id));
-        let l;
-        if (esTela) {
-            if (panel.modo === 'rollos') {
-                if (!(Number(panel.rollos) >= 1)) return toast.error('Indica cuántos rollos.');
-                l = { modo: 'rollos', rollos_pedidos: Number(panel.rollos), metros_por_rollo: Number(panel.metros_por_rollo) > 0 ? Number(panel.metros_por_rollo) : null };
-            } else {
-                if (!(Number(panel.metros) > 0)) return toast.error('Indica cuántos metros.');
-                l = { modo: 'metros', metros_pedidos: Number(panel.metros) };
-            }
-            l.producto_presentacion_id = metro.id;
-        } else {
-            if (!panel.producto_presentacion_id) return toast.error('Elige la unidad.');
-            if (!(Number(panel.cantidad) > 0)) return toast.error('Indica la cantidad.');
-            l = { modo: 'cantidad', cantidad: Number(panel.cantidad), producto_presentacion_id: Number(panel.producto_presentacion_id) };
-        }
-        l.producto_color_id = panel.producto_color_id ? Number(panel.producto_color_id) : null;
-        l.nombre = `${producto.nombre}${color ? ` · ${color.nombre}` : ''}`;
-        l.unidad = presentaciones.find((p) => String(p.id) === String(l.producto_presentacion_id))?.nombre;
-        setLineas((prev) => [...prev, l]);
-        setPanel(lineaVacia);
-    };
-
-    const guardar = async () => {
-        if (!origen) return toast.error('Elige a qué almacén se lo pides.');
-        if (superAdmin && !pide) return toast.error('Elige el almacén que pide.');
-        if (lineas.length === 0) return toast.error('Agrega al menos un producto.');
-        setGuardando(true);
-        try {
-            const { data } = await api.post('/transferencias/requerimientos', {
-                almacen_origen_id: Number(origen),
-                almacen_destino_id: superAdmin ? Number(pide) : undefined,
-                observaciones: observaciones || undefined,
-                detalles: lineas.map(({ nombre, unidad, ...l }) => l),
-            });
-            onCreado(data);
-        } catch (err) {
-            const e = err.response?.data;
-            toast.error(e?.message ?? Object.values(e?.errors ?? {})?.[0]?.[0] ?? 'No se pudo crear el requerimiento.');
-        } finally {
-            setGuardando(false);
-        }
-    };
-
-    const opcionesOrigen = opcionesAlmacen(almacenes).filter((o) => o.value !== String(pideId));
-
-    return (
-        <Modal
-            open={open}
-            onClose={onClose}
-            size="3xl"
-            title="Nuevo requerimiento de traslado"
-            description="El número lo da el almacén al que le pides (RQ002-… si es el almacén 2)"
-            footer={
-                <>
-                    <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-                    <Button loading={guardando} onClick={guardar}>Enviar requerimiento</Button>
-                </>
-            }
-        >
-            <div className="space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                    {superAdmin && (
-                        <SearchSelect label="Almacén que pide" value={pide} onChange={(v) => setPide(v ?? '')} options={opcionesAlmacen(almacenes)} placeholder="Elegir…" />
-                    )}
-                    <SearchSelect label="Se lo pides al almacén" value={origen} onChange={(v) => setOrigen(v ?? '')} options={opcionesOrigen} placeholder="Elegir…" />
-                    <Input label="Observaciones" value={observaciones} onChange={(e) => setObservaciones(e.target.value)} placeholder="Opcional" />
-                </div>
-
-                <div className="space-y-3 rounded-lg border border-edge p-3">
-                    <SearchSelect
-                        label="Producto"
-                        placeholder="Nombre o código…"
-                        value={panel.producto_id}
-                        onChange={(v) => elegirProducto(v ?? '')}
-                        options={productos.map((p) => ({ value: String(p.id), label: p.nombre, keywords: p.codigo }))}
-                    />
-                    {producto?.colores?.length > 0 && (
-                        <ColorSelect colores={producto.colores} value={panel.producto_color_id} onChange={(id) => setPanel((p) => ({ ...p, producto_color_id: id }))} />
-                    )}
-                    {producto && esTela && (
-                        <div className="flex flex-wrap items-end gap-3">
-                            <div className="flex overflow-hidden rounded-md border border-edge text-sm">
-                                {[['rollos', 'Por rollos'], ['metros', 'Por metros']].map(([k, t]) => (
-                                    <button
-                                        key={k}
-                                        type="button"
-                                        onClick={() => setPanel((p) => ({ ...p, modo: k }))}
-                                        className={`px-3 py-2 transition ${panel.modo === k ? 'bg-primary-600 font-medium text-white' : 'bg-white text-warm-600 hover:bg-gray-50'}`}
-                                    >
-                                        {t}
-                                    </button>
-                                ))}
-                            </div>
-                            {panel.modo === 'rollos' ? (
-                                <>
-                                    <div className="w-32"><Input label="Rollos" type="number" min="1" step="1" value={panel.rollos} onChange={(e) => setPanel((p) => ({ ...p, rollos: e.target.value }))} className="text-right" /></div>
-                                    <div className="w-44"><Input label="Metros por rollo" type="number" min="0" step="0.01" placeholder="Opcional" value={panel.metros_por_rollo} onChange={(e) => setPanel((p) => ({ ...p, metros_por_rollo: e.target.value }))} className="text-right" /></div>
-                                </>
-                            ) : (
-                                <div className="w-40"><Input label="Metros" type="number" min="0" step="0.01" value={panel.metros} onChange={(e) => setPanel((p) => ({ ...p, metros: e.target.value }))} className="text-right" /></div>
-                            )}
-                        </div>
-                    )}
-                    {producto && !esTela && (
-                        <div className="grid gap-3 sm:grid-cols-2">
-                            <SearchSelect label="Unidad" value={panel.producto_presentacion_id} clearable={false} onChange={(v) => v && setPanel((p) => ({ ...p, producto_presentacion_id: v }))} options={presentaciones.map((p) => ({ value: String(p.id), label: p.nombre }))} placeholder="Elegir…" />
-                            <Input label="Cantidad" type="number" min="0" step="0.01" value={panel.cantidad} onChange={(e) => setPanel((p) => ({ ...p, cantidad: e.target.value }))} className="text-right" />
-                        </div>
-                    )}
-                    {producto && esTela && panel.modo === 'rollos' && (
-                        <p className="text-xs text-warm-500">Con "metros por rollo", el almacén corta la tela de un rollo más grande si no tiene uno de ese largo.</p>
-                    )}
-                    <div className="flex justify-end">
-                        <Button size="sm" variant="secondary" onClick={agregar} disabled={!producto}>
-                            <Plus className="h-4 w-4" /> Agregar
-                        </Button>
-                    </div>
-                </div>
-
-                {lineas.length > 0 && (
-                    <ul className="divide-y divide-edge rounded-lg border border-edge text-sm">
-                        {lineas.map((l, i) => (
-                            <li key={i} className="flex items-center justify-between gap-3 px-3 py-2">
-                                <span className="min-w-0 truncate"><strong>{l.nombre}</strong> · {pedidoTexto({ ...l, presentacion: l.unidad })}</span>
-                                <button type="button" aria-label="Quitar" onClick={() => setLineas((prev) => prev.filter((_, j) => j !== i))} className="rounded p-1 text-red-600 hover:bg-red-50">
-                                    <Trash2 className="h-4 w-4" />
-                                </button>
-                            </li>
-                        ))}
-                    </ul>
-                )}
-            </div>
         </Modal>
     );
 }

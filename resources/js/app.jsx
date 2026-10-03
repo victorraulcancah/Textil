@@ -42,6 +42,9 @@ import NotasVenta from './pages/NotasVenta';
 import Pedidos from './pages/Pedidos';
 import CrearPedido from './pages/CrearPedido';
 import Despacho from './pages/Despacho';
+import Requerimientos from './pages/Requerimientos';
+import AtenderRequerimientos from './pages/AtenderRequerimientos';
+import CrearRequerimiento from './pages/CrearRequerimiento';
 import CrearVenta from './pages/CrearVenta';
 import MetodosDePago from './pages/MetodosDePago';
 import MiCaja from './pages/MiCaja';
@@ -118,6 +121,9 @@ const routes = [
     { path: '/pedidos/nuevo', element: <CrearPedido /> },
     { path: '/pedidos/:id/editar', element: <CrearPedido /> },
     { path: '/despacho', element: <Despacho /> },
+    { path: '/requerimientos', element: <Requerimientos /> },
+    { path: '/requerimientos/atender', element: <AtenderRequerimientos /> },
+    { path: '/requerimientos/nuevo', element: <CrearRequerimiento /> },
     { path: '/notas-venta', element: <NotasVenta /> },
     { path: '/notas-venta/nueva', element: <CrearVenta /> },
     { path: '/notas-venta/:id/editar', element: <CrearVenta /> },

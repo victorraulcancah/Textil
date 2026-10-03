@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
+import { useAlmacenPropio } from '../lib/almacenes';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
@@ -70,7 +71,10 @@ export default function StockPorRollo() {
     const [rollos, setRollos] = useState([]);
     const [cargandoRollos, setCargandoRollos] = useState(false);
 
-    const [almacenId, setAlmacenId] = useState('');
+    const { propioId } = useAlmacenPropio();
+    /** Arranca en el almacén en el que se trabaja; "todos" muestra el consolidado. */
+    const [almacenSel, setAlmacenSel] = useState(propioId ? String(propioId) : 'todos');
+    const almacenId = almacenSel === 'todos' ? '' : almacenSel;
     const [estado, setEstado] = useState('');
     const [metrosDesde, setMetrosDesde] = useState('');
     const [metrosHasta, setMetrosHasta] = useState('');
@@ -397,11 +401,15 @@ export default function StockPorRollo() {
         <div className="mb-3 flex flex-wrap items-end gap-3">
             <SearchSelect
                 label="Almacén"
-                value={almacenId}
-                onChange={(v) => setAlmacenId(v ?? '')}
+                value={almacenSel}
+                onChange={(v) => setAlmacenSel(v || 'todos')}
+                clearable={false}
                 placeholder="Todos los almacenes"
                 emptyText="Sin coincidencias"
-                options={almacenes.map((a) => ({ value: String(a.id), label: a.nombre }))}
+                options={[
+                    { value: 'todos', label: 'Todos los almacenes' },
+                    ...almacenes.filter((a) => a.activo !== false).map((a) => ({ value: String(a.id), label: a.nombre })),
+                ]}
                 className="w-56"
             />
         </div>

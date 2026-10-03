@@ -484,14 +484,14 @@ class RecepcionCompraController extends Controller
         $enMetros = $this->cantidadEnMetros($presentacion, $recibida);
         $factor = round($this->cantidadEnMetros($presentacion, (float) $linea->cantidad) / max((int) $linea->rollos, 1), 2);
         if ($factor <= 0) {
-            return [['metros' => $enMetros]];
+            return [['metros' => $enMetros, 'usuario_recibe_id' => auth()->id()]];
         }
 
         $enteros = (int) floor(($enMetros + 0.005) / $factor);
-        $rollos = array_fill(0, $enteros, ['metros' => $factor]);
+        $rollos = array_fill(0, $enteros, ['metros' => $factor, 'usuario_recibe_id' => auth()->id()]);
         $resto = round($enMetros - $enteros * $factor, 2);
         if ($resto > 0.005) {
-            $rollos[] = ['metros' => $resto];
+            $rollos[] = ['metros' => $resto, 'usuario_recibe_id' => auth()->id()];
         }
 
         return $rollos;

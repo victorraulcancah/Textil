@@ -171,6 +171,7 @@ return [
                         'recepciones-compra/plantilla-packing-list/*' => 'importar',
                         'recepciones-compra/escanear' => 'editar',
                         'recepciones-compra/quitar-escaneo' => 'editar',
+                        'recepciones-compra/escanear-todos' => 'editar',
                     ],
                 ],
             ],

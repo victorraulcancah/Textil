@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Camera, ChevronRight, ClipboardList, Download, PackageCheck, ScanLine, X } from 'lucide-react';
+import { Camera, Check, CheckCheck, ChevronRight, ClipboardList, Download, PackageCheck, ScanLine, X } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { opcionesAlmacen } from '../lib/almacenes';
 import { useAuth } from '../lib/auth';
@@ -258,6 +258,34 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
         setCodigoEscaneo('');
         await verificarRollo(valor);
         escanerRef.current?.focus();
+    };
+
+    /** Marca un rollo como recibido sin escanearlo (el check de su fila): queda igual que si se hubiera escaneado. */
+    const marcarRollo = async (codigo) => {
+        try {
+            const { data } = await api.post('/recepciones-compra/escanear', { compra_id: compraId, codigo });
+            setPackingList(data.packing_list);
+        } catch (err) {
+            toast.error(err.response?.data?.message ?? 'No se pudo marcar el rollo.');
+        }
+    };
+
+    /** Marca de una vez todos los rollos que faltan por recibir. */
+    const [marcandoTodos, setMarcandoTodos] = useState(false);
+    const marcarTodos = async () => {
+        const faltan = packingList?.resumen?.pendientes ?? 0;
+        if (!faltan) return;
+        if (!window.confirm(`¿Marcar los ${faltan} rollos pendientes como recibidos?`)) return;
+        setMarcandoTodos(true);
+        try {
+            const { data } = await api.post('/recepciones-compra/escanear-todos', { compra_id: compraId });
+            setPackingList(data.packing_list);
+            toast.success(`${data.marcados} rollos marcados como recibidos.`);
+        } catch (err) {
+            toast.error(err.response?.data?.message ?? 'No se pudieron marcar los rollos.');
+        } finally {
+            setMarcandoTodos(false);
+        }
     };
 
     /** Deshace un escaneo equivocado: el rollo vuelve a "por recibir". */
@@ -711,6 +739,18 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
                                                 >
                                                     <Camera className="h-4 w-4" />
                                                 </Button>
+                                                {resumenPL?.pendientes > 0 && (
+                                                    <Button
+                                                        type="button"
+                                                        variant="success"
+                                                        size="sm"
+                                                        loading={marcandoTodos}
+                                                        onClick={marcarTodos}
+                                                        title="Marcar todos los rollos pendientes como recibidos, sin escanear"
+                                                    >
+                                                        <CheckCheck className="h-4 w-4" /> Marcar todos
+                                                    </Button>
+                                                )}
                                             </div>
                                             {ultimoEscaneo && (
                                                 <div
@@ -762,6 +802,17 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
                                                                 )}
                                                             </td>
                                                             <td className="px-2 py-1.5 text-center">
+                                                                {f.estado === 'pendiente' && puede('compras.recepciones-compra.editar') && (
+                                                                    <button
+                                                                        type="button"
+                                                                        aria-label={`Marcar ${f.codigo} como recibido`}
+                                                                        title="Marcar como recibido (sin escanear)"
+                                                                        onClick={() => marcarRollo(f.codigo)}
+                                                                        className="rounded p-0.5 text-green-600 transition hover:bg-green-50"
+                                                                    >
+                                                                        <Check className="h-4 w-4" />
+                                                                    </button>
+                                                                )}
                                                                 {f.estado === 'recibido' && puede('compras.recepciones-compra.editar') && (
                                                                     <button
                                                                         type="button"

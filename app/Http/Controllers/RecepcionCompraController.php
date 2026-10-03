@@ -984,6 +984,33 @@ class RecepcionCompraController extends Controller
         ]);
     }
 
+    /**
+     * Marca como recibidos, de una vez, todos los rollos que siguen pendientes en el packing list de la compra: es
+     * lo mismo que escanearlos uno por uno (quién y cuándo), para cuando llegó todo y no hace falta la pistola.
+     */
+    public function escanearTodos(Request $request)
+    {
+        $data = $request->validate(['compra_id' => 'required|exists:compras,id']);
+
+        $compra = Compra::findOrFail($data['compra_id']);
+        if ($compra->estado === 'anulada' || $compra->finalizado) {
+            return response()->json(['message' => 'La compra está anulada o finalizada: no admite recepciones.'], 422);
+        }
+
+        $marcados = PackingListRollo::where('compra_id', $compra->id)
+            ->where('estado', PackingListRollo::PENDIENTE)
+            ->update([
+                'estado' => PackingListRollo::RECIBIDO,
+                'usuario_escanea_id' => auth()->id(),
+                'escaneado_at' => now(),
+            ]);
+
+        return response()->json([
+            'marcados' => $marcados,
+            'packing_list' => $this->resumenPackingList($compra),
+        ]);
+    }
+
     /** Deshace un escaneo equivocado: el rollo vuelve a "pendiente". */
     public function quitarEscaneo(Request $request)
     {

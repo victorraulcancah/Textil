@@ -36,6 +36,9 @@ const emptyLinea = () => ({ tipo: 'efectivo', cuentaId: '', billeteraId: '', mon
 
 const NOMBRE_MONEDA = { PEN: 'Soles', USD: 'Dólares', CNY: 'Yuanes', EUR: 'Euros' };
 
+/** Antes de elegir el documento (Mi Caja) la ventana se ve completa, con todo en blanco. */
+const CUENTA_VACIA = { saldo: 0, monto_total: 0, monto_pagado: 0, pagos: [], estado: null, moneda: 'PEN' };
+
 const redondear = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
 /** "2026-09-29T05:00:00.000000Z" o "2026-09-29" → "29/09/2026" (sin pasar por la zona horaria: el día es el escrito). */
@@ -72,9 +75,12 @@ function Dato({ etiqueta, children, className }) {
  * documento de control, referencia, importe de abono y tipo de pago—. Los pagos anteriores se pueden editar o anular.
  * @param {'cobrar'|'pagar'} tipo
  */
-export default function PagosCuentaModal({ open, onClose, cuenta, tipo, onSaved, elegir = false, cerrarAlGuardar = false }) {
+export default function PagosCuentaModal({ open, onClose, cuenta, tipo: tipoProp, onSaved, elegir = false, cerrarAlGuardar = false, permitidos = ['cobrar', 'pagar'] }) {
     const toast = useToast();
     const { user } = useAuth();
+    /** Desde Mi Caja un solo botón sirve para cobrar y para pagar: aquí se elige cuál (por defecto, el primero permitido). */
+    const [tipoElegido, setTipoElegido] = useState(permitidos[0] ?? 'cobrar');
+    const tipo = elegir ? (permitidos.includes(tipoElegido) ? tipoElegido : (permitidos[0] ?? 'cobrar')) : tipoProp;
     const basePath = tipo === 'cobrar' ? '/cuentas-por-cobrar' : '/cuentas-por-pagar';
     const esCobrar = tipo === 'cobrar';
 
@@ -167,21 +173,25 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo, onSaved,
         };
     }, [open, esCobrar, fecha]);
 
-    const pagos = useMemo(() => (Array.isArray(state?.pagos) ? state.pagos : []), [state]);
-    const nombre = esCobrar ? state?.cliente?.nombre : state?.proveedor?.nombre;
-    const anulada = state?.estado === 'anulado';
+    /** La cuenta con la que se trabaja: la elegida o, antes de elegir, una vacía. */
+    const cur = state ?? CUENTA_VACIA;
+    const hayDoc = Boolean(state);
+
+    const pagos = useMemo(() => (Array.isArray(cur?.pagos) ? cur.pagos : []), [state]);
+    const nombre = esCobrar ? cur?.cliente?.nombre : cur?.proveedor?.nombre;
+    const anulada = cur?.estado === 'anulado';
     // Lo que pasó a letras de cambio se cobra con la letra: aquí solo se cobra el resto.
-    const enLetras = esCobrar ? Number(state?.en_letras) || 0 : 0;
-    const saldo = Math.max((Number(state?.saldo) || 0) - enLetras, 0);
+    const enLetras = esCobrar ? Number(cur?.en_letras) || 0 : 0;
+    const saldo = Math.max((Number(cur?.saldo) || 0) - enLetras, 0);
     const puedePagar = !anulada && saldo > 0.005;
 
     /** El documento al que se aplica el abono, como se lee en la glosa: "PF002-001" o "C001-001". */
     const documento = esCobrar
-        ? state?.nota_venta
-            ? `${state.nota_venta.serie}-${state.nota_venta.numero}`
-            : `#${state?.id ?? ''}`
-        : (state?.compra?.numero_compra ?? (state?.compra ? `${state.compra.serie ?? ''}-${state.compra.numero ?? ''}` : `#${state?.id ?? ''}`));
-    const condicion = esCobrar ? state?.nota_venta?.tipo_pago : state?.compra?.forma_pago;
+        ? cur?.nota_venta
+            ? `${cur.nota_venta.serie}-${cur.nota_venta.numero}`
+            : `#${cur?.id ?? ''}`
+        : (cur?.compra?.numero_compra ?? (cur?.compra ? `${cur.compra.serie ?? ''}-${cur.compra.numero ?? ''}` : `#${cur?.id ?? ''}`));
+    const condicion = esCobrar ? cur?.nota_venta?.tipo_pago : cur?.compra?.forma_pago;
     const condicionTexto = condicion ? String(condicion).charAt(0).toUpperCase() + String(condicion).slice(1) : '';
     const ultimoAbono = pagos.reduce((max, p) => (String(p.fecha ?? '') > max ? String(p.fecha ?? '') : max), '');
 
@@ -190,7 +200,7 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo, onSaved,
      * abona su equivalente al tipo de cambio. Al cobrar a un cliente se
      * propone el comercial del día; al pagar a un proveedor se escribe.
      */
-    const monedaDeuda = state?.moneda || 'PEN';
+    const monedaDeuda = cur?.moneda || 'PEN';
     const admiteSoles = monedaDeuda !== 'PEN';
     const enSoles = (l) => admiteSoles && l.moneda === 'PEN';
     /** Lo que una línea abona a la deuda, en la moneda de la deuda. */
@@ -305,7 +315,7 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo, onSaved,
         if (nuevoTotal > saldo + 0.01) return toast.error('El abono excede el saldo pendiente.');
         setSaving(true);
         try {
-            const res = await api.post(`${basePath}/${state.id}/pagos`, { fecha, glosa: glosa.trim() || undefined, pagos: validos.map(toPayload) });
+            const res = await api.post(`${basePath}/${cur.id}/pagos`, { fecha, glosa: glosa.trim() || undefined, pagos: validos.map(toPayload) });
             setState(res.data);
             setLineas([emptyLinea()]);
             setModo('efectivo');
@@ -355,7 +365,7 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo, onSaved,
     };
 
     const anular = async (p) => {
-        const importe = p.monto_pen != null ? money(p.monto_pen, 'PEN') : money(p.monto, p.moneda || state.moneda);
+        const importe = p.monto_pen != null ? money(p.monto_pen, 'PEN') : money(p.monto, p.moneda || cur.moneda);
         if (!window.confirm(`¿Anular este abono de ${importe}? Se revertirá el movimiento de caja.`)) return;
         setSaving(true);
         try {
@@ -370,48 +380,7 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo, onSaved,
         }
     };
 
-    // Mi Caja: antes de abonar hay que elegir el documento.
-    if (!state && elegir) {
-        return (
-            <Modal
-                open={open}
-                onClose={onClose}
-                size="lg"
-                title="Amortización de documentos"
-                description={esCobrar ? 'Elige el documento que vas a cobrar.' : 'Elige el documento que vas a pagar.'}
-                footer={<Button variant="secondary" onClick={onClose}>Salir</Button>}
-            >
-                <Bloque titulo="Documento">
-                    <div className="pt-2">
-                        <SearchSelect
-                            label={esCobrar ? 'Documento por cobrar' : 'Documento por pagar'}
-                            value=""
-                            onChange={(v) => {
-                                const elegida = pendientes.find((c) => String(c.id) === String(v));
-                                if (elegida) setState(elegida);
-                            }}
-                            placeholder={cargandoPendientes ? 'Cargando…' : 'Busca por documento o por nombre…'}
-                            emptyText={cargandoPendientes ? 'Cargando…' : 'No hay documentos con saldo'}
-                            options={pendientes.map((c) => {
-                                const doc = esCobrar
-                                    ? c.nota_venta ? `${c.nota_venta.serie}-${c.nota_venta.numero}` : `#${c.id}`
-                                    : (c.compra?.numero_compra ?? `#${c.id}`);
-                                const quien = esCobrar ? c.cliente?.nombre : c.proveedor?.nombre;
-                                const cuota = esCobrar && c.total_cuotas > 1 ? ` · cuota ${c.numero_cuota}/${c.total_cuotas}` : '';
-                                return {
-                                    value: String(c.id),
-                                    label: `${doc}${cuota} · ${quien ?? '—'} · saldo ${money(c.saldo, c.moneda)}`,
-                                    keywords: `${doc} ${quien ?? ''}`,
-                                };
-                            })}
-                        />
-                    </div>
-                </Bloque>
-            </Modal>
-        );
-    }
-
-    if (!state) return null;
+    if (!state && !elegir) return null;
 
     const formas = [
         { value: 'efectivo', label: 'Efectivo' },
@@ -427,19 +396,23 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo, onSaved,
             onClose={onClose}
             size="2xl"
             title="Amortización de documentos"
-            description={`${esCobrar ? 'Cobro' : 'Pago'} del documento ${documento}${
-                esCobrar && state?.total_cuotas > 1 ? ` · cuota ${state.numero_cuota} de ${state.total_cuotas}` : ''
-            }`}
+            description={
+                hayDoc
+                    ? `${esCobrar ? 'Cobro' : 'Pago'} del documento ${documento}${
+                          esCobrar && cur?.total_cuotas > 1 ? ` · cuota ${cur.numero_cuota} de ${cur.total_cuotas}` : ''
+                      }`
+                    : 'Elige el documento en Referencia y registra el abono.'
+            }
             footer={
                 <>
                     <Button variant="secondary" onClick={onClose}>Salir</Button>
-                    <Button onClick={registrar} loading={saving} disabled={!puedePagar || nuevoTotal <= 0}>Guardar</Button>
+                    <Button onClick={registrar} loading={saving} disabled={!hayDoc || !puedePagar || nuevoTotal <= 0}>Guardar</Button>
                 </>
             }
         >
             <div className="space-y-4">
                 {anulada && <Alert variant="warning">Esta cuenta está anulada.</Alert>}
-                {!anulada && !puedePagar && <Alert variant="success">Cuenta saldada. No hay saldo pendiente.</Alert>}
+                {hayDoc && !anulada && !puedePagar && <Alert variant="success">Cuenta saldada. No hay saldo pendiente.</Alert>}
                 {enLetras > 0 && (
                     <Alert variant="info">
                         {money(enLetras, monedaDeuda)} de esta cuenta están en letras de cambio y se cobran con la letra.
@@ -453,38 +426,78 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo, onSaved,
                         <Input label={esCobrar ? 'Fecha de abono' : 'Fecha de pago'} type="date" max={hoy()} value={fecha} onChange={(e) => setFecha(e.target.value)} disabled={!puedePagar} />
                         <div>
                             <p className="text-[11px] font-medium uppercase tracking-wide text-warm-500">Estado</p>
-                            <div className="mt-1">{estadoBadge(state.estado)}</div>
+                            <div className="mt-1">{estadoBadge(cur.estado)}</div>
                         </div>
                     </div>
                 </Bloque>
 
                 {/* ── Referencia ────────────────────────────────────────── */}
                 <Bloque titulo="Referencia">
-                    <div className="grid gap-x-4 gap-y-3 pt-2 sm:grid-cols-3">
-                        <Dato etiqueta="Documento">
-                            {documento}
-                            {elegir && (
-                                <button type="button" onClick={() => setState(null)} className="ml-2 text-xs font-medium text-primary-600 hover:underline">
-                                    cambiar
-                                </button>
+                    {/* Desde Mi Caja el documento se elige aquí mismo: por cobrar o por pagar, y luego cuál. */}
+                    {elegir && (
+                        <div className="grid gap-3 pt-2 sm:grid-cols-[auto_1fr] sm:items-end">
+                            {permitidos.length > 1 && (
+                                <div className="inline-flex rounded-lg border border-edge bg-gray-50 p-0.5">
+                                    {[['cobrar', 'Por cobrar'], ['pagar', 'Por pagar']].filter(([k]) => permitidos.includes(k)).map(([k, t]) => (
+                                        <button
+                                            key={k}
+                                            type="button"
+                                            onClick={() => { setTipoElegido(k); setState(null); }}
+                                            className={`rounded-md px-4 py-1.5 text-sm font-semibold transition ${tipo === k ? 'bg-white text-primary-700 shadow-sm' : 'text-warm-500 hover:text-warm-700'}`}
+                                        >
+                                            {t}
+                                        </button>
+                                    ))}
+                                </div>
                             )}
-                        </Dato>
+                            <SearchSelect
+                                label="N.° documento / nombre"
+                                value={state ? String(state.id) : ''}
+                                clearable={false}
+                                onChange={(v) => {
+                                    const elegida = pendientes.find((c) => String(c.id) === String(v));
+                                    if (elegida) {
+                                        setState(elegida);
+                                        setLineas([emptyLinea()]);
+                                        setModo('efectivo');
+                                        setGlosaEditada(false);
+                                    }
+                                }}
+                                placeholder={cargandoPendientes ? 'Cargando…' : 'Busca por documento o por nombre…'}
+                                emptyText={cargandoPendientes ? 'Cargando…' : 'No hay documentos con saldo'}
+                                options={pendientes.map((c) => {
+                                    const doc = esCobrar
+                                        ? c.nota_venta ? `${c.nota_venta.serie}-${c.nota_venta.numero}` : `#${c.id}`
+                                        : (c.compra?.numero_compra ?? `#${c.id}`);
+                                    const quien = esCobrar ? c.cliente?.nombre : c.proveedor?.nombre;
+                                    const cuota = esCobrar && c.total_cuotas > 1 ? ` · cuota ${c.numero_cuota}/${c.total_cuotas}` : '';
+                                    return {
+                                        value: String(c.id),
+                                        label: `${doc}${cuota} · ${quien ?? '—'} · saldo ${money(c.saldo, c.moneda)}`,
+                                        keywords: `${doc} ${quien ?? ''}`,
+                                    };
+                                })}
+                            />
+                        </div>
+                    )}
+                    <div className="grid gap-x-4 gap-y-3 pt-2 sm:grid-cols-3">
+                        <Dato etiqueta="Documento">{hayDoc ? documento : ''}</Dato>
                         <Dato etiqueta={esCobrar ? 'Cliente' : 'Proveedor'} className="sm:col-span-2">{nombre}</Dato>
                         <Dato etiqueta="Saldo">
-                            <span className="text-red-600">{money(state.saldo, state.moneda)}</span>
+                            <span className="text-red-600">{money(cur.saldo, cur.moneda)}</span>
                         </Dato>
-                        {esCobrar && <Dato etiqueta="Vendedor">{state.nota_venta?.vendedor?.name}</Dato>}
-                        <Dato etiqueta="Fec. venc.">{state.fecha_vencimiento ? fechaCorta(state.fecha_vencimiento) : ''}</Dato>
-                        <Dato etiqueta="Importe">{money(state.monto_total, state.moneda)}</Dato>
+                        {esCobrar && <Dato etiqueta="Vendedor">{cur.nota_venta?.vendedor?.name}</Dato>}
+                        <Dato etiqueta="Fec. venc.">{cur.fecha_vencimiento ? fechaCorta(cur.fecha_vencimiento) : ''}</Dato>
+                        <Dato etiqueta="Importe">{money(cur.monto_total, cur.moneda)}</Dato>
                         <Dato etiqueta="Pagado">
-                            <span className="text-green-600">{money(state.monto_pagado, state.moneda)}</span>
+                            <span className="text-green-600">{money(cur.monto_pagado, cur.moneda)}</span>
                         </Dato>
                         <Dato etiqueta="Último abono">{ultimoAbono ? fechaCorta(ultimoAbono) : ''}</Dato>
                     </div>
                 </Bloque>
 
-                {puedePagar && (
-                    <>
+                {(puedePagar || !hayDoc) && (
+                    <fieldset disabled={!hayDoc} className={cn('m-0 min-w-0 space-y-4 border-0 p-0', !hayDoc && 'opacity-60')}>
                         {/* ── Importe de abono ──────────────────────────────── */}
                         <Bloque titulo="Importe de abono">
                             <div className="grid gap-4 pt-2 lg:grid-cols-[1fr_14rem]">
@@ -599,7 +612,7 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo, onSaved,
                                 </div>
                             )}
                         </Bloque>
-                    </>
+                    </fieldset>
                 )}
 
                 {/* ── Abonos anteriores ─────────────────────────────────── */}
@@ -633,11 +646,11 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo, onSaved,
                                             <span className="font-medium text-warm-900">
                                                 {money(p.monto_pen, 'PEN')}
                                                 <span className="ml-2 text-xs font-normal text-warm-500">
-                                                    · T.C. {Number(p.tipo_cambio)} = {money(p.monto, p.moneda || state.moneda)}
+                                                    · T.C. {Number(p.tipo_cambio)} = {money(p.monto, p.moneda || cur.moneda)}
                                                 </span>
                                             </span>
                                         ) : (
-                                            <span className="font-medium text-warm-900">{money(p.monto, p.moneda || state.moneda)}</span>
+                                            <span className="font-medium text-warm-900">{money(p.monto, p.moneda || cur.moneda)}</span>
                                         )}
                                         <span className="text-warm-500">{fechaCorta(p.fecha)}</span>
                                         {p.referencia && <span className="text-warm-400">· {p.referencia}</span>}

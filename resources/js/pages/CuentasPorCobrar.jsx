@@ -73,10 +73,12 @@ export default function CuentasPorCobrar() {
         {
             key: 'documento',
             label: 'Venta',
+            // La serie ahora es más larga (PF002-001): con poco ancho el número se partía en dos líneas.
+            width: '215px',
             getSearchValue: (row) => (row.nota_venta ? `${row.nota_venta.serie}-${row.nota_venta.numero}` : ''),
             render: (row) => (
-                <span className="inline-flex items-center gap-1.5">
-                    <Badge variant="blue">
+                <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                    <Badge variant="blue" className="whitespace-nowrap">
                         {row.nota_venta ? `${row.nota_venta.serie}-${row.nota_venta.numero}` : `#${row.id}`}
                     </Badge>
                     {row.total_cuotas > 1 && (
@@ -95,21 +97,24 @@ export default function CuentasPorCobrar() {
         {
             key: 'fecha_vencimiento',
             label: 'Vence',
+            width: '105px',
             render: (row) => {
                 const vencida = ['pendiente', 'parcial'].includes(row.estado) && !enLetrasTotal(row) && String(row.fecha_vencimiento).slice(0, 10) < hoy();
                 return <span className={vencida ? 'font-semibold text-red-600' : ''}>{fecha(row.fecha_vencimiento)}</span>;
             },
         },
-        { key: 'monto_total', label: 'Total', align: 'right', render: (row) => money(row.monto_total, row.moneda) },
+        { key: 'monto_total', label: 'Total', width: '110px', align: 'right', render: (row) => money(row.monto_total, row.moneda) },
         {
             key: 'monto_pagado',
             label: 'Pagado',
+            width: '110px',
             align: 'right',
             render: (row) => <span className="text-green-600">{money(row.monto_pagado, row.moneda)}</span>,
         },
         {
             key: 'saldo',
             label: 'Saldo',
+            width: '110px',
             align: 'right',
             // Lo que pasó a letras ya no es saldo por cobrar aquí.
             render: (row) => (

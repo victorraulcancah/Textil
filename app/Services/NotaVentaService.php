@@ -221,7 +221,7 @@ class NotaVentaService
         }
 
         // El ingreso de caja va a la caja del vendedor (una caja pertenece a un usuario).
-        $cajaId = User::find($data['vendedor_id'])?->caja_id;
+        $cajaId = User::find($data['vendedor_id'])?->cajaActual($nota->almacen_id ? (int) $nota->almacen_id : null)?->id;
         $apertura = $cajaId
             ? AperturaCaja::where('estado', 'abierta')
                 ->where('caja_id', $cajaId)

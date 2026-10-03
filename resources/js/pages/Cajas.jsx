@@ -307,9 +307,13 @@ export default function Cajas() {
                         placeholder="Sin usuario"
                         emptyText="Sin coincidencias"
                         options={usuarios
-                            // Solo personal del mismo almacén (o sin almacén, como el administrador).
-                            .filter((u) => !u.almacen_id || !form.almacen_id || String(u.almacen_id) === String(form.almacen_id))
-                            .filter((u) => !u.caja_id || String(u.id) === String(form.usuario_id))
+                            // Cualquier usuario puede tener caja aquí (una por almacén): al asignarla, también puede trabajar en
+                            // este almacén. Salen solo los que todavía no tienen una en este almacén.
+                            .filter(
+                                (u) =>
+                                    String(u.id) === String(form.usuario_id) ||
+                                    !(u.cajas ?? []).some((c) => String(c.almacen_id) === String(form.almacen_id)),
+                            )
                             .map((u) => ({ value: String(u.id), label: `${u.name} (${u.email})` }))}
                         error={formErrors.usuario_id}
                     />

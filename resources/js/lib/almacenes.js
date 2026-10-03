@@ -30,15 +30,27 @@ export const opcionesAlmacen = (almacenes = [], seleccionadoId = null, propioId 
 export function useAlmacenPropio() {
     const { user } = useAuth();
     const esSuperAdmin = (user?.roles ?? []).some((r) => (r?.name ?? r) === 'super-admin');
-    // El Super Admin elige un almacén al entrar y trabaja como esa sucursal: para las pantallas es un usuario más.
-    const activo = esSuperAdmin ? leerAlmacenActivo() : null;
+    /** Los almacenes donde puede trabajar (el suyo y los de sus cajas); el Super Admin, todos. */
+    const almacenes = user?.almacenes ?? [];
+    const guardado = leerAlmacenActivo();
+    // El Super Admin elige un almacén (por defecto el primero) y trabaja como esa sucursal. Un usuario con varios
+    // almacenes trabaja en el que elija entre los suyos, y por defecto en el principal.
+    const activo = esSuperAdmin
+        ? guardado
+        : guardado && almacenes.some((a) => String(a.id) === String(guardado.id))
+          ? guardado
+          : null;
     const superAdmin = esSuperAdmin && !activo;
+    const propioId = esSuperAdmin ? (activo?.id ?? null) : (activo?.id ?? user?.almacen_id ?? null);
 
     return {
         superAdmin,
         esSuperAdmin,
-        propioId: esSuperAdmin ? (activo?.id ?? null) : (user?.almacen_id ?? null),
-        /** Nombre del almacén en el que trabaja (el asignado, o el que eligió el Super Admin). */
-        almacenNombre: esSuperAdmin ? (activo?.nombre ?? null) : (user?.almacen?.nombre ?? null),
+        propioId,
+        almacenes,
+        /** Nombre del almacén en el que trabaja ahora. */
+        almacenNombre: esSuperAdmin
+            ? (activo?.nombre ?? null)
+            : (activo?.nombre ?? almacenes.find((a) => String(a.id) === String(propioId))?.nombre ?? user?.almacen?.nombre ?? null),
     };
 }

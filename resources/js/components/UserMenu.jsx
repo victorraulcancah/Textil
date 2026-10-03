@@ -3,7 +3,7 @@ import { Check, ChevronDown, ChevronsUpDown, LogOut, Warehouse } from 'lucide-re
 import api, { asList } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useAlmacenPropio } from '../lib/almacenes';
-import { guardarAlmacenActivo, leerAlmacenActivo } from '../lib/almacenActivo';
+import { guardarAlmacenActivo } from '../lib/almacenActivo';
 import { cn } from './ui';
 
 function Avatar({ user, size = 'md' }) {
@@ -32,17 +32,20 @@ function Avatar({ user, size = 'md' }) {
  */
 export default function UserMenu({ compact = false, barra = false }) {
     const { user, logout } = useAuth();
-    const { esSuperAdmin, almacenNombre } = useAlmacenPropio();
+    const { esSuperAdmin, almacenNombre, propioId, almacenes: propios } = useAlmacenPropio();
+    /** Quien trabaja en más de un almacén (o el Super Admin) cambia de almacén desde aquí. */
+    const puedeCambiar = esSuperAdmin || propios.length > 1;
     const almacen = almacenNombre ?? (esSuperAdmin ? 'Todos los almacenes' : 'Sin almacén asignado');
     const [open, setOpen] = useState(false);
     /** Los almacenes entre los que el Super Admin puede cambiar (se piden al abrir el menú). */
-    const [almacenes, setAlmacenes] = useState([]);
+    const [todos, setTodos] = useState([]);
+    const almacenes = esSuperAdmin ? todos : propios;
     useEffect(() => {
-        if (!open || !esSuperAdmin || almacenes.length) return;
-        api.get('/almacenes').then((res) => setAlmacenes(asList(res).filter((a) => a.activo !== false))).catch(() => {});
-    }, [open, esSuperAdmin, almacenes.length]);
+        if (!open || !esSuperAdmin || todos.length) return;
+        api.get('/almacenes').then((res) => setTodos(asList(res).filter((a) => a.activo !== false))).catch(() => {});
+    }, [open, esSuperAdmin, todos.length]);
     const cambiarAlmacen = (a) => {
-        if (String(a.id) === String(leerAlmacenActivo()?.id)) return setOpen(false);
+        if (String(a.id) === String(propioId)) return setOpen(false);
         guardarAlmacenActivo(a);
         // Lo que está en pantalla es del almacén anterior: se recarga todo.
         window.location.reload();
@@ -92,11 +95,11 @@ export default function UserMenu({ compact = false, barra = false }) {
                         </div>
                         <div className="p-1.5">
                             {/* El Super Admin cambia de almacén eligiendo otro de la lista. */}
-                            {esSuperAdmin && almacenes.length > 0 && (
+                            {puedeCambiar && almacenes.length > 0 && (
                                 <div className="mb-1.5 border-b border-edge pb-1.5">
                                     <p className="px-3 pb-1 pt-0.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400">Almacenes</p>
                                     {almacenes.map((a) => {
-                                        const actual = String(a.id) === String(leerAlmacenActivo()?.id);
+                                        const actual = String(a.id) === String(propioId);
                                         return (
                                             <button
                                                 key={a.id}

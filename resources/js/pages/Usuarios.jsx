@@ -203,7 +203,8 @@ export default function Usuarios() {
         {
             key: 'caja',
             label: 'Caja',
-            render: (row) => (row.caja ? `${row.caja.codigo ? `${row.caja.codigo} · ` : ''}${row.caja.nombre}` : '—'),
+            // Una caja por almacén: se listan todas las que tiene.
+            render: (row) => ((row.cajas ?? []).length ? row.cajas.map((c) => c.codigo ?? c.nombre).join(', ') : '—'),
         },
         {
             key: 'almacen',

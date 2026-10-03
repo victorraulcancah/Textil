@@ -264,7 +264,7 @@ class CompraController extends Controller
     }
 
     /**
-     * Correlativo interno propio de la compra (C001-00000001), automático desde
+     * Correlativo interno propio de la compra (C001-001), automático desde
      * 1. El usuario no lo ingresa. Se bloquea la fila para que dos compras
      * simultáneas no tomen el mismo número.
      */

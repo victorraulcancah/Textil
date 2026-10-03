@@ -67,7 +67,7 @@ class RecepcionCompraPdf implements DocumentoPdf
         return [
             'recepcion' => $recepcion,
             'documento' => $recepcion->documento ?? ('#' . $recepcion->id),
-            'compraRef' => $recepcion->compra?->correlativo ? 'C001-' . str_pad((string) $recepcion->compra->correlativo, 8, '0', STR_PAD_LEFT) : null,
+            'compraRef' => $recepcion->compra?->correlativo ? 'C001-' . str_pad((string) $recepcion->compra->correlativo, 3, '0', STR_PAD_LEFT) : null,
             'ordenRef' => $recepcion->ordenCompra?->codigo,
             'filas' => $filas,
             'rollos' => $rollos,

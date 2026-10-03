@@ -19,7 +19,7 @@ class StoreCompraRequest extends FormRequest
             'orden_compra_id' => 'nullable|exists:ordenes_compra,id',
             'tipo_documento' => 'required|string|max:30',
             // Serie y número son los del documento del proveedor: el correlativo
-            // interno (C001-00000001) lo genera el sistema.
+            // interno (C001-001) lo genera el sistema.
             'serie' => 'nullable|string|max:20',
             'numero' => 'nullable|string|max:30',
             'guia' => 'nullable|string|max:30',

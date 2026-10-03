@@ -20,7 +20,7 @@ class CompraResource extends JsonResource
         return [
             'id' => $this->id,
             'correlativo' => $this->correlativo,
-            // Correlativo interno ya formateado: "C001-00000001".
+            // Correlativo interno ya formateado: "C001-001".
             'numero_compra' => $this->numero_compra,
             'proveedor_id' => $this->proveedor_id,
             'orden_compra_id' => $this->orden_compra_id,

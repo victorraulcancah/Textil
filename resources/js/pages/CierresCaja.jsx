@@ -162,7 +162,7 @@ export default function CierresCaja() {
             render: (row) => (
                 <span className="flex items-center gap-2 font-medium text-warm-900">
                     <Coins className="h-4 w-4 shrink-0 text-primary-600" />
-                    <span className="truncate">{row.apertura?.caja?.nombre ?? '—'}</span>
+                    <span className="truncate">{row.apertura?.caja?.codigo ? `${row.apertura.caja.codigo} · ` : ''}{row.apertura?.caja?.nombre ?? '—'}</span>
                 </span>
             ),
         },

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\CierreCaja;
 use App\Models\MovimientoCaja;
+use App\Support\AlmacenAcceso;
 
 /**
  * Registro de cierres de caja: qué se esperaba, qué se contó y todos los
@@ -15,9 +16,10 @@ class CierreCajaController extends Controller
     {
         $cierres = CierreCaja::with([
             'apertura:id,caja_id,usuario_id,monto_inicial,fecha_apertura',
-            'apertura.caja:id,nombre',
+            'apertura.caja:id,nombre,codigo,almacen_id',
             'apertura.usuario:id,name',
-        ])->latest('fecha_cierre')->get();
+            // Tesorería por sucursal: cada almacén ve los cierres de sus cajas.
+        ])->whereHas('apertura.caja', fn ($c) => AlmacenAcceso::limitar($c))->latest('fecha_cierre')->get();
 
         // Totales por tipo y por método de cada apertura, en una sola consulta.
         $aperturaIds = $cierres->pluck('apertura_caja_id')->filter();
@@ -64,9 +66,10 @@ class CierreCajaController extends Controller
     {
         $cierresCaja->load([
             'apertura:id,caja_id,usuario_id,monto_inicial,fecha_apertura',
-            'apertura.caja:id,nombre',
+            'apertura.caja:id,nombre,codigo,almacen_id',
             'apertura.usuario:id,name',
         ]);
+        AlmacenAcceso::exigir($cierresCaja->apertura?->caja?->almacen_id);
 
         $movimientos = MovimientoCaja::with([
             'motivo:id,nombre,tipo',

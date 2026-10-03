@@ -132,7 +132,7 @@ export default function MovimientosCaja() {
 
     const columns = [
         { key: 'fecha', label: 'Fecha', render: (row) => <>{fecha(row.fecha)}<span className="block text-xs text-warm-500">{row.created_at ? new Date(row.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : ''}</span></> },
-        { key: 'apertura', label: 'Caja', render: (row) => row.apertura?.caja?.nombre ?? '—' },
+        { key: 'apertura', label: 'Caja', render: (row) => (row.apertura?.caja ? `${row.apertura.caja.codigo ? `${row.apertura.caja.codigo} · ` : ''}${row.apertura.caja.nombre}` : '—') },
         {
             key: 'tipo',
             label: 'Tipo',

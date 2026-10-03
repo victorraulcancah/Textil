@@ -280,7 +280,7 @@ export default function MiCaja() {
                         <div className="flex items-center gap-3">
                             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary-50 text-primary-600"><Wallet className="h-6 w-6" /></div>
                             <div>
-                                <h2 className="text-lg font-bold text-warm-900">{caja.nombre}</h2>
+                                <h2 className="text-lg font-bold text-warm-900">{caja.codigo ? `${caja.codigo} · ` : ''}{caja.nombre}</h2>
                                 {apertura && <p className="text-sm text-warm-500">Abierta desde {fechaHora(apertura.fecha_apertura)}</p>}
                             </div>
                         </div>

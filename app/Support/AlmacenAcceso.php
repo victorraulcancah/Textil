@@ -18,12 +18,28 @@ class AlmacenAcceso
         return auth('api')->user() ?? auth()->user();
     }
 
+    /**
+     * El almacén en el que trabaja el usuario ahora. Un usuario normal: el que tiene asignado. El Super Admin tiene
+     * acceso a todos pero elige uno al entrar (la pantalla lo manda en X-Almacen-Id) y trabaja como esa sucursal.
+     * Sin elegir ninguno (consola, seeders) sigue sin restricción.
+     */
+    private static function almacenDe(User $usuario): ?int
+    {
+        if (! $usuario->esSuperAdmin()) {
+            return $usuario->almacen_id ? (int) $usuario->almacen_id : null;
+        }
+
+        $pedido = (int) request()->header('X-Almacen-Id');
+
+        return $pedido && Almacen::whereKey($pedido)->where('activo', true)->exists() ? $pedido : null;
+    }
+
     /** ¿Sin restricción de almacén? */
     public static function irrestricto(?User $usuario = null): bool
     {
         $usuario ??= self::usuario();
 
-        return $usuario === null || $usuario->esSuperAdmin();
+        return $usuario === null || ($usuario->esSuperAdmin() && self::almacenDe($usuario) === null);
     }
 
     /** El almacén en el que trabaja el usuario (null si es irrestricto o no tiene). */
@@ -31,7 +47,7 @@ class AlmacenAcceso
     {
         $usuario = self::usuario();
 
-        return self::irrestricto($usuario) ? null : ($usuario->almacen_id ? (int) $usuario->almacen_id : null);
+        return self::irrestricto($usuario) ? null : self::almacenDe($usuario);
     }
 
     /**
@@ -45,12 +61,13 @@ class AlmacenAcceso
             return;
         }
 
-        if (! $usuario->almacen_id) {
+        $actual = self::almacenDe($usuario);
+        if (! $actual) {
             self::negar('No tienes un almacén asignado: pídele a un administrador que te asigne uno para poder operar.');
         }
 
-        if ((int) $usuario->almacen_id !== (int) $almacenId) {
-            $propio = Almacen::whereKey($usuario->almacen_id)->value('nombre');
+        if ($actual !== (int) $almacenId) {
+            $propio = Almacen::whereKey($actual)->value('nombre');
             $otro = Almacen::whereKey($almacenId)->value('nombre');
             self::negar("Solo puedes operar en tu almacén ({$propio}). Esto es del almacén {$otro}: puedes verlo, no modificarlo.");
         }

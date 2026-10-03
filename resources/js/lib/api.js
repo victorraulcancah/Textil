@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { leerAlmacenActivo } from './almacenActivo';
 
 const api = axios.create({
     baseURL: '/api',
@@ -12,6 +13,11 @@ api.interceptors.request.use((config) => {
     const token = localStorage.getItem('access_token');
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
+    }
+    // El Super Admin trabaja en el almacén que eligió al entrar (el servidor lo ignora para los demás).
+    const almacen = leerAlmacenActivo();
+    if (almacen) {
+        config.headers['X-Almacen-Id'] = almacen.id;
     }
     return config;
 });

@@ -6,6 +6,7 @@ use App\Models\AperturaCaja;
 use App\Models\Caja;
 use App\Models\MovimientoCaja;
 use App\Models\MotivoMovimiento;
+use App\Support\AlmacenAcceso;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -19,7 +20,7 @@ class MovimientoCajaController extends Controller
         // Solo la caja de la apertura: cargar la apertura entera (montos,
         // fechas, estado) por cada movimiento engordaba el JSON sin uso.
         'apertura:id,caja_id',
-        'apertura.caja:id,nombre',
+        'apertura.caja:id,nombre,codigo,almacen_id',
     ];
 
     public function index(Request $request)
@@ -32,6 +33,8 @@ class MovimientoCajaController extends Controller
                 $user?->caja_id && ! $user->hasRole('super-admin'),
                 fn ($q) => $q->whereHas('apertura', fn ($a) => $a->where('caja_id', $user->caja_id))
             )
+            // Tesorería por sucursal: cada almacén ve los movimientos de sus cajas.
+            ->whereHas('apertura.caja', fn ($c) => AlmacenAcceso::limitar($c))
             ->latest('created_at')
             ->latest('id')
             ->limit(500);
@@ -61,6 +64,7 @@ class MovimientoCajaController extends Controller
         }
 
         $caja = Caja::with(['cuentasBancarias:id', 'billeteras:id'])->findOrFail($cajaId);
+        AlmacenAcceso::exigir($caja->almacen_id);
 
         $apertura = AperturaCaja::where('caja_id', $cajaId)
             ->where('estado', 'abierta')

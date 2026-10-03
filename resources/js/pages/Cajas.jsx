@@ -2,12 +2,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { Banknote, Coins, CreditCard, Edit, Smartphone, Trash2 } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
+import { opcionesAlmacen, useAlmacenPropio } from '../lib/almacenes';
 import Layout from '../components/Layout';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select } from '../components/ui';
 
 const emptyForm = {
     nombre: '',
+    almacen_id: '',
     usuario_id: '',
     activo: true,
     acepta_efectivo: true,
@@ -17,6 +19,9 @@ const emptyForm = {
 
 export default function Cajas() {
     const toast = useToast();
+    const { propioId, superAdmin } = useAlmacenPropio();
+    const [almacenes, setAlmacenes] = useState([]);
+    const [fAlmacen, setFAlmacen] = useState('');
     const [cajas, setCajas] = useState([]);
     const [cuentas, setCuentas] = useState([]);
     const [billeteras, setBilleteras] = useState([]);
@@ -38,12 +43,14 @@ export default function Cajas() {
         setLoading(true);
         setError(null);
         try {
-            const [cajasRes, cuentasRes, billeterasRes, usuariosRes] = await Promise.all([
+            const [cajasRes, cuentasRes, billeterasRes, usuariosRes, almacenesRes] = await Promise.all([
                 api.get('/cajas'),
                 api.get('/cuentas-bancarias'),
                 api.get('/billeteras-digitales'),
                 api.get('/users'),
+                api.get('/almacenes'),
             ]);
+            setAlmacenes(asList(almacenesRes));
             setCajas(asList(cajasRes));
             setCuentas(asList(cuentasRes));
             setBilleteras(asList(billeterasRes));
@@ -61,7 +68,8 @@ export default function Cajas() {
 
     const openCreate = () => {
         setEditing(null);
-        setForm(emptyForm);
+        // Una sucursal crea cajas en su almacén; el Super Admin elige.
+        setForm({ ...emptyForm, almacen_id: propioId ? String(propioId) : '' });
         setFormErrors({});
         setModalOpen(true);
     };
@@ -70,6 +78,7 @@ export default function Cajas() {
         setEditing(caja);
         setForm({
             nombre: caja.nombre,
+            almacen_id: caja.almacen_id ? String(caja.almacen_id) : '',
             usuario_id: caja.usuario?.id ?? '',
             activo: Boolean(caja.activo),
             acepta_efectivo: Boolean(caja.acepta_efectivo),
@@ -93,6 +102,7 @@ export default function Cajas() {
         setFormErrors({});
         const payload = {
             nombre: form.nombre,
+            almacen_id: form.almacen_id || null,
             usuario_id: form.usuario_id || null,
             activo: form.activo,
             acepta_efectivo: form.acepta_efectivo,
@@ -137,6 +147,18 @@ export default function Cajas() {
     const cuentaLabel = (c) => `${c.alias || 'Cuenta'}${c.numero_cuenta ? ` · ${c.numero_cuenta}` : ''}`;
 
     const columns = [
+        {
+            key: 'codigo',
+            label: 'Código',
+            width: '120px',
+            render: (row) => (row.codigo ? <Badge variant="blue" className="whitespace-nowrap">{row.codigo}</Badge> : <span className="text-gray-400">Sin almacén</span>),
+        },
+        {
+            key: 'almacen',
+            label: 'Almacén',
+            getSearchValue: (row) => row.almacen?.nombre ?? '',
+            render: (row) => row.almacen?.nombre ?? <span className="text-gray-400">—</span>,
+        },
         {
             key: 'nombre',
             label: 'Caja',
@@ -205,11 +227,15 @@ export default function Cajas() {
 
             <DataTable
                 columns={columns}
-                rows={fEstado ? cajas.filter((c) => (fEstado === 'activas' ? c.activo : !c.activo)) : cajas}
+                rows={cajas.filter((c) => {
+                    if (fEstado && (fEstado === 'activas' ? !c.activo : c.activo)) return false;
+                    if (fAlmacen && String(c.almacen_id) !== fAlmacen) return false;
+                    return true;
+                })}
                 loading={loading}
                 searchPlaceholder="Buscar cajas..."
                 filterable
-                filterCount={fEstado ? 1 : 0}
+                filterCount={(fEstado ? 1 : 0) + (fAlmacen ? 1 : 0)}
                 filters={
                     <div className="space-y-2">
                         <Select
@@ -222,8 +248,16 @@ export default function Cajas() {
                                 { value: 'inactivas', label: 'Inactivas' },
                             ]}
                         />
-                        {fEstado && (
-                            <button onClick={() => setFEstado('')} className="text-xs font-medium text-red-600 hover:text-red-700">
+                        {superAdmin && (
+                            <Select
+                                label="Almacén"
+                                value={fAlmacen}
+                                onChange={(e) => setFAlmacen(e.target.value)}
+                                options={[{ value: '', label: 'Todos' }, ...almacenes.map((a) => ({ value: String(a.id), label: a.nombre }))]}
+                            />
+                        )}
+                        {(fEstado || fAlmacen) && (
+                            <button onClick={() => { setFEstado(''); setFAlmacen(''); }} className="text-xs font-medium text-red-600 hover:text-red-700">
                                 Limpiar filtros
                             </button>
                         )}
@@ -254,6 +288,18 @@ export default function Cajas() {
                         }}
                         error={formErrors.nombre}
                     />
+                    {/* Cada caja es de una sucursal; su código sale del número del almacén (CJ002-001). */}
+                    <SearchSelect
+                        label="Almacén"
+                        value={form.almacen_id}
+                        disabled={!superAdmin}
+                        clearable={false}
+                        onChange={(v) => setForm((prev) => ({ ...prev, almacen_id: v ?? '', usuario_id: '' }))}
+                        placeholder="Elegir almacén…"
+                        options={opcionesAlmacen(almacenes, form.almacen_id, propioId)}
+                        error={formErrors.almacen_id}
+                    />
+                    {editing?.codigo && <p className="-mt-2 text-xs text-warm-500">Código: <strong>{editing.codigo}</strong></p>}
                     <SearchSelect
                         label="Usuario asignado"
                         value={form.usuario_id}
@@ -261,6 +307,8 @@ export default function Cajas() {
                         placeholder="Sin usuario"
                         emptyText="Sin coincidencias"
                         options={usuarios
+                            // Solo personal del mismo almacén (o sin almacén, como el administrador).
+                            .filter((u) => !u.almacen_id || !form.almacen_id || String(u.almacen_id) === String(form.almacen_id))
                             .filter((u) => !u.caja_id || String(u.id) === String(form.usuario_id))
                             .map((u) => ({ value: String(u.id), label: `${u.name} (${u.email})` }))}
                         error={formErrors.usuario_id}

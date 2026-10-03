@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronsUpDown, LogOut, Warehouse } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { useAlmacenPropio } from '../lib/almacenes';
+import { olvidarAlmacenActivo } from '../lib/almacenActivo';
 import { cn } from './ui';
 
 function Avatar({ user, size = 'md' }) {
@@ -30,8 +31,13 @@ function Avatar({ user, size = 'md' }) {
  */
 export default function UserMenu({ compact = false, barra = false }) {
     const { user, logout } = useAuth();
-    const { superAdmin } = useAlmacenPropio();
-    const almacen = user?.almacen?.nombre ?? (superAdmin ? 'Todos los almacenes' : 'Sin almacén asignado');
+    const { esSuperAdmin, almacenNombre } = useAlmacenPropio();
+    const almacen = almacenNombre ?? (esSuperAdmin ? 'Todos los almacenes' : 'Sin almacén asignado');
+    /** El Super Admin vuelve a la pantalla donde se elige almacén. */
+    const cambiarAlmacen = () => {
+        olvidarAlmacenActivo();
+        window.location.reload();
+    };
     const [open, setOpen] = useState(false);
     const menuRef = useRef(null);
 
@@ -77,6 +83,16 @@ export default function UserMenu({ compact = false, barra = false }) {
                             </p>
                         </div>
                         <div className="p-1.5">
+                            {esSuperAdmin && (
+                                <button
+                                    role="menuitem"
+                                    onClick={cambiarAlmacen}
+                                    className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-primary-700 transition hover:bg-primary-50"
+                                >
+                                    <Warehouse className="h-4 w-4" />
+                                    Cambiar de almacén
+                                </button>
+                            )}
                             <button
                                 role="menuitem"
                                 onClick={logout}

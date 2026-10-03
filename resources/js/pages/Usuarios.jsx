@@ -203,7 +203,7 @@ export default function Usuarios() {
         {
             key: 'caja',
             label: 'Caja',
-            render: (row) => row.caja?.nombre ?? '—',
+            render: (row) => (row.caja ? `${row.caja.codigo ? `${row.caja.codigo} · ` : ''}${row.caja.nombre}` : '—'),
         },
         {
             key: 'almacen',

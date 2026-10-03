@@ -1,4 +1,5 @@
 import { useAuth } from './auth';
+import { leerAlmacenActivo } from './almacenActivo';
 
 /**
  * Opciones de almacén para formularios de operación (ventas, traslados,
@@ -28,7 +29,16 @@ export const opcionesAlmacen = (almacenes = [], seleccionadoId = null, propioId 
  */
 export function useAlmacenPropio() {
     const { user } = useAuth();
-    const superAdmin = (user?.roles ?? []).some((r) => (r?.name ?? r) === 'super-admin');
+    const esSuperAdmin = (user?.roles ?? []).some((r) => (r?.name ?? r) === 'super-admin');
+    // El Super Admin elige un almacén al entrar y trabaja como esa sucursal: para las pantallas es un usuario más.
+    const activo = esSuperAdmin ? leerAlmacenActivo() : null;
+    const superAdmin = esSuperAdmin && !activo;
 
-    return { superAdmin, propioId: superAdmin ? null : (user?.almacen_id ?? null) };
+    return {
+        superAdmin,
+        esSuperAdmin,
+        propioId: esSuperAdmin ? (activo?.id ?? null) : (user?.almacen_id ?? null),
+        /** Nombre del almacén en el que trabaja (el asignado, o el que eligió el Super Admin). */
+        almacenNombre: esSuperAdmin ? (activo?.nombre ?? null) : (user?.almacen?.nombre ?? null),
+    };
 }

@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import api from './api';
+import { olvidarAlmacenActivo } from './almacenActivo';
 
 const AuthContext = createContext(null);
 
@@ -44,6 +45,8 @@ export function AuthProvider({ children }) {
         const { data } = await api.post('/login', { email, password });
         localStorage.setItem('access_token', data.access_token);
         localStorage.setItem('user', JSON.stringify(data.user));
+        // Cada vez que entra, el Super Admin elige de nuevo en qué almacén va a trabajar.
+        olvidarAlmacenActivo();
         setUser(data.user);
         return data.user;
     }, []);
@@ -54,6 +57,7 @@ export function AuthProvider({ children }) {
         } finally {
             localStorage.removeItem('access_token');
             localStorage.removeItem('user');
+            olvidarAlmacenActivo();
             setUser(null);
         }
     }, []);

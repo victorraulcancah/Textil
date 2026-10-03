@@ -2,11 +2,14 @@ import { useState } from 'react';
 import AlertsBell from './AlertsBell';
 import Sidebar from './Sidebar';
 import UserMenu from './UserMenu';
+import SeleccionAlmacen from './SeleccionAlmacen';
+import { useAlmacenPropio } from '../lib/almacenes';
 import { cn } from './ui';
 
 const COLLAPSE_STORAGE = 'sidebar_collapsed';
 
 export default function Layout({ children }) {
+    const { superAdmin } = useAlmacenPropio();
     const [collapsed, setCollapsed] = useState(() => {
         try {
             return localStorage.getItem(COLLAPSE_STORAGE) === '1';
@@ -26,6 +29,11 @@ export default function Layout({ children }) {
             return next;
         });
     };
+
+    // El Super Admin tiene que elegir en qué almacén trabaja antes de ver nada.
+    if (superAdmin) {
+        return <SeleccionAlmacen />;
+    }
 
     return (
         <div className="min-h-screen bg-surface">

@@ -68,6 +68,14 @@ class UserController extends Controller
                 $user->update($data);
             }
 
+            // Su caja es de su almacén: si lo cambian de sucursal, la caja de la anterior se le quita.
+            if ($user->caja_id && $user->almacen_id) {
+                $cajaAlmacen = $user->caja()->value('almacen_id');
+                if ($cajaAlmacen && (int) $cajaAlmacen !== (int) $user->almacen_id) {
+                    $user->update(['caja_id' => null]);
+                }
+            }
+
             // Sus permisos son la unión de los de todos sus roles.
             if ($roles) {
                 $user->syncRoles($roles);

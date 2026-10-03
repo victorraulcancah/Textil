@@ -32,7 +32,9 @@ class EstadoCuentaService
         $cliente->loadMissing('lineaCredito');
         $diasGracia = (int) ($cliente->lineaCredito?->dias_gracia ?? 0);
 
-        $cuentas = CuentaPorCobrar::with(['notaVenta:id,serie,numero,fecha_emision', 'pagos'])
+        // Tesorería por sucursal: el estado de cuenta es de lo que el cliente compró en este almacén.
+        $cuentas = \App\Support\AlmacenAcceso::limitar(CuentaPorCobrar::query())
+            ->with(['notaVenta:id,serie,numero,fecha_emision', 'pagos'])
             ->where('cliente_id', $cliente->id)
             ->get();
 

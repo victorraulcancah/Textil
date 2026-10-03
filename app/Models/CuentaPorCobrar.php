@@ -14,6 +14,8 @@ class CuentaPorCobrar extends Model
     protected $table = 'cuentas_por_cobrar';
 
     protected $fillable = [
+        // De qué almacén (sucursal) es: cada una cobra y paga lo suyo.
+        'almacen_id',
         'nota_venta_id',
         'cliente_id',
         // Cada cuota de una venta a crédito es su propia cuenta.

@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Http\Controllers;
+use App\Support\AlmacenAcceso;
 
 use App\Models\AperturaCaja;
 use App\Models\CuentaPorCobrar;
@@ -56,7 +57,7 @@ class AlertaController extends Controller
         $gracia = LineaCredito::pluck('dias_gracia', 'cliente_id');
         $aviso = now()->addDays(EstadoCuentaService::DIAS_AVISO)->toDateString();
 
-        CuentaPorCobrar::with(['cliente:id,nombre', 'notaVenta:id,serie,numero'])
+        AlmacenAcceso::limitar(CuentaPorCobrar::query())->with(['cliente:id,nombre', 'notaVenta:id,serie,numero'])
             ->withSum(['letras as en_letras' => fn ($q) => $q->where('estado', 'emitida')], 'saldo')
             ->whereIn('estado', ['pendiente', 'parcial'])
             ->whereDate('fecha_vencimiento', '<=', $aviso)
@@ -104,6 +105,7 @@ class AlertaController extends Controller
 
         // ── Cajas abiertas de días anteriores (sin cerrar) ──
         AperturaCaja::with('caja:id,nombre')
+            ->whereHas('caja', fn ($c) => AlmacenAcceso::limitar($c))
             ->where('estado', 'abierta')
             ->whereDate('fecha_apertura', '<', $hoy)
             ->get()

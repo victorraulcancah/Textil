@@ -268,6 +268,7 @@ class NotaVentaService
 
             foreach ($cuotas as $i => $cuota) {
                 CuentaPorCobrar::create([
+                    'almacen_id' => $nota->almacen_id,
                     'nota_venta_id' => $nota->id,
                     'cliente_id' => $data['cliente_id'],
                     'numero_cuota' => $i + 1,

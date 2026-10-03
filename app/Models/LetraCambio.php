@@ -18,6 +18,8 @@ class LetraCambio extends Model
     protected $table = 'letras_cambio';
 
     protected $fillable = [
+        // De qué almacén (sucursal) es: cada una cobra y paga lo suyo.
+        'almacen_id',
         'numero', 'cuenta_por_cobrar_id', 'cliente_id', 'referencia', 'fecha_giro', 'lugar_giro',
         'fecha_vencimiento', 'moneda', 'importe', 'saldo', 'monto_pagado', 'letra_anterior_id', 'serie_letra', 'serie_renovacion',
         'aceptante_nombre', 'aceptante_documento', 'aceptante_domicilio', 'aceptante_localidad', 'aceptante_telefono',

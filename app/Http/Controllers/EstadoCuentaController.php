@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Http\Controllers;
+use App\Support\AlmacenAcceso;
 
 use App\Models\Cliente;
 use App\Services\CreditoService;
@@ -28,14 +29,14 @@ class EstadoCuentaController extends Controller
      */
     public function index()
     {
-        $deudas = \App\Models\CuentaPorCobrar::whereIn('estado', ['pendiente', 'parcial'])
+        $deudas = AlmacenAcceso::limitar(\App\Models\CuentaPorCobrar::query())->whereIn('estado', ['pendiente', 'parcial'])
             ->selectRaw('cliente_id, moneda, SUM(saldo) AS saldo')
             ->groupBy('cliente_id', 'moneda')
             ->get()
             ->groupBy('cliente_id');
 
         return response()->json(
-            Cliente::whereHas('cuentasPorCobrar')
+            Cliente::whereHas('cuentasPorCobrar', fn ($q) => AlmacenAcceso::limitar($q))
                 ->orderBy('nombre')
                 ->get(['id', 'codigo', 'nombre', 'numero_documento'])
                 ->map(fn (Cliente $c) => $c->only(['id', 'codigo', 'nombre', 'numero_documento']) + [

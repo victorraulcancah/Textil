@@ -101,7 +101,7 @@ class DashboardController extends Controller
         $caja = MovimientoCaja::whereBetween('fecha', $rango)
             ->when($almacenId !== null, fn ($q) => $q->whereIn('apertura_caja_id', fn ($s) => $s
                 ->select('ap.id')->from('aperturas_caja as ap')
-                ->join('users as uc', 'uc.id', '=', 'ap.usuario_id')->where('uc.almacen_id', $almacenId)))
+                ->join('cajas as cj', 'cj.id', '=', 'ap.caja_id')->where('cj.almacen_id', $almacenId)))
             ->where('moneda', 'PEN')
             ->selectRaw('tipo, SUM(monto) as total')
             ->groupBy('tipo')->get()
@@ -112,9 +112,10 @@ class DashboardController extends Controller
         $tipoCambioHoy = (float) (app(\App\Services\TipoCambioService::class)->venta() ?? 1);
         $porCobrar = round((float) CuentaPorCobrar::whereIn('estado', ['pendiente', 'parcial'])
             // De una sucursal: las deudas de sus ventas.
-            ->when($almacenId !== null, fn ($q) => $q->whereIn('nota_venta_id', fn ($s) => $s->select('id')->from('notas_venta')->where('almacen_id', $almacenId)))
+            ->when($almacenId !== null, fn ($q) => $q->where('almacen_id', $almacenId))
             ->selectRaw("SUM(CASE WHEN moneda = 'USD' THEN saldo * ? ELSE saldo END) as saldo", [$tipoCambioHoy])
             ->value('saldo'), 2);
+        // Lo que se debe a proveedores es general (las compras son de todos los almacenes).
         $porPagar = round((float) CuentaPorPagar::whereIn('estado', ['pendiente', 'parcial'])->sum('saldo'), 2);
         $capitalInmovilizado = round((float) ProductoAlmacenStock::query()
             ->when($almacenId !== null, fn ($q) => $q->where('almacen_id', $almacenId))

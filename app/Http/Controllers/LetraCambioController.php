@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\CuentaPorCobrar;
 use App\Models\Empresa;
 use App\Models\LetraCambio;
+use App\Support\AlmacenAcceso;
 use App\Models\MovimientoCaja;
 use App\Models\SerieDocumento;
 use App\Services\CajaService;
@@ -35,11 +36,14 @@ class LetraCambioController extends Controller
     private function lista()
     {
         // La proforma (venta) que se canjea por la letra: sale de la cuenta por cobrar de la que se giró.
-        return LetraCambio::with('cliente:id,nombre', 'anterior:id,numero,serie_renovacion', 'renovacion:id,numero,serie_renovacion,letra_anterior_id', 'cuentaPorCobrar:id,nota_venta_id,numero_cuota,total_cuotas', 'cuentaPorCobrar.notaVenta:id,serie,numero,fecha_emision')->latest('id');
+        return LetraCambio::with('cliente:id,nombre', 'anterior:id,numero,serie_renovacion', 'renovacion:id,numero,serie_renovacion,letra_anterior_id', 'cuentaPorCobrar:id,nota_venta_id,numero_cuota,total_cuotas', 'cuentaPorCobrar.notaVenta:id,serie,numero,fecha_emision')->latest('id')
+            // Tesorería por sucursal: cada almacén ve las letras de las suyas.
+            ->where(fn ($q) => AlmacenAcceso::limitar($q));
     }
 
     public function show(LetraCambio $letrasCambio)
     {
+        AlmacenAcceso::exigir($letrasCambio->almacen_id);
         return response()->json($letrasCambio->load('cliente:id,nombre', 'cuentaPorCobrar:id,nota_venta_id,saldo,moneda'));
     }
 
@@ -53,6 +57,7 @@ class LetraCambioController extends Controller
         $request->validate(['cuenta_id' => 'required|exists:cuentas_por_cobrar,id']);
 
         $cuenta = CuentaPorCobrar::with('cliente', 'notaVenta:id,serie,numero')->findOrFail($request->integer('cuenta_id'));
+        AlmacenAcceso::exigir($cuenta->almacen_id);
         $cliente = $cuenta->cliente;
         $empresa = Empresa::query()->where('activa', true)->first() ?? Empresa::first();
 
@@ -120,6 +125,7 @@ class LetraCambioController extends Controller
             // Letra suelta: no hay deuda de una venta que comprobar; se gira por lo que se escribe.
             if (empty($data['cuenta_por_cobrar_id'])) {
                 return LetraCambio::create($data + [
+                    'almacen_id' => AlmacenAcceso::propio() ?? \App\Models\Almacen::orderBy('id')->value('id'),
                     'numero' => $this->siguienteNumero(),
                     'serie_letra' => $this->siguienteSerieLetra(),
                     'estado' => 'emitida',
@@ -130,6 +136,7 @@ class LetraCambioController extends Controller
             }
 
             $cuenta = CuentaPorCobrar::lockForUpdate()->findOrFail($data['cuenta_por_cobrar_id']);
+            AlmacenAcceso::exigir($cuenta->almacen_id);
 
             if (in_array($cuenta->estado, ['anulado', 'pagado'], true)) {
                 abort(422, 'Esta cuenta ya no tiene saldo por cobrar: no se puede girar una letra.');
@@ -145,6 +152,7 @@ class LetraCambioController extends Controller
             $data['moneda'] = $cuenta->moneda ?: 'PEN';
 
             return LetraCambio::create($data + [
+                'almacen_id' => $cuenta->almacen_id,
                 'cliente_id' => $cuenta->cliente_id,
                 'numero' => $this->siguienteNumero(),
                 // Una letra lleva su serie LT001-NNN; una renovación (otro documento) no la usa.
@@ -168,6 +176,7 @@ class LetraCambioController extends Controller
      */
     public function cobrar(Request $request, LetraCambio $letrasCambio)
     {
+        AlmacenAcceso::exigir($letrasCambio->almacen_id);
         $data = $request->validate([
             'fecha' => 'required|date|before_or_equal:'.now()->toDateString(),
             // Lo que se cobra, en la moneda de la letra; sin decir nada, todo el saldo.
@@ -288,6 +297,7 @@ class LetraCambioController extends Controller
      */
     public function renovar(Request $request, LetraCambio $letrasCambio)
     {
+        AlmacenAcceso::exigir($letrasCambio->almacen_id);
         $data = $request->validate([
             'fecha_giro' => 'required|date',
             'fecha_vencimiento' => 'required|date|after_or_equal:fecha_giro',
@@ -307,6 +317,7 @@ class LetraCambioController extends Controller
             $letrasCambio->update(['estado' => 'cancelada', 'saldo' => 0]);
 
             return LetraCambio::create([
+                'almacen_id' => $letrasCambio->almacen_id,
                 'numero' => $this->siguienteNumero(),
                 'cuenta_por_cobrar_id' => $letrasCambio->cuenta_por_cobrar_id,
                 'letra_anterior_id' => $letrasCambio->id,
@@ -350,6 +361,7 @@ class LetraCambioController extends Controller
     /** Cambia dónde está la letra mientras se cobra: cartera, cobranza libre, cobranza banco o descuento. */
     public function cambiarSubEstado(Request $request, LetraCambio $letrasCambio)
     {
+        AlmacenAcceso::exigir($letrasCambio->almacen_id);
         $data = $request->validate([
             'sub_estado' => ['required', Rule::in(array_keys(LetraCambio::SUB_ESTADOS))],
         ]);
@@ -366,6 +378,7 @@ class LetraCambioController extends Controller
     /** La letra queda anulada (no se borra: el número ya existió y hay que poder rastrearlo). */
     public function anular(LetraCambio $letrasCambio)
     {
+        AlmacenAcceso::exigir($letrasCambio->almacen_id);
         if (in_array($letrasCambio->estado, ['pagada', 'cancelada'], true) || (float) $letrasCambio->monto_pagado > 0) {
             return response()->json(['message' => 'La letra ya tiene cobros o fue renovada: no se puede anular.'], 422);
         }

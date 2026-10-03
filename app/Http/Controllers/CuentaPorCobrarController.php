@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AperturaCaja;
 use App\Models\CuentaPorCobrar;
+use App\Support\AlmacenAcceso;
 use App\Models\CuentaPorCobrarPago;
 use App\Models\MovimientoCaja;
 use App\Services\TipoCambioService;
@@ -17,8 +18,9 @@ class CuentaPorCobrarController extends Controller
 
     public function index()
     {
+        // Tesorería por sucursal: cada almacén ve las cuentas de sus ventas.
         return response()->json(
-            CuentaPorCobrar::with([
+            AlmacenAcceso::limitar(CuentaPorCobrar::query())->with([
                 'cliente:id,nombre', 'notaVenta:id,serie,numero,fecha_emision', 'pagos.cuentaBancaria:id,alias,numero_cuenta', 'pagos.billetera:id,nombre',
                 // Las letras vigentes que se emitieron desde la cuenta: la relación se ve en la lista.
                 'letras' => fn ($q) => $q->where('estado', 'emitida')->select('id', 'numero', 'cuenta_por_cobrar_id', 'importe', 'saldo', 'moneda', 'fecha_vencimiento', 'serie_renovacion')->orderBy('numero'),
@@ -31,12 +33,14 @@ class CuentaPorCobrarController extends Controller
 
     public function show(CuentaPorCobrar $cuenta)
     {
+        AlmacenAcceso::exigir($cuenta->almacen_id);
         return response()->json($cuenta->cargarEnLetras()->load(['cliente:id,nombre', 'notaVenta:id,serie,numero', 'pagos.cuentaBancaria:id,alias,numero_cuenta', 'pagos.billetera:id,nombre']));
     }
 
     /** Registra uno o varios pagos (mixto) contra la cuenta y genera movimiento de caja. */
     public function registrarPago(Request $request, CuentaPorCobrar $cuenta)
     {
+        AlmacenAcceso::exigir($cuenta->almacen_id);
         if ($cuenta->estado === 'anulado' || $cuenta->estado === 'pagado') {
             return response()->json(['message' => 'La cuenta no admite más pagos.'], 422);
         }
@@ -133,6 +137,7 @@ class CuentaPorCobrarController extends Controller
     /** Edita un pago existente y ajusta su movimiento de caja. */
     public function actualizarPago(Request $request, CuentaPorCobrarPago $pago)
     {
+        AlmacenAcceso::exigir($pago->cuentaPorCobrar?->almacen_id);
         $data = $request->validate([
             'forma_pago' => 'required|in:'.self::FORMAS,
             'cuenta_bancaria_id' => 'nullable|exists:cuentas_bancarias,id',
@@ -197,6 +202,7 @@ class CuentaPorCobrarController extends Controller
     /** Anula (elimina) un pago y revierte su movimiento de caja. */
     public function anularPago(CuentaPorCobrarPago $pago)
     {
+        AlmacenAcceso::exigir($pago->cuentaPorCobrar?->almacen_id);
         $cuenta = $pago->cuentaPorCobrar;
 
         DB::transaction(function () use ($pago, $cuenta) {

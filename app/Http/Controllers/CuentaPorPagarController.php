@@ -17,6 +17,7 @@ class CuentaPorPagarController extends Controller
     public function index()
     {
         return response()->json(
+            // Las compras son de todos los almacenes: lo que se debe a proveedores es general.
             CuentaPorPagar::with(['proveedor:id,nombre', 'recepcionCompra:id', 'compra:id,correlativo,serie,numero,tipo_documento,fecha', 'pagos.cuentaBancaria:id,alias,numero_cuenta', 'pagos.billetera:id,nombre'])
                 ->latest('id')
                 ->get()

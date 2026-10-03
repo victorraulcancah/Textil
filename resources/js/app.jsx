@@ -15,6 +15,7 @@ import Productos from './pages/Productos';
 import ListaPrecios from './pages/ListaPrecios';
 import Colores from './pages/Colores';
 import TiposTela from './pages/TiposTela';
+import FamiliaTela from './pages/FamiliaTela';
 import Marcas from './pages/Marcas';
 import SubMarcas from './pages/SubMarcas';
 import UnidadesMedida from './pages/UnidadesMedida';
@@ -82,6 +83,7 @@ const routes = [
     { path: '/lista-precios', element: <ListaPrecios /> },
     { path: '/colores', element: <Colores /> },
     { path: '/tipos-tela', element: <TiposTela /> },
+    { path: '/tipos-tela/familia/:id', element: <FamiliaTela /> },
     { path: '/marcas', element: <Marcas /> },
     { path: '/sub-marcas', element: <SubMarcas /> },
     { path: '/unidades-medida', element: <UnidadesMedida /> },

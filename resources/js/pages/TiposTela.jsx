@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Edit, Layers3, Shapes, Trash2 } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
@@ -13,6 +14,7 @@ import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select, Ta
  */
 export default function TiposTela() {
     const toast = useToast();
+    const navigate = useNavigate();
     const [tab, setTab] = useState('familias');
     const [familias, setFamilias] = useState([]);
     const [tipos, setTipos] = useState([]);
@@ -285,7 +287,12 @@ export default function TiposTela() {
                 filterCount={filterCount}
                 onApplyFilters={applyFilters}
                 onClearFilters={clearFilters}
+                // Doble clic en una familia: abre la vista con sus tipos de tela.
+                onRowDoubleClick={tab === 'familias' ? (row) => navigate(`/tipos-tela/familia/${row.id}`) : undefined}
             />
+            {tab === 'familias' && (
+                <p className="mt-2 text-xs text-warm-400">Doble clic en una familia para ver sus tipos de tela.</p>
+            )}
 
             <Modal
                 open={modalOpen}

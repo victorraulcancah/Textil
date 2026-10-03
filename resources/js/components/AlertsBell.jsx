@@ -55,7 +55,7 @@ export default function AlertsBell() {
               : 'bg-primary-600';
 
     return (
-        <div ref={ref} className="fixed right-4 top-3 z-40">
+        <div ref={ref} className="relative z-40">
             <button
                 onClick={() => {
                     setOpen((v) => !v);

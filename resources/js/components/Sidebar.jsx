@@ -6,7 +6,6 @@ import { navigation } from '../config/navigation';
 import api from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { cn } from './ui';
-import UserMenu from './UserMenu';
 
 const GROUPS_STORAGE = 'sidebar_groups';
 const GROUP_LABELS = navigation.filter((i) => i.children).map((i) => i.label);
@@ -412,9 +411,6 @@ export default function Sidebar({ collapsed = false, onToggleCollapse }) {
                     )}
                 </nav>
 
-                <div className="shrink-0 border-t border-edge p-2">
-                    <UserMenu compact={rail} />
-                </div>
             </aside>
 
             {/* Submenú del modo contraído. Va en un portal porque el nav recorta

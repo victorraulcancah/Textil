@@ -15,10 +15,10 @@ class NotaVenta extends Model
     /** La serie de las proformas sin almacén conocido: PF01. (Las anteriores conservan NV01.) */
     public const SERIE = 'PF01';
 
-    /** PF + el número de serie del almacén en dos dígitos: PF01, PF02… Cada almacén numera aparte (PF02-001). */
+    /** PF + el número de serie del almacén en tres dígitos: PF001, PF002… Cada almacén numera aparte (PF002-001). */
     public static function serieDeProforma(?int $numeroSerie): string
     {
-        return 'PF'.str_pad((string) ($numeroSerie ?: 1), 2, '0', STR_PAD_LEFT);
+        return 'PF'.str_pad((string) ($numeroSerie ?: 1), 3, '0', STR_PAD_LEFT);
     }
 
     /** La serie que corresponde a las proformas de un almacén. */

@@ -341,12 +341,12 @@ export default function Almacenes() {
         },
         {
             key: 'numero_serie',
-            label: 'Serie',
+            label: 'Serie (PF / OV)',
             width: '90px',
             searchable: false,
             render: (row) => (
-                <Badge variant="blue" title="Las proformas de este almacén salen con esta serie">
-                    PF{String(row.numero_serie ?? 1).padStart(2, '0')}
+                <Badge variant="blue" title="Las proformas y los pedidos de este almacén salen con su número de serie">
+                    {String(row.numero_serie ?? 1).padStart(3, '0')}
                 </Badge>
             ),
         },

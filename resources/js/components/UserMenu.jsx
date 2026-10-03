@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronsUpDown, LogOut } from 'lucide-react';
+import { ChevronDown, ChevronsUpDown, LogOut, Warehouse } from 'lucide-react';
 import { useAuth } from '../lib/auth';
+import { useAlmacenPropio } from '../lib/almacenes';
 import { cn } from './ui';
 
 function Avatar({ user, size = 'md' }) {
@@ -23,8 +24,14 @@ function Avatar({ user, size = 'md' }) {
     );
 }
 
-export default function UserMenu({ compact = false }) {
+/**
+ * El usuario con el que se entró. `barra`: en la barra de arriba, junto a la campana de alertas, con el almacén
+ * (sucursal) donde trabaja. Sin `barra`: el bloque de siempre del menú lateral.
+ */
+export default function UserMenu({ compact = false, barra = false }) {
     const { user, logout } = useAuth();
+    const { superAdmin } = useAlmacenPropio();
+    const almacen = user?.almacen?.nombre ?? (superAdmin ? 'Todos los almacenes' : 'Sin almacén asignado');
     const [open, setOpen] = useState(false);
     const menuRef = useRef(null);
 
@@ -37,6 +44,53 @@ export default function UserMenu({ compact = false }) {
         document.addEventListener('mousedown', handler);
         return () => document.removeEventListener('mousedown', handler);
     }, []);
+
+    if (barra) {
+        return (
+            <div ref={menuRef} className="relative">
+                <button
+                    onClick={() => setOpen((v) => !v)}
+                    aria-haspopup="menu"
+                    aria-expanded={open}
+                    className="flex items-center gap-3 rounded-full border border-edge bg-white py-1 pl-1 pr-3 text-left shadow-sm transition hover:bg-primary-50"
+                >
+                    <Avatar user={user} />
+                    <span className="hidden min-w-0 sm:block">
+                        <span className="block max-w-[11rem] truncate text-sm font-semibold leading-tight text-gray-900">{user?.name}</span>
+                        <span className="block max-w-[11rem] truncate text-[11px] leading-tight text-gray-500">{user?.email}</span>
+                    </span>
+                    <span className="hidden items-center gap-1 whitespace-nowrap rounded-full bg-primary-50 px-2.5 py-1 text-xs font-semibold text-primary-700 md:inline-flex" title="Almacén (sucursal) en el que trabajas">
+                        <Warehouse className="h-3.5 w-3.5" />
+                        {almacen}
+                    </span>
+                    <ChevronDown className="h-4 w-4 shrink-0 text-gray-400" />
+                </button>
+
+                {open && (
+                    <div role="menu" className="absolute right-0 top-full z-50 mt-2 w-64 overflow-hidden rounded-lg border border-edge bg-white shadow-lg">
+                        <div className="border-b border-edge bg-gray-50 px-4 py-3">
+                            <p className="truncate text-sm font-medium text-gray-900">{user?.name}</p>
+                            <p className="truncate text-xs text-gray-500">{user?.email}</p>
+                            <p className="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-primary-700">
+                                <Warehouse className="h-3.5 w-3.5" />
+                                {almacen}
+                            </p>
+                        </div>
+                        <div className="p-1.5">
+                            <button
+                                role="menuitem"
+                                onClick={logout}
+                                className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50"
+                            >
+                                <LogOut className="h-4 w-4" />
+                                Cerrar sesión
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    }
 
     return (
         <div ref={menuRef} className="relative">

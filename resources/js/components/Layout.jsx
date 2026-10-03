@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import AlertsBell from './AlertsBell';
 import Sidebar from './Sidebar';
+import UserMenu from './UserMenu';
 import { cn } from './ui';
 
 const COLLAPSE_STORAGE = 'sidebar_collapsed';
@@ -29,14 +30,18 @@ export default function Layout({ children }) {
     return (
         <div className="min-h-screen bg-surface">
             <Sidebar collapsed={collapsed} onToggleCollapse={toggleCollapsed} />
-            <AlertsBell />
             <div
                 className={cn(
                     'flex min-h-screen flex-col transition-[padding]',
                     collapsed ? 'lg:pl-16' : 'lg:pl-52',
                 )}
             >
-                <main className="flex-1 px-4 pb-6 pt-16 sm:px-6 lg:px-8 lg:pr-20 lg:pt-6">{children}</main>
+                {/* La barra de arriba: el usuario con su almacén y la campana de alertas. */}
+                <div className="flex h-14 shrink-0 items-center justify-end gap-3 px-4 pl-16 sm:px-6 lg:px-8">
+                    <UserMenu barra />
+                    <AlertsBell />
+                </div>
+                <main className="flex-1 px-4 pb-6 pt-2 sm:px-6 lg:px-8">{children}</main>
             </div>
         </div>
     );

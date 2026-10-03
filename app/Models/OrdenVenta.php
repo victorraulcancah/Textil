@@ -14,6 +14,14 @@ use Illuminate\Database\Eloquent\Model;
  */
 class OrdenVenta extends Model
 {
+    /** OV + el número de serie del almacén en tres dígitos: OV001, OV002… El pedido dice de qué sucursal es (OV002-001). */
+    public static function serieDeAlmacen(?int $almacenId): string
+    {
+        $numero = $almacenId ? Almacen::whereKey($almacenId)->value('numero_serie') : null;
+
+        return 'OV'.str_pad((string) ($numero ?: 1), 3, '0', STR_PAD_LEFT);
+    }
+
     use Auditable;
 
     /** Nombre del módulo en la bitácora de auditoría. */

@@ -35,12 +35,8 @@ class ClienteController extends Controller
     {
         $query = Cliente::with(self::RELACIONES)->where('activo', true);
 
-        // Sin "ver todo", cada quien ve solo los clientes que tiene a cargo.
-        // Los que no tienen ejecutivo asignado nadie los ve por esta vía —
-        // hay que asignarlos primero— salvo quien sí tenga "ver todo".
-        if (! $this->puedeVerTodo($request)) {
-            $query->where('ejecutivo_id', $request->user()->id);
-        }
+        // Los clientes son compartidos por todas las sucursales: quien puede ver Clientes los ve todos. El
+        // ejecutivo asignado sigue siendo un dato del cliente, ya no un filtro de quién lo ve.
 
         // De la A a la Z por nombre o razón social.
         $clientes = $query->orderBy('nombre')->orderBy('id')->get();
@@ -405,13 +401,5 @@ class ClienteController extends Controller
             'observaciones' => $linea['observaciones'] ?? null,
         ]);
         $cliente->unsetRelation('lineaCredito');
-    }
-
-    /** El super-admin y quien tenga el permiso "ver todo" ven la cartera completa. */
-    private function puedeVerTodo(Request $request): bool
-    {
-        $user = $request->user();
-
-        return $user->hasRole(config('permisos.super_admin')) || $user->can('ventas.clientes.ver_todo');
     }
 }

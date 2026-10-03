@@ -60,8 +60,9 @@ class OrdenVentaService
     {
         return DB::transaction(function () use ($data) {
             $orden = OrdenVenta::create($this->cabecera($data) + [
-                'serie' => $data['serie'] ?? 'OV',
-                'numero' => $this->siguienteNumero('orden_venta', $data['serie'] ?? 'OV'),
+                // La serie dice de qué sucursal es el pedido: OV001-001 en el almacén 1, OV002-001 en el 2…
+                'serie' => $serie = $data['serie'] ?? OrdenVenta::serieDeAlmacen($data['almacen_id'] ?? null),
+                'numero' => $this->siguienteNumero('orden_venta', $serie, 3, $data['almacen_id'] ?? null),
                 // La sucursal que toma el pedido: de ahí sale la mercadería.
                 'almacen_id' => $data['almacen_id'] ?? null,
                 'estado' => OrdenVenta::BORRADOR,
@@ -1075,19 +1076,19 @@ class OrdenVentaService
     }
 
     /** Correlativo del documento, reutilizando el contador del sistema. */
-    private function siguienteNumero(string $tipoDocumento, string $serie): string
+    private function siguienteNumero(string $tipoDocumento, string $serie, int $largo = 6, ?int $almacenId = null): string
     {
         $doc = SerieDocumento::where('tipo_documento', $tipoDocumento)
             ->where('serie', $serie)
             ->lockForUpdate()
             ->firstOrCreate(
                 ['tipo_documento' => $tipoDocumento, 'serie' => $serie],
-                ['numero_actual' => 0, 'activo' => true],
+                ['numero_actual' => 0, 'activo' => true, 'almacen_id' => $almacenId],
             );
 
         $doc->increment('numero_actual');
 
-        return str_pad((string) $doc->numero_actual, 6, '0', STR_PAD_LEFT);
+        return str_pad((string) $doc->numero_actual, $largo, '0', STR_PAD_LEFT);
     }
 
     private function exigirTransicion(OrdenVenta $orden, string $destino): void

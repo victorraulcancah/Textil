@@ -337,6 +337,7 @@ export default function CrearTransferencia() {
                                 lineas={items}
                                 setLineas={setItems}
                                 validarStock
+                                almacenOrigenId={form.almacen_origen_id || null}
                                 deshabilitado={!form.almacen_origen_id}
                                 avisoDeshabilitado="Elige el almacén de origen para ver sus productos con stock."
                                 errores={formErrors}

@@ -245,24 +245,39 @@ class RequerimientoTrasladoService
         }
 
         return DB::transaction(function () use ($t, $transporte, $extras) {
+            $escogidos = collect($extras)->flatMap(fn ($e) => collect($e['rollos_escaneados'] ?? [])->pluck('rollo_id'))->all();
+
             foreach ($extras as $extra) {
                 $cantidad = $extra['cantidad_enviada'] ?? null;
-                if (! empty($extra['rollos'])) {
+                $filasEscaneadas = [];
+                if (! empty($extra['rollos_escaneados'])) {
+                    // Rollos escogidos escaneando: salen exactamente esos.
+                    [$cantidad, $filasEscaneadas] = app(TrasladoRollosService::class)->prepararEscaneados(
+                        ProductoPresentacion::with('producto')->findOrFail($extra['producto_presentacion_id']),
+                        $extra['producto_color_id'] ?? null,
+                        (int) $t->almacen_origen_id,
+                        $extra['rollos_escaneados'],
+                    );
+                } elseif (! empty($extra['rollos'])) {
                     // "N rollos": se toman los más antiguos del color y se descuenta lo que pesan.
                     $cantidad = app(TrasladoRollosService::class)->cantidadDeRollos(
                         ProductoPresentacion::with('producto')->findOrFail($extra['producto_presentacion_id']),
                         $extra['producto_color_id'] ?? null,
                         (int) $t->almacen_origen_id,
                         (int) $extra['rollos'],
+                        $escogidos,
                     );
                 }
 
-                $t->detalles()->create([
+                $linea = $t->detalles()->create([
                     'producto_presentacion_id' => $extra['producto_presentacion_id'],
                     'producto_color_id' => $extra['producto_color_id'] ?? null,
                     'modo' => 'cantidad',
                     'cantidad_enviada' => $cantidad,
                 ]);
+                foreach ($filasEscaneadas as $fila) {
+                    $linea->rollos()->create($fila);
+                }
             }
             $t->unsetRelation('detalles');
 

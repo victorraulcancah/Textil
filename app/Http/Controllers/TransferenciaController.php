@@ -52,8 +52,12 @@ class TransferenciaController extends Controller
             // Cuál color viaja; solo aplica a lo que se lleva por rollos.
             'detalles.*.producto_color_id' => 'nullable|exists:producto_colores,id',
             // O una cantidad, o N rollos enteros de la tela (el servidor toma los más antiguos del color).
-            'detalles.*.cantidad_enviada' => 'required_without:detalles.*.rollos|nullable|numeric|min:0.01',
+            'detalles.*.cantidad_enviada' => 'required_without_all:detalles.*.rollos,detalles.*.rollos_escaneados|nullable|numeric|min:0.01',
             'detalles.*.rollos' => 'nullable|integer|min:1|max:9999',
+            // Rollos escogidos escaneando su QR: salen esos, enteros o con el corte que se indique.
+            'detalles.*.rollos_escaneados' => 'nullable|array|min:1',
+            'detalles.*.rollos_escaneados.*.rollo_id' => 'required|integer|exists:rollos,id',
+            'detalles.*.rollos_escaneados.*.metros' => 'required|numeric|min:0.01',
         ]);
 
         $transferencia = DB::transaction(function () use ($data) {
@@ -78,28 +82,56 @@ class TransferenciaController extends Controller
                 'usuario_envio_id' => auth()->id(),
             ]);
 
+            // Los rollos escogidos escaneando: las líneas "N rollos" no los repiten.
+            $escogidos = collect($data['detalles'])->flatMap(fn ($d) => collect($d['rollos_escaneados'] ?? [])->pluck('rollo_id'))->all();
+
             foreach ($data['detalles'] as $detalle) {
                 $cantidad = $detalle['cantidad_enviada'] ?? null;
-                if (! empty($detalle['rollos'])) {
+                $filasEscaneadas = [];
+                if (! empty($detalle['rollos_escaneados'])) {
+                    [$cantidad, $filasEscaneadas] = app(\App\Services\TrasladoRollosService::class)->prepararEscaneados(
+                        ProductoPresentacion::with('producto')->findOrFail($detalle['producto_presentacion_id']),
+                        $detalle['producto_color_id'] ?? null,
+                        (int) $data['almacen_origen_id'],
+                        $detalle['rollos_escaneados'],
+                    );
+                } elseif (! empty($detalle['rollos'])) {
                     $cantidad = app(\App\Services\TrasladoRollosService::class)->cantidadDeRollos(
                         ProductoPresentacion::with('producto')->findOrFail($detalle['producto_presentacion_id']),
                         $detalle['producto_color_id'] ?? null,
                         (int) $data['almacen_origen_id'],
                         (int) $detalle['rollos'],
+                        $escogidos,
                     );
                 }
 
-                $transferencia->detalles()->create([
+                $linea = $transferencia->detalles()->create([
                     'producto_presentacion_id' => $detalle['producto_presentacion_id'],
                     'producto_color_id' => $detalle['producto_color_id'] ?? null,
                     'cantidad_enviada' => $cantidad,
                 ]);
+                foreach ($filasEscaneadas as $fila) {
+                    $linea->rollos()->create($fila);
+                }
             }
 
             return $transferencia;
         });
 
         return response()->json($transferencia->load(['almacenOrigen', 'almacenDestino', 'usuarioEnvio:id,name', 'detalles.presentacion.producto.marca', 'detalles.color']), 201);
+    }
+
+    /** Valida un rollo escaneado al armar un traslado: devuelve su tela, color y metros para agregarlo a la línea. */
+    public function rolloEscaneado(Request $request)
+    {
+        $data = $request->validate([
+            'codigo' => 'required|string|max:100',
+            'almacen_origen_id' => 'required|exists:almacenes,id',
+        ]);
+
+        return response()->json(
+            app(\App\Services\TrasladoRollosService::class)->rolloParaTraslado($data['codigo'], (int) $data['almacen_origen_id'])
+        );
     }
 
     public function show(Transferencia $transferencia)

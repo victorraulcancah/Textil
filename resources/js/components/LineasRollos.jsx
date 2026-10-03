@@ -1,8 +1,10 @@
 import { Fragment, useMemo, useState } from 'react';
-import { ChevronRight, Eraser, Plus, Trash2 } from 'lucide-react';
+import { Camera, Check, ChevronRight, Eraser, Plus, ScanLine, Trash2, TriangleAlert } from 'lucide-react';
+import api from '../lib/api';
 import { useToast } from '../lib/toast';
 import { tipoUnidad } from '../lib/unidades';
 import ColorSelect from './ColorSelect';
+import EscanerCamara from './EscanerCamara';
 import ProductoPickerModal from './ProductoPickerModal';
 import { Button, Input, SearchSelect, cn } from './ui';
 
@@ -22,7 +24,7 @@ const lineaVacia = { producto_id: '', producto_presentacion_id: '', producto_col
 
 /** Las líneas de un requerimiento: lo que se le pide a otro almacén. */
 export const aDetallesRequerimiento = (lineas) =>
-    lineas.map((l) =>
+    lineas.filter((l) => l.modo !== 'escaneado').map((l) =>
         l.modo === ROLLOS
             ? {
                   modo: ROLLOS,
@@ -42,7 +44,14 @@ export const aDetallesRequerimiento = (lineas) =>
 /** Las líneas de un traslado por stock: una tela va por rollos (el servidor toma los más antiguos del color). */
 export const aDetallesTraslado = (lineas) =>
     lineas.map((l) =>
-        l.modo === ROLLOS
+        l.modo === 'escaneado'
+            ? {
+                  // Rollos escogidos escaneando su QR: salen exactamente esos (enteros, o con el corte que se indique).
+                  producto_presentacion_id: Number(l.producto_presentacion_id),
+                  producto_color_id: l.producto_color_id ? Number(l.producto_color_id) : null,
+                  rollos_escaneados: l.rollos.map((r) => ({ rollo_id: r.rollo_id, metros: Number(r.metros) })),
+              }
+            : l.modo === ROLLOS
             ? {
                   producto_presentacion_id: Number(l.producto_presentacion_id),
                   producto_color_id: l.producto_color_id ? Number(l.producto_color_id) : null,
@@ -75,8 +84,13 @@ export default function LineasRollos({
     deshabilitado = false,
     avisoDeshabilitado = null,
     errores = {},
+    /** Con un almacén de origen, se puede escoger un rollo exacto escaneando su QR (pistola o cámara). */
+    almacenOrigenId = null,
 }) {
     const toast = useToast();
+    const [codigo, setCodigo] = useState('');
+    const [ultimo, setUltimo] = useState(null);
+    const [camara, setCamara] = useState(false);
     const [nueva, setNueva] = useState(lineaVacia);
     const [abiertas, setAbiertas] = useState({});
     const [picker, setPicker] = useState({ open: false, query: '' });
@@ -135,8 +149,68 @@ export default function LineasRollos({
     /** Lo ya agregado de esa tela y color, para no pasarse del disponible al sumar. */
     const yaAgregado = (presentacionId, colorId) =>
         lineas
-            .filter((l) => l.modo === ROLLOS && String(l.producto_presentacion_id) === String(presentacionId) && String(l.producto_color_id || '') === String(colorId || ''))
-            .reduce((s, l) => s + (Number(l.rollos_pedidos) || 0), 0);
+            .filter((l) => (l.modo === ROLLOS || l.modo === 'escaneado') && String(l.producto_presentacion_id) === String(presentacionId) && String(l.producto_color_id || '') === String(colorId || ''))
+            .reduce((s, l) => s + (l.modo === 'escaneado' ? l.rollos.length : Number(l.rollos_pedidos) || 0), 0);
+
+    /** Valida el rollo escaneado en el servidor y lo agrega a su tela y color. */
+    const verificar = async (valor) => {
+        if (!valor || !almacenOrigenId) return { ok: false, texto: 'Elige el almacén de origen.' };
+        try {
+            const { data: r } = await api.post('/transferencias/rollo-escaneado', { codigo: valor, almacen_origen_id: Number(almacenOrigenId) });
+            if (lineas.some((l) => l.modo === 'escaneado' && l.rollos.some((x) => x.rollo_id === r.rollo_id))) {
+                const texto = `El rollo ${r.codigo} ya está agregado.`;
+                setUltimo({ ok: false, codigo: r.codigo, texto });
+                return { ok: false, texto };
+            }
+            setLineas((prev) => {
+                const rollo = { rollo_id: r.rollo_id, codigo: r.codigo, metros: String(r.metros), metros_rollo: r.metros_rollo };
+                const j = prev.findIndex(
+                    (l) =>
+                        l.modo === 'escaneado' &&
+                        String(l.producto_presentacion_id) === String(r.producto_presentacion_id) &&
+                        String(l.producto_color_id || '') === String(r.producto_color_id ?? ''),
+                );
+                if (j !== -1) return prev.map((l, k) => (k === j ? { ...l, rollos: [...l.rollos, rollo] } : l));
+                return [
+                    ...prev,
+                    {
+                        modo: 'escaneado',
+                        producto_presentacion_id: String(r.producto_presentacion_id),
+                        producto_color_id: r.producto_color_id ? String(r.producto_color_id) : '',
+                        producto: r.producto,
+                        color: r.color ?? '',
+                        presentacion: 'Rollo',
+                        rollos: [rollo],
+                    },
+                ];
+            });
+            const texto = `Rollo correcto · ${num(r.metros)} m`;
+            setUltimo({ ok: true, codigo: r.codigo, texto });
+            return { ok: true, texto };
+        } catch (err) {
+            const texto = err.response?.data?.message ?? 'No se pudo verificar el rollo.';
+            setUltimo({ ok: false, codigo: valor, texto });
+            return { ok: false, texto };
+        }
+    };
+
+    const escanear = async (e) => {
+        e.preventDefault();
+        const valor = codigo.trim();
+        if (!valor) return;
+        setCodigo('');
+        await verificar(valor);
+    };
+
+    /** Los metros de un rollo escaneado: por defecto entero; menos metros = se corta. */
+    const cambiarMetrosRollo = (i, rolloId, valor) =>
+        setLineas((prev) => prev.map((l, j) => (j === i ? { ...l, rollos: l.rollos.map((r) => (r.rollo_id === rolloId ? { ...r, metros: valor } : r)) } : l)));
+    const quitarRollo = (i, rolloId) =>
+        setLineas((prev) =>
+            prev
+                .map((l, j) => (j === i ? { ...l, rollos: l.rollos.filter((r) => r.rollo_id !== rolloId) } : l))
+                .filter((l) => l.modo !== 'escaneado' || l.rollos.length > 0),
+        );
 
     const elegirProducto = (id) => {
         const pr = productos.find((p) => String(p.id) === String(id));
@@ -266,7 +340,7 @@ export default function LineasRollos({
         const filas = [];
         const telas = new Map();
         lineas.forEach((l, i) => {
-            if (l.modo !== ROLLOS) {
+            if (l.modo !== ROLLOS && l.modo !== 'escaneado') {
                 filas.push({ tipo: 'linea', clave: `l${i}`, l, i });
                 return;
             }
@@ -302,6 +376,41 @@ export default function LineasRollos({
                             searchTitle="Buscador avanzado con filtros"
                             onSearch={(q) => setPicker({ open: true, query: q })}
                         />
+
+                        {/* Escoger un rollo exacto: pistola o cámara (traslados). */}
+                        {almacenOrigenId && (
+                            <form onSubmit={escanear}>
+                                <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-warm-500">O escanea el rollo que quieres mandar</label>
+                                <div className="flex items-center gap-2">
+                                    <span className="relative flex-1">
+                                        <ScanLine className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-primary-600" />
+                                        <input
+                                            value={codigo}
+                                            onChange={(e) => setCodigo(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    e.preventDefault();
+                                                    escanear(e);
+                                                }
+                                            }}
+                                            placeholder="Dispara la pistola sobre la etiqueta…"
+                                            autoComplete="off"
+                                            className="w-full rounded-lg border border-edge py-2.5 pl-10 pr-3 font-mono text-sm shadow-sm outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-100"
+                                        />
+                                    </span>
+                                    <Button type="submit" size="sm" variant="secondary" disabled={!codigo.trim()}>Agregar rollo</Button>
+                                    <Button type="button" variant="secondary" size="sm" onClick={() => setCamara(true)} title="Escanear con la cámara">
+                                        <Camera className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                                {ultimo && (
+                                    <div className={cn('mt-2 flex items-center gap-2 rounded-md px-3 py-2 text-sm', ultimo.ok ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800')}>
+                                        {ultimo.ok ? <Check className="h-4 w-4 shrink-0" /> : <TriangleAlert className="h-4 w-4 shrink-0" />}
+                                        <span><strong>{ultimo.codigo}</strong> · {ultimo.texto}</span>
+                                    </div>
+                                )}
+                            </form>
+                        )}
 
                         {/* Solo si la tela tiene colores registrados: hay insumos que no se piden por color. */}
                         {producto?.colores?.length > 0 && (
@@ -426,7 +535,7 @@ export default function LineasRollos({
                                 // Una tela: una fila y, al desplegarla, sus colores con los rollos.
                                 if (fila.tipo === 'tela') {
                                     const colores = fila.indices.map((i) => ({ l: lineas[i], i }));
-                                    const rollos = colores.reduce((suma, { l }) => suma + (Number(l.rollos_pedidos) || 0), 0);
+                                    const rollos = colores.reduce((suma, { l }) => suma + (l.modo === 'escaneado' ? l.rollos.length : Number(l.rollos_pedidos) || 0), 0);
                                     const abierta = Boolean(abiertas[fila.clave]);
                                     const error = colores.map(({ i }) => errores[`detalles.${i}.rollos`] ?? errores[`detalles.${i}.cantidad_enviada`]).find(Boolean);
                                     const hexDe = (l) =>
@@ -475,10 +584,50 @@ export default function LineasRollos({
                                                             <div className={cn('bg-gray-50/70 py-1 pl-10 pr-3 transition-opacity duration-300', abierta ? 'border-b border-gray-100 opacity-100' : 'opacity-0')}>
                                                                 <div className="grid grid-cols-[1fr_7rem_2.5rem] items-center gap-3 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-warm-500">
                                                                     <span>Color</span>
-                                                                    <span className="text-right">Rollos</span>
+                                                                    <span className="text-right">Rollos / metros</span>
                                                                     <span />
                                                                 </div>
-                                                                {colores.map(({ l, i }) => (
+                                                                {colores.map(({ l, i }) => l.modo === 'escaneado' ? (
+                                                                    <div key={i}>
+                                                                        <div className="px-2 py-1.5">
+                                                                            <span className="inline-flex items-center gap-2 font-medium uppercase text-warm-800">
+                                                                                <span className="h-3 w-3 shrink-0 rounded-full ring-1 ring-black/10" style={{ backgroundColor: hexDe(l) || '#9ca3af' }} />
+                                                                                {l.color || 'Sin color'}
+                                                                                <span className="text-xs font-semibold normal-case text-primary-700">· {l.rollos.length} escaneado{l.rollos.length === 1 ? '' : 's'}</span>
+                                                                            </span>
+                                                                        </div>
+                                                                        {l.rollos.map((r) => (
+                                                                            <div key={r.rollo_id} className="grid grid-cols-[1fr_7rem_2.5rem] items-center gap-3 px-2 py-1 pl-7">
+                                                                                <span className="font-mono text-xs text-warm-700">
+                                                                                    {r.codigo}
+                                                                                    {Number(r.metros) + 0.001 < Number(r.metros_rollo) && (
+                                                                                        <span className="ml-2 font-sans text-[11px] font-semibold text-primary-700">corte de {num(r.metros_rollo)} m</span>
+                                                                                    )}
+                                                                                </span>
+                                                                                <Input
+                                                                                    type="number"
+                                                                                    step="0.01"
+                                                                                    min="0.01"
+                                                                                    max={r.metros_rollo}
+                                                                                    value={r.metros}
+                                                                                    onChange={(e) => cambiarMetrosRollo(i, r.rollo_id, e.target.value)}
+                                                                                    className="text-right"
+                                                                                    aria-label={`Metros del rollo ${r.codigo}`}
+                                                                                    tabIndex={abierta ? 0 : -1}
+                                                                                />
+                                                                                <button
+                                                                                    type="button"
+                                                                                    aria-label={`Quitar ${r.codigo}`}
+                                                                                    onClick={() => quitarRollo(i, r.rollo_id)}
+                                                                                    tabIndex={abierta ? 0 : -1}
+                                                                                    className="rounded-md p-1.5 text-red-600 transition hover:bg-red-50"
+                                                                                >
+                                                                                    <Trash2 className="h-4 w-4" />
+                                                                                </button>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                ) : (
                                                                     <div key={i} className="grid grid-cols-[1fr_7rem_2.5rem] items-center gap-3 px-2 py-1.5">
                                                                         <span className="inline-flex items-center gap-2 font-medium uppercase text-warm-800">
                                                                             <span className="h-3 w-3 shrink-0 rounded-full ring-1 ring-black/10" style={{ backgroundColor: hexDe(l) || '#9ca3af' }} />
@@ -570,6 +719,8 @@ export default function LineasRollos({
                     </table>
                 </div>
             </section>
+
+            <EscanerCamara abierto={camara} onCerrar={() => setCamara(false)} onLeer={verificar} titulo="Escanear rollo para el traslado" />
 
             {/* Buscador avanzado: el stock que muestra es el del almacén de donde sale la mercadería. */}
             <ProductoPickerModal

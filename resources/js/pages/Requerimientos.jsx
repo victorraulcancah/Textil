@@ -119,19 +119,31 @@ export default function Requerimientos() {
             key: 'acciones',
             label: 'Acciones',
             type: 'actions',
-            width: '280px',
+            width: '150px',
             align: 'right',
             actions: (r) => (
                 <>
                     {r.estado === 'en_transito' && puede('inventario.transferencias.editar') && (
                         <>
                             {/* Dos formas de recibir: escaneando el QR de cada rollo, o todo de golpe. */}
-                            <Button size="sm" onClick={() => setRecepcion(r)} title="Escanear el QR de cada rollo que llegó">
-                                <ScanLine className="h-4 w-4" /> Recepcionar
-                            </Button>
-                            <Button size="sm" variant="secondary" onClick={() => recibir(r)} title="Recibir todo lo enviado, sin escanear">
-                                <PackageCheck className="h-4 w-4" /> Recibir todo
-                            </Button>
+                            <button
+                                type="button"
+                                aria-label="Recepcionar"
+                                title="Recepcionar: escanea el QR de cada rollo que llegó"
+                                onClick={() => setRecepcion(r)}
+                                className="rounded-md bg-primary-50 p-1.5 text-primary-600 ring-1 ring-inset ring-primary-200 transition hover:bg-primary-100 hover:text-primary-700"
+                            >
+                                <ScanLine className="h-4 w-4" />
+                            </button>
+                            <button
+                                type="button"
+                                aria-label="Recibir todo"
+                                title="Recibir todo lo enviado, sin escanear"
+                                onClick={() => recibir(r)}
+                                className="rounded-md bg-emerald-50 p-1.5 text-emerald-600 ring-1 ring-inset ring-emerald-200 transition hover:bg-emerald-100 hover:text-emerald-700"
+                            >
+                                <PackageCheck className="h-4 w-4" />
+                            </button>
                         </>
                     )}
                     {r.guia && (

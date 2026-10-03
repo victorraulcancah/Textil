@@ -41,20 +41,13 @@
                 'Transporte' => $transporte,
                 'Conductor' => $guia->conductor_nombre ?: '—',
                 'Bultos' => $guia->numero_bultos ?? '—',
+                'Requerimiento' => $guia->requerimiento ?: '—',
                 'Estado' => $estado,
             ]" />
-        <x-pdf.items
-            :columnas="[
-                ['label' => 'Ítem', 'key' => 'n', 'width' => '32px'],
-                ['label' => 'Código', 'key' => 'codigo', 'width' => '72px'],
-                ['label' => 'Descripción', 'key' => 'producto'],
-                ['label' => 'Unidad', 'key' => 'unidad', 'width' => '100px'],
-                ['label' => 'Enviado', 'key' => 'enviado', 'align' => 'right', 'width' => '75px'],
-                ['label' => 'Recibido', 'key' => 'recibido', 'align' => 'right', 'width' => '75px'],
-            ]"
-            :filas="$filas"
-            :minFilas="8" />
-        <table class="marco" style="margin-bottom: 20px;">
+
+        {{-- El formato del pedido y la proforma: una tabla por tela, rollo por rollo (1R = rollo entero), sin precios. --}}
+        <x-pdf.planilla :grupos="$planilla['grupos']" :totales="$planilla['totales']" :precios="false" />
+        <table class="marco" style="margin: 12px 0 20px 0;">
             <tr><td>
                 <span class="strong upper" style="font-size: 8px;">Observaciones</span><br>
                 {{ $guia->observaciones ?: '—' }}

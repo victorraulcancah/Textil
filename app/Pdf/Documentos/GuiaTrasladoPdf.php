@@ -4,6 +4,7 @@ namespace App\Pdf\Documentos;
 
 use App\Models\Transferencia;
 use App\Pdf\DocumentoPdf;
+use App\Pdf\PlanillaTela;
 
 class GuiaTrasladoPdf implements DocumentoPdf
 {
@@ -25,6 +26,9 @@ class GuiaTrasladoPdf implements DocumentoPdf
             'almacenDestino:id,nombre',
             'usuarioEnvio:id,name',
             'detalles.presentacion.producto:id,codigo,nombre',
+            'detalles.presentacion.unidadBase',
+            'detalles.color:id,codigo,nombre',
+            'detalles.rollos.rollo.color',
         ])->findOrFail($id);
 
         $filas = $guia->detalles->map(fn ($d, $i) => [
@@ -42,6 +46,8 @@ class GuiaTrasladoPdf implements DocumentoPdf
 
         return [
             'filas' => $filas,
+            // El formato del pedido y la proforma: una tabla por tela, rollo por rollo, sin precios.
+            'planilla' => PlanillaTela::deTraslado($guia),
             'guia' => $guia,
             'documento' => $guia->documento ?? ('#' . $guia->id),
         ];

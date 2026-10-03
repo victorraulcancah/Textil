@@ -6,6 +6,7 @@ use App\Models\Compra;
 use App\Models\NotaVenta;
 use App\Models\OrdenCompra;
 use App\Models\OrdenVenta;
+use App\Models\Transferencia;
 
 /**
  * La planilla de telas, en el formato de las hojas de Excel del cliente, para
@@ -59,6 +60,72 @@ class PlanillaTela
                 'total' => array_sum(array_column($grupos, 'total')),
             ],
         ];
+    }
+
+    /**
+     * Una guía de traslado (o un requerimiento): el mismo formato del pedido, sin precios. Los rollos que el almacén
+     * escaneó van uno por fila con su metraje (1R = rollo entero, Corte = un trozo); lo que no es tela o se movió
+     * por cantidad va en una fila con su unidad; lo que aún falta escanear sale como "N R" por definir.
+     */
+    public static function deTraslado(Transferencia $traslado): array
+    {
+        $lineas = [];
+
+        foreach ($traslado->detalles as $d) {
+            $producto = $d->presentacion?->producto;
+            $esTela = $d->esTela() || ($d->presentacion?->unidadBase && strtolower((string) $d->presentacion->unidadBase->abreviatura) === 'm');
+            $grupo = (string) ($producto?->id ?? 0);
+            $titulo = self::titulo((bool) $esTela, $producto?->codigo, $producto?->nombre);
+            $color = $d->color?->nombre ?? '';
+            $itemLinea = self::item($producto?->codigo, $d->color?->codigo);
+
+            foreach ($d->rollos as $r) {
+                $entero = (bool) $r->entero;
+                $lineas[] = [
+                    'grupo' => $grupo, 'titulo' => $titulo, 'rollos' => $entero ? 1 : 0,
+                    'fila' => [
+                        'item' => self::item($producto?->codigo, $r->rollo?->color?->codigo ?? $d->color?->codigo),
+                        'color' => $r->rollo?->color?->nombre ?? $color,
+                        'rollo' => $entero ? '1R' : 'Corte',
+                        'factor' => (float) ($r->metros_rollo ?? $r->metros),
+                        'metros' => (float) $r->metros,
+                        'precio' => null, 'total' => null,
+                    ],
+                ];
+            }
+
+            // Lo pedido en rollos que todavía no tiene rollo escaneado.
+            if ($d->esPorRollos() && ($faltan = $d->rollosPendientes()) > 0) {
+                $lineas[] = [
+                    'grupo' => $grupo, 'titulo' => $titulo, 'rollos' => $faltan,
+                    'fila' => [
+                        'item' => $itemLinea, 'color' => $color, 'rollo' => "{$faltan}R",
+                        'factor' => $d->metros_por_rollo !== null ? (float) $d->metros_por_rollo : self::PENDIENTE,
+                        'metros' => $d->metros_por_rollo !== null ? round((float) $d->metros_por_rollo * $faltan, 2) : self::PENDIENTE,
+                        'precio' => null, 'total' => null,
+                    ],
+                ];
+                continue;
+            }
+
+            // Sin rollos escaneados (un traslado directo, o lo que no es tela): va por cantidad.
+            if ($d->rollos->isEmpty()) {
+                $metros = $d->esPorMetros() && (float) $d->cantidad_enviada <= 0
+                    ? (float) $d->metros_pedidos
+                    : (float) $d->cantidad_enviada;
+                $lineas[] = [
+                    'grupo' => $grupo, 'titulo' => $titulo, 'rollos' => 0,
+                    'fila' => [
+                        'item' => $itemLinea, 'color' => $color,
+                        'rollo' => $esTela ? '' : ($d->presentacion?->nombre ?? ''),
+                        'factor' => null, 'metros' => $metros,
+                        'precio' => null, 'total' => null,
+                    ],
+                ];
+            }
+        }
+
+        return self::agrupar($lineas);
     }
 
     public static function deOrdenCompra(OrdenCompra $orden): array

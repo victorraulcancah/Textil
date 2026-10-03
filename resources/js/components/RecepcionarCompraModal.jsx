@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Camera, ClipboardList, Download, PackageCheck, ScanLine, X } from 'lucide-react';
+import { Camera, ChevronRight, ClipboardList, Download, PackageCheck, ScanLine, X } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { opcionesAlmacen } from '../lib/almacenes';
 import { useAuth } from '../lib/auth';
@@ -411,6 +411,102 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
         }
     };
 
+    /** Las líneas por tela: una fila por tela y, al abrirla, sus colores (como en el pedido y la compra). */
+    const gruposRec = useMemo(() => {
+        const m = new Map();
+        conPendiente.forEach((l) => {
+            const k = String(l.producto_id ?? l.codigo ?? l.producto);
+            if (!m.has(k)) m.set(k, { clave: k, producto: l.producto, codigo: l.codigo, unidad: l.unidad, lineas: [] });
+            m.get(k).lineas.push(l);
+        });
+        return [...m.values()].map((g) => ({ ...g, conColor: g.lineas.some((l) => l.color) }));
+    }, [conPendiente]);
+    const [plegadasRec, setPlegadasRec] = useState({});
+    /** Lo que se recibe ahora de una línea: lo escaneado del packing list o lo escrito a mano. */
+    const recibeAhoraDe = (l) => {
+        const enLista = filasDeLinea(l);
+        return enLista.length > 0
+            ? enLista.filter((f) => f.estado === 'recibido').reduce((a, f) => a + f.metros, 0)
+            : Number(cantidades[String(l.compra_detalle_id)]) || 0;
+    };
+
+    /** Una línea de la compra por recibir (hija = el color de una tela agrupada). */
+    const renderFila = (l, hija = false) => {
+                                        const clave = String(l.compra_detalle_id);
+                                        const cap = rollosPorLinea[clave];
+                                        // Solo la mercadería con muestrario se
+                                        // maneja rollo por rollo.
+                                        const porRollos = (l.colores?.length ?? 0) > 0;
+                                        const leidos = rollosDe(cap);
+                                        // Con packing list, lo que se recibe es lo escaneado.
+                                        const enLista = filasDeLinea(l);
+                                        const escaneados = escaneadosDe(l);
+                                        // ¿Ya tiene algo cargado en su detalle de rollos?
+                                        const conDatos = leidos.length > 0 || Boolean(cap?.almacen_ubicacion_id);
+
+                                        return (
+                                            <tr key={clave}>
+                                                <td className="px-3 py-2 text-warm-500">{hija ? '' : (l.codigo ?? '—')}</td>
+                                                <td className="px-3 py-2 font-semibold text-warm-900">{hija ? (<span className="inline-flex items-center gap-2 pl-7 text-sm font-medium uppercase text-warm-800"><span className="h-3 w-3 shrink-0 rounded-full bg-gray-400 ring-1 ring-black/10" />{l.color?.nombre ?? 'Sin color'}{l.rollos ? <span className="text-xs font-normal normal-case text-warm-500">· {l.rollos} rollo{l.rollos === 1 ? '' : 's'}</span> : null}</span>) : (<>{l.producto}{l.color && (<span className="ml-1 text-xs font-normal text-warm-500">· {l.color.nombre}</span>)}</>)}</td>
+                                                <td className="px-3 py-2 text-warm-500">{l.unidad ?? '—'}</td>
+                                                <td className="px-3 py-2 text-right text-warm-900">{num(l.cantidad_pedida)}</td>
+                                                <td className="px-3 py-2 text-right text-warm-500">{num(l.cantidad_recibida)}</td>
+                                                <td className="px-3 py-2 text-right font-semibold text-amber-600">{num(l.pendiente)}</td>
+                                                <td className="px-3 py-2">
+                                                    {enLista.length > 0 ? (
+                                                        <div className="text-right text-xs">
+                                                            <span className="block text-sm font-semibold text-warm-900">
+                                                                {num(escaneados.reduce((a, f) => a + f.metros, 0))} m
+                                                            </span>
+                                                            <span className="text-warm-500">
+                                                                {escaneados.length} de {enLista.length} rollos escaneados
+                                                            </span>
+                                                        </div>
+                                                    ) : (
+                                                        <Input
+                                                            type="number"
+                                                            min="0"
+                                                            max={l.pendiente}
+                                                            step="any"
+                                                            value={cantidades[clave] ?? ''}
+                                                            onChange={(e) =>
+                                                                setCantidades((prev) => ({
+                                                                    ...prev,
+                                                                    [clave]: e.target.value,
+                                                                }))
+                                                            }
+                                                            // Con rollos capturados la manda el detalle:
+                                                            // la cantidad sale de la suma de sus metros.
+                                                            disabled={leidos.length > 0}
+                                                            aria-label={`Cantidad recibida de ${l.producto}`}
+                                                            className="text-right"
+                                                        />
+                                                    )}
+                                                </td>
+                                                {/* Ver recepción: los rollos de la línea y dónde se guardan,
+                                                    en su propio modal. El punto verde avisa que ya tiene datos. */}
+                                                <td className="px-3 py-2 text-center">
+                                                    {porRollos ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setLineaRollosId(clave)}
+                                                            aria-label={`Ver recepción de ${l.producto}`}
+                                                            title="Ver recepción"
+                                                            className="relative rounded-md p-1.5 text-primary-600 transition hover:bg-primary-50 hover:text-primary-700"
+                                                        >
+                                                            <ClipboardList className="h-4 w-4" />
+                                                            {conDatos && (
+                                                                <span className="absolute right-0.5 top-0.5 h-2 w-2 rounded-full bg-green-500 ring-2 ring-white" />
+                                                            )}
+                                                        </button>
+                                                    ) : (
+                                                        <span className="text-warm-300">—</span>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        );
+    };
+
     return (
         <Modal
             open={open}
@@ -722,86 +818,36 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100">
-                                    {conPendiente.map((l) => {
-                                        const clave = String(l.compra_detalle_id);
-                                        const cap = rollosPorLinea[clave];
-                                        // Solo la mercadería con muestrario se
-                                        // maneja rollo por rollo.
-                                        const porRollos = (l.colores?.length ?? 0) > 0;
-                                        const leidos = rollosDe(cap);
-                                        // Con packing list, lo que se recibe es lo escaneado.
-                                        const enLista = filasDeLinea(l);
-                                        const escaneados = escaneadosDe(l);
-                                        // ¿Ya tiene algo cargado en su detalle de rollos?
-                                        const conDatos = leidos.length > 0 || Boolean(cap?.almacen_ubicacion_id);
-
+                                    {gruposRec.map((g) => {
+                                        // Una tela con colores: una fila y, abierta, sus colores; lo demás, una fila por línea.
+                                        if (!g.conColor) return g.lineas.map((l) => renderFila(l));
+                                        const abierta = !plegadasRec[g.clave];
+                                        const suma = (f) => g.lineas.reduce((acc, l) => acc + (Number(f(l)) || 0), 0);
                                         return (
-                                            <tr key={clave}>
-                                                <td className="px-3 py-2 text-warm-500">{l.codigo ?? '—'}</td>
-                                                <td className="px-3 py-2 font-semibold text-warm-900">
-                                                    {l.producto}
-                                                    {l.color && (
-                                                        <span className="ml-1 text-xs font-normal text-warm-500">
-                                                            · {l.color.nombre}
+                                            <Fragment key={g.clave}>
+                                                <tr
+                                                    className="cursor-pointer bg-gray-50/60 transition hover:bg-gray-100"
+                                                    onClick={() => setPlegadasRec((prev) => ({ ...prev, [g.clave]: !prev[g.clave] }))}
+                                                >
+                                                    <td className="px-3 py-2 text-warm-500">{g.codigo ?? '—'}</td>
+                                                    <td className="px-3 py-2">
+                                                        <span className="flex items-center gap-2">
+                                                            <ChevronRight className={cn('h-4 w-4 text-warm-500 transition-transform duration-300', abierta && 'rotate-90')} />
+                                                            <span className="font-semibold text-warm-900">{g.producto}</span>
+                                                            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-warm-700">
+                                                                {g.lineas.length} color{g.lineas.length === 1 ? '' : 'es'}
+                                                            </span>
                                                         </span>
-                                                    )}
-                                                </td>
-                                                <td className="px-3 py-2 text-warm-500">{l.unidad ?? '—'}</td>
-                                                <td className="px-3 py-2 text-right text-warm-900">{num(l.cantidad_pedida)}</td>
-                                                <td className="px-3 py-2 text-right text-warm-500">{num(l.cantidad_recibida)}</td>
-                                                <td className="px-3 py-2 text-right font-semibold text-amber-600">{num(l.pendiente)}</td>
-                                                <td className="px-3 py-2">
-                                                    {enLista.length > 0 ? (
-                                                        <div className="text-right text-xs">
-                                                            <span className="block text-sm font-semibold text-warm-900">
-                                                                {num(escaneados.reduce((a, f) => a + f.metros, 0))} m
-                                                            </span>
-                                                            <span className="text-warm-500">
-                                                                {escaneados.length} de {enLista.length} rollos escaneados
-                                                            </span>
-                                                        </div>
-                                                    ) : (
-                                                        <Input
-                                                            type="number"
-                                                            min="0"
-                                                            max={l.pendiente}
-                                                            step="any"
-                                                            value={cantidades[clave] ?? ''}
-                                                            onChange={(e) =>
-                                                                setCantidades((prev) => ({
-                                                                    ...prev,
-                                                                    [clave]: e.target.value,
-                                                                }))
-                                                            }
-                                                            // Con rollos capturados la manda el detalle:
-                                                            // la cantidad sale de la suma de sus metros.
-                                                            disabled={leidos.length > 0}
-                                                            aria-label={`Cantidad recibida de ${l.producto}`}
-                                                            className="text-right"
-                                                        />
-                                                    )}
-                                                </td>
-                                                {/* Ver recepción: los rollos de la línea y dónde se guardan,
-                                                    en su propio modal. El punto verde avisa que ya tiene datos. */}
-                                                <td className="px-3 py-2 text-center">
-                                                    {porRollos ? (
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => setLineaRollosId(clave)}
-                                                            aria-label={`Ver recepción de ${l.producto}`}
-                                                            title="Ver recepción"
-                                                            className="relative rounded-md p-1.5 text-primary-600 transition hover:bg-primary-50 hover:text-primary-700"
-                                                        >
-                                                            <ClipboardList className="h-4 w-4" />
-                                                            {conDatos && (
-                                                                <span className="absolute right-0.5 top-0.5 h-2 w-2 rounded-full bg-green-500 ring-2 ring-white" />
-                                                            )}
-                                                        </button>
-                                                    ) : (
-                                                        <span className="text-warm-300">—</span>
-                                                    )}
-                                                </td>
-                                            </tr>
+                                                    </td>
+                                                    <td className="px-3 py-2 text-warm-500">{g.unidad ?? '—'}</td>
+                                                    <td className="px-3 py-2 text-right text-warm-900">{num(suma((l) => l.cantidad_pedida))}</td>
+                                                    <td className="px-3 py-2 text-right text-warm-500">{num(suma((l) => l.cantidad_recibida))}</td>
+                                                    <td className="px-3 py-2 text-right font-semibold text-amber-600">{num(suma((l) => l.pendiente))}</td>
+                                                    <td className="px-3 py-2 text-right font-semibold text-warm-900">{num(suma(recibeAhoraDe))}</td>
+                                                    <td />
+                                                </tr>
+                                                {abierta && g.lineas.map((l) => renderFila(l, true))}
+                                            </Fragment>
                                         );
                                     })}
                                 </tbody>

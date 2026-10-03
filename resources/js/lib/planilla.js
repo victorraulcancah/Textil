@@ -223,6 +223,40 @@ export function gruposDePedido(detalles = []) {
 }
 
 /**
+ * Una recepción de compra: lo que llegó de cada tela, color por color, en el mismo formato de la compra (sin precios).
+ * Cada línea sale con los rollos y el factor de la compra y los metros que se recibieron.
+ */
+export function gruposDeRecepcion(detalles = []) {
+    return agrupar(
+        detalles.map((d) => {
+            const producto = d.presentacion?.producto;
+            const compra = d.compra_detalle ?? {};
+            const color = compra.color ?? null;
+            const rollos = Number(compra.rollos) || 0;
+            const recibida = Number(d.cantidad_recibida) || 0;
+            const esTela = rollos > 0 || Boolean(color) || (d.presentacion?.nombre ?? '').toLowerCase() === 'metro';
+
+            return {
+                grupo: String(d.presentacion?.producto_id ?? producto?.id ?? producto?.codigo ?? 'sin'),
+                titulo: tituloDe(esTela, producto?.codigo, producto?.nombre),
+                rollos,
+                fila: {
+                    item: codigoItem(producto?.codigo, color?.codigo),
+                    color_code: compra.color_code ?? '',
+                    color: color?.nombre ?? '',
+                    hex: color?.hex ?? null,
+                    rollo: esTela ? (rollos > 0 ? `${rollos}R` : '') : (d.presentacion?.nombre ?? ''),
+                    factor: esTela && rollos > 0 ? redondear(recibida / rollos) : null,
+                    metros: recibida,
+                    precio: null,
+                    total: null,
+                },
+            };
+        }),
+    );
+}
+
+/**
  * Una orden de compra o una compra: cada color de una tela con sus rollos y su
  * factor (los metros de cada rollo), y el código de color que se escribió en la
  * línea. `campoPrecio` es "precio_unitario" (orden) o "costo_unitario" (compra).

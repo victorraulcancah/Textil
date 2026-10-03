@@ -25,7 +25,8 @@ class RecepcionCompraController extends Controller
         'ordenCompra:id,codigo',
         'usuarioRecibe:id,name',
         'detalles.presentacion.producto.marca',
-        'detalles.compraDetalle:id,cantidad,cantidad_finalizada',
+        'detalles.compraDetalle:id,compra_id,producto_color_id,color_code,rollos,cantidad,cantidad_finalizada',
+        'detalles.compraDetalle.color:id,nombre,codigo,hex',
     ];
 
     public function index()
@@ -340,6 +341,16 @@ class RecepcionCompraController extends Controller
                     $presentacionLinea = ProductoPresentacion::with('producto')
                         ->findOrFail($linea->producto_presentacion_id);
 
+                    // Recibida "de golpe", sin detallar rollo por rollo: una tela que se compró por color y con su
+                    // cantidad de rollos ingresa igual como rollos (del factor de la compra) y con su color. Sin esto
+                    // solo sumaba stock y el almacén quedaba sin rollos que escanear, vender o trasladar.
+                    if (empty($detalle['rollos']) && $linea->producto_color_id && (int) $linea->rollos > 0
+                        && $presentacionLinea->producto?->esTela() && (float) $detalle['cantidad_recibida'] > 0
+                    ) {
+                        $detalle['rollos'] = $this->rollosDelFactor($presentacionLinea, $linea, (float) $detalle['cantidad_recibida']);
+                        $detalle['producto_color_id'] = $linea->producto_color_id;
+                    }
+
                     // Con rollos capturados, la cantidad sale de ellos: es la
                     // única forma de que el stock y las piezas no discrepen.
                     $cantidad = ! empty($detalle['rollos'])
@@ -460,6 +471,37 @@ class RecepcionCompraController extends Controller
         }
 
         return response()->json($recepcion->load(self::RELACIONES), 201);
+    }
+
+    /**
+     * Los rollos de una línea recibida sin detalle: tantos rollos del factor de la compra (metros por rollo) como
+     * quepan en lo recibido y, si sobra, un último rollo con el resto.
+     *
+     * @return list<array{metros: float}>
+     */
+    private function rollosDelFactor(ProductoPresentacion $presentacion, $linea, float $recibida): array
+    {
+        $enMetros = $this->cantidadEnMetros($presentacion, $recibida);
+        $factor = round($this->cantidadEnMetros($presentacion, (float) $linea->cantidad) / max((int) $linea->rollos, 1), 2);
+        if ($factor <= 0) {
+            return [['metros' => $enMetros]];
+        }
+
+        $enteros = (int) floor(($enMetros + 0.005) / $factor);
+        $rollos = array_fill(0, $enteros, ['metros' => $factor]);
+        $resto = round($enMetros - $enteros * $factor, 2);
+        if ($resto > 0.005) {
+            $rollos[] = ['metros' => $resto];
+        }
+
+        return $rollos;
+    }
+
+    private function cantidadEnMetros(ProductoPresentacion $presentacion, float $cantidad): float
+    {
+        $basePorMetro = max((float) ($presentacion->producto?->factorBasePorMetro() ?? 1), 0.0001);
+
+        return round($cantidad * (float) ($presentacion->factor_conversion ?: 1) / $basePorMetro, 2);
     }
 
     /** Deshace la recepción: revierte el stock que ingresó y la deja inactiva. */

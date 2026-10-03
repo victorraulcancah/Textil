@@ -3,6 +3,8 @@ import { Printer, Truck, Undo2 } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
+import PlanillaTela from '../components/PlanillaTela';
+import { gruposDeRecepcion } from '../lib/planilla';
 import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
 import DetalleCard from '../components/ui/DetalleCard';
 import PageHeader from '../components/PageHeader';
@@ -315,56 +317,55 @@ export default function RecepcionesCompra() {
                         {detalles.length} {detalles.length === 1 ? 'línea' : 'líneas'}
                     </span>
                 </div>
-                <div className="overflow-auto" style={{ height: '30vh' }}>
-                    <table className="w-full min-w-[1080px] text-sm">
-                        <thead className="sticky top-0 z-10">
-                            <tr className="bg-primary-600 text-left text-xs font-semibold uppercase tracking-wide text-white">
-                                <th className="px-3 py-1.5 text-center">#</th>
-                                <th className="px-3 py-1.5">Cod. Producto</th>
-                                <th className="px-3 py-1.5">Producto</th>
-                                <th className="px-3 py-1.5">Marca</th>
-                                <th className="px-3 py-1.5">Unidad Derivada</th>
-                                <th className="px-3 py-1.5 text-right">Cant.</th>
-                                <th className="px-3 py-1.5 text-right">Pedida</th>
-                                <th className="px-3 py-1.5 text-right" title="Cantidad total recepcionada">Total Recep.</th>
-                                <th className="px-3 py-1.5 text-right" title="Cantidad finalizada">Finaliz.</th>
-                                <th className="px-3 py-1.5 text-right">Stock Ant.</th>
-                                <th className="px-3 py-1.5 text-right">Stock Nuevo</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                            {detalles.length === 0 && (
-                                <tr>
-                                    <td colSpan={11} className="px-3 py-10 text-center text-sm text-warm-500">
-                                        {seleccionada
-                                            ? 'Esta recepción no tiene líneas.'
-                                            : 'Selecciona una recepción arriba para ver su detalle.'}
-                                    </td>
-                                </tr>
+                {/* El mismo formato de la compra: una tabla por tela, con cada color, sus rollos y el factor. */}
+                <div className="max-h-[60vh] overflow-auto p-4">
+                    {detalles.length === 0 ? (
+                        <p className="px-3 py-10 text-center text-sm text-warm-500">
+                            {seleccionada ? 'Esta recepción no tiene líneas.' : 'Selecciona una recepción arriba para ver su detalle.'}
+                        </p>
+                    ) : (
+                        <>
+                            {/* A qué almacén ingresó la mercadería. */}
+                            {seleccionada?.almacen?.nombre && (
+                                <p className="mb-3 rounded-md bg-primary-50 px-3 py-2 text-xs font-medium text-primary-700">
+                                    Ingresó al almacén: <strong>{seleccionada.almacen.nombre}</strong>
+                                </p>
                             )}
-
-                            {detalles.map((d, i) => {
-                                const producto = d.presentacion?.producto;
-                                return (
-                                    <tr key={d.id}>
-                                        <td className="px-3 py-2 text-center text-warm-500">{i + 1}</td>
-                                        <td className="px-3 py-2 text-warm-500">{producto?.codigo ?? '—'}</td>
-                                        <td className="px-3 py-2 font-semibold text-warm-900">{producto?.nombre ?? '—'}</td>
-                                        <td className="px-3 py-2 text-warm-500">{producto?.marca?.nombre ?? '—'}</td>
-                                        <td className="px-3 py-2 text-warm-500">{d.presentacion?.nombre ?? '—'}</td>
-                                        <td className="px-3 py-2 text-right font-semibold text-primary-600">{num(d.cantidad_recibida)}</td>
-                                        <td className="px-3 py-2 text-right text-warm-900">{num(d.cantidad_pedida)}</td>
-                                        <td className="px-3 py-2 text-right text-warm-900">
-                                            {num(totalRecepcionado(d.compra_detalle_id))}
-                                        </td>
-                                        <td className="px-3 py-2 text-right text-amber-600">{num(d.compra_detalle?.cantidad_finalizada)}</td>
-                                        <td className="px-3 py-2 text-right text-warm-500">{num(d.stock_anterior)}</td>
-                                        <td className="px-3 py-2 text-right font-medium text-warm-900">{num(d.stock_nuevo)}</td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
+                            <PlanillaTela grupos={gruposDeRecepcion(detalles)} precios={false} colorCode />
+                            {/* Lo pedido, lo acumulado y el stock que quedó en el almacén, por línea. */}
+                            <div className="mt-4 overflow-x-auto rounded-lg border border-edge">
+                                <table className="w-full min-w-[640px] text-sm">
+                                    <thead>
+                                        <tr className="bg-gray-50 text-left text-[11px] font-semibold uppercase tracking-wide text-warm-500">
+                                            <th className="px-3 py-2">Producto</th>
+                                            <th className="px-3 py-2 text-right">Pedida</th>
+                                            <th className="px-3 py-2 text-right">Esta recepción</th>
+                                            <th className="px-3 py-2 text-right" title="Cantidad total recepcionada">Total recep.</th>
+                                            <th className="px-3 py-2 text-right">Finaliz.</th>
+                                            <th className="px-3 py-2 text-right">Stock ant.</th>
+                                            <th className="px-3 py-2 text-right">Stock nuevo</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {detalles.map((d) => (
+                                            <tr key={d.id}>
+                                                <td className="px-3 py-2 font-medium text-warm-900">
+                                                    {d.presentacion?.producto?.nombre ?? '—'}
+                                                    {d.compra_detalle?.color && <span className="font-normal text-warm-500"> · {d.compra_detalle.color.nombre}</span>}
+                                                </td>
+                                                <td className="px-3 py-2 text-right text-warm-900">{num(d.cantidad_pedida)}</td>
+                                                <td className="px-3 py-2 text-right font-semibold text-primary-600">{num(d.cantidad_recibida)}</td>
+                                                <td className="px-3 py-2 text-right text-warm-900">{num(totalRecepcionado(d.compra_detalle_id))}</td>
+                                                <td className="px-3 py-2 text-right text-amber-600">{num(d.compra_detalle?.cantidad_finalizada)}</td>
+                                                <td className="px-3 py-2 text-right text-warm-500">{num(d.stock_anterior)}</td>
+                                                <td className="px-3 py-2 text-right font-medium text-warm-900">{num(d.stock_nuevo)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </>
+                    )}
                 </div>
             </div>
 

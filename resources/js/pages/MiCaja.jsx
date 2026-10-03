@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowDownCircle, ArrowUpCircle, Lock, LockOpen, PiggyBank, Wallet } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, FileSignature, Lock, LockOpen, PiggyBank, Wallet } from 'lucide-react';
 import api from '../lib/api';
+import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
+import PagosCuentaModal from '../components/PagosCuentaModal';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import MetodoCajaPicker from '../components/MetodoCajaPicker';
@@ -84,7 +86,8 @@ export default function MiCaja() {
     const abrir = async () => {
         setSaving(true);
         try {
-            const res = await api.post('/mi-caja/abrir', { monto_inicial: Number(montoInicial) || 0 });
+            // Con un cierre previo el servidor abre con lo que quedó en la caja; aquí solo cuenta la primera vez.
+            const res = await api.post('/mi-caja/abrir', { monto_inicial: saldoAnterior ? saldoAnterior.monto : Number(montoInicial) || 0 });
             setData(res.data);
             setAbrirOpen(false);
             setMontoInicial('');
@@ -148,8 +151,13 @@ export default function MiCaja() {
         );
     }
 
+    const { puede } = useAuth();
+    /** Amortización de un documento desde la caja: 'cobrar' | 'pagar' | null. */
+    const [amortizar, setAmortizar] = useState(null);
     const caja = data?.caja;
     const apertura = data?.apertura;
+    /** Lo que dejó el último cierre: con eso abre quien sigue. */
+    const saldoAnterior = data?.saldo_anterior ?? null;
     const resumen = data?.resumen;
     const movimientos = data?.movimientos ?? [];
     const esperado = resumen?.esperado ?? 0;
@@ -300,6 +308,13 @@ export default function MiCaja() {
                             <div className="mb-4 flex flex-wrap gap-2">
                                 <Button variant="success" onClick={() => openReg('ingreso')}><ArrowUpCircle className="h-4 w-4" /> Nuevo ingreso</Button>
                                 <Button variant="danger" onClick={() => openReg('egreso')}><ArrowDownCircle className="h-4 w-4" /> Nuevo gasto</Button>
+                                {/* Cobrar o pagar un documento pendiente (amortización) con esta caja abierta. */}
+                                {puede('tesoreria.cuentas-por-cobrar.crear') && (
+                                    <Button variant="secondary" onClick={() => setAmortizar('cobrar')}><FileSignature className="h-4 w-4" /> Cobrar documento</Button>
+                                )}
+                                {puede('tesoreria.cuentas-por-pagar.crear') && (
+                                    <Button variant="secondary" onClick={() => setAmortizar('pagar')}><FileSignature className="h-4 w-4" /> Pagar documento</Button>
+                                )}
                                 <Button variant="secondary" onClick={() => { setCerrarOpen(true); setMontoContado(''); setMontoContadoUsd(''); }}><Lock className="h-4 w-4" /> Cerrar caja</Button>
                             </div>
 
@@ -348,10 +363,36 @@ export default function MiCaja() {
                 </>
             )}
 
+            {/* Amortización de documentos: elige el documento y abona; el movimiento queda en esta caja. */}
+            <PagosCuentaModal
+                open={Boolean(amortizar)}
+                onClose={() => setAmortizar(null)}
+                tipo={amortizar ?? 'cobrar'}
+                cuenta={null}
+                elegir
+                cerrarAlGuardar
+                onSaved={() => load()}
+            />
+
             {/* Modal abrir */}
-            <Modal open={abrirOpen} onClose={() => setAbrirOpen(false)} title="Abrir caja" description="Ingresa el monto en efectivo con el que inicias." size="sm"
+            <Modal open={abrirOpen} onClose={() => setAbrirOpen(false)} title="Abrir caja"
+                description={saldoAnterior ? 'La caja abre con el efectivo que dejó el cierre anterior.' : 'Ingresa el monto en efectivo con el que inicias.'} size="sm"
                 footer={<><Button variant="secondary" onClick={() => setAbrirOpen(false)}>Cancelar</Button><Button loading={saving} onClick={abrir}>Abrir caja</Button></>}>
-                <Input label="Monto inicial (S/)" type="number" min="0" step="0.01" placeholder="0.00" value={montoInicial} onChange={(e) => setMontoInicial(e.target.value)} />
+                {saldoAnterior ? (
+                    <div className="space-y-3">
+                        <Input label="Monto inicial (S/)" value={money(saldoAnterior.monto)} readOnly disabled className="text-right" />
+                        <p className="rounded-md bg-primary-50 px-3 py-2 text-xs text-primary-700">
+                            Es lo que contó {saldoAnterior.cerro ?? 'el usuario anterior'} al cerrar
+                            {saldoAnterior.fecha ? ` el ${fechaHora(saldoAnterior.fecha)}` : ''}
+                            {Math.abs(Number(saldoAnterior.diferencia)) > 0.004
+                                ? ` (${Number(saldoAnterior.diferencia) > 0 ? 'sobrante' : 'faltante'} de ${money(Math.abs(saldoAnterior.diferencia))} incluido)`
+                                : ''}
+                            . No se cambia: si no coincide con lo que hay en el cajón, avisa a un administrador.
+                        </p>
+                    </div>
+                ) : (
+                    <Input label="Monto inicial (S/)" type="number" min="0" step="0.01" placeholder="0.00" value={montoInicial} onChange={(e) => setMontoInicial(e.target.value)} />
+                )}
             </Modal>
 
             {/* Modal cerrar */}

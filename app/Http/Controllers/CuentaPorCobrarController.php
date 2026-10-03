@@ -21,7 +21,7 @@ class CuentaPorCobrarController extends Controller
         // Tesorería por sucursal: cada almacén ve las cuentas de sus ventas.
         return response()->json(
             AlmacenAcceso::limitar(CuentaPorCobrar::query())->with([
-                'cliente:id,nombre', 'notaVenta:id,serie,numero,fecha_emision', 'pagos.cuentaBancaria:id,alias,numero_cuenta', 'pagos.billetera:id,nombre',
+                'cliente:id,nombre', 'notaVenta:id,serie,numero,fecha_emision,tipo_pago,vendedor_id', 'notaVenta.vendedor:id,name', 'pagos.cuentaBancaria:id,alias,numero_cuenta', 'pagos.billetera:id,nombre',
                 // Las letras vigentes que se emitieron desde la cuenta: la relación se ve en la lista.
                 'letras' => fn ($q) => $q->where('estado', 'emitida')->select('id', 'numero', 'cuenta_por_cobrar_id', 'importe', 'saldo', 'moneda', 'fecha_vencimiento', 'serie_renovacion')->orderBy('numero'),
             ])
@@ -34,7 +34,7 @@ class CuentaPorCobrarController extends Controller
     public function show(CuentaPorCobrar $cuenta)
     {
         AlmacenAcceso::exigir($cuenta->almacen_id);
-        return response()->json($cuenta->cargarEnLetras()->load(['cliente:id,nombre', 'notaVenta:id,serie,numero', 'pagos.cuentaBancaria:id,alias,numero_cuenta', 'pagos.billetera:id,nombre']));
+        return response()->json($cuenta->cargarEnLetras()->load(['cliente:id,nombre', 'notaVenta:id,serie,numero,fecha_emision,tipo_pago,vendedor_id', 'notaVenta.vendedor:id,name', 'pagos.cuentaBancaria:id,alias,numero_cuenta', 'pagos.billetera:id,nombre']));
     }
 
     /** Registra uno o varios pagos (mixto) contra la cuenta y genera movimiento de caja. */
@@ -51,6 +51,8 @@ class CuentaPorCobrarController extends Controller
         $data = $request->validate([
             // El día en que se cobró/pagó de verdad: puede ser uno pasado, nunca futuro.
             'fecha' => 'nullable|date|before_or_equal:'.now()->toDateString(),
+            // Lo que explica el abono: "CANC D: PF002-001, CLIENTE". Va a la caja como descripción.
+            'glosa' => 'nullable|string|max:255',
             'pagos' => 'required|array|min:1',
             'pagos.*.forma_pago' => 'required|in:'.self::FORMAS,
             'pagos.*.cuenta_bancaria_id' => 'nullable|exists:cuentas_bancarias,id',
@@ -97,8 +99,10 @@ class CuentaPorCobrarController extends Controller
                         'apertura_caja_id' => $apertura->id,
                         'tipo' => 'ingreso',
                         'motivo_movimiento_id' => app(\App\Services\CajaService::class)->motivo('Ingreso por cobranza'),
-                        'descripcion' => 'Cobranza'.($cuenta->notaVenta ? " de la venta {$cuenta->notaVenta->serie}-{$cuenta->notaVenta->numero}" : '')
-                            .($cuenta->total_cuotas > 1 ? " (cuota {$cuenta->numero_cuota}/{$cuenta->total_cuotas})" : ''),
+                        'descripcion' => filled($data['glosa'] ?? null)
+                            ? $data['glosa']
+                            : 'Cobranza'.($cuenta->notaVenta ? " de la venta {$cuenta->notaVenta->serie}-{$cuenta->notaVenta->numero}" : '')
+                                .($cuenta->total_cuotas > 1 ? " (cuota {$cuenta->numero_cuota}/{$cuenta->total_cuotas})" : ''),
                         'cuenta_bancaria_id' => $cuentaBancariaId,
                         'billetera_id' => $billeteraId,
                         'monto' => $ingreso['monto'],
@@ -119,6 +123,7 @@ class CuentaPorCobrarController extends Controller
                     'monto_pen' => $abono['monto_pen'],
                     'tipo_cambio' => $abono['tipo_cambio'],
                     'referencia' => $p['referencia'] ?? null,
+                    'glosa' => $data['glosa'] ?? null,
                     'movimiento_caja_id' => $mov?->id,
                     'fecha' => $fecha,
                 ]);
@@ -131,7 +136,7 @@ class CuentaPorCobrarController extends Controller
             $this->recalcular($cuenta);
         });
 
-        return response()->json($cuenta->fresh()->cargarEnLetras()->load(['cliente:id,nombre', 'notaVenta:id,serie,numero', 'pagos.cuentaBancaria:id,alias,numero_cuenta', 'pagos.billetera:id,nombre']));
+        return response()->json($cuenta->fresh()->cargarEnLetras()->load(['cliente:id,nombre', 'notaVenta:id,serie,numero,fecha_emision,tipo_pago,vendedor_id', 'notaVenta.vendedor:id,name', 'pagos.cuentaBancaria:id,alias,numero_cuenta', 'pagos.billetera:id,nombre']));
     }
 
     /** Edita un pago existente y ajusta su movimiento de caja. */
@@ -144,6 +149,7 @@ class CuentaPorCobrarController extends Controller
             'billetera_id' => 'nullable|exists:billeteras_digitales,id',
             'monto' => 'required|numeric|min:0.01',
             'referencia' => 'nullable|string|max:100',
+            'glosa' => 'nullable|string|max:255',
             // El día en que se cobró/pagó de verdad: puede ser uno pasado, nunca futuro.
             'fecha' => 'nullable|date|before_or_equal:'.now()->toDateString(),
             'moneda' => 'nullable|in:PEN,USD',
@@ -175,6 +181,7 @@ class CuentaPorCobrarController extends Controller
                 'monto_pen' => $abono['monto_pen'],
                 'tipo_cambio' => $abono['tipo_cambio'],
                 'referencia' => $data['referencia'] ?? null,
+                'glosa' => $data['glosa'] ?? $pago->glosa,
                 'fecha' => $data['fecha'] ?? $pago->fecha,
             ]);
 
@@ -186,6 +193,7 @@ class CuentaPorCobrarController extends Controller
                     'moneda' => $ingreso['moneda'],
                     'numero_operacion' => $data['referencia'] ?? null,
                     'fecha' => $data['fecha'] ?? $pago->fecha,
+                    ...(filled($data['glosa'] ?? null) ? ['descripcion' => $data['glosa']] : []),
                 ]);
             }
 
@@ -196,7 +204,7 @@ class CuentaPorCobrarController extends Controller
             $this->recalcular($cuenta);
         });
 
-        return response()->json($cuenta->fresh()->cargarEnLetras()->load(['cliente:id,nombre', 'notaVenta:id,serie,numero', 'pagos.cuentaBancaria:id,alias,numero_cuenta', 'pagos.billetera:id,nombre']));
+        return response()->json($cuenta->fresh()->cargarEnLetras()->load(['cliente:id,nombre', 'notaVenta:id,serie,numero,fecha_emision,tipo_pago,vendedor_id', 'notaVenta.vendedor:id,name', 'pagos.cuentaBancaria:id,alias,numero_cuenta', 'pagos.billetera:id,nombre']));
     }
 
     /** Anula (elimina) un pago y revierte su movimiento de caja. */
@@ -213,7 +221,7 @@ class CuentaPorCobrarController extends Controller
             $this->recalcular($cuenta);
         });
 
-        return response()->json($cuenta->fresh()->cargarEnLetras()->load(['cliente:id,nombre', 'notaVenta:id,serie,numero', 'pagos.cuentaBancaria:id,alias,numero_cuenta', 'pagos.billetera:id,nombre']));
+        return response()->json($cuenta->fresh()->cargarEnLetras()->load(['cliente:id,nombre', 'notaVenta:id,serie,numero,fecha_emision,tipo_pago,vendedor_id', 'notaVenta.vendedor:id,name', 'pagos.cuentaBancaria:id,alias,numero_cuenta', 'pagos.billetera:id,nombre']));
     }
 
     private function aperturaAbierta(): ?AperturaCaja

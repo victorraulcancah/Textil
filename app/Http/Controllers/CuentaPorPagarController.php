@@ -18,7 +18,7 @@ class CuentaPorPagarController extends Controller
     {
         return response()->json(
             // Las compras son de todos los almacenes: lo que se debe a proveedores es general.
-            CuentaPorPagar::with(['proveedor:id,nombre', 'recepcionCompra:id', 'compra:id,correlativo,serie,numero,tipo_documento,fecha', 'pagos.cuentaBancaria:id,alias,numero_cuenta', 'pagos.billetera:id,nombre'])
+            CuentaPorPagar::with(['proveedor:id,nombre', 'recepcionCompra:id', 'compra:id,correlativo,serie,numero,tipo_documento,fecha,forma_pago', 'pagos.cuentaBancaria:id,alias,numero_cuenta', 'pagos.billetera:id,nombre'])
                 ->latest('id')
                 ->get()
         );
@@ -26,7 +26,7 @@ class CuentaPorPagarController extends Controller
 
     public function show(CuentaPorPagar $cuenta)
     {
-        return response()->json($cuenta->load(['proveedor:id,nombre', 'pagos.cuentaBancaria:id,alias,numero_cuenta', 'pagos.billetera:id,nombre']));
+        return response()->json($cuenta->load(['proveedor:id,nombre', 'compra:id,correlativo,serie,numero,tipo_documento,fecha,forma_pago', 'pagos.cuentaBancaria:id,alias,numero_cuenta', 'pagos.billetera:id,nombre']));
     }
 
     /** Registra uno o varios pagos (mixto) a proveedor y genera egreso de caja. */
@@ -42,6 +42,7 @@ class CuentaPorPagarController extends Controller
         $data = $request->validate([
             // El día en que se cobró/pagó de verdad: puede ser uno pasado, nunca futuro.
             'fecha' => 'nullable|date|before_or_equal:'.now()->toDateString(),
+            'glosa' => 'nullable|string|max:255',
             'pagos' => 'required|array|min:1',
             'pagos.*.forma_pago' => 'required|in:'.self::FORMAS,
             'pagos.*.cuenta_bancaria_id' => 'nullable|exists:cuentas_bancarias,id',
@@ -81,7 +82,7 @@ class CuentaPorPagarController extends Controller
                         'apertura_caja_id' => $apertura->id,
                         'tipo' => 'egreso',
                         'motivo_movimiento_id' => app(\App\Services\CajaService::class)->motivo('Salida por pago a proveedor'),
-                        'descripcion' => 'Pago a '.($cuenta->proveedor?->nombre ?? 'proveedor')
+                        'descripcion' => filled($data['glosa'] ?? null) ? $data['glosa'] : 'Pago a '.($cuenta->proveedor?->nombre ?? 'proveedor')
                             .($cuenta->compra ? ' · compra '.($cuenta->compra->numero_compra ?? "#{$cuenta->compra->id}") : ''),
                         'cuenta_bancaria_id' => $cuentaBancariaId,
                         'billetera_id' => $billeteraId,
@@ -102,6 +103,7 @@ class CuentaPorPagarController extends Controller
                     'monto_pen' => $abono['monto_pen'],
                     'tipo_cambio' => $abono['tipo_cambio'],
                     'referencia' => $p['referencia'] ?? null,
+                    'glosa' => $data['glosa'] ?? null,
                     'movimiento_caja_id' => $mov?->id,
                     'fecha' => $fecha,
                 ]);
@@ -109,7 +111,7 @@ class CuentaPorPagarController extends Controller
             $this->recalcular($cuenta);
         });
 
-        return response()->json($cuenta->fresh()->load(['proveedor:id,nombre', 'pagos.cuentaBancaria:id,alias,numero_cuenta', 'pagos.billetera:id,nombre']));
+        return response()->json($cuenta->fresh()->load(['proveedor:id,nombre', 'compra:id,correlativo,serie,numero,tipo_documento,fecha,forma_pago', 'pagos.cuentaBancaria:id,alias,numero_cuenta', 'pagos.billetera:id,nombre']));
     }
 
     /** Edita un pago existente y ajusta su egreso de caja. */
@@ -166,7 +168,7 @@ class CuentaPorPagarController extends Controller
             $this->recalcular($cuenta);
         });
 
-        return response()->json($cuenta->fresh()->load(['proveedor:id,nombre', 'pagos.cuentaBancaria:id,alias,numero_cuenta', 'pagos.billetera:id,nombre']));
+        return response()->json($cuenta->fresh()->load(['proveedor:id,nombre', 'compra:id,correlativo,serie,numero,tipo_documento,fecha,forma_pago', 'pagos.cuentaBancaria:id,alias,numero_cuenta', 'pagos.billetera:id,nombre']));
     }
 
     /** Anula (elimina) un pago y revierte su egreso de caja. */
@@ -182,7 +184,7 @@ class CuentaPorPagarController extends Controller
             $this->recalcular($cuenta);
         });
 
-        return response()->json($cuenta->fresh()->load(['proveedor:id,nombre', 'pagos.cuentaBancaria:id,alias,numero_cuenta', 'pagos.billetera:id,nombre']));
+        return response()->json($cuenta->fresh()->load(['proveedor:id,nombre', 'compra:id,correlativo,serie,numero,tipo_documento,fecha,forma_pago', 'pagos.cuentaBancaria:id,alias,numero_cuenta', 'pagos.billetera:id,nombre']));
     }
 
     private function aperturaAbierta(): ?AperturaCaja

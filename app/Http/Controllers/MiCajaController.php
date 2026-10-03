@@ -42,6 +42,7 @@ class MiCajaController extends Controller
                 'resumen' => null,
                 'movimientos' => [],
                 'ocupada_por' => ['id' => $apertura->usuario_id, 'name' => $apertura->usuario?->name, 'desde' => $apertura->fecha_apertura],
+                'saldo_anterior' => null,
             ]);
         }
 
@@ -51,6 +52,8 @@ class MiCajaController extends Controller
             'resumen' => $apertura ? $this->resumen($apertura) : null,
             'movimientos' => $apertura ? $this->movimientos($apertura) : [],
             'ocupada_por' => null,
+            // Con la caja cerrada: lo que dejó el último cierre, que es con lo que abre quien sigue.
+            'saldo_anterior' => $apertura ? null : $this->saldoAnterior($cajaId),
         ]);
     }
 
@@ -74,7 +77,13 @@ class MiCajaController extends Controller
             throw ValidationException::withMessages(['caja' => 'No tienes una caja asignada en este almacén.']);
         }
 
-        $data = $request->validate(['monto_inicial' => 'required|numeric|min:0']);
+        // La caja abre con el efectivo que dejó el cierre anterior (lo contado, sobrante incluido): lo que se escriba no
+        // cuenta. Solo la primera vez que se abre, sin cierre previo, se indica el monto inicial.
+        $anterior = $this->saldoAnterior($cajaId);
+        $data = $request->validate(['monto_inicial' => ($anterior ? 'nullable' : 'required').'|numeric|min:0']);
+        if ($anterior) {
+            $data['monto_inicial'] = $anterior['monto'];
+        }
 
         // Entra uno a la vez: el bloqueo evita que dos usuarios de la misma caja la abran en el mismo instante.
         DB::transaction(function () use ($cajaId, $user, $data) {
@@ -147,6 +156,33 @@ class MiCajaController extends Controller
         });
 
         return $this->show();
+    }
+
+    /**
+     * Lo que dejó el último cierre de la caja: el efectivo contado (lo que sobró o faltó ya está incluido). null si la
+     * caja nunca se cerró.
+     */
+    private function saldoAnterior(?int $cajaId): ?array
+    {
+        if (! $cajaId) {
+            return null;
+        }
+
+        $cierre = CierreCaja::with('apertura.usuario:id,name')
+            ->whereHas('apertura', fn ($q) => $q->where('caja_id', $cajaId))
+            ->latest('fecha_cierre')->latest('id')
+            ->first();
+
+        if (! $cierre) {
+            return null;
+        }
+
+        return [
+            'monto' => round((float) $cierre->monto_contado, 2),
+            'diferencia' => round((float) $cierre->diferencia, 2),
+            'cerro' => $cierre->apertura?->usuario?->name,
+            'fecha' => $cierre->fecha_cierre,
+        ];
     }
 
     /** Resumen del efectivo esperado en la apertura. */

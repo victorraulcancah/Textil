@@ -21,6 +21,8 @@ class CuentaPorPagarPago extends Model
         'tipo_cambio',
         'movimiento_caja_id',
         'referencia',
+        // Lo que se escribe para explicar el abono ("CANC D: PF002-001, CLIENTE"); es también la descripción en caja.
+        'glosa',
         'fecha',
     ];
 

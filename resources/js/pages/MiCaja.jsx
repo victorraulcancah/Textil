@@ -64,7 +64,7 @@ export default function MiCaja() {
 
     // ── Filtros de la tabla de movimientos ──
     /** Tipo de movimiento: '' (todos), 'efectivo' (el cajón) o 'digital' (transferencia, Yape, billetera). */
-    const [tipoMov, setTipoMov] = useState('');
+    const [filtroTipoMov, setFiltroTipoMov] = useState('');
     const [filtroTipo, setFiltroTipo] = useState('');
     const [filtroMotivo, setFiltroMotivo] = useState('');
     const [filtroMetodo, setFiltroMetodo] = useState('');
@@ -182,6 +182,7 @@ export default function MiCaja() {
 
     const aplicarFiltros = () => {
         const next = {};
+        if (filtroTipoMov) next.tipoMov = filtroTipoMov;
         if (filtroTipo) next.tipo = filtroTipo;
         if (filtroMotivo) next.motivo = filtroMotivo;
         if (filtroMetodo) next.metodo = filtroMetodo;
@@ -189,6 +190,7 @@ export default function MiCaja() {
     };
 
     const limpiarFiltros = () => {
+        setFiltroTipoMov('');
         setFiltroTipo('');
         setFiltroMotivo('');
         setFiltroMetodo('');
@@ -196,8 +198,8 @@ export default function MiCaja() {
     };
 
     const movimientosFiltrados = movimientos.filter((r) => {
-        if (tipoMov === 'efectivo' && metodoDe(r) !== 'efectivo') return false;
-        if (tipoMov === 'digital' && metodoDe(r) === 'efectivo') return false;
+        if (filtrosActivos.tipoMov === 'efectivo' && metodoDe(r) !== 'efectivo') return false;
+        if (filtrosActivos.tipoMov === 'digital' && metodoDe(r) === 'efectivo') return false;
         if (filtrosActivos.tipo && r.tipo !== filtrosActivos.tipo) return false;
         if (filtrosActivos.motivo && String(r.motivo_movimiento_id) !== filtrosActivos.motivo) return false;
         if (filtrosActivos.metodo && metodoDe(r) !== filtrosActivos.metodo) return false;
@@ -219,6 +221,17 @@ export default function MiCaja() {
 
     const filtros = (
         <div className="flex flex-wrap items-end gap-3">
+            <Select
+                label="Tipo de movimiento"
+                value={filtroTipoMov}
+                onChange={(e) => setFiltroTipoMov(e.target.value)}
+                options={[
+                    { value: '', label: 'Todos' },
+                    { value: 'efectivo', label: 'Efectivo' },
+                    { value: 'digital', label: 'Pagos digitales' },
+                ]}
+                className="w-52"
+            />
             <Select
                 label="Tipo"
                 value={filtroTipo}
@@ -338,21 +351,7 @@ export default function MiCaja() {
                                 </div>
                             )}
 
-                            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                                <h3 className="text-sm font-bold text-warm-900">Movimientos de esta apertura</h3>
-                                <div className="inline-flex rounded-lg border border-edge bg-gray-50 p-0.5">
-                                    {[['', 'Todos'], ['efectivo', 'Efectivo'], ['digital', 'Pagos digitales']].map(([k, t]) => (
-                                        <button
-                                            key={k || 'todos'}
-                                            type="button"
-                                            onClick={() => setTipoMov(k)}
-                                            className={`rounded-md px-3.5 py-1.5 text-sm font-semibold transition ${tipoMov === k ? 'bg-white text-primary-700 shadow-sm' : 'text-warm-500 hover:text-warm-700'}`}
-                                        >
-                                            {t}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
+                            <h3 className="mb-2 text-sm font-bold text-warm-900">Movimientos de esta apertura</h3>
                             <DataTable
                                 columns={columns}
                                 rows={movimientosFiltrados}
@@ -364,7 +363,7 @@ export default function MiCaja() {
                                 onClearFilters={limpiarFiltros}
                                 toggleableColumns={false}
                                 emptyMessage={
-                                    (filtrosCount > 0 || tipoMov)
+                                    filtrosCount > 0
                                         ? 'Ningún movimiento coincide con los filtros.'
                                         : 'Aún no hay movimientos. Registra un ingreso o gasto.'
                                 }

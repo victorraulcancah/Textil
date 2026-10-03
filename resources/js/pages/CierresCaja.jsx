@@ -13,6 +13,8 @@ const money = (n, moneda = 'PEN') =>
 const fechaHora = (v) => (v ? new Date(v).toLocaleString('es-PE') : '—');
 const fechaCorta = (v) => (v ? new Date(v).toLocaleDateString('es-PE') : '—');
 
+const esDigital = (m) => Boolean(m.cuenta_bancaria || m.billetera);
+
 const metodoLabel = (m) => {
     if (m.cuenta_bancaria) return `Transf. · ${m.cuenta_bancaria.alias || m.cuenta_bancaria.numero_cuenta}`;
     if (m.billetera) return m.billetera.nombre;
@@ -34,6 +36,10 @@ export default function CierresCaja() {
     const [filtroCaja, setFiltroCaja] = useState('');
     const [filtroDiferencia, setFiltroDiferencia] = useState('');
     const [filtrosActivos, setFiltrosActivos] = useState({});
+
+    /** Filtro de los movimientos del cierre: '' (todos), 'efectivo' o 'digital' (transferencia, Yape, billetera). */
+    const [filtroTipoMov, setFiltroTipoMov] = useState('');
+    const [tipoMovActivo, setTipoMovActivo] = useState('');
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -266,13 +272,42 @@ export default function CierresCaja() {
         },
     ];
 
+    const movimientosVisibles = movimientos.filter((m) => {
+        if (tipoMovActivo === 'efectivo') return !esDigital(m);
+        if (tipoMovActivo === 'digital') return esDigital(m);
+        return true;
+    });
+
+    const filtrosMov = (
+        <div className="flex flex-wrap items-end gap-3">
+            <Select
+                label="Tipo de movimiento"
+                value={filtroTipoMov}
+                onChange={(e) => setFiltroTipoMov(e.target.value)}
+                options={[
+                    { value: '', label: 'Todos' },
+                    { value: 'efectivo', label: 'Efectivo' },
+                    { value: 'digital', label: 'Pagos digitales' },
+                ]}
+                className="w-52"
+            />
+        </div>
+    );
+    const propsFiltroMov = {
+        filterable: true,
+        filters: filtrosMov,
+        filterCount: tipoMovActivo ? 1 : 0,
+        onApplyFilters: () => setTipoMovActivo(filtroTipoMov),
+        onClearFilters: () => { setFiltroTipoMov(''); setTipoMovActivo(''); },
+    };
+
     const movColumns = [
         {
             key: 'idx',
             label: '#',
             width: '56px',
             searchable: false,
-            render: (row) => <span className="text-warm-500">{movimientos.indexOf(row) + 1}</span>,
+            render: (row) => <span className="text-warm-500">{movimientosVisibles.indexOf(row) + 1}</span>,
         },
         {
             key: 'fecha',
@@ -358,10 +393,11 @@ export default function CierresCaja() {
             >
                 <DataTable
                     columns={movColumns}
-                    rows={movimientos}
+                    rows={movimientosVisibles}
                     loading={cargandoDetalle}
                     searchable={false}
                     toggleableColumns={false}
+                    {...propsFiltroMov}
                     emptyMessage="Esta apertura no tuvo movimientos."
                 />
             </BottomSheet>
@@ -413,10 +449,11 @@ export default function CierresCaja() {
                 {/* Mismo componente que la tabla de arriba: así en móvil se ven igual. */}
                 <DataTable
                     columns={movColumns}
-                    rows={movimientos}
+                    rows={movimientosVisibles}
                     loading={cargandoDetalle}
                     searchable={false}
                     toggleableColumns={false}
+                    {...propsFiltroMov}
                     height="350px"
                     emptyMessage={
                         seleccionado

@@ -5,6 +5,7 @@ import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
 import { gruposDePedido } from '../lib/planilla';
 import EscanerCamara from '../components/EscanerCamara';
+import FiltroAlmacen from '../components/FiltroAlmacen';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import PlanillaTela from '../components/PlanillaTela';
@@ -31,6 +32,8 @@ export default function Despacho() {
     const puedeAsignar = puede('inventario.despacho.asignar');
 
     const [pedidos, setPedidos] = useState([]);
+    /** Solo el Super Admin elige almacén; los demás ven el suyo. */
+    const [almacenId, setAlmacenId] = useState('');
     /** "todas" o "mias": el almacenero puede quedarse solo con lo que le repartieron. */
     const [filtro, setFiltro] = useState('todas');
     const [almaceneros, setAlmaceneros] = useState(null);
@@ -63,8 +66,10 @@ export default function Despacho() {
                 // Los tres estados que le tocan al almacén: la solicitud recién
                 // llegada, la que está juntando y la que ya apartó pero no ha
                 // salido todavía.
+                // Del almacén en el que se trabaja: el servidor limita a cada usuario al suyo, y el Super Admin
+                // puede elegir uno (o ver todos).
                 const { data } = await api.get('/ordenes-venta', {
-                    params: { estados: 'solicitado,preparando,separado' },
+                    params: { estados: 'solicitado,preparando,separado', almacen_id: almacenId || undefined },
                 });
                 const filas = asList({ data });
                 setPedidos(filas);
@@ -75,7 +80,7 @@ export default function Despacho() {
                 if (!silencioso) setCargando(false);
             }
         },
-        [toast],
+        [toast, almacenId],
     );
 
     useEffect(() => {
@@ -358,6 +363,7 @@ export default function Despacho() {
             <PageHeader
                 title="Preparación y despacho"
                 description="Atiende las solicitudes de venta: escanea, separa y despacha"
+                actions={<FiltroAlmacen value={almacenId} onChange={setAlmacenId} />}
             />
 
             {cargando ? (

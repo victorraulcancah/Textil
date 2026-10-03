@@ -68,8 +68,14 @@ class OrdenVentaController extends Controller
                 ! $request->filled('estados') && ! $this->puedeVerTodo($request),
                 fn ($q) => $q->where('vendedor_id', $request->user()->id),
             )
+            // La bandeja de Despacho solo trae lo del almacén en el que trabaja el usuario (más lo antiguo, que no tiene
+            // almacén todavía). El Super Admin ve todos, o el que elija con el filtro.
+            ->when(
+                $request->filled('estados') && ! AlmacenAcceso::irrestricto(),
+                fn ($q) => $q->where(fn ($w) => $w->where('almacen_id', AlmacenAcceso::propio() ?? 0)->orWhereNull('almacen_id')),
+            )
             ->when($request->filled('cliente_id'), fn ($q) => $q->where('cliente_id', $request->cliente_id))
-            ->when($request->filled('almacen_id'), fn ($q) => $q->where('almacen_id', $request->almacen_id))
+            ->when($request->filled('almacen_id') && AlmacenAcceso::irrestricto(), fn ($q) => $q->where('almacen_id', $request->almacen_id))
             ->latest('id')
             ->get();
 

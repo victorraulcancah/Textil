@@ -21,9 +21,11 @@
             margin: 0;
         }
 
+        /* Papel de 100x60 mm (~378x227 px a 96 dpi). dompdf suma el padding al alto: se deja margen. */
         .etiqueta {
-            width: 100%;
-            padding: 10px 12px;
+            height: 204px;
+            padding: 8px 12px;
+            overflow: hidden;
             page-break-after: always;
         }
         .etiqueta:last-child { page-break-after: auto; }
@@ -57,17 +59,17 @@
             color: {{ config('theme.muted') }};
         }
 
-        .codigos { margin-top: 6px; }
+        .codigos { margin-top: 4px; }
         .codigos td { vertical-align: middle; text-align: center; padding: 0 4px; }
-        .qr { height: 78px; }
-        .barras { height: 46px; width: 100%; }
+        .qr { height: 70px; width: 70px; }
+        .barras { height: 38px; width: 100%; }
         .pie { font-size: 7px; color: {{ config('theme.muted_light') }}; margin-top: 3px; }
     </style>
 </head>
 <body>
 @foreach ($etiquetas as $e)
     <div class="etiqueta">
-        <table>
+        <table style="width: 100%;">
             <tr>
                 <td style="vertical-align: top;">
                     <div class="producto">{{ $e['producto'] }} · {{ $e['color'] }}</div>
@@ -101,7 +103,7 @@
                     </div>
                 </td>
                 @if ($e['qr'])
-                    <td style="width: 88px; text-align: right;">
+                    <td style="width: 78px; text-align: right; vertical-align: top;">
                         <img class="qr" src="{{ $e['qr'] }}" alt="{{ $e['codigo'] }}">
                     </td>
                 @endif
@@ -109,7 +111,7 @@
         </table>
 
         @if ($e['barras'])
-            <table class="codigos">
+            <table class="codigos" style="width: 100%;">
                 <tr>
                     <td><img class="barras" src="{{ $e['barras'] }}" alt="{{ $e['codigo'] }}"></td>
                 </tr>

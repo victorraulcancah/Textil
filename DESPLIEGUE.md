@@ -189,6 +189,99 @@ Por si vienes de `bautista`, que está en el mismo servidor: aquí **no hay**
 worker de colas, ni servicio de WhatsApp, ni websockets. No hay ningún daemon
 que reiniciar después de desplegar. Es solo web.
 
+---
+
+# Servidor de producción: osotex.com
+
+Es el servidor de la empresa: `144.91.85.10` (AlmaLinux 10, Contabo), sirve
+`https://osotex.com`. Es **distinto** al de pruebas: aquí no valen las rarezas
+de arriba (`php83`, compilar el frontend en local, el puerto 8090).
+
+| Cosa | Valor |
+|---|---|
+| Proyecto | `/var/www/html/osotex` (el repositorio completo) |
+| Carpeta pública | `/var/www/html/osotex/public` |
+| Apache | vhost en `/etc/httpd/conf.d/osotex.conf` (redirige `http` a `https`, certificado de Let's Encrypt) |
+| PHP | `php` a secas **ya es 8.3** |
+| Node | 24: el frontend **se compila en el servidor** |
+| Base de datos | MariaDB, base `osotex` |
+| Configuración | `.env` del servidor (no viaja con el repositorio; ahí están `APP_URL=https://osotex.com`, `APP_ENV=production`, `APP_DEBUG=false` y las credenciales de la base) |
+
+## Subir cambios
+
+Primero sube tus commits a GitHub (`git push`). Luego, en el servidor
+(por SSH, como `root`):
+
+```bash
+cd /var/www/html/osotex && git pull && composer install --no-dev -o && php artisan migrate --force && npm ci && npm run build && php artisan optimize:clear && php artisan optimize && chown -R apache:apache storage bootstrap/cache
+```
+
+Qué hace cada parte, por si algo falla a la mitad:
+
+| Paso | Para qué |
+|---|---|
+| `git pull` | Trae el código nuevo |
+| `composer install --no-dev -o` | Dependencias de PHP (`--no-dev`: no se instalan las de desarrollo) |
+| `migrate --force` | Crea o cambia las tablas; sin `--force` en producción no corre |
+| `npm ci && npm run build` | Compila el frontend en `public/build` |
+| `optimize:clear && optimize` | Limpia y vuelve a guardar en caché la configuración y las rutas; sin esto los cambios no aparecen |
+| `chown ... storage bootstrap/cache` | Devuelve esas carpetas a Apache |
+
+**El `chown` del final no es opcional.** Los comandos `artisan` corren como
+`root` y pueden crear `storage/logs/laravel.log` a nombre de `root`. Apache
+(usuario `apache`) no puede escribirlo y toda la web empieza a dar 500.
+
+Si el despliegue agrega módulos o acciones en `config/permisos.php`, corre
+`php artisan db:seed --class=PermisosSeeder --force`. Ojo: ese seeder da todos
+los permisos a todos los roles. **No lo corras sin revisar** si en producción
+hay roles limitados a mano.
+
+## Primera instalación (resumen de lo que se hizo)
+
+1. `git clone https://github.com/victorraulcancah/Textil.git .` dentro de
+   `/var/www/html/osotex` (con la carpeta `public` vacía quitada antes).
+2. Crear la base: `CREATE DATABASE osotex CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`
+3. `composer install --no-dev --optimize-autoloader`, `cp .env.example .env`,
+   `php artisan key:generate`, `php artisan jwt:secret`. Editar el `.env`
+   (producción, `APP_DEBUG=false`, `APP_URL`, datos de la base). La contraseña
+   de la base va **entre comillas simples**: sin ellas dotenv se come el `$$`.
+4. `chown -R apache:apache storage bootstrap/cache`, `chmod -R 775` sobre las
+   mismas carpetas y `php artisan storage:link`.
+5. `php artisan migrate --force`, y luego o bien los datos importados, o bien
+   `ProductionSeeder` (roles, empresa, administrador y catálogos base) seguido
+   de `PermisosSeeder`. **Nunca `db:seed` a secas**: carga datos de
+   demostración y un usuario con clave `password`.
+6. `npm ci && npm run build`, `php artisan optimize`.
+
+## SELinux
+
+El servidor trae SELinux en modo `Enforcing`. Dos cosas lo contentan y las dos
+ya están hechas, pero si algún día se reinstala:
+
+```bash
+setsebool -P httpd_can_network_connect_db 1
+chcon -R -t httpd_sys_rw_content_t storage bootstrap/cache
+```
+
+Sin la primera, Apache no puede conectarse a MariaDB y toda la web da 500
+aunque `php artisan` (que corre fuera de Apache) funcione bien. Sin la segunda,
+Apache no puede escribir en `storage`.
+
+## Si algo falla (producción)
+
+| Síntoma | Causa |
+|---|---|
+| 500 en todo | `grep -a "production.ERROR" storage/logs/laravel.log \| tail -n 1` dice cuál |
+| `Vite manifest not found` | Falta `public/build`: `npm ci && npm run build` |
+| `SQLSTATE[HY000] [2002] Permission denied` | SELinux: `setsebool -P httpd_can_network_connect_db 1` |
+| 500 justo después de un despliegue | Faltó el `chown` de `storage`; el log quedó a nombre de `root` |
+| `Access denied for user` | La contraseña del `.env` está sin comillas simples o está mal; luego `php artisan optimize` |
+| Los cambios no se ven | Falta `php artisan optimize:clear` |
+| `Primary script unknown` en `/var/log/httpd/error_log` | La carpeta `public` está vacía o el `DocumentRoot` apunta mal |
+
+**Las credenciales (base de datos, SSH) no se escriben en este archivo:** el
+repositorio está en GitHub.
+
 
 
 poner el componete reutilizable al color en crear pedido, nota de venta un select buscador.

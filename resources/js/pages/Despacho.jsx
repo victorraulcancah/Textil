@@ -375,9 +375,9 @@ export default function Despacho() {
                     No hay solicitudes en la bandeja. Cuando Ventas solicite un pedido aparecerá aquí.
                 </Alert>
             ) : (
-                <div className="grid gap-4 lg:grid-cols-[19rem_1fr]">
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-[19rem_minmax(0,1fr)]">
                     {/* Bandeja de pedidos que llegaron al almacén */}
-                    <aside className="overflow-hidden rounded-lg border border-edge bg-white shadow-sm lg:sticky lg:top-4 lg:self-start">
+                    <aside className="min-w-0 overflow-hidden rounded-lg border border-edge bg-white shadow-sm lg:sticky lg:top-4 lg:self-start">
                         <div className="flex items-center justify-between gap-2 border-b border-edge px-3 py-2">
                             <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
                                 Por atender ({visibles.length})
@@ -405,7 +405,7 @@ export default function Despacho() {
                                 </div>
                             )}
                         </div>
-                        <ul className="max-h-[70vh] overflow-y-auto p-1">
+                        <ul className="max-h-48 overflow-y-auto p-1 lg:max-h-[70vh]">
                             {visibles.length === 0 && (
                                 <li className="px-3 py-6 text-center text-xs text-warm-400">
                                     No tienes pedidos asignados.
@@ -463,7 +463,7 @@ export default function Despacho() {
                     </aside>
 
                     {/* El pedido que se está preparando */}
-                    <section className="rounded-lg border border-edge bg-white shadow-sm">
+                    <section className="min-w-0 rounded-lg border border-edge bg-white shadow-sm">
                         {!detalle ? (
                             <p className="px-4 py-16 text-center text-sm text-warm-400">
                                 Elige una solicitud para atenderla.
@@ -550,8 +550,8 @@ export default function Despacho() {
                                     <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-warm-500">
                                         Escanea el rollo
                                     </label>
-                                    <div className="flex items-center gap-2">
-                                        <span className="relative flex-1">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <span className="relative min-w-0 flex-[1_1_14rem]">
                                             <ScanLine className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-primary-600" />
                                             <input
                                                 ref={inputRef}
@@ -624,7 +624,7 @@ export default function Despacho() {
                                 {/* Lo que pidió el cliente y con qué se va cubriendo, en el mismo
                                     formato del pedido (una tabla por tela, rollo por rollo) pero sin
                                     precios: el almacenero busca los metros que faltan. */}
-                                <div className="p-4">
+                                <div className="overflow-x-auto p-2 sm:p-4">
                                     <PlanillaTela
                                         grupos={gruposDePedido(detalle.detalles ?? [])}
                                         precios={false}

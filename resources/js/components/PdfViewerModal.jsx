@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Download, ExternalLink, FileText, Loader2, Printer, X } from 'lucide-react';
 import { descargarPdf, obtenerPdf, obtenerPdfDeUrl } from '../lib/pdf';
 import { useToast } from '../lib/toast';
+import PdfCanvas from './PdfCanvas';
 
 /**
  * ¿El navegador dibuja PDFs dentro de la página? Los navegadores móviles no
@@ -47,11 +48,16 @@ export default function PdfViewerModal({
     const [formato, setFormato] = useState(formatos[0]);
     const [url, setUrl] = useState(null);
     const [loading, setLoading] = useState(false);
-    const [incrustable] = useState(soportaPdfIncrustado);
+    const incrustable = soportaPdfIncrustado();
+    /** Si pdf.js no pudo dibujarlo, queda el botón de abrir/descargar. */
+    const [falloVisor, setFalloVisor] = useState(false);
 
     // Al abrir se resetea al primer formato disponible.
     useEffect(() => {
-        if (open) setFormato(formatos[0]);
+        if (open) {
+            setFormato(formatos[0]);
+            setFalloVisor(false);
+        }
     }, [open, id]); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
@@ -196,7 +202,7 @@ export default function PdfViewerModal({
                     {/* PDF: se ajusta al ancho para no dejar franjas grises a los costados */}
                     <div
                         className="relative flex-1 overflow-hidden bg-gray-100"
-                        style={{ minHeight: incrustable ? '76vh' : '18rem' }}
+                        style={{ minHeight: incrustable ? '76vh' : '60vh' }}
                     >
                         {loading && (
                             <div className="absolute inset-0 z-10 flex items-center justify-center">
@@ -212,7 +218,12 @@ export default function PdfViewerModal({
                                 style={{ minHeight: '76vh' }}
                             />
                         )}
-                        {url && !incrustable && (
+                        {url && !incrustable && !falloVisor && (
+                            <div className="absolute inset-0">
+                                <PdfCanvas url={url} onError={() => setFalloVisor(true)} />
+                            </div>
+                        )}
+                        {url && !incrustable && falloVisor && (
                             <div className="flex h-full flex-col items-center justify-center gap-4 px-6 py-10 text-center">
                                 <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary-50 text-primary-600">
                                     <FileText className="h-8 w-8" />
@@ -220,7 +231,7 @@ export default function PdfViewerModal({
                                 <div>
                                     <p className="text-sm font-semibold text-warm-900">{nombre ?? titulo}</p>
                                     <p className="mt-1 text-xs text-warm-500">
-                                        Tu navegador no muestra PDF dentro de la página. Ábrelo o descárgalo para verlo.
+                                        No se pudo mostrar el PDF aquí. Ábrelo o descárgalo para verlo.
                                     </p>
                                 </div>
                                 <button

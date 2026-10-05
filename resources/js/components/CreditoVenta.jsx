@@ -159,35 +159,48 @@ export default function CreditoVenta({ clienteId, total, moneda, tipoCambio, fec
 
             <div className="divide-y divide-gray-100 rounded-lg border border-edge">
                 {cuotas.map((c, i) => (
-                    <div key={i} className="flex items-center gap-2 px-2 py-1.5">
-                        <span className="inline-flex w-10 shrink-0 items-center gap-1 text-xs font-semibold text-warm-500">
-                            <CalendarClock className="h-3.5 w-3.5" /> {i + 1}
+                    /* Celular: cada cuota es una tarjeta (título y quitar arriba; vencimiento y monto lado a lado,
+                       con su rótulo). Desde sm: todo en una sola fila, como antes. */
+                    <div key={i} className="grid grid-cols-[1fr_auto] items-center gap-x-2 gap-y-2 px-3 py-3 sm:flex sm:gap-2 sm:px-2 sm:py-1.5">
+                        <span className="inline-flex shrink-0 items-center gap-1.5 text-sm font-semibold text-warm-600 sm:w-10 sm:gap-1 sm:text-xs sm:text-warm-500">
+                            <CalendarClock className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+                            <span className="sm:hidden">Cuota </span>
+                            {i + 1}
                         </span>
-                        <Input
-                            type="date"
-                            value={c.fecha_vencimiento}
-                            min={fecha}
-                            onChange={(e) => cambiarCuota(i, { fecha_vencimiento: e.target.value })}
-                            aria-label={`Vencimiento de la cuota ${i + 1}`}
-                        />
-                        <Input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={c.monto}
-                            onChange={(e) => cambiarCuota(i, { monto: e.target.value })}
-                            className="text-right"
-                            aria-label={`Monto de la cuota ${i + 1}`}
-                        />
                         <button
                             type="button"
                             onClick={() => quitarCuota(i)}
                             disabled={cuotas.length === 1}
-                            className="rounded-md p-1.5 text-red-600 transition hover:bg-red-50 disabled:opacity-30"
+                            className="rounded-md p-1.5 text-red-600 transition hover:bg-red-50 disabled:opacity-30 sm:order-last"
                             aria-label="Quitar cuota"
                         >
                             <Trash2 className="h-4 w-4" />
                         </button>
+                        <div className="col-span-2 grid grid-cols-2 gap-2 sm:contents">
+                            <div className="min-w-0 sm:flex-1">
+                                <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-warm-500 sm:hidden">Vencimiento</span>
+                                <Input
+                                    type="date"
+                                    value={c.fecha_vencimiento}
+                                    min={fecha}
+                                    onChange={(e) => cambiarCuota(i, { fecha_vencimiento: e.target.value })}
+                                    aria-label={`Vencimiento de la cuota ${i + 1}`}
+                                />
+                            </div>
+                            <div className="min-w-0 sm:flex-1">
+                                <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-warm-500 sm:hidden">Monto</span>
+                                <Input
+                                    type="number"
+                                    inputMode="decimal"
+                                    min="0"
+                                    step="0.01"
+                                    value={c.monto}
+                                    onChange={(e) => cambiarCuota(i, { monto: e.target.value })}
+                                    className="text-right"
+                                    aria-label={`Monto de la cuota ${i + 1}`}
+                                />
+                            </div>
+                        </div>
                     </div>
                 ))}
             </div>

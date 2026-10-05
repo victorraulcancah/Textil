@@ -239,6 +239,8 @@ export default function RecepcionarCompraModal({ open, onClose, compraId, onDone
                 const { data } = await api.post('/recepciones-compra/escanear', { compra_id: compraId, codigo });
                 setPackingList(data.packing_list);
                 const r = data.packing_list?.resumen;
+                // Ya llegó todo el packing list: se apaga la cámara.
+                if (r && r.pendientes === 0) setCamara(false);
                 const texto = `Rollo correcto · ${num(data.rollo.metros)} m · ${r?.recibidos ?? 0}/${r?.total ?? 0}`;
                 setUltimoEscaneo({ ok: true, codigo, texto: 'Rollo correcto', metros: data.rollo.metros });
                 return { ok: true, texto };

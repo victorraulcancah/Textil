@@ -164,6 +164,8 @@ export default function Despacho() {
                 // los del medio no, o con treinta rollos serían treinta
                 // recargas de la lista.
                 if (estadoAntes === 'solicitado' || data.completo) await cargar();
+                // Ya está todo lo pedido: la cámara no tiene nada más que leer.
+                if (data.completo) setCamara(false);
 
                 return { ok: true, texto };
             } catch (err) {

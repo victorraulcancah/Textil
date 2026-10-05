@@ -108,6 +108,8 @@ export default function AtenderRequerimientos() {
                 setUltimo({ ok: true, codigo: data.rollo.codigo, metros: data.metros, texto: 'Rollo correcto' });
                 await cargarDetalle(detalle.id);
                 if (antes === 'solicitada' || data.completo) await cargar(true);
+                // Ya está todo lo pedido: la cámara no tiene nada más que leer.
+                if (data.completo) setCamara(false);
                 return { ok: true, texto };
             } catch (err) {
                 const texto = err.response?.data?.message ?? 'No se pudo verificar el rollo.';

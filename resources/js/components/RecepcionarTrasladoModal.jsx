@@ -52,6 +52,8 @@ export default function RecepcionarTrasladoModal({ traslado, onClose, onRecibido
                 const { data } = await api.post(`/transferencias/${id}/recepcion/escanear`, { codigo: valor });
                 setUltimo({ ok: true, codigo: data.rollo.codigo, texto: `Rollo correcto · ${num(data.metros)} m` });
                 await cargar();
+                // Ya llegaron todos los rollos: se apaga la cámara.
+                if (data.total > 0 && data.recibidos >= data.total) setCamara(false);
                 return { ok: true, texto: `Rollo correcto · ${num(data.metros)} m · ${data.recibidos}/${data.total}` };
             } catch (err) {
                 const texto = err.response?.data?.message ?? 'No se pudo verificar el rollo.';

@@ -9,6 +9,7 @@ import DetalleProforma from '../components/DetalleProforma';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
 import { Alert, Badge, Button, DataTable, DateRangePicker, Input, Modal, SearchSelect, Select, Spinner } from '../components/ui';
+import { hoyIso } from '../lib/fechas';
 
 const fecha = (v) => (v ? new Date(v).toLocaleDateString('es-PE') : '—');
 const formaLabel = { efectivo: 'Efectivo', transferencia: 'Transferencia', tarjeta: 'Tarjeta', yape: 'Yape', plin: 'Plin', credito: 'Crédito', otro: 'Otro' };
@@ -36,8 +37,8 @@ export default function NotasVenta() {
     const [fCliente, setFCliente] = useState('');
     const [fAlmacen, setFAlmacen] = useState('');
     const [fVendedor, setFVendedor] = useState('');
-    const [fDesde, setFDesde] = useState('');
-    const [fHasta, setFHasta] = useState('');
+    const [fDesde, setFDesde] = useState(hoyIso);
+    const [fHasta, setFHasta] = useState(hoyIso);
 
     const [anularTarget, setAnularTarget] = useState(null);
     const [motivo, setMotivo] = useState('');

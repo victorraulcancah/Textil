@@ -10,6 +10,7 @@ import PageHeader, { CreateButton } from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
 import { descargarExcel } from '../components/reportes/ReporteUI';
 import { Alert, Badge, Button, DataTable, Input, Modal, Select, Tabs } from '../components/ui';
+import { hoyIso } from '../lib/fechas';
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
 
@@ -78,9 +79,10 @@ export default function Ajustes() {
     const [filterOrigen, setFilterOrigen] = useState('');
     const [filterProveedor, setFilterProveedor] = useState('');
     const [filterRegistra, setFilterRegistra] = useState('');
-    const [filterDesde, setFilterDesde] = useState('');
-    const [filterHasta, setFilterHasta] = useState('');
-    const [activeFilters, setActiveFilters] = useState({});
+    const [filterDesde, setFilterDesde] = useState(hoyIso);
+    const [filterHasta, setFilterHasta] = useState(hoyIso);
+    // Abre con los movimientos del día; "Limpiar" muestra todo.
+    const [activeFilters, setActiveFilters] = useState(() => ({ desde: hoyIso(), hasta: hoyIso() }));
 
     const [activeTab, setActiveTab] = useState('ajustes');
 

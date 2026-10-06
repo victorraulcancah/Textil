@@ -10,7 +10,8 @@ import DetalleCard from '../components/ui/DetalleCard';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
 import RecepcionarTrasladoModal from '../components/RecepcionarTrasladoModal';
-import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select, Tabs } from '../components/ui';
+import { Alert, Badge, Button, DataTable, DateRangePicker, Input, Modal, SearchSelect, Select, Tabs } from '../components/ui';
+import { diaLocal, hoyIso } from '../lib/fechas';
 
 const estadoInfo = {
     pendiente: { label: 'Pendiente', variant: 'amber' },
@@ -66,7 +67,10 @@ export default function Transferencias() {
 
     const [filterEstado, setFilterEstado] = useState('');
     const [filterAlmacen, setFilterAlmacen] = useState('');
-    const [activeFilters, setActiveFilters] = useState({});
+    const [filterDesde, setFilterDesde] = useState(hoyIso);
+    const [filterHasta, setFilterHasta] = useState(hoyIso);
+    // Abre con los movimientos del día; "Limpiar" muestra todo.
+    const [activeFilters, setActiveFilters] = useState(() => ({ desde: hoyIso(), hasta: hoyIso() }));
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -189,11 +193,15 @@ export default function Transferencias() {
         const next = {};
         if (filterEstado) next.estado = filterEstado;
         if (filterAlmacen) next.almacen = filterAlmacen;
+        if (filterDesde) next.desde = filterDesde;
+        if (filterHasta) next.hasta = filterHasta;
         setActiveFilters(next);
     };
     const clearFilters = () => {
         setFilterEstado('');
         setFilterAlmacen('');
+        setFilterDesde('');
+        setFilterHasta('');
         setActiveFilters({});
     };
     const filtered = transferencias.filter((t) => {
@@ -202,6 +210,10 @@ export default function Transferencias() {
             const a = activeFilters.almacen;
             if (String(t.almacen_origen_id) !== a && String(t.almacen_destino_id) !== a) return false;
         }
+        // La fecha de la guía: la que se ve en la tabla (inicio del traslado o, sin ella, cuando se creó).
+        const dia = diaLocal(t.fecha_inicio_traslado ?? t.created_at);
+        if (activeFilters.desde && (!dia || dia < activeFilters.desde)) return false;
+        if (activeFilters.hasta && (!dia || dia > activeFilters.hasta)) return false;
         return true;
     });
     const filterCount = Object.keys(activeFilters).length;
@@ -226,6 +238,15 @@ export default function Transferencias() {
                 emptyText="Sin coincidencias"
                 options={almacenes.map((a) => ({ value: String(a.id), label: a.nombre }))}
                 className="w-48"
+            />
+            <DateRangePicker
+                label="Rango de fecha"
+                desde={filterDesde}
+                hasta={filterHasta}
+                onChange={(d, h) => {
+                    setFilterDesde(d);
+                    setFilterHasta(h);
+                }}
             />
         </div>
     );

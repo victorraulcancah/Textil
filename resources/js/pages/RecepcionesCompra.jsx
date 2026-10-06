@@ -11,6 +11,7 @@ import PageHeader from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
 import ActionsMenu from '../components/ActionsMenu';
 import { Alert, Badge, Button, DataTable, DateRangePicker, Modal, SearchSelect, Select } from '../components/ui';
+import { hoyIso } from '../lib/fechas';
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
 
@@ -41,8 +42,8 @@ export default function RecepcionesCompra() {
     const [fEstado, setFEstado] = useState('');
     const [fProveedor, setFProveedor] = useState('');
     const [fAlmacen, setFAlmacen] = useState('');
-    const [fDesde, setFDesde] = useState('');
-    const [fHasta, setFHasta] = useState('');
+    const [fDesde, setFDesde] = useState(hoyIso);
+    const [fHasta, setFHasta] = useState(hoyIso);
 
     const load = useCallback(async () => {
         setLoading(true);

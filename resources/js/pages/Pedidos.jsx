@@ -77,8 +77,8 @@ export default function Pedidos() {
     const [fCliente, setFCliente] = useState('');
     const [fAlmacen, setFAlmacen] = useState('');
     const [fVendedor, setFVendedor] = useState('');
-    const [fDesde, setFDesde] = useState('');
-    const [fHasta, setFHasta] = useState('');
+    const [fDesde, setFDesde] = useState(hoyIso);
+    const [fHasta, setFHasta] = useState(hoyIso);
     const [fRequerimiento, setFRequerimiento] = useState('');
 
     const [seleccionado, setSeleccionado] = useState(null);

@@ -14,6 +14,7 @@ import RecepcionarCompraModal from '../components/RecepcionarCompraModal';
 import PlanillaTela from '../components/PlanillaTela';
 import { gruposDeCompra } from '../lib/planilla';
 import { Alert, Badge, Button, DataTable, DateRangePicker, Input, Modal, SearchSelect, Select } from '../components/ui';
+import { hoyIso } from '../lib/fechas';
 
 const estadoCompra = {
     registrada: { label: 'Registrada', variant: 'green' },
@@ -59,8 +60,8 @@ export default function Compras() {
     const [fEstado, setFEstado] = useState('');
     const [fPago, setFPago] = useState('');
     const [fProveedor, setFProveedor] = useState('');
-    const [fDesde, setFDesde] = useState('');
-    const [fHasta, setFHasta] = useState('');
+    const [fDesde, setFDesde] = useState(hoyIso);
+    const [fHasta, setFHasta] = useState(hoyIso);
 
     const load = useCallback(async () => {
         setLoading(true);

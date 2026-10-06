@@ -13,6 +13,7 @@ import DetalleCard from '../components/ui/DetalleCard';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
 import { Alert, Badge, DataTable, DateRangePicker, SearchSelect, Select } from '../components/ui';
+import { hoyIso } from '../lib/fechas';
 
 const money = (n, moneda = 'PEN') =>
     new Intl.NumberFormat(moneda === 'USD' ? 'en-US' : 'es-PE', {
@@ -48,9 +49,10 @@ export default function OrdenesCompra() {
     const [filterEstado, setFilterEstado] = useState('');
     const [filterCompra, setFilterCompra] = useState('');
     const [filterProveedor, setFilterProveedor] = useState('');
-    const [filterDesde, setFilterDesde] = useState('');
-    const [filterHasta, setFilterHasta] = useState('');
-    const [activeFilters, setActiveFilters] = useState({});
+    const [filterDesde, setFilterDesde] = useState(hoyIso);
+    const [filterHasta, setFilterHasta] = useState(hoyIso);
+    // Abre con los movimientos del día; "Limpiar" muestra todo.
+    const [activeFilters, setActiveFilters] = useState(() => ({ desde: hoyIso(), hasta: hoyIso() }));
 
     const load = useCallback(async () => {
         setLoading(true);

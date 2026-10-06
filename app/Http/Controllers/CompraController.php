@@ -19,7 +19,7 @@ class CompraController extends Controller
 {
     /** Relaciones que acompañan a una compra en las respuestas de detalle. */
     private const RELACIONES = [
-        'proveedor:id,nombre',
+        'proveedor:id,nombre,tipo',
         'ordenCompra:id,codigo,proveedor_id,numero_proveedor,fecha_emision',
         'ordenCompra.proveedor:id,codigo_corto',
         'detalles.presentacion.producto',
@@ -31,7 +31,7 @@ class CompraController extends Controller
     public function index()
     {
         $compras = Compra::with([
-            'proveedor:id,nombre',
+            'proveedor:id,nombre,tipo',
             'ordenCompra:id,codigo,proveedor_id,numero_proveedor,fecha_emision',
             'ordenCompra.proveedor:id,codigo_corto',
             'detalles.presentacion.producto.marca',

@@ -115,6 +115,7 @@ class CompraReporteController extends Controller
             'estado' => 'nullable|in:'.implode(',', array_keys(self::ESTADOS)),
             'forma_pago' => 'nullable|in:contado,credito',
             'proveedor_id' => 'nullable|integer',
+            'tipo_proveedor' => 'nullable|in:nacional,extranjero',
             'desde' => 'nullable|date',
             'hasta' => 'nullable|date',
         ]);
@@ -124,6 +125,7 @@ class CompraReporteController extends Controller
             ->when(! empty($f['estado']), fn ($q) => $q->where('estado', $f['estado']))
             ->when(! empty($f['forma_pago']), fn ($q) => $q->where('forma_pago', $f['forma_pago']))
             ->when(! empty($f['proveedor_id']), fn ($q) => $q->where('proveedor_id', $f['proveedor_id']))
+            ->when(! empty($f['tipo_proveedor']), fn ($q) => $q->whereHas('proveedor', fn ($p) => $p->where('tipo', $f['tipo_proveedor'])))
             ->when(! empty($f['desde']), fn ($q) => $q->whereDate('fecha', '>=', $f['desde']))
             ->when(! empty($f['hasta']), fn ($q) => $q->whereDate('fecha', '<=', $f['hasta']))
             ->orderByDesc('fecha')
@@ -190,6 +192,9 @@ class CompraReporteController extends Controller
         }
         if (! empty($f['forma_pago'])) {
             $partes[] = 'Pago: '.($f['forma_pago'] === 'contado' ? 'Contado' : 'Crédito');
+        }
+        if (! empty($f['tipo_proveedor'])) {
+            $partes[] = 'Tipo de proveedor: '.ucfirst($f['tipo_proveedor']);
         }
         if (! empty($f['proveedor_id'])) {
             $partes[] = 'Proveedor: '.(\App\Models\Proveedor::whereKey($f['proveedor_id'])->value('nombre') ?? $f['proveedor_id']);

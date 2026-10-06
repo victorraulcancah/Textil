@@ -63,6 +63,8 @@ export default function Compras() {
     const [fEstado, setFEstado] = useState('');
     const [fPago, setFPago] = useState('');
     const [fProveedor, setFProveedor] = useState('');
+    /** Tipo de proveedor: '' (todos), 'nacional' o 'extranjero'. */
+    const [fTipoProv, setFTipoProv] = useState('');
     const [fDesde, setFDesde] = useState(hoyIso);
     const [fHasta, setFHasta] = useState(hoyIso);
 
@@ -249,7 +251,7 @@ export default function Compras() {
 
     /** Los filtros de la pantalla, tal como los entiende el servidor: el Excel y el PDF salen con las mismas filas. */
     const parametrosReporte = () => {
-        const p = { estado: fEstado, forma_pago: fPago, proveedor_id: fProveedor, desde: fDesde, hasta: fHasta };
+        const p = { estado: fEstado, forma_pago: fPago, proveedor_id: fProveedor, tipo_proveedor: fTipoProv, desde: fDesde, hasta: fHasta };
         return Object.fromEntries(Object.entries(p).filter(([, v]) => v));
     };
 
@@ -299,6 +301,7 @@ export default function Compras() {
                     if (fEstado && c.estado !== fEstado) return false;
                     if (fPago && c.forma_pago !== fPago) return false;
                     if (fProveedor && String(c.proveedor_id) !== String(fProveedor)) return false;
+                    if (fTipoProv && (c.proveedor?.tipo ?? 'nacional') !== fTipoProv) return false;
                     if (fDesde && (!c.fecha || c.fecha.slice(0, 10) < fDesde)) return false;
                     if (fHasta && (!c.fecha || c.fecha.slice(0, 10) > fHasta)) return false;
                     return true;
@@ -308,7 +311,7 @@ export default function Compras() {
                 onRowClick={(row) => { setSeleccionada(row); sheet.abrir(); }}
                 rowClassName={(row) => (row.id === seleccionada?.id ? 'bg-primary-50' : undefined)}
                 filterable
-                filterCount={(fEstado ? 1 : 0) + (fPago ? 1 : 0) + (fProveedor ? 1 : 0) + (fDesde ? 1 : 0) + (fHasta ? 1 : 0)}
+                filterCount={(fEstado ? 1 : 0) + (fPago ? 1 : 0) + (fProveedor ? 1 : 0) + (fTipoProv ? 1 : 0) + (fDesde ? 1 : 0) + (fHasta ? 1 : 0)}
                 filters={
                     <div className="space-y-2">
                         <Select
@@ -330,6 +333,19 @@ export default function Compras() {
                                 { value: 'credito', label: 'Crédito' },
                             ]}
                         />
+                        <Select
+                            label="Tipo de proveedor"
+                            value={fTipoProv}
+                            onChange={(e) => {
+                                setFTipoProv(e.target.value);
+                                setFProveedor('');
+                            }}
+                            options={[
+                                { value: '', label: 'Todos' },
+                                { value: 'nacional', label: 'Nacional' },
+                                { value: 'extranjero', label: 'Extranjero' },
+                            ]}
+                        />
                         <SearchSelect
                             label="Proveedor"
                             value={fProveedor}
@@ -338,16 +354,18 @@ export default function Compras() {
                             emptyText="Sin coincidencias"
                             options={[
                                 ...new Map(
-                                    compras.filter((c) => c.proveedor_id).map((c) => [String(c.proveedor_id), c.proveedor?.nombre]),
+                                    // Solo los proveedores del tipo elegido.
+                                    compras.filter((c) => c.proveedor_id && (!fTipoProv || (c.proveedor?.tipo ?? 'nacional') === fTipoProv)).map((c) => [String(c.proveedor_id), c.proveedor?.nombre]),
                                 ).entries(),
                             ].map(([value, label]) => ({ value, label }))}
                         />
-                        {(fEstado || fPago || fProveedor || fDesde || fHasta) && (
+                        {(fEstado || fPago || fProveedor || fTipoProv || fDesde || fHasta) && (
                             <button
                                 onClick={() => {
                                     setFEstado('');
                                     setFPago('');
                                     setFProveedor('');
+                                    setFTipoProv('');
                                     setFDesde('');
                                     setFHasta('');
                                 }}

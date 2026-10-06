@@ -62,8 +62,8 @@
             font-size: 9px;
             font-weight: normal;
             color: {{ config('theme.muted') }};
-            display: {{ $vertical ? 'block' : 'inline' }};
-            margin-top: {{ $vertical ? 1 : 0 }}px;
+            display: block;
+            margin-top: 1px;
         }
 
         .codigos { margin-top: 2px; }
@@ -89,7 +89,7 @@
                     <div class="metraje">
                         {{ $e['metros_fabrica'] }} m
                         @if ($e['peso_kg'])
-                            <span class="peso">@unless ($vertical)· @endunless peso neto {{ $e['peso_kg'] }} kg</span>
+                            <span class="peso">peso neto {{ $e['peso_kg'] }} kg</span>
                         @endif
                     </div>
                     <div class="linea">
@@ -110,8 +110,9 @@
                     </div>
                 </td>
                 @if ($e['qr'] && ! $vertical)
-                    <td style="width: 66px; text-align: right; vertical-align: top;">
-                        <img class="qr" src="{{ $e['qr'] }}" alt="{{ $e['codigo'] }}">
+                    {{-- Sin código de barras sobra espacio: el QR se imprime más grande, que se lee mejor. --}}
+                    <td style="width: {{ $e['barras'] ? 66 : 100 }}px; text-align: right; vertical-align: top;">
+                        <img class="qr" @unless ($e['barras']) style="height: 92px; width: 92px;" @endunless src="{{ $e['qr'] }}" alt="{{ $e['codigo'] }}">
                     </td>
                 @endif
             </tr>
@@ -120,7 +121,7 @@
         {{-- En vertical el QR va centrado debajo del texto. --}}
         @if ($e['qr'] && $vertical)
             <div style="text-align: center; margin-top: 4px;">
-                <img class="qr" src="{{ $e['qr'] }}" alt="{{ $e['codigo'] }}">
+                <img class="qr" @unless ($e['barras']) style="height: 104px; width: 104px;" @endunless src="{{ $e['qr'] }}" alt="{{ $e['codigo'] }}">
             </div>
         @endif
 

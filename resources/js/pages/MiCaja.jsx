@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowDownCircle, ArrowUpCircle, FileSignature, Lock, LockOpen, PiggyBank, Smartphone, Wallet } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, FileSignature, FileSpreadsheet, FileText, Lock, LockOpen, PiggyBank, Smartphone, Wallet } from 'lucide-react';
 import api from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
@@ -8,6 +8,7 @@ import PagosCuentaModal from '../components/PagosCuentaModal';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import MetodoCajaPicker from '../components/MetodoCajaPicker';
+import PdfViewerModal from '../components/PdfViewerModal';
 import { Alert, Badge, Button, Card, DataTable, Input, Modal, SearchSelect, Select, Spinner } from '../components/ui';
 
 const money = (n, moneda = 'PEN') =>
@@ -49,6 +50,8 @@ export default function MiCaja() {
     const opcionesDestino = useCatalogoDestinos();
     /** Amortización de documentos desde la caja, separada: 'cobrar' (ingreso) o 'pagar' (egreso). */
     const [amortizar, setAmortizar] = useState(null);
+    /** El reporte de la caja del día en PDF: { url } mientras se ve. */
+    const [reportePdf, setReportePdf] = useState(null);
     const [data, setData] = useState(null);
     const [motivos, setMotivos] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -89,6 +92,21 @@ export default function MiCaja() {
     useEffect(() => {
         load();
     }, [load]);
+
+    /** El Excel de la caja del día (el servidor lo arma con la apertura de quien consulta). */
+    const descargarReporteExcel = async () => {
+        try {
+            const { data } = await api.get('/mi-caja/reporte/excel', { responseType: 'blob' });
+            const url = URL.createObjectURL(data);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `caja-${new Date().toLocaleDateString('en-CA')}.xlsx`;
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 4000);
+        } catch {
+            toast.error('No se pudo generar el reporte de caja.');
+        }
+    };
 
     const abrir = async () => {
         setSaving(true);
@@ -329,6 +347,9 @@ export default function MiCaja() {
                                 {puede('tesoreria.cuentas-por-pagar.crear') && (
                                     <Button variant="secondary" onClick={() => setAmortizar('pagar')}><FileSignature className="h-4 w-4" /> Pagar documento</Button>
                                 )}
+                                {/* El reporte de la caja del día: resumen, lo cobrado por cada cuenta y todos los movimientos. */}
+                                <Button variant="secondary" onClick={descargarReporteExcel}><FileSpreadsheet className="h-4 w-4" /> Excel</Button>
+                                <Button variant="secondary" onClick={() => setReportePdf({ url: '/mi-caja/reporte/pdf' })}><FileText className="h-4 w-4" /> PDF</Button>
                                 <Button variant="secondary" onClick={() => { setCerrarOpen(true); setMontoContado(''); setMontoContadoUsd(''); }}><Lock className="h-4 w-4" /> Cerrar caja</Button>
                             </div>
 
@@ -378,6 +399,15 @@ export default function MiCaja() {
                     )}
                 </>
             )}
+
+            {/* El reporte de la caja del día en PDF. */}
+            <PdfViewerModal
+                open={Boolean(reportePdf)}
+                onClose={() => setReportePdf(null)}
+                url={reportePdf?.url}
+                titulo="Reporte de caja"
+                nombre={`Caja ${new Date().toLocaleDateString('es-PE')}`}
+            />
 
             {/* Amortización de documentos: elige el documento y abona; el movimiento queda en esta caja. */}
             <PagosCuentaModal

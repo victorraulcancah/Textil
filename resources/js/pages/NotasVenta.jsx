@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Ban, Edit, Eye, Printer, User } from 'lucide-react';
+import { Ban, Edit, Eye, FileSpreadsheet, FileText, Printer, User } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
@@ -28,6 +28,8 @@ export default function NotasVenta() {
     const [notas, setNotas] = useState([]);
     /** Nota cuyo PDF se está viendo. */
     const [pdfTarget, setPdfTarget] = useState(null);
+    /** El listado en PDF: { url } mientras se ve. */
+    const [reportePdf, setReportePdf] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [fEstado, setFEstado] = useState('');
@@ -193,6 +195,28 @@ export default function NotasVenta() {
         },
     ];
 
+    /** Los filtros de la pantalla, tal como los entiende el servidor: el Excel y el PDF salen con las mismas filas. */
+    const parametrosReporte = () => {
+        const p = { estado: fEstado, tipo_pago: fPago, cliente_id: fCliente, almacen_id: fAlmacen, vendedor_id: fVendedor, desde: fDesde, hasta: fHasta };
+        return Object.fromEntries(Object.entries(p).filter(([, v]) => v));
+    };
+
+    const descargarExcel = async () => {
+        try {
+            const { data } = await api.get('/notas-venta/reporte/excel', { params: parametrosReporte(), responseType: 'blob' });
+            const url = URL.createObjectURL(data);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `proformas-${hoyIso()}.xlsx`;
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 4000);
+        } catch {
+            toast.error('No se pudo generar el Excel.');
+        }
+    };
+
+    const verReportePdf = () => setReportePdf({ url: `/notas-venta/reporte/pdf?${new URLSearchParams(parametrosReporte()).toString()}` });
+
     const docNombre = (n) => `${n?.serie ?? ''}-${String(n?.numero ?? '').padStart(8, '0')}`;
 
     const detallesVenta = seleccionada?.detalles ?? [];
@@ -203,7 +227,17 @@ export default function NotasVenta() {
                 title="Proformas"
                 description="Proformas emitidas a clientes"
                 actions={
-                    <CreateButton onClick={() => navigate('/notas-venta/nueva')}>Nueva proforma</CreateButton>
+                    <>
+                        <Button variant="secondary" onClick={descargarExcel}>
+                            <FileSpreadsheet className="h-4 w-4" />
+                            Excel
+                        </Button>
+                        <Button variant="secondary" onClick={verReportePdf}>
+                            <FileText className="h-4 w-4" />
+                            PDF
+                        </Button>
+                        <CreateButton onClick={() => navigate('/notas-venta/nueva')}>Nueva proforma</CreateButton>
+                    </>
                 }
             />
 
@@ -470,6 +504,15 @@ export default function NotasVenta() {
                     </div>
                 )}
             </Modal>
+            {/* El listado de proformas en PDF, con los filtros de la pantalla. */}
+            <PdfViewerModal
+                open={Boolean(reportePdf)}
+                onClose={() => setReportePdf(null)}
+                url={reportePdf?.url}
+                titulo="Proformas"
+                nombre={`Proformas ${hoyIso()}`}
+            />
+
                     <PdfViewerModal
                 open={Boolean(pdfTarget)}
                 onClose={() => setPdfTarget(null)}

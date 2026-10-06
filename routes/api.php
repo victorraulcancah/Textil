@@ -262,6 +262,9 @@ Route::middleware('auth:api')->group(function () {
         ->except(['show'])->parameters(['actividades-comerciales' => 'actividadComercial']);
     Route::get('notas-venta', [NotaVentaController::class, 'index']);
     Route::post('notas-venta', [NotaVentaController::class, 'store']);
+    // El listado de proformas en Excel y PDF, con los mismos filtros de la pantalla.
+    Route::get('notas-venta/reporte/excel', [\App\Http\Controllers\NotaVentaReporteController::class, 'excel']);
+    Route::get('notas-venta/reporte/pdf', [\App\Http\Controllers\NotaVentaReporteController::class, 'pdf']);
     Route::get('notas-venta/{notaVenta}', [NotaVentaController::class, 'show']);
     Route::put('notas-venta/{notaVenta}', [NotaVentaController::class, 'update']);
     Route::post('notas-venta/{notaVenta}/anular', [NotaVentaController::class, 'anular']);
@@ -275,6 +278,9 @@ Route::middleware('auth:api')->group(function () {
     Route::apiResource('billeteras-digitales', BilleteraDigitalController::class);
     Route::apiResource('cajas', CajaController::class);
     Route::get('mi-caja', [MiCajaController::class, 'show']);
+    // El reporte de la caja del día (la apertura de quien la tiene abierta), en Excel y en PDF.
+    Route::get('mi-caja/reporte/excel', [\App\Http\Controllers\MiCajaReporteController::class, 'excel']);
+    Route::get('mi-caja/reporte/pdf', [\App\Http\Controllers\MiCajaReporteController::class, 'pdf']);
     Route::post('mi-caja/abrir', [MiCajaController::class, 'abrir']);
     Route::post('mi-caja/cerrar', [MiCajaController::class, 'cerrar']);
     Route::get('movimientos-caja', [MovimientoCajaController::class, 'index']);

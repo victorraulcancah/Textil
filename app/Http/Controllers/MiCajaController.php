@@ -193,7 +193,7 @@ class MiCajaController extends Controller
      * con faltante. Por eso `esperado` cuenta únicamente el efectivo, y lo
      * demás se informa aparte.
      */
-    private function resumen(AperturaCaja $apertura): array
+    public function resumen(AperturaCaja $apertura): array
     {
         $todos = MovimientoCaja::where('apertura_caja_id', $apertura->id)
             ->get(['tipo', 'monto', 'moneda', 'cuenta_bancaria_id', 'billetera_id']);

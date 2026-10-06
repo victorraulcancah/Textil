@@ -12,7 +12,8 @@ import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
 import DetalleCard from '../components/ui/DetalleCard';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
-import { Alert, Badge, DataTable, DateRangePicker, SearchSelect, Select } from '../components/ui';
+import { Alert, Badge, DataTable, SearchSelect, Select } from '../components/ui';
+import FiltroFechas from '../components/FiltroFechas';
 import { hoyIso } from '../lib/fechas';
 
 const money = (n, moneda = 'PEN') =>
@@ -112,6 +113,18 @@ export default function OrdenesCompra() {
     };
 
     // ── Filtros ──
+    /** Las fechas de la cabecera se aplican al instante (no esperan a "Aplicar" de los filtros). */
+    const fijarFecha = (clave, valor) => {
+        if (clave === 'desde') setFilterDesde(valor);
+        else setFilterHasta(valor);
+        setActiveFilters((prev) => {
+            const next = { ...prev };
+            if (valor) next[clave] = valor;
+            else delete next[clave];
+            return next;
+        });
+    };
+
     const applyFilters = () => {
         const next = {};
         if (filterEstado) next.estado = filterEstado;
@@ -155,15 +168,6 @@ export default function OrdenesCompra() {
                 placeholder="Todos" emptyText="Sin coincidencias"
                 options={proveedoresOptions}
                 className="w-52" />
-            <DateRangePicker
-                label="Rango de fecha"
-                desde={filterDesde}
-                hasta={filterHasta}
-                onChange={(d, h) => {
-                    setFilterDesde(d);
-                    setFilterHasta(h);
-                }}
-            />
         </div>
     );
 
@@ -290,7 +294,17 @@ export default function OrdenesCompra() {
             <PageHeader
                 title="Órdenes de Compra"
                 description="Pedidos formales de compra a proveedores"
-                actions={<CreateButton onClick={() => navigate('/ordenes-compra/nueva')}>Nueva orden</CreateButton>}
+                actions={
+                    <>
+                        <FiltroFechas
+                            desde={filterDesde}
+                            hasta={filterHasta}
+                            onDesde={(v) => fijarFecha('desde', v)}
+                            onHasta={(v) => fijarFecha('hasta', v)}
+                        />
+                        <CreateButton onClick={() => navigate('/ordenes-compra/nueva')}>Nueva orden</CreateButton>
+                    </>
+                }
             />
 
             {error && <Alert variant="error" className="mb-4">{error}</Alert>}

@@ -46,7 +46,7 @@ const rollosLibresEn = (existencias, productoId, colorId) => {
  * Las líneas que piden más de lo que hay disponible en el almacén de origen (`existencias` ya es de ese almacén):
  * [{ i, mensaje }], con `i` = posición de la línea. Lo pedido de la misma tela y color en varias líneas se suma.
  */
-export const faltantesDeStock = ({ lineas, existencias, productos }) => {
+export const faltantesDeStock = ({ lineas, existencias, productos, almacen = 'el almacén de origen' }) => {
     const productoDe = (presentacionId) =>
         productos.find((p) => (p.presentaciones ?? []).some((pr) => String(pr.id) === String(presentacionId))) ?? null;
 
@@ -67,7 +67,7 @@ export const faltantesDeStock = ({ lineas, existencias, productos }) => {
                 faltantes.push({
                     i,
                     mensaje: hay <= 0
-                        ? 'Sin stock disponible en el almacén de origen'
+                        ? `Sin stock disponible en ${almacen}`
                         : `Pides ${num(pide)} rollo${pide === 1 ? '' : 's'} y solo hay ${num(hay)} disponible${hay === 1 ? '' : 's'}`,
                 });
             }
@@ -82,7 +82,7 @@ export const faltantesDeStock = ({ lineas, existencias, productos }) => {
             if (pide > hay + 0.001) {
                 faltantes.push({
                     i,
-                    mensaje: hay <= 0 ? 'Sin stock disponible en el almacén de origen' : `Pides ${num(pide)} y solo hay ${num(hay)} disponibles`,
+                    mensaje: hay <= 0 ? `Sin stock disponible en ${almacen}` : `Pides ${num(pide)} y solo hay ${num(hay)} disponibles`,
                 });
             }
         }

@@ -1,12 +1,13 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, ChevronRight, ClipboardList, Eraser, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, ChevronRight, ClipboardList, Eraser, Plus, Trash2, TriangleAlert } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import ColorSelect from '../components/ColorSelect';
 import { enterCopiar } from '../lib/enterCopiar';
+import { faltantesDeStock } from '../components/LineasRollos';
 import ProductoPickerModal from '../components/ProductoPickerModal';
 import { tipoUnidad } from '../lib/unidades';
 import { precioPara } from '../lib/precios';
@@ -647,6 +648,13 @@ export default function CrearPedido() {
      * Lo que se ve en la tabla: cada tela pedida en rollos es una sola fila
      * (sus colores se despliegan debajo); lo demás va línea por línea.
      */
+    /** Lo que se pide de más: con el almacén elegido, cada línea se compara con los rollos libres de ahí (se marca en rojo). */
+    const faltantes = useMemo(
+        () => (almacenId ? faltantesDeStock({ lineas, existencias, productos, almacen: 'este almacén' }) : []),
+        [almacenId, lineas, existencias, productos],
+    );
+    const faltaDe = (i) => faltantes.find((f) => f.i === i);
+
     const filasTabla = useMemo(() => {
         const filas = [];
         const telas = new Map();
@@ -953,7 +961,9 @@ export default function CrearPedido() {
                                         const colores = fila.indices.map((i) => ({ l: lineas[i], i }));
                                         const rollos = colores.reduce((suma, { l }) => suma + (Number(l.rollos_pedidos) || 0), 0);
                                         const precios = [...new Set(colores.map(({ l }) => String(l.precio_unitario)))];
-                                        const abierta = Boolean(abiertas[fila.clave]);
+                                        const hayFalta = colores.some(({ i }) => faltaDe(i));
+                                        // Con faltantes se queda abierta: ahí está el mensaje de cada color.
+                                        const abierta = Boolean(abiertas[fila.clave]) || hayFalta;
                                         const error = colores
                                             .map(({ i }) => errores[`detalles.${i}.cantidad`] ?? errores[`detalles.${i}.rollos_pedidos`])
                                             .find(Boolean);
@@ -984,6 +994,11 @@ export default function CrearPedido() {
                                                             <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-warm-700">
                                                                 {colores.length} color{colores.length === 1 ? '' : 'es'}
                                                             </span>
+                                                            {hayFalta && (
+                                                                <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700">
+                                                                    <TriangleAlert className="h-3 w-3" /> Sin stock suficiente
+                                                                </span>
+                                                            )}
                                                         </span>
                                                         {error && <span className="block pl-7 text-xs text-red-600">{error[0]}</span>}
                                                     </td>
@@ -1044,12 +1059,17 @@ export default function CrearPedido() {
                                                                             key={i}
                                                                             className="grid grid-cols-[1fr_7rem_8rem_2.5rem] items-center gap-3 px-2 py-1.5"
                                                                         >
-                                                                            <span className="inline-flex items-center gap-2 font-medium uppercase text-warm-800">
+                                                                            <span className="inline-flex flex-wrap items-center gap-2 font-medium uppercase text-warm-800">
                                                                                 <span
                                                                                     className="h-3 w-3 shrink-0 rounded-full ring-1 ring-black/10"
                                                                                     style={{ backgroundColor: hexDe(l) || '#9ca3af' }}
                                                                                 />
                                                                                 {l.color || 'Cualquier color'}
+                                                                                {faltaDe(i) && (
+                                                                                    <span className="flex basis-full items-center gap-1 text-xs font-medium normal-case text-red-600">
+                                                                                        <TriangleAlert className="h-3.5 w-3.5 shrink-0" /> {faltaDe(i).mensaje}
+                                                                                    </span>
+                                                                                )}
                                                                                 {Number(l.metros_por_rollo) > 0 && (
                                                                                     <span className="text-xs font-semibold normal-case text-primary-700">
                                                                                         · rollos de {num(l.metros_por_rollo)} m
@@ -1079,7 +1099,7 @@ export default function CrearPedido() {
                                                                                     })
                                                                                 }
                                                                                 data-rollos={i}
-                                                                                className="text-right"
+                                                                                className={cn('text-right', faltaDe(i) && 'text-red-600 ring-red-500!')}
                                                                                 aria-label={`Rollos de ${fila.producto} ${l.color}`}
                                                                                 tabIndex={abierta ? 0 : -1}
                                                                             />

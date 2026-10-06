@@ -128,6 +128,9 @@ Route::middleware('auth:api')->group(function () {
     Route::post('ordenes-compra/{ordenesCompra}/aprobar', [OrdenCompraController::class, 'aprobar']);
     Route::post('ordenes-compra/{ordenesCompra}/enviar', [OrdenCompraController::class, 'enviar']);
     Route::post('ordenes-compra/{ordenesCompra}/anular', [OrdenCompraController::class, 'anular']);
+    // El listado de compras en Excel y PDF, con los mismos filtros de la pantalla (antes del resource: {compra}).
+    Route::get('compras/reporte/excel', [\App\Http\Controllers\CompraReporteController::class, 'excel']);
+    Route::get('compras/reporte/pdf', [\App\Http\Controllers\CompraReporteController::class, 'pdf']);
     Route::apiResource('compras', CompraController::class);
     Route::post('compras/{compra}/anular', [CompraController::class, 'anular']);
     Route::post('compras/{compra}/finalizar', [CompraController::class, 'finalizar']);

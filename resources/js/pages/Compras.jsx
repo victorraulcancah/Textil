@@ -9,11 +9,12 @@ import DetalleCard from '../components/ui/DetalleCard';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
 import ActionsMenu from '../components/ActionsMenu';
+import MenuImprimir from '../components/MenuImprimir';
 import DetalleRecepcionCompra from '../components/DetalleRecepcionCompra';
 import RecepcionarCompraModal from '../components/RecepcionarCompraModal';
 import PlanillaTela from '../components/PlanillaTela';
 import { gruposDeCompra } from '../lib/planilla';
-import { Alert, Badge, Button, DataTable, DateRangePicker, Input, Modal, SearchSelect, Select } from '../components/ui';
+import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select } from '../components/ui';
 import { hoyIso } from '../lib/fechas';
 
 const estadoCompra = {
@@ -44,6 +45,8 @@ export default function Compras() {
 
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [pdfTarget, setPdfTarget] = useState(null);
+    /** El listado en PDF: { url } mientras se ve. */
+    const [reportePdf, setReportePdf] = useState(null);
     const [deleting, setDeleting] = useState(false);
     const [actionId, setActionId] = useState(null);
     const [recepcionarId, setRecepcionarId] = useState(null);
@@ -244,12 +247,48 @@ export default function Compras() {
 
     const detalles = seleccionada?.detalles ?? [];
 
+    /** Los filtros de la pantalla, tal como los entiende el servidor: el Excel y el PDF salen con las mismas filas. */
+    const parametrosReporte = () => {
+        const p = { estado: fEstado, forma_pago: fPago, proveedor_id: fProveedor, desde: fDesde, hasta: fHasta };
+        return Object.fromEntries(Object.entries(p).filter(([, v]) => v));
+    };
+
+    const exportarExcel = async () => {
+        try {
+            const { data } = await api.get('/compras/reporte/excel', { params: parametrosReporte(), responseType: 'blob' });
+            const url = URL.createObjectURL(data);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `compras-${hoyIso()}.xlsx`;
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 4000);
+        } catch {
+            toast.error('No se pudo generar el Excel.');
+        }
+    };
+
+    const exportarPdf = () => setReportePdf({ url: `/compras/reporte/pdf?${new URLSearchParams(parametrosReporte()).toString()}` });
+
     return (
         <Layout>
             <PageHeader
                 title="Compras"
                 description="Comprobantes de compra a proveedores"
-                actions={<CreateButton onClick={() => navigate('/compras/nueva')}>Nueva compra</CreateButton>}
+                actions={
+                    <>
+                        {/* Desde y hasta por separado, a la vista y en la misma fila que Imprimir (el Excel y el PDF los usan). */}
+                        <label className="flex items-center gap-2 text-sm font-medium text-warm-600">
+                            Desde
+                            <span className="w-40"><Input type="date" max={fHasta || undefined} value={fDesde} onChange={(e) => setFDesde(e.target.value)} aria-label="Fecha desde" /></span>
+                        </label>
+                        <label className="flex items-center gap-2 text-sm font-medium text-warm-600">
+                            Hasta
+                            <span className="w-40"><Input type="date" min={fDesde || undefined} value={fHasta} onChange={(e) => setFHasta(e.target.value)} aria-label="Fecha hasta" /></span>
+                        </label>
+                        <MenuImprimir onExcel={exportarExcel} onPdf={exportarPdf} />
+                        <CreateButton onClick={() => navigate('/compras/nueva')}>Nueva compra</CreateButton>
+                    </>
+                }
             />
 
             {error && <Alert variant="error" className="mb-4">{error}</Alert>}
@@ -302,15 +341,6 @@ export default function Compras() {
                                     compras.filter((c) => c.proveedor_id).map((c) => [String(c.proveedor_id), c.proveedor?.nombre]),
                                 ).entries(),
                             ].map(([value, label]) => ({ value, label }))}
-                        />
-                        <DateRangePicker
-                            label="Rango de fecha"
-                            desde={fDesde}
-                            hasta={fHasta}
-                            onChange={(d, h) => {
-                                setFDesde(d);
-                                setFHasta(h);
-                            }}
                         />
                         {(fEstado || fPago || fProveedor || fDesde || fHasta) && (
                             <button
@@ -455,6 +485,15 @@ export default function Compras() {
                 compraId={detalleRecepcionId}
                 onClose={() => setDetalleRecepcionId(null)}
             />
+            {/* El listado de compras en PDF, con los filtros de la pantalla. */}
+            <PdfViewerModal
+                open={Boolean(reportePdf)}
+                onClose={() => setReportePdf(null)}
+                url={reportePdf?.url}
+                titulo="Compras"
+                nombre={`Compras ${hoyIso()}`}
+            />
+
                     <PdfViewerModal
                 open={Boolean(pdfTarget)}
                 onClose={() => setPdfTarget(null)}

@@ -1,8 +1,9 @@
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useMemo, useRef, useState } from 'react';
 import { Camera, Check, ChevronRight, Eraser, Plus, ScanLine, Trash2, TriangleAlert } from 'lucide-react';
 import api from '../lib/api';
 import { useToast } from '../lib/toast';
 import { tipoUnidad } from '../lib/unidades';
+import { enterCopiar } from '../lib/enterCopiar';
 import ColorSelect from './ColorSelect';
 import EscanerCamara from './EscanerCamara';
 import ProductoPickerModal from './ProductoPickerModal';
@@ -390,6 +391,8 @@ export default function LineasRollos({
         setPicker((prev) => ({ ...prev, open: false }));
     };
 
+    /** La fila cuyos rollos se están escribiendo (Enter los copia a la siguiente). */
+    const editandoRollos = useRef(null);
     const cambiar = (i, campo, valor) => setLineas((prev) => prev.map((l, j) => (j === i ? { ...l, [campo]: valor } : l)));
     const quitar = (i) => setLineas((prev) => prev.filter((_, j) => j !== i));
     const quitarVarias = (indices) => setLineas((prev) => prev.filter((_, j) => !indices.includes(j)));
@@ -654,7 +657,7 @@ export default function LineasRollos({
                                                                     <span className="text-right">Rollos / metros</span>
                                                                     <span />
                                                                 </div>
-                                                                {colores.map(({ l, i }) => l.modo === 'escaneado' ? (
+                                                                {colores.map(({ l, i }, n) => l.modo === 'escaneado' ? (
                                                                     <div key={i}>
                                                                         <div className="px-2 py-1.5">
                                                                             <span className="inline-flex items-center gap-2 font-medium uppercase text-warm-800">
@@ -709,7 +712,26 @@ export default function LineasRollos({
                                                                             step="1"
                                                                             min="1"
                                                                             value={l.rollos_pedidos}
-                                                                            onChange={(e) => cambiar(i, 'rollos_pedidos', e.target.value)}
+                                                                            onChange={(e) => {
+                                                                                editandoRollos.current = i;
+                                                                                cambiar(i, 'rollos_pedidos', e.target.value);
+                                                                            }}
+                                                                            onFocus={() => {
+                                                                                if (editandoRollos.current !== i) editandoRollos.current = null;
+                                                                            }}
+                                                                            onKeyDown={(e) => {
+                                                                                const sig = colores[n + 1];
+                                                                                enterCopiar({
+                                                                                    e,
+                                                                                    editando: editandoRollos,
+                                                                                    actual: { clave: i, valor: l.rollos_pedidos },
+                                                                                    // Los rollos escaneados no se copian: solo la fila de rollos pedidos que sigue.
+                                                                                    siguiente: sig && sig.l.modo !== 'escaneado' ? { clave: sig.i, valor: sig.l.rollos_pedidos } : null,
+                                                                                    copiar: (j, v) => cambiar(j, 'rollos_pedidos', v),
+                                                                                    atributo: 'data-rollos',
+                                                                                });
+                                                                            }}
+                                                                            data-rollos={i}
                                                                             className="text-right"
                                                                             aria-label={`Rollos de ${fila.producto} ${l.color}`}
                                                                             tabIndex={abierta ? 0 : -1}

@@ -641,6 +641,27 @@ export default function CrearCompra() {
     const [abiertas, setAbiertas] = useState({});
     const alternar = (clave) => setAbiertas((prev) => ({ ...prev, [clave]: !prev[clave] }));
 
+    /** La fila cuyos rollos se están escribiendo (se copian a la siguiente al dar Enter). */
+    const editandoRollos = useRef(null);
+    /**
+     * Enter en los rollos de un color: pasa a los del color siguiente. Si acabas de escribir (o de recibir por copia)
+     * ese valor, se lo copia a la fila siguiente (y sus metros se recalculan con su factor).
+     */
+    const enterRollos = (e, actual, siguiente) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        if (!siguiente) return;
+        if (editandoRollos.current === actual.i && String(actual.it.rollos) !== String(siguiente.it.rollos)) {
+            cambiarRollos(siguiente.i, actual.it.rollos);
+            editandoRollos.current = siguiente.i;
+        } else {
+            editandoRollos.current = null;
+        }
+        const campo = document.querySelector(`[data-rollos="${siguiente.i}"]`);
+        campo?.focus();
+        campo?.select();
+    };
+
     /**
      * Cambiar los rollos de un color mantiene el factor (los metros de cada
      * rollo) y recalcula los metros: 1 rollo de 70 m → 11 rollos = 770 m.
@@ -1189,7 +1210,15 @@ export default function CrearCompra() {
                                                                                         min="0"
                                                                                         step="1"
                                                                                         value={it.rollos}
-                                                                                        onChange={(e) => cambiarRollos(i, e.target.value)}
+                                                                                        onChange={(e) => {
+                                                                                            editandoRollos.current = i;
+                                                                                            cambiarRollos(i, e.target.value);
+                                                                                        }}
+                                                                                        onFocus={() => {
+                                                                                            if (editandoRollos.current !== i) editandoRollos.current = null;
+                                                                                        }}
+                                                                                        onKeyDown={(e) => enterRollos(e, colores[n], colores[n + 1])}
+                                                                                        data-rollos={i}
                                                                                         className="text-right"
                                                                                         aria-label={`Rollos de ${producto?.nombre} ${color?.nombre ?? ''}`}
                                                                                         tabIndex={abierta ? 0 : -1}

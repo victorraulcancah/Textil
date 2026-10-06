@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, ChevronRight, ClipboardList, Eraser, Plus, Trash2 } from 'lucide-react';
 import api, { asList } from '../lib/api';
@@ -6,6 +6,7 @@ import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import ColorSelect from '../components/ColorSelect';
+import { enterCopiar } from '../lib/enterCopiar';
 import ProductoPickerModal from '../components/ProductoPickerModal';
 import { tipoUnidad } from '../lib/unidades';
 import { precioPara } from '../lib/precios';
@@ -597,6 +598,8 @@ export default function CrearPedido() {
      * precio de lista (puede entrar en un precio por cantidad), salvo que el
      * precio se haya escrito a mano. En rollos no hay metros que cambien el precio.
      */
+    /** La fila cuyos rollos se están escribiendo (Enter los copia a la siguiente). */
+    const editandoRollos = useRef(null);
     const cambiar = (i, campo, valor) =>
         setLineas((prev) =>
             prev.map((l, j) => {
@@ -1036,7 +1039,7 @@ export default function CrearPedido() {
                                                                         <span className="text-right">Precio por metro</span>
                                                                         <span />
                                                                     </div>
-                                                                    {colores.map(({ l, i }) => (
+                                                                    {colores.map(({ l, i }, n) => (
                                                                         <div
                                                                             key={i}
                                                                             className="grid grid-cols-[1fr_7rem_8rem_2.5rem] items-center gap-3 px-2 py-1.5"
@@ -1058,7 +1061,24 @@ export default function CrearPedido() {
                                                                                 step="1"
                                                                                 min="1"
                                                                                 value={l.rollos_pedidos}
-                                                                                onChange={(e) => cambiar(i, 'rollos_pedidos', e.target.value)}
+                                                                                onChange={(e) => {
+                                                                                    editandoRollos.current = i;
+                                                                                    cambiar(i, 'rollos_pedidos', e.target.value);
+                                                                                }}
+                                                                                onFocus={() => {
+                                                                                    if (editandoRollos.current !== i) editandoRollos.current = null;
+                                                                                }}
+                                                                                onKeyDown={(e) =>
+                                                                                    enterCopiar({
+                                                                                        e,
+                                                                                        editando: editandoRollos,
+                                                                                        actual: { clave: i, valor: l.rollos_pedidos },
+                                                                                        siguiente: colores[n + 1] ? { clave: colores[n + 1].i, valor: colores[n + 1].l.rollos_pedidos } : null,
+                                                                                        copiar: (j, v) => cambiar(j, 'rollos_pedidos', v),
+                                                                                        atributo: 'data-rollos',
+                                                                                    })
+                                                                                }
+                                                                                data-rollos={i}
                                                                                 className="text-right"
                                                                                 aria-label={`Rollos de ${fila.producto} ${l.color}`}
                                                                                 tabIndex={abierta ? 0 : -1}

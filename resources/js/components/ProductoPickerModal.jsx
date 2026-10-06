@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { enterCopiar } from '../lib/enterCopiar';
 import { Package, PackageSearch, Plus, RotateCcw, Search, Warehouse, X } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { tipoUnidad } from '../lib/unidades';
@@ -141,6 +142,8 @@ export default function ProductoPickerModal({
     /** La tela cuyos colores se están eligiendo (su propio modal) y lo escrito ahí, sin confirmar. */
     const [telaModal, setTelaModal] = useState(null);
     const [borrador, setBorrador] = useState({});
+    /** El color cuyos rollos se están escribiendo en el modal de la tela (Enter los copia al siguiente). */
+    const editandoRollos = useRef(null);
     /** Compra: la tela cuya tabla de colores está abierta, y los rollos ya agregados de cada tela. */
     const [telaCompra, setTelaCompra] = useState(null);
     const [agregadas, setAgregadas] = useState({});
@@ -1101,8 +1104,11 @@ export default function ProductoPickerModal({
             }
         >
             <ul className="grid gap-2 sm:grid-cols-2">
-                {lineasTela.map((c) => {
+                {lineasTela.map((c, idx) => {
                     const clave = `${telaModal.id}:${c.id ?? 'sin'}`;
+                    // El siguiente color al que se puede copiar (sin rollos libres no se puede pedir si se bloquea).
+                    const sig = lineasTela.slice(idx + 1).find((x) => !(bloquearSinStock && x.rollos <= 0));
+                    const claveSig = sig ? `${telaModal.id}:${sig.id ?? 'sin'}` : null;
                     const valor = borrador[clave] ?? '';
                     const marcada = Number(valor) > 0;
                     const sinRollos = c.rollos <= 0;
@@ -1149,7 +1155,24 @@ export default function ProductoPickerModal({
                                 placeholder="0"
                                 disabled={bloqueada}
                                 value={valor}
-                                onChange={(e) => setRollosBorrador(c, e.target.value, c.rollos)}
+                                onChange={(e) => {
+                                    editandoRollos.current = clave;
+                                    setRollosBorrador(c, e.target.value, c.rollos);
+                                }}
+                                onFocus={() => {
+                                    if (editandoRollos.current !== clave) editandoRollos.current = null;
+                                }}
+                                onKeyDown={(e) =>
+                                    enterCopiar({
+                                        e,
+                                        editando: editandoRollos,
+                                        actual: { clave, valor },
+                                        siguiente: sig ? { clave: claveSig, valor: borrador[claveSig] ?? '' } : null,
+                                        copiar: (_, v) => setRollosBorrador(sig, v, sig.rollos),
+                                        atributo: 'data-rollos-color',
+                                    })
+                                }
+                                data-rollos-color={clave}
                                 aria-label={`Rollos de ${telaModal.nombre} ${c.nombre}`}
                                 className="w-16 shrink-0 rounded-md border-0 px-2 py-1.5 text-center text-sm text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-primary-600 disabled:bg-gray-100"
                             />

@@ -74,7 +74,9 @@ class ConsultaDocumentoController extends Controller
             $res = Http::timeout(12)
                 ->acceptJson()
                 ->get(rtrim(config('services.apisperu.url'), '/') . '/' . $recurso, ['token' => $token]);
-        } catch (\Throwable) {
+        } catch (\Throwable $e) {
+            // El motivo real (sin conexión, firewall, SELinux…) queda en el log para poder diagnosticarlo.
+            \Illuminate\Support\Facades\Log::warning("Consulta {$recurso}: no se pudo conectar con apisperu: ".$e->getMessage());
             abort(503, 'El servicio de consulta no responde');
         }
 

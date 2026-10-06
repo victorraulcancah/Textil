@@ -221,40 +221,39 @@ class OrdenVentaService
      * Siguen dentro del almacén —salen recién con el despacho—, pero ya no se
      * tocan: están en su sitio esperando a que el cliente pase a recogerlos.
      */
-    public function marcarSeparado(OrdenVenta $orden, bool $parcial = false, ?string $saldo = null): OrdenVenta
+    public function marcarSeparado(OrdenVenta $orden, bool $parcial = false): OrdenVenta
     {
         $this->exigirTransicion($orden, OrdenVenta::SEPARADO);
 
         $orden->load('detalles.rollos');
 
-        // Con `$parcial` se separa solo lo escaneado aunque falte algo (no se encontró un rollo, no hay más): hay que
-        // decir qué pasa con lo que falta (`$saldo`): 'pendiente' (nace otro pedido con esa diferencia) o 'cancelar'
-        // (el cliente ya no lo necesita). Se aplica al despachar; mientras tanto no se pierde nada de lo preparado.
-        if ($orden->estaVerificada()) {
-            $saldo = null;
-        } elseif ($parcial) {
-            if (! in_array($saldo, ['pendiente', 'cancelar'], true)) {
-                throw new \DomainException('Elige qué pasa con lo que falta: dejarlo pendiente o cancelarlo.');
-            }
-            if (! $orden->detalles->contains(fn ($d) => $d->rollos->isNotEmpty())) {
-                throw new \DomainException('Escanea al menos un rollo antes de entregar lo que hay. Si el cliente ya no quiere nada, anula el pedido.');
-            }
-        } else {
-            $faltanRollos = $orden->detalles->filter->esPorRollos()->sum(fn ($d) => $d->rollosPendientes());
-            $faltanMetros = $orden->detalles->reject->esPorRollos()->sum(fn ($d) => $d->metrosPendientes());
-            $partes = array_filter([
-                $faltanRollos > 0 ? $faltanRollos.($faltanRollos === 1 ? ' rollo' : ' rollos') : null,
-                $faltanMetros > 0 ? round($faltanMetros, 2).' m' : null,
-            ]);
+        // Con `$parcial` se separa solo lo encontrado aunque falte algo (un rollo no estaba en el rack): lo que falta
+        // queda registrado como NO ENCONTRADO al despachar. No queda pendiente ni genera otra atención: el cliente
+        // recibe lo encontrado y el pedido se cierra con eso.
+        $noEncontrado = false;
+        if (! $orden->estaVerificada()) {
+            if ($parcial) {
+                if (! $orden->detalles->contains(fn ($d) => $d->rollos->isNotEmpty())) {
+                    throw new \DomainException('Escanea al menos un rollo antes de despachar lo encontrado. Si no se encontró nada, anula el pedido.');
+                }
+                $noEncontrado = true;
+            } else {
+                $faltanRollos = $orden->detalles->filter->esPorRollos()->sum(fn ($d) => $d->rollosPendientes());
+                $faltanMetros = $orden->detalles->reject->esPorRollos()->sum(fn ($d) => $d->metrosPendientes());
+                $partes = array_filter([
+                    $faltanRollos > 0 ? $faltanRollos.($faltanRollos === 1 ? ' rollo' : ' rollos') : null,
+                    $faltanMetros > 0 ? round($faltanMetros, 2).' m' : null,
+                ]);
 
-            throw new \DomainException('Faltan '.implode(' y ', $partes).' por cubrir antes de darlo por separado.');
+                throw new \DomainException('Faltan '.implode(' y ', $partes).' por cubrir antes de darlo por separado.');
+            }
         }
 
-        return DB::transaction(function () use ($orden, $saldo) {
+        return DB::transaction(function () use ($orden, $noEncontrado) {
             $orden->update([
                 'estado' => OrdenVenta::SEPARADO,
                 'fecha_separacion' => now(),
-                'saldo_accion' => $saldo,
+                'saldo_accion' => $noEncontrado ? 'faltantes' : null,
             ]);
 
             return $this->conRelaciones($orden->fresh());
@@ -597,7 +596,7 @@ class OrdenVentaService
 
         return DB::transaction(function () use ($orden) {
             if ($orden->saldo_accion) {
-                $this->aplicarSaldo($orden);
+                $this->registrarNoEncontrado($orden);
             }
 
             $this->liberarReservas($orden);
@@ -905,15 +904,23 @@ class OrdenVentaService
     }
 
     /**
-     * Al despachar una entrega parcial: lo pedido de cada línea queda igual a lo que sale, lo que faltó se anota y, si
-     * se decidió dejarlo pendiente, nace otro pedido (ya solicitado, en la bandeja del almacén) con esa diferencia.
-     * No exige que haya rollos libres: justamente es lo que no se pudo cubrir.
+     * Al despachar con faltantes: lo pedido de cada línea queda igual a lo que sale y lo que no se encontró queda
+     * registrado como NO ENCONTRADO en el pedido (con los códigos de los rollos que se buscaron, si se marcaron). No
+     * queda pendiente de despacho ni nace otra atención: el cliente recibe lo encontrado y el pedido se cierra.
      */
-    private function aplicarSaldo(OrdenVenta $orden): void
+    private function registrarNoEncontrado(OrdenVenta $orden): void
     {
         $orden->load('detalles.rollos', 'detalles.presentacion', 'detalles.color', 'detalles.almacenReserva');
 
-        $saldo = [];
+        // Los rollos que se marcaron "no se encontró" en este pedido, por tela y color.
+        $buscados = RolloMovimiento::with('rollo:id,codigo,producto_id,producto_color_id')
+            ->where('documento_tipo', 'orden_venta')
+            ->where('documento_id', $orden->id)
+            ->where('tipo', RolloMovimiento::REVISION)
+            ->get()
+            ->pluck('rollo')->filter()->unique('id')
+            ->groupBy(fn ($r) => $r->producto_id.'-'.($r->producto_color_id ?? 0));
+
         $resumen = [];
         foreach ($orden->detalles as $linea) {
             if ($linea->estaCubierta()) {
@@ -921,70 +928,18 @@ class OrdenVentaService
             }
 
             $nombre = trim(($linea->presentacion?->producto?->nombre ?? 'Producto').($linea->color ? ' · '.$linea->color->nombre : ''));
+            $codigos = $buscados->get(($linea->presentacion?->producto_id).'-'.($linea->producto_color_id ?? 0), collect())->pluck('codigo')->all();
+            $codigos = $codigos ? ' ('.implode(', ', $codigos).')' : '';
 
             if ($linea->esPorRollos()) {
                 $faltan = $linea->rollosPendientes();
-                $saldo[] = [
-                    'modo' => OrdenVentaDetalle::MODO_ROLLOS,
-                    'producto_presentacion_id' => $linea->producto_presentacion_id,
-                    'producto_color_id' => $linea->producto_color_id,
-                    'rollos_pedidos' => $faltan,
-                    'metros_por_rollo' => $linea->metros_por_rollo,
-                    'cantidad' => 0,
-                    'metros' => 0,
-                    'precio_unitario' => $linea->precio_unitario,
-                    'descuento' => 0,
-                    'subtotal' => 0,
-                    'precio_oculto' => $linea->precio_oculto,
-                    'descripcion' => $linea->descripcion,
-                ];
-                $resumen[] = "{$nombre}: {$faltan} ".($faltan === 1 ? 'rollo' : 'rollos');
+                $resumen[] = "{$nombre}: {$faltan} ".($faltan === 1 ? 'rollo' : 'rollos').$codigos;
                 $this->reducirLinea($linea, (float) $linea->rollosAsignados());
             } else {
                 $faltan = $linea->metrosPendientes();
-                $ratio = (float) $linea->metros > 0 ? $faltan / (float) $linea->metros : 0;
-                $cantidad = round((float) $linea->cantidad * $ratio, 2);
-                $descuento = round((float) $linea->descuento * $ratio, 2);
-                $saldo[] = [
-                    'modo' => OrdenVentaDetalle::MODO_METROS,
-                    'producto_presentacion_id' => $linea->producto_presentacion_id,
-                    'producto_color_id' => $linea->producto_color_id,
-                    'rollos_pedidos' => null,
-                    'metros_por_rollo' => null,
-                    'cantidad' => $cantidad,
-                    'metros' => $faltan,
-                    'precio_unitario' => $linea->precio_unitario,
-                    'descuento' => $descuento,
-                    'subtotal' => round($cantidad * (float) $linea->precio_unitario - $descuento, 2),
-                    'precio_oculto' => $linea->precio_oculto,
-                    'descripcion' => $linea->descripcion,
-                ];
-                $resumen[] = "{$nombre}: ".round($faltan, 2).' m';
+                $resumen[] = "{$nombre}: ".round($faltan, 2).' m'.$codigos;
                 $this->reducirLinea($linea, $linea->metrosAsignados());
             }
-        }
-
-        if ($orden->saldo_accion === 'pendiente' && $saldo) {
-            $hijo = OrdenVenta::create([
-                'serie' => $serie = OrdenVenta::serieDeAlmacen($orden->almacen_id),
-                'numero' => $this->siguienteNumero('orden_venta', $serie, 3, $orden->almacen_id),
-                'cliente_id' => $orden->cliente_id,
-                'almacen_id' => $orden->almacen_id,
-                'vendedor_id' => $orden->vendedor_id,
-                'fecha_emision' => now()->toDateString(),
-                'fecha_entrega' => $orden->fecha_entrega,
-                'moneda' => $orden->moneda,
-                'tipo_cambio' => $orden->tipo_cambio,
-                'observaciones' => 'Saldo de '.$orden->documento,
-                // Ya está pedido y pendiente de preparar: aparece en la bandeja del almacén.
-                'estado' => OrdenVenta::SOLICITADO,
-                'requerimiento_numero' => 'RA-'.$this->siguienteNumero('requerimiento_almacen', 'RA'),
-                'orden_origen_id' => $orden->id,
-            ]);
-            foreach ($saldo as $fila) {
-                $hijo->detalles()->create($fila);
-            }
-            $this->recalcularTotales($hijo);
         }
 
         $this->recalcularTotales($orden);
@@ -1368,8 +1323,6 @@ class OrdenVentaService
             'detalles.presentacion.producto',
             'detalles.almacenReserva',
             'detalles.rollos.rollo.color',
-            'ordenSaldo:id,serie,numero,orden_origen_id',
-            'ordenOrigen:id,serie,numero',
         ]);
     }
 }

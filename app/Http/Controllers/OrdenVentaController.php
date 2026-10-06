@@ -39,8 +39,6 @@ class OrdenVentaController extends Controller
         // Quién escaneó cada rollo: varios almaceneros pueden preparar el
         // mismo pedido y se necesita saber quién trajo cuál.
         'detalles.rollos.usuario:id,name',
-        'ordenSaldo:id,serie,numero,orden_origen_id',
-        'ordenOrigen:id,serie,numero',
     ];
 
     public function __construct(private OrdenVentaService $pedidos) {}
@@ -148,14 +146,11 @@ class OrdenVentaController extends Controller
     public function separar(Request $request, OrdenVenta $ordenesVenta)
     {
         AlmacenAcceso::exigir($ordenesVenta->almacen_id);
-        // Con `parcial` se separa solo lo escaneado; `saldo` dice qué pasa con lo que falta (pendiente | cancelar).
-        $datos = $request->validate([
-            'parcial' => 'nullable|boolean',
-            'saldo' => 'nullable|in:pendiente,cancelar',
-        ]);
+        // Con `parcial` se separa solo lo encontrado: lo que falta queda registrado como NO ENCONTRADO al despachar.
+        $datos = $request->validate(['parcial' => 'nullable|boolean']);
 
         return new OrdenVentaResource(
-            $this->pedidos->marcarSeparado($ordenesVenta, (bool) ($datos['parcial'] ?? false), $datos['saldo'] ?? null)
+            $this->pedidos->marcarSeparado($ordenesVenta, (bool) ($datos['parcial'] ?? false))
                 ->load(self::RELACIONES)
         );
     }

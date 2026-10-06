@@ -79,11 +79,9 @@ class OrdenVentaResource extends JsonResource
             'completo' => $this->whenLoaded('detalles', fn () => $this->estaVerificada()),
             // Se puede entregar lo escaneado aunque falte algo, si ya hay algún rollo.
             'parcial_posible' => $this->whenLoaded('detalles', fn () => ! $this->estaVerificada() && $this->detalles->contains(fn ($d) => $d->rollos->isNotEmpty())),
-            // Entrega parcial: qué se decidió con lo que faltó, qué quedó sin entregar y el pedido del saldo.
+            // Despacho con faltantes: 'faltantes' si se despachó con faltantes, y qué no se encontró (NO ENCONTRADO) en texto.
             'saldo_accion' => $this->saldo_accion,
-            'saldo_detalle' => $this->saldo_detalle,
-            'orden_saldo' => $this->whenLoaded('ordenSaldo', fn () => $this->ordenSaldo ? ['id' => $this->ordenSaldo->id, 'documento' => $this->ordenSaldo->documento] : null),
-            'orden_origen' => $this->whenLoaded('ordenOrigen', fn () => $this->ordenOrigen ? ['id' => $this->ordenOrigen->id, 'documento' => $this->ordenOrigen->documento] : null),
+            'no_encontrado' => $this->saldo_detalle,
 
             'detalles' => OrdenVentaDetalleResource::collection($detalles),
 

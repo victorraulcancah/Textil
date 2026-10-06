@@ -45,9 +45,8 @@ export default function Despacho() {
     const [detalle, setDetalle] = useState(null);
     const [despachando, setDespachando] = useState(false);
     const [tomando, setTomando] = useState(false);
-    /** Entrega parcial: la ventana, qué pasa con lo que falta (pendiente | cancelar). */
+    /** Despacho de lo encontrado (con faltantes): la ventana. */
     const [parcial, setParcial] = useState(false);
-    const [saldo, setSaldo] = useState('pendiente');
     /** Rollo que no se encontró en el rack (null = ventana cerrada) y su observación. */
     const [noEncontrado, setNoEncontrado] = useState(null);
     const [obsNoEncontrado, setObsNoEncontrado] = useState('');
@@ -211,6 +210,28 @@ export default function Despacho() {
     };
 
     /**
+     * Despacha lo encontrado aunque falte algo: separa lo escaneado y lo despacha enseguida. Lo que no se encontró queda
+     * registrado como NO ENCONTRADO; no queda pendiente ni genera otra atención, y el pedido se cierra con lo despachado.
+     */
+    const despacharLoEncontrado = async () => {
+        setTomando(true);
+        try {
+            await api.post(`/ordenes-venta/${detalle.id}/separar`, { parcial: true });
+            await api.post(`/ordenes-venta/${detalle.id}/despachar`);
+            toast.success(`${detalle.documento} despachado con lo encontrado.`);
+            setParcial(false);
+            setDetalle(null);
+            setSeleccionado(null);
+            await cargar();
+        } catch (err) {
+            toast.error(err.response?.data?.message ?? 'No se pudo despachar lo encontrado.');
+            await cargarDetalle(detalle.id).catch(() => {});
+        } finally {
+            setTomando(false);
+        }
+    };
+
+    /**
      * Descontar metraje de un rollo ya tomado: un ajuste de sistema con su motivo (los de salida de
      * Ajustes). El rollo se queda en el pedido con menos metros.
      */
@@ -297,17 +318,13 @@ export default function Despacho() {
      * El almacenero terminó de juntar los rollos: quedan apartados en el
      * almacén, verificados y esperando su salida.
      */
-    const separar = async (conFaltantes = false) => {
+    const separar = async () => {
         setTomando(true);
         try {
-            const { data } = await api.post(
-                `/ordenes-venta/${detalle.id}/separar`,
-                conFaltantes ? { parcial: true, saldo } : undefined,
-            );
+            const { data } = await api.post(`/ordenes-venta/${detalle.id}/separar`);
             const orden = data?.data ?? data;
             setDetalle(orden);
-            setParcial(false);
-            toast.success(conFaltantes ? `${orden.documento}: separado lo preparado, listo para salir.` : `${orden.documento} separado y listo para salir.`);
+            toast.success(`${orden.documento} separado y listo para salir.`);
             await cargar();
         } catch (err) {
             toast.error(err.response?.data?.message ?? 'No se pudo dar por separado.');
@@ -596,12 +613,12 @@ export default function Despacho() {
                                             <>
                                                 {/* No se encuentra un rollo o falta mercadería: se entrega lo ya preparado. */}
                                                 {!completo && detalle.parcial_posible && (
-                                                    <Button variant="secondary" size="sm" onClick={() => { setSaldo('pendiente'); setParcial(true); }}>
+                                                    <Button variant="secondary" size="sm" onClick={() => setParcial(true)}>
                                                         <PackageCheck className="h-4 w-4" />
-                                                        Entregar lo preparado
+                                                        Despachar lo encontrado
                                                     </Button>
                                                 )}
-                                                <Button size="sm" loading={tomando} disabled={!completo} onClick={() => separar(false)}>
+                                                <Button size="sm" loading={tomando} disabled={!completo} onClick={separar}>
                                                     <PackageCheck className="h-4 w-4" />
                                                     Separado
                                                 </Button>
@@ -618,17 +635,9 @@ export default function Despacho() {
                                     </div>
                                 )}
 
-                                {detalle.orden_origen && (
-                                    <div className="border-b border-edge bg-primary-50 px-4 py-2.5 text-sm text-primary-800">
-                                        Es el saldo de <strong>{detalle.orden_origen.documento}</strong>: lo que no se pudo entregar en esa ocasión.
-                                    </div>
-                                )}
                                 {separado && detalle.saldo_accion && (
                                     <div className="border-b border-edge bg-amber-50 px-4 py-2.5 text-sm text-amber-900">
-                                        <strong>Entrega parcial.</strong> Sale solo lo preparado.{' '}
-                                        {detalle.saldo_accion === 'pendiente'
-                                            ? 'Lo que falta queda pendiente: al despachar nace otro pedido con ese saldo.'
-                                            : 'Lo que falta se cancela: el cliente ya no lo necesita.'}
+                                        <strong>Despacho con faltantes.</strong> Sale solo lo encontrado; lo demás queda registrado como <strong>NO ENCONTRADO</strong>.
                                         {faltan.length > 0 && <span className="mt-1 block text-xs">Falta: {faltan.map((f) => `${f.nombre} (${f.texto})`).join('; ')}</span>}
                                     </div>
                                 )}
@@ -715,7 +724,7 @@ export default function Despacho() {
                                 {!completo && escaneando && detalle.parcial_posible && (
                                     <div className="border-b border-edge bg-amber-50/70 px-4 py-2 text-sm text-amber-800">
                                         ¿No encuentras un rollo? Márcalo como <strong>no encontrado</strong> (queda en revisión) y escanea otro, o
-                                        <strong> entrega lo preparado</strong>: lo que falta queda pendiente o se cancela, sin anular el pedido.
+                                        <strong> despacha lo encontrado</strong>: lo que falta queda registrado como NO ENCONTRADO, sin anular el pedido.
                                     </div>
                                 )}
                                 {completo && escaneando && (
@@ -797,24 +806,24 @@ export default function Despacho() {
                 titulo={detalle ? `${detalle.requerimiento_numero ?? detalle.documento} · ${avance}` : 'Escanear rollo'}
             />
 
-            {/* Entrega parcial: se despacha lo preparado y se decide qué pasa con lo que falta. */}
+            {/* Despacho con faltantes: sale lo encontrado y lo que falta queda registrado como NO ENCONTRADO. */}
             <Modal
                 open={parcial}
                 onClose={() => setParcial(false)}
-                title="Entrega parcial"
-                description="Sale solo lo que ya está preparado; los rollos separados no se pierden."
+                title="Despachar lo encontrado"
+                description="Sale solo lo que ya está escaneado; el pedido se cierra con eso."
                 footer={
                     <>
                         <Button variant="secondary" onClick={() => setParcial(false)}>Volver</Button>
-                        <Button loading={tomando} onClick={() => separar(true)}>
-                            <PackageCheck className="h-4 w-4" /> Entregar lo preparado
+                        <Button loading={tomando} onClick={despacharLoEncontrado}>
+                            <PackageCheck className="h-4 w-4" /> Despachar lo encontrado
                         </Button>
                     </>
                 }
             >
                 <div className="space-y-4">
                     <div>
-                        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-warm-500">Lo que falta</p>
+                        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-warm-500">No encontrado</p>
                         <ul className="divide-y divide-edge rounded-lg border border-edge text-sm">
                             {faltan.map((f) => (
                                 <li key={f.id} className="flex items-center justify-between gap-3 px-3 py-2">
@@ -824,27 +833,10 @@ export default function Despacho() {
                             ))}
                         </ul>
                     </div>
-                    <fieldset className="space-y-2">
-                        <legend className="mb-1 text-xs font-semibold uppercase tracking-wide text-warm-500">¿Qué pasa con lo que falta?</legend>
-                        {[
-                            ['pendiente', 'Dejarlo pendiente de entrega', 'Se crea otro pedido con lo que falta, ya solicitado al almacén, para entregarlo después.'],
-                            ['cancelar', 'Cancelar el saldo', 'El cliente ya no lo necesita: este pedido se entrega y se factura con lo preparado.'],
-                        ].map(([valor, titulo, texto]) => (
-                            <label
-                                key={valor}
-                                className={cn(
-                                    'flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2.5 transition',
-                                    saldo === valor ? 'border-primary-500 bg-primary-50' : 'border-edge hover:bg-gray-50',
-                                )}
-                            >
-                                <input type="radio" name="saldo-pedido" value={valor} checked={saldo === valor} onChange={() => setSaldo(valor)} className="mt-1" />
-                                <span>
-                                    <span className="block text-sm font-semibold text-warm-900">{titulo}</span>
-                                    <span className="block text-xs text-warm-600">{texto}</span>
-                                </span>
-                            </label>
-                        ))}
-                    </fieldset>
+                    <Alert variant="warning">
+                        Esto queda registrado como <strong>NO ENCONTRADO</strong>. No queda pendiente de despacho ni se crea otro pedido: el cliente recibe solo
+                        lo encontrado y, al despachar, el pedido se cierra sin poder modificarse. No hace falta anularlo.
+                    </Alert>
                 </div>
             </Modal>
 

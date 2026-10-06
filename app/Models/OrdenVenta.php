@@ -107,10 +107,9 @@ class OrdenVenta extends Model
         'usuario_anula_id',
         'fecha_anulacion',
         'observaciones',
-        // Entrega parcial: qué se decidió con lo que faltó, qué quedó sin entregar y de qué pedido viene el saldo.
+        // Despacho con faltantes: 'faltantes' y qué no se encontró (texto), que queda como NO ENCONTRADO.
         'saldo_accion',
         'saldo_detalle',
-        'orden_origen_id',
     ];
 
     protected function casts(): array
@@ -177,18 +176,6 @@ class OrdenVenta extends Model
             'orden_venta_id',
             'orden_venta_detalle_id',
         );
-    }
-
-    /** El pedido que nació con el saldo que no se pudo entregar de este. */
-    public function ordenSaldo()
-    {
-        return $this->hasOne(OrdenVenta::class, 'orden_origen_id');
-    }
-
-    /** Si este pedido es el saldo de otro: el pedido del que viene. */
-    public function ordenOrigen()
-    {
-        return $this->belongsTo(OrdenVenta::class, 'orden_origen_id');
     }
 
     public function notaVenta()

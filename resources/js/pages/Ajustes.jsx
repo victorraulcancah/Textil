@@ -11,6 +11,7 @@ import PdfViewerModal from '../components/PdfViewerModal';
 import { descargarExcel } from '../components/reportes/ReporteUI';
 import { Alert, Badge, Button, DataTable, Input, Modal, Select, Tabs } from '../components/ui';
 import { hoyIso } from '../lib/fechas';
+import FiltroFechas from '../components/FiltroFechas';
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
 
@@ -264,6 +265,18 @@ export default function Ajustes() {
         }
     };
 
+    /** Las fechas de la cabecera se aplican al instante (no esperan a "Aplicar" de los filtros). */
+    const fijarFecha = (clave, valor) => {
+        if (clave === 'desde') setFilterDesde(valor);
+        else setFilterHasta(valor);
+        setActiveFilters((prev) => {
+            const next = { ...prev };
+            if (valor) next[clave] = valor;
+            else delete next[clave];
+            return next;
+        });
+    };
+
     const applyFilters = () => {
         const next = {};
         if (filterEstado) next.estado = filterEstado;
@@ -453,20 +466,6 @@ export default function Ajustes() {
                 onChange={(e) => setFilterRegistra(e.target.value)}
                 options={opciones.usuarios}
                 className="w-48"
-            />
-            <Input
-                label="Desde"
-                type="date"
-                value={filterDesde}
-                onChange={(e) => setFilterDesde(e.target.value)}
-                className="w-40"
-            />
-            <Input
-                label="Hasta"
-                type="date"
-                value={filterHasta}
-                onChange={(e) => setFilterHasta(e.target.value)}
-                className="w-40"
             />
         </div>
     );
@@ -766,6 +765,12 @@ export default function Ajustes() {
                 actions={
                     activeTab === 'ajustes' ? (
                         <div className="flex flex-wrap items-center gap-2">
+                            <FiltroFechas
+                                desde={filterDesde}
+                                hasta={filterHasta}
+                                onDesde={(v) => fijarFecha('desde', v)}
+                                onHasta={(v) => fijarFecha('hasta', v)}
+                            />
                             <Button variant="secondary" onClick={exportarExcel}>
                                 <Download className="h-4 w-4" />
                                 Exportar Excel

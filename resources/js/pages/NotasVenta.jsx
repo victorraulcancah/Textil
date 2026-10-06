@@ -8,7 +8,8 @@ import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
 import DetalleProforma from '../components/DetalleProforma';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
-import { Alert, Badge, Button, DataTable, DateRangePicker, Input, Modal, SearchSelect, Select, Spinner } from '../components/ui';
+import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select, Spinner } from '../components/ui';
+import FiltroFechas from '../components/FiltroFechas';
 import { hoyIso } from '../lib/fechas';
 
 const fecha = (v) => (v ? new Date(v).toLocaleDateString('es-PE') : '—');
@@ -228,6 +229,7 @@ export default function NotasVenta() {
                 description="Proformas emitidas a clientes"
                 actions={
                     <>
+                        <FiltroFechas desde={fDesde} hasta={fHasta} onDesde={setFDesde} onHasta={setFHasta} />
                         <Button variant="secondary" onClick={descargarExcel}>
                             <FileSpreadsheet className="h-4 w-4" />
                             Excel
@@ -326,15 +328,6 @@ export default function NotasVenta() {
                                     notas.filter((n) => n.vendedor_id).map((n) => [String(n.vendedor_id), n.vendedor?.name]),
                                 ).entries(),
                             ].map(([value, label]) => ({ value, label }))}
-                        />
-                        <DateRangePicker
-                            label="Rango de fecha"
-                            desde={fDesde}
-                            hasta={fHasta}
-                            onChange={(d, h) => {
-                                setFDesde(d);
-                                setFHasta(h);
-                            }}
                         />
                         {(fEstado || fPago || fCliente || fAlmacen || fVendedor || fDesde || fHasta) && (
                             <button

@@ -10,7 +10,8 @@ import DetalleCard from '../components/ui/DetalleCard';
 import PageHeader from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
 import ActionsMenu from '../components/ActionsMenu';
-import { Alert, Badge, Button, DataTable, DateRangePicker, Modal, SearchSelect, Select } from '../components/ui';
+import { Alert, Badge, Button, DataTable, Modal, SearchSelect, Select } from '../components/ui';
+import FiltroFechas from '../components/FiltroFechas';
 import { hoyIso } from '../lib/fechas';
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
@@ -190,6 +191,7 @@ export default function RecepcionesCompra() {
             <PageHeader
                 title="Recepciones de Compra"
                 description="Registro formal del ingreso de mercadería. Se generan desde cada compra."
+                actions={<FiltroFechas desde={fDesde} hasta={fHasta} onDesde={setFDesde} onHasta={setFHasta} />}
             />
 
             {error && <Alert variant="error" className="mb-4">{error}</Alert>}
@@ -245,15 +247,6 @@ export default function RecepcionesCompra() {
                                     recepciones.filter((r) => r.almacen_id).map((r) => [String(r.almacen_id), r.almacen?.nombre]),
                                 ).entries(),
                             ].map(([value, label]) => ({ value, label }))}
-                        />
-                        <DateRangePicker
-                            label="Rango de fecha"
-                            desde={fDesde}
-                            hasta={fHasta}
-                            onChange={(d, h) => {
-                                setFDesde(d);
-                                setFHasta(h);
-                            }}
                         />
                         {(fEstado || fProveedor || fAlmacen || fDesde || fHasta) && (
                             <button

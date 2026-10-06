@@ -10,7 +10,8 @@ import DetalleCard from '../components/ui/DetalleCard';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
 import RecepcionarTrasladoModal from '../components/RecepcionarTrasladoModal';
-import { Alert, Badge, Button, DataTable, DateRangePicker, Input, Modal, SearchSelect, Select, Tabs } from '../components/ui';
+import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select, Tabs } from '../components/ui';
+import FiltroFechas from '../components/FiltroFechas';
 import { diaLocal, hoyIso } from '../lib/fechas';
 
 const estadoInfo = {
@@ -189,6 +190,18 @@ export default function Transferencias() {
     const bandejaRows = useMemo(() => [...porAprobar, ...porRecepcionar], [porAprobar, porRecepcionar]);
 
     // ── Filtros ──
+    /** Las fechas de la cabecera se aplican al instante (no esperan a "Aplicar" de los filtros). */
+    const fijarFecha = (clave, valor) => {
+        if (clave === 'desde') setFilterDesde(valor);
+        else setFilterHasta(valor);
+        setActiveFilters((prev) => {
+            const next = { ...prev };
+            if (valor) next[clave] = valor;
+            else delete next[clave];
+            return next;
+        });
+    };
+
     const applyFilters = () => {
         const next = {};
         if (filterEstado) next.estado = filterEstado;
@@ -238,15 +251,6 @@ export default function Transferencias() {
                 emptyText="Sin coincidencias"
                 options={almacenes.map((a) => ({ value: String(a.id), label: a.nombre }))}
                 className="w-48"
-            />
-            <DateRangePicker
-                label="Rango de fecha"
-                desde={filterDesde}
-                hasta={filterHasta}
-                onChange={(d, h) => {
-                    setFilterDesde(d);
-                    setFilterHasta(h);
-                }}
             />
         </div>
     );
@@ -441,7 +445,19 @@ export default function Transferencias() {
                 actions={
                     tab === 'motivos'
                         ? <CreateButton onClick={() => abrirMotivo()}>Nuevo motivo</CreateButton>
-                        : <CreateButton onClick={() => navigate('/transferencias/nueva')}>Nueva guía</CreateButton>
+                        : (
+                            <>
+                                {tab === 'guias' && (
+                                    <FiltroFechas
+                                        desde={filterDesde}
+                                        hasta={filterHasta}
+                                        onDesde={(v) => fijarFecha('desde', v)}
+                                        onHasta={(v) => fijarFecha('hasta', v)}
+                                    />
+                                )}
+                                <CreateButton onClick={() => navigate('/transferencias/nueva')}>Nueva guía</CreateButton>
+                            </>
+                        )
                 }
             />
 

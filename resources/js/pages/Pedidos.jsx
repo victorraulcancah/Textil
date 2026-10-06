@@ -25,7 +25,8 @@ import ExcesoCreditoModal from '../components/ExcesoCreditoModal';
 import { cargarTipoCambio, NOMBRE_MONEDA, redondear } from '../lib/moneda';
 import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
 import DetalleCard from '../components/ui/DetalleCard';
-import { Alert, Badge, Button, DataTable, DateRangePicker, Input, Modal, SearchSelect, Select } from '../components/ui';
+import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select } from '../components/ui';
+import FiltroFechas from '../components/FiltroFechas';
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
 
@@ -341,16 +342,6 @@ export default function Pedidos() {
                 options={requerimientosPresentes}
                 className="w-48"
             />
-            <DateRangePicker
-                label="Rango de fecha"
-                desde={fDesde}
-                hasta={fHasta}
-                onChange={(d, h) => {
-                    setFDesde(d);
-                    setFHasta(h);
-                }}
-                className="w-full"
-            />
             {filtrosActivos > 0 && (
                 <Button variant="ghost" size="sm" onClick={limpiarTodo}>
                     Limpiar
@@ -374,7 +365,12 @@ export default function Pedidos() {
             <PageHeader
                 title="Pedidos"
                 description="Reservan la tela para el cliente al solicitarse; el stock se descuenta al despachar"
-                actions={<CreateButton onClick={() => navigate('/pedidos/nuevo')}>Nuevo pedido</CreateButton>}
+                actions={
+                    <>
+                        <FiltroFechas desde={fDesde} hasta={fHasta} onDesde={setFDesde} onHasta={setFHasta} />
+                        <CreateButton onClick={() => navigate('/pedidos/nuevo')}>Nuevo pedido</CreateButton>
+                    </>
+                }
             />
 
             {error && <Alert variant="error" className="mb-4">{error}</Alert>}

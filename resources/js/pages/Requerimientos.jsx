@@ -9,7 +9,8 @@ import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
 import RecepcionarTrasladoModal from '../components/RecepcionarTrasladoModal';
-import { Alert, Badge, Button, DataTable, DateRangePicker, Modal } from '../components/ui';
+import { Alert, Badge, Button, DataTable, Modal } from '../components/ui';
+import FiltroFechas from '../components/FiltroFechas';
 import { diaLocal, hoyIso } from '../lib/fechas';
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
@@ -52,7 +53,6 @@ export default function Requerimientos() {
     // Abre con los requerimientos del día; "Limpiar" muestra todos.
     const [filterDesde, setFilterDesde] = useState(hoyIso);
     const [filterHasta, setFilterHasta] = useState(hoyIso);
-    const [activeFilters, setActiveFilters] = useState(() => ({ desde: hoyIso(), hasta: hoyIso() }));
     const [detalle, setDetalle] = useState(null);
     const [pdf, setPdf] = useState(null);
     /** El traslado que se recepciona escaneando sus rollos. */
@@ -184,11 +184,14 @@ export default function Requerimientos() {
                 title="Requerimientos de traslado"
                 description="Pídele mercadería a otro almacén: ellos escanean, separan y despachan; tú la recibes aquí"
                 actions={
-                    puede('inventario.transferencias.crear') && (
-                        <Button onClick={() => navigate('/requerimientos/nuevo')}>
-                            <Plus className="h-4 w-4" /> Nuevo requerimiento
-                        </Button>
-                    )
+                    <>
+                        <FiltroFechas desde={filterDesde} hasta={filterHasta} onDesde={setFilterDesde} onHasta={setFilterHasta} />
+                        {puede('inventario.transferencias.crear') && (
+                            <Button onClick={() => navigate('/requerimientos/nuevo')}>
+                                <Plus className="h-4 w-4" /> Nuevo requerimiento
+                            </Button>
+                        )}
+                    </>
                 }
             />
 
@@ -200,40 +203,14 @@ export default function Requerimientos() {
                 columns={columns}
                 rows={rows.filter((r) => {
                     const dia = diaLocal(r.fecha_solicitud);
-                    if (activeFilters.desde && (!dia || dia < activeFilters.desde)) return false;
-                    if (activeFilters.hasta && (!dia || dia > activeFilters.hasta)) return false;
+                    if (filterDesde && (!dia || dia < filterDesde)) return false;
+                    if (filterHasta && (!dia || dia > filterHasta)) return false;
                     return true;
                 })}
                 loading={loading}
                 searchPlaceholder="Buscar requerimiento…"
-                emptyMessage={Object.keys(activeFilters).length > 0 ? 'No hay requerimientos en ese rango de fecha.' : 'Aún no has pedido nada a otro almacén.'}
+                emptyMessage={filterDesde || filterHasta ? 'No hay requerimientos en ese rango de fecha.' : 'Aún no has pedido nada a otro almacén.'}
                 onRowDoubleClick={setDetalle}
-                filterable
-                filters={
-                    <div className="flex flex-wrap items-end gap-3">
-                        <DateRangePicker
-                            label="Rango de fecha"
-                            desde={filterDesde}
-                            hasta={filterHasta}
-                            onChange={(d, h) => {
-                                setFilterDesde(d);
-                                setFilterHasta(h);
-                            }}
-                        />
-                    </div>
-                }
-                filterCount={Object.keys(activeFilters).length}
-                onApplyFilters={() => {
-                    const next = {};
-                    if (filterDesde) next.desde = filterDesde;
-                    if (filterHasta) next.hasta = filterHasta;
-                    setActiveFilters(next);
-                }}
-                onClearFilters={() => {
-                    setFilterDesde('');
-                    setFilterHasta('');
-                    setActiveFilters({});
-                }}
             />
 
             <DetalleModal r={detalle} onClose={() => setDetalle(null)} />

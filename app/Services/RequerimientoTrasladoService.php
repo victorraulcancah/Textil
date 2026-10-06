@@ -36,11 +36,19 @@ class RequerimientoTrasladoService
     /**
      * @param  array{almacen_origen_id: int, almacen_destino_id: int, observaciones?: ?string, detalles: list<array>}  $data
      */
-    public function crear(array $data): Transferencia
+    public function crear(array $data, bool $validarStock = true): Transferencia
     {
-        return DB::transaction(function () use ($data) {
+        return DB::transaction(function () use ($data, $validarStock) {
             $origen = Almacen::findOrFail($data['almacen_origen_id']);
             $serie = Transferencia::serieRequerimiento($origen);
+
+            $presentaciones = ProductoPresentacion::with('producto.presentaciones.unidadBase')
+                ->whereIn('id', collect($data['detalles'])->pluck('producto_presentacion_id'))
+                ->get()->keyBy('id');
+
+            if ($validarStock) {
+                $this->validarStockEnOrigen($origen, $data['detalles'], $presentaciones);
+            }
 
             $transferencia = Transferencia::create([
                 'requerimiento_serie' => $serie,
@@ -52,10 +60,6 @@ class RequerimientoTrasladoService
                 'usuario_solicita_id' => auth()->id(),
                 'fecha_solicitud' => now(),
             ]);
-
-            $presentaciones = ProductoPresentacion::with('producto.presentaciones.unidadBase')
-                ->whereIn('id', collect($data['detalles'])->pluck('producto_presentacion_id'))
-                ->get()->keyBy('id');
 
             foreach ($data['detalles'] as $linea) {
                 $presentacion = $presentaciones[$linea['producto_presentacion_id']] ?? null;
@@ -199,22 +203,37 @@ class RequerimientoTrasladoService
                 }
             }
             if ($t->estado === self::SEPARADA) {
-                $t->update(['estado' => self::PREPARANDO]);
+                $t->update(['estado' => self::PREPARANDO, 'saldo_accion' => null]);
             }
 
             return $this->cargar($t->fresh());
         });
     }
 
-    /** Todo lo pedido está cubierto: queda a la espera de que lo recojan / lo envíen. */
-    public function marcarSeparada(Transferencia $t): Transferencia
+    /**
+     * Todo lo pedido está cubierto: queda a la espera de que lo recojan / lo envíen.
+     *
+     * Con `$parcial` se separa solo lo escaneado aunque falte alguna tela (no había stock o no se encontró): hay que
+     * decir qué pasa con lo que falta (`$saldo`): 'pendiente' (nace otro requerimiento con esa diferencia) o
+     * 'cancelar' (no se atiende). Se aplica al despachar; mientras tanto no se pierde nada de lo preparado.
+     */
+    public function marcarSeparada(Transferencia $t, bool $parcial = false, ?string $saldo = null): Transferencia
     {
         if (! in_array($t->estado, [self::SOLICITADA, self::PREPARANDO], true)) {
             throw new \DomainException('Solo se puede dar por separado un requerimiento en preparación.');
         }
 
         $t->load('detalles.rollos');
-        if (! $this->estaCompleto($t)) {
+        if ($this->estaCompleto($t)) {
+            $saldo = null;
+        } elseif ($parcial) {
+            if (! in_array($saldo, ['pendiente', 'cancelar'], true)) {
+                throw new \DomainException('Elige qué pasa con lo que falta: dejarlo pendiente o cancelarlo.');
+            }
+            if (! $t->detalles->contains(fn ($d) => $d->esTela() && $d->rollos->isNotEmpty())) {
+                throw new \DomainException('Escanea al menos un rollo antes de separar lo que hay. Si no se puede atender nada, rechaza el requerimiento.');
+            }
+        } else {
             $faltanRollos = $t->detalles->filter->esPorRollos()->sum(fn ($d) => $d->rollosPendientes());
             $faltanMetros = $t->detalles->filter->esPorMetros()->sum(fn ($d) => $d->metrosPendientes());
             $partes = array_filter([
@@ -224,7 +243,7 @@ class RequerimientoTrasladoService
             throw new \DomainException('Faltan '.implode(' y ', $partes).' por cubrir antes de darlo por separado.');
         }
 
-        $t->update(['estado' => self::SEPARADA, 'fecha_separacion' => now()]);
+        $t->update(['estado' => self::SEPARADA, 'fecha_separacion' => now(), 'saldo_accion' => $saldo]);
 
         return $this->cargar($t->fresh());
     }
@@ -245,6 +264,10 @@ class RequerimientoTrasladoService
         }
 
         return DB::transaction(function () use ($t, $transporte, $extras) {
+            if ($t->saldo_accion) {
+                $this->aplicarSaldo($t);
+            }
+
             $escogidos = collect($extras)->flatMap(fn ($e) => collect($e['rollos_escaneados'] ?? [])->pluck('rollo_id'))->all();
 
             foreach ($extras as $extra) {
@@ -363,6 +386,144 @@ class RequerimientoTrasladoService
 
             return $this->cargar($t->fresh());
         });
+    }
+
+    /**
+     * Al despachar una atención parcial: lo pedido de cada línea se ajusta a lo que de verdad sale, y lo que faltó se
+     * deja anotado y, si se decidió dejarlo pendiente, nace otro requerimiento con esa diferencia (sin pasar por la
+     * validación de stock: justamente es lo que no había).
+     */
+    private function aplicarSaldo(Transferencia $t): void
+    {
+        $t->load('detalles.rollos', 'detalles.presentacion.producto', 'detalles.color');
+
+        $saldo = [];
+        $resumen = [];
+        foreach ($t->detalles as $d) {
+            if (! $d->esTela() || $d->estaCubierta()) {
+                continue;
+            }
+
+            $nombre = trim(($d->presentacion?->producto?->nombre ?? 'Producto').($d->color ? ' · '.$d->color->nombre : ''));
+            if ($d->esPorRollos()) {
+                $faltan = $d->rollosPendientes();
+                $saldo[] = [
+                    'modo' => 'rollos',
+                    'producto_presentacion_id' => $d->producto_presentacion_id,
+                    'producto_color_id' => $d->producto_color_id,
+                    'rollos_pedidos' => $faltan,
+                    'metros_por_rollo' => $d->metros_por_rollo,
+                ];
+                $resumen[] = "{$nombre}: {$faltan} ".($faltan === 1 ? 'rollo' : 'rollos');
+            } else {
+                $faltan = $d->metrosPendientes();
+                $saldo[] = [
+                    'modo' => 'metros',
+                    'producto_presentacion_id' => $d->producto_presentacion_id,
+                    'producto_color_id' => $d->producto_color_id,
+                    'metros_pedidos' => $faltan,
+                ];
+                $resumen[] = "{$nombre}: ".round($faltan, 2).' m';
+            }
+
+            // Lo pedido queda igual a lo que sale: la guía y la recepción hablan de lo que viaja.
+            if ($d->rollos->isEmpty()) {
+                $d->delete();
+            } else {
+                $d->update($d->esPorRollos() ? ['rollos_pedidos' => $d->rollos->count()] : ['metros_pedidos' => $d->metrosAsignados()]);
+            }
+        }
+
+        if ($t->saldo_accion === 'pendiente' && $saldo) {
+            $hijo = $this->crear([
+                'almacen_origen_id' => $t->almacen_origen_id,
+                'almacen_destino_id' => $t->almacen_destino_id,
+                'observaciones' => "Saldo de {$t->requerimiento}",
+                'detalles' => $saldo,
+            ], validarStock: false);
+            // Lo sigue pidiendo quien lo pidió, no quien despachó.
+            $hijo->update(['usuario_solicita_id' => $t->usuario_solicita_id, 'requerimiento_origen_id' => $t->id]);
+        }
+
+        $t->update(['saldo_detalle' => implode('; ', $resumen) ?: null]);
+        $t->unsetRelation('detalles');
+    }
+
+    /**
+     * Lo que se pide tiene que existir: telas con rollos disponibles en el origen (del color y del metraje pedidos) y lo
+     * demás con stock. Si algo no alcanza, no se crea el requerimiento y se dice qué corregir o quitar.
+     *
+     * @param  list<array>  $detalles
+     * @param  \Illuminate\Support\Collection  $presentaciones
+     */
+    private function validarStockEnOrigen(Almacen $origen, array $detalles, $presentaciones): void
+    {
+        $problemas = [];
+        $pedidoPorClave = [];
+
+        foreach ($detalles as $linea) {
+            $presentacion = $presentaciones[$linea['producto_presentacion_id']] ?? null;
+            $producto = $presentacion?->producto;
+            if (! $producto) {
+                continue;
+            }
+
+            $modo = $linea['modo'] ?? 'cantidad';
+            $colorId = $linea['producto_color_id'] ?? null;
+            $color = $colorId ? \App\Models\ProductoColor::find($colorId) : null;
+            $nombre = trim($producto->nombre.($color ? ' · '.$color->nombre : ''));
+
+            if ($modo === 'rollos' || $modo === 'metros') {
+                $rollos = Rollo::query()
+                    ->where('almacen_id', $origen->id)
+                    ->where('producto_id', $producto->id)
+                    ->where('estado', Rollo::DISPONIBLE)
+                    ->where('metros_actual', '>', 0)
+                    ->when($colorId, fn ($q) => $q->where('producto_color_id', $colorId));
+
+                if ($modo === 'rollos') {
+                    $metraje = ! empty($linea['metros_por_rollo']) ? (float) $linea['metros_por_rollo'] : null;
+                    if ($metraje) {
+                        $rollos->where('metros_actual', '>=', $metraje - 0.01);
+                    }
+                    // Lo pedido de la misma tela, color y metraje en varias líneas se suma.
+                    $clave = $producto->id.'|'.($colorId ?? '').'|'.($metraje ?? '');
+                    $pedidoPorClave[$clave] = ($pedidoPorClave[$clave] ?? 0) + max(1, (int) ($linea['rollos_pedidos'] ?? 0));
+                    $pide = $pedidoPorClave[$clave];
+                    $hay = (int) $rollos->count();
+                    if ($pide > $hay) {
+                        $de = $metraje ? " de {$metraje} m o más" : '';
+                        $problemas[] = $hay === 0
+                            ? "{$nombre}: no tiene rollos disponibles{$de} en {$origen->nombre}"
+                            : "{$nombre}: piden {$pide} ".($pide === 1 ? 'rollo' : 'rollos')." y en {$origen->nombre} solo hay {$hay}{$de}";
+                    }
+                } else {
+                    $pide = round((float) ($linea['metros_pedidos'] ?? 0), 2);
+                    $hay = round((float) $rollos->sum('metros_actual'), 2);
+                    if ($pide > $hay + 0.001) {
+                        $problemas[] = $hay <= 0
+                            ? "{$nombre}: no tiene metros disponibles en {$origen->nombre}"
+                            : "{$nombre}: piden {$pide} m y en {$origen->nombre} solo hay {$hay} m";
+                    }
+                }
+
+                continue;
+            }
+
+            $stock = \App\Models\ProductoAlmacenStock::where('almacen_id', $origen->id)->where('producto_id', $producto->id)->first();
+            $factor = (float) $presentacion->factor_conversion ?: 1;
+            $hay = $stock ? round((float) $stock->stock_disponible / $factor, 2) : 0.0;
+            $pide = round((float) ($linea['cantidad'] ?? 0), 2);
+            if ($pide > $hay + 0.001) {
+                $problemas[] = $hay <= 0
+                    ? "{$nombre}: no tiene stock disponible en {$origen->nombre}"
+                    : "{$nombre}: piden {$pide} {$presentacion->nombre} y en {$origen->nombre} solo hay {$hay}";
+            }
+        }
+
+        if ($problemas) {
+            throw new \DomainException('No hay stock suficiente. Corrige la cantidad o quita el producto: '.implode(' | ', $problemas).'.');
+        }
     }
 
     public function estaCompleto(Transferencia $t): bool

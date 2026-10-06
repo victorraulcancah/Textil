@@ -43,6 +43,8 @@ export default function AtenderRequerimientos() {
     const [codigo, setCodigo] = useState('');
     const [separando, setSeparando] = useState(false);
     const [rechazo, setRechazo] = useState(null); // motivo (null = cerrado)
+    const [parcial, setParcial] = useState(false); // ventana "Atención parcial"
+    const [saldo, setSaldo] = useState('pendiente'); // qué pasa con lo que falta: pendiente | cancelar
     const inputRef = useRef(null);
 
     const cargar = useCallback(
@@ -138,12 +140,16 @@ export default function AtenderRequerimientos() {
         }
     };
 
-    const separar = async () => {
+    const separar = async (conFaltantes = false) => {
         setSeparando(true);
         try {
-            const { data } = await api.post(`/transferencias/requerimientos/${detalle.id}/separar`);
+            const { data } = await api.post(
+                `/transferencias/requerimientos/${detalle.id}/separar`,
+                conFaltantes ? { parcial: true, saldo } : undefined,
+            );
             setDetalle(data);
-            toast.success(`${data.requerimiento} separado y listo para salir.`);
+            setParcial(false);
+            toast.success(conFaltantes ? `${data.requerimiento}: separado lo escaneado, listo para salir.` : `${data.requerimiento} separado y listo para salir.`);
             await cargar(true);
         } catch (err) {
             toast.error(err.response?.data?.message ?? 'No se pudo dar por separado.');
@@ -170,6 +176,14 @@ export default function AtenderRequerimientos() {
     const lineas = detalle?.detalles ?? [];
     const completo = lineas.length > 0 && lineas.every((d) => d.cubierta);
     const avance = lineas.filter((d) => d.modo !== 'cantidad').map(avanceDe).join(' · ');
+    /** Lo que todavía falta de cada tela: es lo que quedaría pendiente (o cancelado) en una atención parcial. */
+    const faltan = lineas
+        .filter((d) => !d.cubierta && d.modo !== 'cantidad')
+        .map((d) => ({
+            id: d.id,
+            nombre: `${d.producto}${d.color ? ` · ${d.color}` : ''}`,
+            texto: d.modo === 'rollos' ? `${num(d.rollos_pendientes)} rollo${d.rollos_pendientes === 1 ? '' : 's'}` : `${num(d.metros_pendientes)} m`,
+        }));
 
     return (
         <Layout>
@@ -184,12 +198,12 @@ export default function AtenderRequerimientos() {
             ) : lista.length === 0 ? (
                 <Alert variant="info">No hay requerimientos por atender. Cuando otro almacén le pida mercadería al tuyo aparecerá aquí.</Alert>
             ) : (
-                <div className="grid gap-4 lg:grid-cols-[19rem_1fr]">
-                    <aside className="overflow-hidden rounded-lg border border-edge bg-white shadow-sm lg:sticky lg:top-4 lg:self-start">
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-[19rem_minmax(0,1fr)]">
+                    <aside className="min-w-0 overflow-hidden rounded-lg border border-edge bg-white shadow-sm lg:sticky lg:top-4 lg:self-start">
                         <div className="border-b border-edge px-3 py-2">
                             <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Por atender ({lista.length})</p>
                         </div>
-                        <ul className="max-h-[70vh] overflow-y-auto p-1">
+                        <ul className="max-h-48 overflow-y-auto p-1 lg:max-h-[70vh]">
                             {lista.map((r) => (
                                 <li key={r.id}>
                                     <button
@@ -211,7 +225,7 @@ export default function AtenderRequerimientos() {
                         </ul>
                     </aside>
 
-                    <section className="rounded-lg border border-edge bg-white shadow-sm">
+                    <section className="min-w-0 rounded-lg border border-edge bg-white shadow-sm">
                         {!detalle ? (
                             <p className="px-4 py-16 text-center text-sm text-warm-400">Elige un requerimiento para atenderlo.</p>
                         ) : (
@@ -233,9 +247,17 @@ export default function AtenderRequerimientos() {
                                                 <Truck className="h-4 w-4" /> Despachar
                                             </Button>
                                         ) : (
-                                            <Button size="sm" loading={separando} disabled={!completo} onClick={separar}>
-                                                <PackageCheck className="h-4 w-4" /> Separado
-                                            </Button>
+                                            <>
+                                                {/* Falta alguna tela (sin stock o no se encuentra): se puede separar lo que ya se escaneó. */}
+                                                {!completo && detalle.parcial_posible && (
+                                                    <Button variant="secondary" size="sm" onClick={() => { setSaldo('pendiente'); setParcial(true); }}>
+                                                        <PackageCheck className="h-4 w-4" /> Separar lo escaneado
+                                                    </Button>
+                                                )}
+                                                <Button size="sm" loading={separando} disabled={!completo} onClick={() => separar(false)}>
+                                                    <PackageCheck className="h-4 w-4" /> Separado
+                                                </Button>
+                                            </>
                                         )}
                                     </div>
                                 </div>
@@ -246,6 +268,14 @@ export default function AtenderRequerimientos() {
                                         Si piden un metraje menor al del rollo, se corta al despachar.
                                     </div>
                                 )}
+                                {separado && detalle.saldo_accion && (
+                                    <div className="border-b border-edge bg-amber-50 px-4 py-2.5 text-sm text-amber-900">
+                                        <strong>Atención parcial.</strong> Sale solo lo escaneado. {detalle.saldo_accion === 'pendiente'
+                                            ? 'Lo que falta quedará pendiente: al despachar nace otro requerimiento con ese saldo.'
+                                            : 'Lo que falta se cancela: no se atenderá.'}
+                                        {faltan.length > 0 && <span className="mt-1 block text-xs">Falta: {faltan.map((f) => `${f.nombre} (${f.texto})`).join('; ')}</span>}
+                                    </div>
+                                )}
                                 {separado && (
                                     <div className="border-b border-edge bg-green-50 px-4 py-2.5 text-sm text-green-800">
                                         Separado y verificado. Pulsa <strong>Despachar</strong>: se abre el traslado con todo esto ya cargado, para completar el transporte o agregar más productos antes de crearlo.
@@ -254,8 +284,8 @@ export default function AtenderRequerimientos() {
 
                                 <form onSubmit={escanear} className={cn('border-b border-edge px-4 py-3', !escaneando && 'hidden')}>
                                     <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-warm-500">Escanea el rollo</label>
-                                    <div className="flex items-center gap-2">
-                                        <span className="relative flex-1">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <span className="relative min-w-0 flex-[1_1_14rem]">
                                             <ScanLine className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-primary-600" />
                                             <input
                                                 ref={inputRef}
@@ -289,6 +319,11 @@ export default function AtenderRequerimientos() {
                                     )}
                                 </form>
 
+                                {!completo && escaneando && detalle.parcial_posible && (
+                                    <div className="border-b border-edge bg-amber-50/70 px-4 py-2 text-sm text-amber-800">
+                                        ¿Falta alguna tela? Puedes <strong>separar lo escaneado</strong> y despacharlo: lo que falta queda pendiente o se cancela, sin anular el requerimiento ni perder lo preparado.
+                                    </div>
+                                )}
                                 {completo && escaneando && (
                                     <div className="border-b border-edge bg-green-50 px-4 py-2 text-sm text-green-800">
                                         Todo lo pedido está cubierto. Pulsa <strong>Separado</strong> para cerrar la preparación.
@@ -330,6 +365,56 @@ export default function AtenderRequerimientos() {
             )}
 
             <EscanerCamara abierto={camara} onCerrar={() => setCamara(false)} onLeer={verificar} titulo={detalle ? `${detalle.requerimiento} · ${avance}` : 'Escanear rollo'} />
+
+            <Modal
+                open={parcial}
+                onClose={() => setParcial(false)}
+                title="Atención parcial"
+                description="Sale solo lo que ya escaneaste; los rollos preparados no se pierden."
+                footer={
+                    <>
+                        <Button variant="secondary" onClick={() => setParcial(false)}>Volver</Button>
+                        <Button loading={separando} onClick={() => separar(true)}>
+                            <PackageCheck className="h-4 w-4" /> Separar lo escaneado
+                        </Button>
+                    </>
+                }
+            >
+                <div className="space-y-4">
+                    <div>
+                        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-warm-500">Lo que falta</p>
+                        <ul className="divide-y divide-edge rounded-lg border border-edge text-sm">
+                            {faltan.map((f) => (
+                                <li key={f.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                                    <span className="font-medium text-warm-900">{f.nombre}</span>
+                                    <span className="font-semibold text-red-600">{f.texto}</span>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                    <fieldset className="space-y-2">
+                        <legend className="mb-1 text-xs font-semibold uppercase tracking-wide text-warm-500">¿Qué pasa con lo que falta?</legend>
+                        {[
+                            ['pendiente', 'Dejarlo pendiente', 'Se crea otro requerimiento con lo que falta, para atenderlo cuando haya stock.'],
+                            ['cancelar', 'Cancelar el saldo', 'No se atiende lo que falta; este requerimiento sale con lo escaneado.'],
+                        ].map(([valor, titulo, texto]) => (
+                            <label
+                                key={valor}
+                                className={cn(
+                                    'flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2.5 transition',
+                                    saldo === valor ? 'border-primary-500 bg-primary-50' : 'border-edge hover:bg-gray-50',
+                                )}
+                            >
+                                <input type="radio" name="saldo" value={valor} checked={saldo === valor} onChange={() => setSaldo(valor)} className="mt-1" />
+                                <span>
+                                    <span className="block text-sm font-semibold text-warm-900">{titulo}</span>
+                                    <span className="block text-xs text-warm-600">{texto}</span>
+                                </span>
+                            </label>
+                        ))}
+                    </fieldset>
+                </div>
+            </Modal>
 
             <Modal
                 open={rechazo !== null}

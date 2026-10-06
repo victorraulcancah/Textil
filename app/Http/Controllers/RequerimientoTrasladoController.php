@@ -116,11 +116,20 @@ class RequerimientoTrasladoController extends Controller
         return response()->json($this->formato($this->servicio->quitarRollo($transferencia, $rolloId)));
     }
 
-    public function separar(Transferencia $transferencia)
+    /** Con `parcial` se separa solo lo escaneado; `saldo` dice qué pasa con lo que falta (pendiente | cancelar). */
+    public function separar(Request $request, Transferencia $transferencia)
     {
         $this->exigirAtencion($transferencia);
+        $datos = $request->validate([
+            'parcial' => 'nullable|boolean',
+            'saldo' => 'nullable|in:pendiente,cancelar',
+        ]);
 
-        return response()->json($this->formato($this->servicio->marcarSeparada($transferencia)));
+        return response()->json($this->formato($this->servicio->marcarSeparada(
+            $transferencia,
+            (bool) ($datos['parcial'] ?? false),
+            $datos['saldo'] ?? null,
+        )));
     }
 
     /** Sale la mercadería: nace la guía y el traslado queda en tránsito hacia el almacén que lo pidió. */
@@ -216,7 +225,11 @@ class RequerimientoTrasladoController extends Controller
     /** La forma que consume la pantalla. */
     private function formato(Transferencia $t): array
     {
-        $t->loadMissing('detalles.rollos.rollo.color', 'detalles.presentacion.producto', 'detalles.color');
+        $t->loadMissing(
+            'detalles.rollos.rollo.color', 'detalles.presentacion.producto', 'detalles.color',
+            'requerimientoSaldo:id,requerimiento_serie,requerimiento_numero,requerimiento_origen_id',
+            'requerimientoOrigen:id,requerimiento_serie,requerimiento_numero',
+        );
         $completo = $t->detalles->every(fn ($d) => $d->estaCubierta());
 
         return [
@@ -234,6 +247,13 @@ class RequerimientoTrasladoController extends Controller
             'motivo_rechazo' => $t->motivo_rechazo,
             'abierto' => in_array($t->estado, self::ESTADOS_ABIERTOS, true),
             'completo' => $completo,
+            // Se puede separar lo escaneado aunque falte alguna tela, si ya hay algún rollo.
+            'parcial_posible' => ! $completo && $t->detalles->contains(fn ($d) => $d->esTela() && $d->rollos->isNotEmpty()),
+            // Atención parcial: qué se decidió con lo que faltó, qué quedó sin atender y el requerimiento del saldo.
+            'saldo_accion' => $t->saldo_accion,
+            'saldo_detalle' => $t->saldo_detalle,
+            'requerimiento_saldo' => $t->requerimientoSaldo ? ['id' => $t->requerimientoSaldo->id, 'requerimiento' => $t->requerimientoSaldo->requerimiento] : null,
+            'requerimiento_origen' => $t->requerimientoOrigen ? ['id' => $t->requerimientoOrigen->id, 'requerimiento' => $t->requerimientoOrigen->requerimiento] : null,
             'detalles' => $t->detalles->map(fn ($d) => [
                 'id' => $d->id,
                 'modo' => $d->modo,
@@ -244,6 +264,7 @@ class RequerimientoTrasladoController extends Controller
                 'color_codigo' => $d->color?->codigo,
                 'color_hex' => $d->color?->hex ?? $d->color?->codigo_hex ?? null,
                 'rollos_pendientes' => $d->esPorRollos() ? $d->rollosPendientes() : 0,
+                'metros_pendientes' => $d->esPorMetros() ? $d->metrosPendientes() : 0,
                 'rollos_pedidos' => $d->rollos_pedidos,
                 'metros_por_rollo' => $d->metros_por_rollo !== null ? (float) $d->metros_por_rollo : null,
                 'metros_pedidos' => $d->metros_pedidos !== null ? (float) $d->metros_pedidos : null,

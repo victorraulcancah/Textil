@@ -20,6 +20,75 @@ const presentacionMetroDe = (producto) =>
 const unidadesDe = (producto) =>
     (producto?.presentaciones ?? []).filter((p) => p.activo !== false).map((p) => ({ value: String(p.id), label: p.nombre }));
 
+/** Rollos libres de una tela (de un color, si se indica) en las existencias dadas (las del almacén de origen). */
+const rollosLibresEn = (existencias, productoId, colorId) => {
+    const porColor = new Map();
+    for (const fila of existencias) {
+        if (String(fila.producto?.id ?? fila.producto_id) !== String(productoId)) continue;
+        for (const c of fila.colores ?? []) {
+            const k = String(c.id ?? 'sin');
+            const previo = porColor.get(k) ?? { libres: 0, porAsignar: 0 };
+            previo.libres += Number(c.rollos_disponibles ?? c.rollos) || 0;
+            previo.porAsignar = Math.max(previo.porAsignar, Number(c.rollos_por_asignar) || 0);
+            porColor.set(k, previo);
+        }
+    }
+    let total = 0;
+    for (const [k, v] of porColor) {
+        if (colorId && k !== String(colorId)) continue;
+        total += Math.max(0, v.libres - v.porAsignar);
+    }
+    return total;
+};
+
+/**
+ * Las líneas que piden más de lo que hay disponible en el almacén de origen (`existencias` ya es de ese almacén):
+ * [{ i, mensaje }], con `i` = posición de la línea. Lo pedido de la misma tela y color en varias líneas se suma.
+ */
+export const faltantesDeStock = ({ lineas, existencias, productos }) => {
+    const productoDe = (presentacionId) =>
+        productos.find((p) => (p.presentaciones ?? []).some((pr) => String(pr.id) === String(presentacionId))) ?? null;
+
+    const pedidoPorGrupo = new Map();
+    lineas.forEach((l) => {
+        if (l.modo !== ROLLOS) return;
+        const k = `${productoDe(l.producto_presentacion_id)?.id}|${l.producto_color_id || ''}`;
+        pedidoPorGrupo.set(k, (pedidoPorGrupo.get(k) ?? 0) + (Number(l.rollos_pedidos) || 0));
+    });
+
+    const faltantes = [];
+    lineas.forEach((l, i) => {
+        if (l.modo === ROLLOS) {
+            const prod = productoDe(l.producto_presentacion_id);
+            const pide = pedidoPorGrupo.get(`${prod?.id}|${l.producto_color_id || ''}`) ?? 0;
+            const hay = rollosLibresEn(existencias, prod?.id, l.producto_color_id);
+            if (pide > hay) {
+                faltantes.push({
+                    i,
+                    mensaje: hay <= 0
+                        ? 'Sin stock disponible en el almacén de origen'
+                        : `Pides ${num(pide)} rollo${pide === 1 ? '' : 's'} y solo hay ${num(hay)} disponible${hay === 1 ? '' : 's'}`,
+                });
+            }
+        } else if (l.modo === 'cantidad') {
+            const prod = productoDe(l.producto_presentacion_id);
+            const pres = (prod?.presentaciones ?? []).find((pr) => String(pr.id) === String(l.producto_presentacion_id));
+            const stock = existencias
+                .filter((f) => String(f.producto?.id ?? f.producto_id) === String(prod?.id))
+                .reduce((s, f) => s + Number(f.stock_disponible ?? f.stock_actual ?? 0), 0);
+            const hay = stock / (Number(pres?.factor_conversion) || 1);
+            const pide = Number(l.cantidad) || 0;
+            if (pide > hay + 0.001) {
+                faltantes.push({
+                    i,
+                    mensaje: hay <= 0 ? 'Sin stock disponible en el almacén de origen' : `Pides ${num(pide)} y solo hay ${num(hay)} disponibles`,
+                });
+            }
+        }
+    });
+    return faltantes;
+};
+
 const lineaVacia = { producto_id: '', producto_presentacion_id: '', producto_color_id: '', cantidad: '', conMetraje: false, metros_por_rollo: '' };
 
 /** Las líneas de un requerimiento: lo que se le pide a otro almacén. */
@@ -81,6 +150,8 @@ export default function LineasRollos({
     titulo = 'Productos',
     conMetraje = false,
     validarStock = false,
+    /** Marca en rojo lo que pide más de lo que hay en el origen (sin impedir agregarlo; quien guarda decide si deja pasar). */
+    avisarStock = false,
     deshabilitado = false,
     avisoDeshabilitado = null,
     errores = {},
@@ -115,25 +186,14 @@ export default function LineasRollos({
         productos.find((p) => (p.presentaciones ?? []).some((pr) => String(pr.id) === String(presentacionId))) ?? null;
 
     /** Rollos libres de una tela (de un color, si se indica) en el almacén de origen. */
-    const rollosLibresDe = (productoId, colorId) => {
-        const porColor = new Map();
-        for (const fila of existencias) {
-            if (String(fila.producto?.id ?? fila.producto_id) !== String(productoId)) continue;
-            for (const c of fila.colores ?? []) {
-                const k = String(c.id ?? 'sin');
-                const previo = porColor.get(k) ?? { libres: 0, porAsignar: 0 };
-                previo.libres += Number(c.rollos_disponibles ?? c.rollos) || 0;
-                previo.porAsignar = Math.max(previo.porAsignar, Number(c.rollos_por_asignar) || 0);
-                porColor.set(k, previo);
-            }
-        }
-        let total = 0;
-        for (const [k, v] of porColor) {
-            if (colorId && k !== String(colorId)) continue;
-            total += Math.max(0, v.libres - v.porAsignar);
-        }
-        return total;
-    };
+    const rollosLibresDe = (productoId, colorId) => rollosLibresEn(existencias, productoId, colorId);
+
+    /** Lo que se pide de más (con `avisarStock`): se marca en su línea y en la fila de la tela. */
+    const faltantes = useMemo(
+        () => (avisarStock ? faltantesDeStock({ lineas, existencias, productos }) : []),
+        [avisarStock, lineas, existencias, productos], // eslint-disable-line react-hooks/exhaustive-deps
+    );
+    const faltaDe = (i) => faltantes.find((f) => f.i === i);
 
     const rollosLibres = useMemo(
         () => (producto ? rollosLibresDe(producto.id, nueva.producto_color_id) : 0),
@@ -536,7 +596,9 @@ export default function LineasRollos({
                                 if (fila.tipo === 'tela') {
                                     const colores = fila.indices.map((i) => ({ l: lineas[i], i }));
                                     const rollos = colores.reduce((suma, { l }) => suma + (l.modo === 'escaneado' ? l.rollos.length : Number(l.rollos_pedidos) || 0), 0);
-                                    const abierta = Boolean(abiertas[fila.clave]);
+                                    const hayFalta = colores.some(({ i }) => faltaDe(i));
+                                    // Con faltantes se queda abierta: ahí está el mensaje de cada color.
+                                    const abierta = Boolean(abiertas[fila.clave]) || hayFalta;
                                     const error = colores.map(({ i }) => errores[`detalles.${i}.rollos`] ?? errores[`detalles.${i}.cantidad_enviada`]).find(Boolean);
                                     const hexDe = (l) =>
                                         (productoDe(l.producto_presentacion_id)?.colores ?? []).find((c) => String(c.id) === String(l.producto_color_id))?.hex;
@@ -558,6 +620,11 @@ export default function LineasRollos({
                                                         <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-warm-700">
                                                             {colores.length} color{colores.length === 1 ? '' : 'es'}
                                                         </span>
+                                                        {hayFalta && (
+                                                            <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700">
+                                                                <TriangleAlert className="h-3 w-3" /> Sin stock suficiente
+                                                            </span>
+                                                        )}
                                                     </span>
                                                     {error && <span className="block pl-7 text-xs text-red-600">{error[0] ?? error}</span>}
                                                 </td>
@@ -628,7 +695,8 @@ export default function LineasRollos({
                                                                         ))}
                                                                     </div>
                                                                 ) : (
-                                                                    <div key={i} className="grid grid-cols-[1fr_7rem_2.5rem] items-center gap-3 px-2 py-1.5">
+                                                                    <div key={i}>
+                                                                    <div className="grid grid-cols-[1fr_7rem_2.5rem] items-center gap-3 px-2 py-1.5">
                                                                         <span className="inline-flex items-center gap-2 font-medium uppercase text-warm-800">
                                                                             <span className="h-3 w-3 shrink-0 rounded-full ring-1 ring-black/10" style={{ backgroundColor: hexDe(l) || '#9ca3af' }} />
                                                                             {l.color || 'Cualquier color'}
@@ -656,6 +724,12 @@ export default function LineasRollos({
                                                                             <Trash2 className="h-4 w-4" />
                                                                         </button>
                                                                     </div>
+                                                                    {faltaDe(i) && (
+                                                                        <p className="flex items-center gap-1.5 px-2 pb-1.5 pl-7 text-xs font-medium text-red-600">
+                                                                            <TriangleAlert className="h-3.5 w-3.5 shrink-0" /> {faltaDe(i).mensaje}
+                                                                        </p>
+                                                                    )}
+                                                                    </div>
                                                                 ))}
                                                             </div>
                                                         </div>
@@ -675,6 +749,11 @@ export default function LineasRollos({
                                         <td className="px-3 py-2">
                                             <span className="font-medium text-warm-900">{l.producto}</span>
                                             {l.color && <span className="ml-1.5 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-warm-700">{l.color}</span>}
+                                            {faltaDe(i) && (
+                                                <span className="mt-0.5 flex items-center gap-1 text-xs font-medium text-red-600">
+                                                    <TriangleAlert className="h-3.5 w-3.5 shrink-0" /> {faltaDe(i).mensaje}
+                                                </span>
+                                            )}
                                             {(errores[`detalles.${i}.cantidad_enviada`] ?? errores[`detalles.${i}.cantidad`]) && (
                                                 <span className="block text-xs text-red-600">{errores[`detalles.${i}.cantidad_enviada`] ?? errores[`detalles.${i}.cantidad`]}</span>
                                             )}

@@ -232,6 +232,18 @@ export function DetalleModal({ r, onClose }) {
                     </div>
                     {r.observaciones && <p className="rounded-md bg-gray-50 px-3 py-2 text-warm-600">{r.observaciones}</p>}
                     {r.motivo_rechazo && <Alert variant="error">Motivo: {r.motivo_rechazo}</Alert>}
+                    {r.requerimiento_origen && (
+                        <Alert variant="info">Es el saldo de <strong>{r.requerimiento_origen.requerimiento}</strong>: lo que no se pudo atender en esa ocasión.</Alert>
+                    )}
+                    {r.saldo_accion && (
+                        <Alert variant="warning">
+                            <strong>Atención parcial.</strong> Salió solo lo escaneado.{' '}
+                            {r.saldo_accion === 'pendiente'
+                                ? <>Lo que faltó quedó pendiente{r.requerimiento_saldo ? <> en <strong>{r.requerimiento_saldo.requerimiento}</strong></> : ''}.</>
+                                : 'Lo que faltó se canceló.'}
+                            {r.saldo_detalle && <span className="mt-1 block text-xs">Faltó: {r.saldo_detalle}</span>}
+                        </Alert>
+                    )}
                     <table className="w-full text-left">
                         <thead>
                             <tr className="border-b border-edge text-xs uppercase tracking-wide text-warm-500">

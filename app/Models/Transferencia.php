@@ -45,6 +45,10 @@ class Transferencia extends Model
         'usuario_recepcion_id',
         'observaciones',
         'motivo_rechazo',
+        // Atención parcial: qué se decidió con lo que faltó, qué quedó sin atender y de qué requerimiento viene el saldo.
+        'saldo_accion',
+        'saldo_detalle',
+        'requerimiento_origen_id',
         // Lo que se anotó al recepcionar con diferencias (rollos que no llegaron).
         'observacion_recepcion',
     ];
@@ -86,6 +90,18 @@ class Transferencia extends Model
     public static function serieRequerimiento(Almacen $almacen): string
     {
         return 'RQ'.str_pad((string) ($almacen->numero_serie ?: $almacen->id), 3, '0', STR_PAD_LEFT);
+    }
+
+    /** El requerimiento que nació con el saldo que no se pudo atender de este. */
+    public function requerimientoSaldo()
+    {
+        return $this->hasOne(Transferencia::class, 'requerimiento_origen_id');
+    }
+
+    /** Si este requerimiento es el saldo de otro: el requerimiento del que viene. */
+    public function requerimientoOrigen()
+    {
+        return $this->belongsTo(Transferencia::class, 'requerimiento_origen_id');
     }
 
     public function usuarioSolicita()

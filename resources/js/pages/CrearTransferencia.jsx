@@ -300,8 +300,25 @@ export default function CrearTransferencia() {
                         <div className="rounded-xl border border-edge bg-white p-5 shadow-sm">
                             <h2 className="mb-1 text-sm font-semibold text-warm-900">Del requerimiento {requerimiento.requerimiento}</h2>
                             <p className="mb-3 text-xs text-warm-500">Lo pidió {requerimiento.destino?.nombre}. Estos rollos ya están separados y salen con el traslado.</p>
+                            {requerimiento.saldo_accion && (
+                                <Alert variant="warning" className="mb-3">
+                                    <strong>Atención parcial.</strong> Sale solo lo escaneado.{' '}
+                                    {requerimiento.saldo_accion === 'pendiente'
+                                        ? 'Al crear el traslado, lo que falta queda pendiente en un nuevo requerimiento.'
+                                        : 'Al crear el traslado, lo que falta se cancela.'}
+                                    {requerimiento.detalles.filter((d) => d.modo !== 'cantidad' && !d.cubierta).length > 0 && (
+                                        <span className="mt-1 block text-xs">
+                                            Falta:{' '}
+                                            {requerimiento.detalles
+                                                .filter((d) => d.modo !== 'cantidad' && !d.cubierta)
+                                                .map((d) => `${d.producto}${d.color ? ` · ${d.color}` : ''} (${d.modo === 'rollos' ? `${num(d.rollos_pendientes)} rollos` : `${num(d.metros_pendientes)} m`})`)
+                                                .join('; ')}
+                                        </span>
+                                    )}
+                                </Alert>
+                            )}
                             <div className="space-y-2">
-                                {requerimiento.detalles.map((d) => (
+                                {requerimiento.detalles.filter((d) => d.modo === 'cantidad' || d.rollos.length > 0).map((d) => (
                                     <div key={d.id} className="rounded-lg border border-edge">
                                         <div className="flex flex-wrap items-center justify-between gap-2 bg-gray-50 px-3 py-2 text-sm">
                                             <span className="font-semibold text-warm-900">

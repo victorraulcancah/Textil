@@ -5,7 +5,7 @@ import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import { opcionesAlmacen, useAlmacenPropio } from '../lib/almacenes';
 import Layout from '../components/Layout';
-import LineasRollos, { ROLLOS, aDetallesRequerimiento } from '../components/LineasRollos';
+import LineasRollos, { ROLLOS, aDetallesRequerimiento, faltantesDeStock } from '../components/LineasRollos';
 import { Alert, Button, Input, SearchSelect, Spinner } from '../components/ui';
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
@@ -57,12 +57,21 @@ export default function CrearRequerimiento() {
         [todasExistencias, origen],
     );
 
+    /** Lo que se pide de más: con el almacén de origen elegido, cada línea se compara con lo que ahí hay disponible. */
+    const faltantes = useMemo(
+        () => (origen ? faltantesDeStock({ lineas, existencias, productos }) : []),
+        [origen, lineas, existencias, productos],
+    );
+
     const guardar = async () => {
         if (!origen) return toast.error('Elige a qué almacén se lo pides.');
         if (superAdmin && !pide) return toast.error('Elige el almacén que pide.');
         if (lineas.length === 0) return toast.error('Agrega al menos un producto.');
         if (lineas.some((l) => !(Number(l.modo === ROLLOS ? l.rollos_pedidos : l.cantidad) > 0))) {
             return toast.error('Todas las líneas necesitan una cantidad mayor a cero.');
+        }
+        if (faltantes.length > 0) {
+            return toast.error('Hay productos sin stock suficiente en el almacén de origen: corrige la cantidad o quítalos.');
         }
         setGuardando(true);
         try {
@@ -119,7 +128,7 @@ export default function CrearRequerimiento() {
             </div>
 
             <div className="grid gap-4 lg:grid-cols-[1fr_22rem] lg:items-start *:min-w-0">
-                <LineasRollos productos={productos} existencias={existencias} lineas={lineas} setLineas={setLineas} conMetraje />
+                <LineasRollos productos={productos} existencias={existencias} lineas={lineas} setLineas={setLineas} conMetraje avisarStock={Boolean(origen)} />
 
                 {/* ── Requerimiento y resumen ─────────────────────────── */}
                 <div className="space-y-4">
@@ -174,11 +183,18 @@ export default function CrearRequerimiento() {
                         </dl>
                     </section>
 
+                    {faltantes.length > 0 && (
+                        <Alert variant="error">
+                            <strong>{faltantes.length === 1 ? '1 producto no tiene' : `${faltantes.length} productos no tienen`} stock suficiente</strong> en {nombreOrigen ?? 'el almacén de origen'}.
+                            Corrige la cantidad o quita ese producto para poder registrar el requerimiento.
+                        </Alert>
+                    )}
+
                     <div className="flex justify-end gap-2">
                         <Button variant="secondary" onClick={() => navigate('/requerimientos')}>
                             Cancelar
                         </Button>
-                        <Button loading={guardando} disabled={!lineas.length} onClick={guardar}>
+                        <Button loading={guardando} disabled={!lineas.length || faltantes.length > 0} onClick={guardar}>
                             Registrar requerimiento
                         </Button>
                     </div>

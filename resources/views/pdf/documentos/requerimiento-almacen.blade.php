@@ -20,6 +20,9 @@
     {{-- El mismo formato que el pedido: una tabla por tela, rollo por rollo (1R = rollo entero). --}}
     <x-pdf.planilla :grupos="$planilla['grupos']" :totales="$planilla['totales']" :precios="false" :pendiente="$pendiente" />
 
+    {{-- Lo que no se encontró y por tanto no se entregó. --}}
+    <x-pdf.no-encontrado :detalle="$orden->saldo_detalle" />
+
     <table class="marco" style="margin: 10px 0 16px 0;">
         <tr>
             <td class="strong upper" style="font-size: 10px;">{{ $total_lineas }} producto(s)</td>

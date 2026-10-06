@@ -33,6 +33,9 @@
         :moneda="$orden->moneda === 'USD' ? '$' : 'S/'"
         :pendiente="$porDefinir" />
 
+    {{-- Lo que no se encontró y por tanto no se entregó. --}}
+    <x-pdf.no-encontrado :detalle="$orden->saldo_detalle" />
+
     @unless ($porDefinir)
         <x-pdf.totales
             :lineas="['Subtotal' => number_format((float) $orden->subtotal, 2), 'Descuento' => (float) $orden->descuento_total > 0 ? number_format((float) $orden->descuento_total, 2) : null]"

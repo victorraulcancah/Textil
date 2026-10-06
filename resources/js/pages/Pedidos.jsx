@@ -212,6 +212,21 @@ export default function Pedidos() {
         },
         { key: 'requerimiento_numero', label: 'Requerimiento', render: (row) => row.requerimiento_numero ?? '—' },
         {
+            // Lo que no se encontró al preparar el pedido: queda registrado y el pedido se despachó sin eso.
+            key: 'no_encontrado',
+            label: 'No encontrado',
+            getSearchValue: (row) => row.no_encontrado ?? '',
+            render: (row) =>
+                row.no_encontrado ? (
+                    <span className="block max-w-[16rem] text-xs leading-snug text-amber-800" title={row.no_encontrado}>
+                        <Badge variant="amber">NO ENCONTRADO</Badge>
+                        <span className="mt-0.5 block">{row.no_encontrado}</span>
+                    </span>
+                ) : (
+                    <span className="text-warm-400">—</span>
+                ),
+        },
+        {
             type: 'actions',
             key: 'actions',
             label: 'Acciones',

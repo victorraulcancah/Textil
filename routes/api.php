@@ -238,6 +238,7 @@ Route::middleware('auth:api')->group(function () {
     // Entrega parcial: el rollo no está en el rack (queda en revisión) y bajar lo pedido de una línea.
     Route::post('ordenes-venta/{ordenesVenta}/rollo-no-encontrado', [OrdenVentaController::class, 'rolloNoEncontrado']);
     Route::post('ordenes-venta/{ordenesVenta}/reducir', [OrdenVentaController::class, 'reducir']);
+    Route::post('ordenes-venta/{ordenesVenta}/no-encontrado', [OrdenVentaController::class, 'noEncontrado']);
     Route::post('ordenes-venta/{ordenesVenta}/separar', [OrdenVentaController::class, 'separar']);
     Route::post('ordenes-venta/{ordenesVenta}/asignar', [OrdenVentaController::class, 'asignar']);
     Route::post('ordenes-venta/{ordenesVenta}/escanear', [OrdenVentaController::class, 'escanear']);

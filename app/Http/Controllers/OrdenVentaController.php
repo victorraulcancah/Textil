@@ -280,6 +280,24 @@ class OrdenVentaController extends Controller
         );
     }
 
+    /** Lo que no se encuentra en el rack (sobre lo pendiente de una línea): queda como NO ENCONTRADO y deja de pedirse. */
+    public function noEncontrado(Request $request, OrdenVenta $ordenesVenta)
+    {
+        AlmacenAcceso::exigir($ordenesVenta->almacen_id);
+        $datos = $request->validate([
+            'detalle_id' => 'required|integer',
+            'cantidad' => 'required|numeric|min:0.01',
+            'codigos' => 'nullable|array',
+            'codigos.*' => 'string|max:100',
+            'observaciones' => 'nullable|string|max:500',
+        ]);
+
+        return new OrdenVentaResource(
+            $this->pedidos->marcarNoEncontrado($ordenesVenta, (int) $datos['detalle_id'], (float) $datos['cantidad'], $datos['codigos'] ?? [], $datos['observaciones'] ?? null)
+                ->load(self::RELACIONES)
+        );
+    }
+
     /** Baja lo pedido de una línea (solo lo que aún no está preparado), sin anular el pedido. */
     public function reducir(Request $request, OrdenVenta $ordenesVenta)
     {

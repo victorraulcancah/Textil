@@ -216,6 +216,7 @@ return [
                         'ordenes-venta/*/quitar-rollo' => 'editar',
                         'ordenes-venta/*/rollo-no-encontrado' => 'editar',
                         'ordenes-venta/*/reducir' => 'editar',
+                        'ordenes-venta/*/no-encontrado' => 'editar',
                         'ordenes-venta/*/separar' => 'editar',
                         'ordenes-venta/*/despachar' => 'editar',
                         // Atender un requerimiento de traslado es el mismo trabajo del almacenero que despachar un pedido:

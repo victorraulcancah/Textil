@@ -253,7 +253,7 @@ class OrdenVentaService
             $orden->update([
                 'estado' => OrdenVenta::SEPARADO,
                 'fecha_separacion' => now(),
-                'saldo_accion' => $noEncontrado ? 'faltantes' : null,
+                'saldo_accion' => $noEncontrado ? 'faltantes' : $orden->saldo_accion,
             ]);
 
             return $this->conRelaciones($orden->fresh());
@@ -538,6 +538,96 @@ class OrdenVentaService
             if ($orden->estado === OrdenVenta::SEPARADO) {
                 $orden->update(['estado' => OrdenVenta::PREPARANDO, 'saldo_accion' => null]);
             }
+
+            return $this->conRelaciones($orden->fresh());
+        });
+    }
+
+    /**
+     * Lo que el almacenero no encuentra en el rack: se marca sobre lo PENDIENTE de una línea (lo que todavía no tiene rollo
+     * escaneado). Esa cantidad deja de pedirse a esta preparación —así el pedido puede darse por separado y despacharse con
+     * lo encontrado— y queda registrada como NO ENCONTRADO; no queda pendiente ni genera otra atención.
+     *
+     * Si se indican los códigos de los rollos que el sistema decía que había y no aparecen, quedan bloqueados "en revisión"
+     * (no se ofrecen como disponibles) hasta que alguien los ubique o se confirme su pérdida, que se ajusta aparte.
+     *
+     * @param  list<string>  $codigos  rollos que no aparecen (opcional; como mucho tantos como lo no encontrado)
+     */
+    public function marcarNoEncontrado(OrdenVenta $orden, int $detalleId, float $cantidad, array $codigos = [], ?string $observaciones = null): OrdenVenta
+    {
+        if (! in_array($orden->estado, [OrdenVenta::SOLICITADO, OrdenVenta::PREPARANDO], true)) {
+            throw new \DomainException('Solo se puede marcar lo no encontrado mientras el pedido se prepara.');
+        }
+
+        return DB::transaction(function () use ($orden, $detalleId, $cantidad, $codigos, $observaciones) {
+            $orden->load('detalles.rollos', 'detalles.presentacion.producto', 'detalles.color', 'detalles.almacenReserva');
+
+            $linea = $orden->detalles->firstWhere('id', $detalleId);
+            if (! $linea) {
+                throw new \DomainException('Esa línea no es de este pedido.');
+            }
+
+            $porRollos = $linea->esPorRollos();
+            $cantidad = $porRollos ? (float) (int) round($cantidad) : round($cantidad, 2);
+            $pendiente = $porRollos ? (float) $linea->rollosPendientes() : $linea->metrosPendientes();
+            $unidad = $porRollos ? ($cantidad === 1.0 ? 'rollo' : 'rollos') : 'm';
+
+            if ($cantidad <= 0) {
+                throw new \DomainException('Indica cuánto no se encontró.');
+            }
+            if ($cantidad > $pendiente + 0.001) {
+                throw new \DomainException('Solo se puede marcar como no encontrado lo que falta por preparar ('.round($pendiente, 2).' '.($porRollos ? 'rollos' : 'm').').');
+            }
+            if ($porRollos && count($codigos) > $cantidad) {
+                throw new \DomainException('Indicaste más códigos de rollos que la cantidad no encontrada.');
+            }
+            $quedaVacia = ($pendiente - $cantidad) <= 0.001 && ($porRollos ? $linea->rollosAsignados() === 0 : $linea->metrosAsignados() <= 0);
+            if ($quedaVacia && $orden->detalles->count() === 1) {
+                throw new \DomainException('Un pedido necesita al menos un producto. Si no se encontró nada, anula el pedido.');
+            }
+
+            // Los rollos que no aparecen: del mismo producto, color y almacén, y libres. Quedan en revisión.
+            $revision = [];
+            foreach (array_values(array_unique(array_filter(array_map('trim', $codigos)))) as $codigo) {
+                $rollo = Rollo::where('codigo', $codigo)->first();
+                if (! $rollo) {
+                    throw new \DomainException("No existe ningún rollo con el código {$codigo}.");
+                }
+                if ((int) $rollo->producto_id !== (int) $linea->presentacion?->producto_id
+                    || ($linea->producto_color_id && (int) $rollo->producto_color_id !== (int) $linea->producto_color_id)) {
+                    throw new \DomainException("El rollo {$codigo} no es de lo que pide esta línea.");
+                }
+                if ($orden->almacen_id && (int) $rollo->almacen_id !== (int) $orden->almacen_id) {
+                    throw new \DomainException("El rollo {$codigo} está en otro almacén.");
+                }
+                if (! $rollo->estaDisponible()) {
+                    $estado = strtolower(Rollo::ESTADOS[$rollo->estado] ?? $rollo->estado);
+                    throw new \DomainException("El rollo {$codigo} está {$estado}: no se puede mandar a revisión.");
+                }
+                $this->rollos->cambiarEstado(
+                    $rollo,
+                    Rollo::EN_REVISION,
+                    RolloMovimiento::REVISION,
+                    'orden_venta',
+                    $orden->id,
+                    null,
+                    trim('No se encontró al preparar el pedido '.($orden->requerimiento_numero ?? $orden->documento).'. '.($observaciones ?? '')),
+                );
+                $revision[] = $rollo->codigo;
+            }
+
+            $nombre = trim(($linea->presentacion?->producto?->nombre ?? 'Producto').($linea->color ? ' · '.$linea->color->nombre : ''));
+            $texto = "{$nombre}: ".round($cantidad, 2)." {$unidad}".($revision ? ' ('.implode(', ', $revision).')' : '');
+
+            // Lo no encontrado deja de pedirse a esta preparación.
+            $this->reducirLinea($linea, ($porRollos ? (float) $linea->rollos_pedidos : (float) $linea->metros) - $cantidad);
+            $this->recalcularTotales($orden);
+
+            $previo = trim((string) $orden->saldo_detalle);
+            $orden->update([
+                'saldo_accion' => 'faltantes',
+                'saldo_detalle' => $previo !== '' ? "{$previo}; {$texto}" : $texto,
+            ]);
 
             return $this->conRelaciones($orden->fresh());
         });
@@ -943,7 +1033,8 @@ class OrdenVentaService
         }
 
         $this->recalcularTotales($orden);
-        $orden->update(['saldo_detalle' => implode('; ', $resumen) ?: null]);
+        $previo = trim((string) $orden->saldo_detalle);
+        $orden->update(['saldo_detalle' => trim($previo.($previo !== '' && $resumen ? '; ' : '').implode('; ', $resumen)) ?: null]);
         $orden->unsetRelation('detalles');
     }
 

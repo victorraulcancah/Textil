@@ -49,7 +49,6 @@ export default function Despacho() {
     const [parcial, setParcial] = useState(false);
     /** Rollo que no se encontró en el rack (null = ventana cerrada) y su observación. */
     const [noEncontrado, setNoEncontrado] = useState(null);
-    const [obsNoEncontrado, setObsNoEncontrado] = useState('');
     /** Reducir lo pedido de una línea: { detalle, nueva } (null = ventana cerrada). */
     const [reduccion, setReduccion] = useState(null);
     const [guardandoAccion, setGuardandoAccion] = useState(false);
@@ -333,20 +332,39 @@ export default function Despacho() {
         }
     };
 
-    /** El rollo no está en el rack: sale del pedido y queda bloqueado en revisión; los demás rollos se conservan. */
+    /** Lo pendiente de una línea que no se encuentra en el rack: se abre la ventana con su cantidad. */
+    const abrirNoEncontrado = (detalleId) => {
+        const d = (detalle?.detalles ?? []).find((x) => x.id === detalleId);
+        if (!d) return;
+        const porRollos = d.modo === 'rollos';
+        const pendiente = porRollos ? Number(d.rollos_pendientes) : Number(d.metros_pendientes);
+        setNoEncontrado({
+            id: d.id,
+            nombre: `${d.producto}${d.color?.nombre ? ` · ${d.color.nombre}` : ''}`,
+            unidad: porRollos ? 'rollos' : 'm',
+            pendiente,
+            cantidad: String(pendiente),
+            codigos: '',
+            obs: '',
+        });
+    };
+
+    /** Lo pendiente no se encontró: queda como NO ENCONTRADO y deja de pedirse; lo escaneado se conserva. */
     const confirmarNoEncontrado = async () => {
         setGuardandoAccion(true);
         try {
-            const { data } = await api.post(`/ordenes-venta/${detalle.id}/rollo-no-encontrado`, {
-                rollo_id: noEncontrado.rollo_id,
-                observaciones: obsNoEncontrado || undefined,
+            const { data } = await api.post(`/ordenes-venta/${detalle.id}/no-encontrado`, {
+                detalle_id: noEncontrado.id,
+                cantidad: Number(noEncontrado.cantidad),
+                codigos: noEncontrado.codigos.split(/[,\s]+/).map((c) => c.trim()).filter(Boolean),
+                observaciones: noEncontrado.obs || undefined,
             });
             setDetalle(data?.data ?? data);
-            toast.success(`${noEncontrado.codigo} quedó en revisión. Escanea otro rollo para reemplazarlo.`);
+            toast.success('Registrado como NO ENCONTRADO.');
             setNoEncontrado(null);
             await cargar(true);
         } catch (err) {
-            toast.error(err.response?.data?.message ?? 'No se pudo apartar el rollo.');
+            toast.error(err.response?.data?.message ?? 'No se pudo registrar lo no encontrado.');
         } finally {
             setGuardandoAccion(false);
         }
@@ -723,8 +741,8 @@ export default function Despacho() {
 
                                 {!completo && escaneando && detalle.parcial_posible && (
                                     <div className="border-b border-edge bg-amber-50/70 px-4 py-2 text-sm text-amber-800">
-                                        ¿No encuentras un rollo? Márcalo como <strong>no encontrado</strong> (queda en revisión) y escanea otro, o
-                                        <strong> despacha lo encontrado</strong>: lo que falta queda registrado como NO ENCONTRADO, sin anular el pedido.
+                                        ¿No encuentras algo de lo que falta? En su fila pendiente usa <strong>«No se encontró»</strong>: queda registrado como NO ENCONTRADO y el
+                                        pedido se puede separar y despachar con lo encontrado, sin anularlo. O usa <strong>Despachar lo encontrado</strong> para hacerlo de una vez.
                                     </div>
                                 )}
                                 {completo && escaneando && (
@@ -761,15 +779,6 @@ export default function Despacho() {
                                                               </button>
                                                               <button
                                                                   type="button"
-                                                                  aria-label={`No se encontró ${f.detalle ?? 'el rollo'}`}
-                                                                  title="No se encontró este rollo: sale del pedido y queda en revisión"
-                                                                  onClick={() => { setNoEncontrado(rolloDelPedido(f.rolloId)); setObsNoEncontrado(''); }}
-                                                                  className="rounded p-0.5 text-amber-600 transition hover:bg-amber-50"
-                                                              >
-                                                                  <PackageSearch className="h-3.5 w-3.5" />
-                                                              </button>
-                                                              <button
-                                                                  type="button"
                                                                   aria-label={`Quitar ${f.detalle ?? 'rollo'}`}
                                                                   title={separado ? 'Quitar este rollo: el pedido vuelve a preparación' : 'Quitar este rollo del pedido'}
                                                                   onClick={() => quitarRollo(f.rolloId)}
@@ -779,15 +788,26 @@ export default function Despacho() {
                                                               </button>
                                                           </span>
                                                       ) : f.detalleId && (f.pendienteRollos > 0 || f.pendienteMetros > 0) ? (
-                                                          <button
-                                                              type="button"
-                                                              aria-label="Reducir lo pedido"
-                                                              title="Reducir lo pedido de esta línea (el cliente ya no lo necesita)"
-                                                              onClick={() => abrirReduccion(f.detalleId)}
-                                                              className="rounded p-0.5 text-warm-500 transition hover:bg-gray-100"
-                                                          >
-                                                              <MinusCircle className="h-3.5 w-3.5" />
-                                                          </button>
+                                                          <span className="inline-flex items-center gap-1">
+                                                              <button
+                                                                  type="button"
+                                                                  aria-label="No se encontró"
+                                                                  title="No se encontró lo que falta: queda como NO ENCONTRADO y no se espera"
+                                                                  onClick={() => abrirNoEncontrado(f.detalleId)}
+                                                                  className="rounded p-0.5 text-amber-600 transition hover:bg-amber-50"
+                                                              >
+                                                                  <PackageSearch className="h-3.5 w-3.5" />
+                                                              </button>
+                                                              <button
+                                                                  type="button"
+                                                                  aria-label="Reducir lo pedido"
+                                                                  title="Reducir lo pedido de esta línea (el cliente ya no lo necesita)"
+                                                                  onClick={() => abrirReduccion(f.detalleId)}
+                                                                  className="rounded p-0.5 text-red-600 transition hover:bg-red-50"
+                                                              >
+                                                                  <MinusCircle className="h-3.5 w-3.5" />
+                                                              </button>
+                                                          </span>
                                                       ) : null
                                                 : null
                                         }
@@ -840,29 +860,54 @@ export default function Despacho() {
                 </div>
             </Modal>
 
-            {/* Un rollo que no aparece en el rack: sale del pedido y queda bloqueado para revisarlo. */}
+            {/* Lo pendiente que no se encuentra en el rack: queda como NO ENCONTRADO y deja de esperarse. */}
             <Modal
                 open={Boolean(noEncontrado)}
                 onClose={() => setNoEncontrado(null)}
-                title="Rollo no encontrado"
-                description={noEncontrado ? `${noEncontrado.codigo} · ${num(noEncontrado.metros_rollo ?? noEncontrado.metros)} m` : ''}
+                title="No se encontró"
+                description={noEncontrado?.nombre}
                 size="sm"
                 footer={
                     <>
                         <Button variant="secondary" onClick={() => setNoEncontrado(null)}>Cancelar</Button>
-                        <Button loading={guardandoAccion} onClick={confirmarNoEncontrado}>
-                            <PackageSearch className="h-4 w-4" /> Sacarlo del pedido
+                        <Button
+                            loading={guardandoAccion}
+                            disabled={!noEncontrado || !(Number(noEncontrado.cantidad) > 0) || Number(noEncontrado.cantidad) > noEncontrado.pendiente}
+                            onClick={confirmarNoEncontrado}
+                        >
+                            <PackageSearch className="h-4 w-4" /> Marcar NO ENCONTRADO
                         </Button>
                     </>
                 }
             >
-                <div className="space-y-3">
-                    <Alert variant="warning">
-                        El rollo sale de este pedido y queda <strong>en revisión</strong>: no se vuelve a ofrecer como disponible hasta que alguien lo ubique o
-                        se confirme su pérdida (el ajuste de inventario se registra aparte, en Stock por rollo). Los demás rollos separados se conservan.
-                    </Alert>
-                    <Input label="Observación (opcional)" value={obsNoEncontrado} onChange={(e) => setObsNoEncontrado(e.target.value)} placeholder="Ej.: no estaba en el rack B-03" />
-                </div>
+                {noEncontrado && (
+                    <div className="space-y-3">
+                        <p className="text-sm text-warm-700">
+                            Faltan por preparar <strong>{num(noEncontrado.pendiente)} {noEncontrado.unidad}</strong>. Lo que no encuentres queda registrado como{' '}
+                            <strong>NO ENCONTRADO</strong>: no queda pendiente de despacho, y el pedido se despacha con lo que sí encontraste.
+                        </p>
+                        <Input
+                            label={`Cuánto no se encontró (${noEncontrado.unidad})`}
+                            type="number"
+                            min="0"
+                            max={noEncontrado.pendiente}
+                            step={noEncontrado.unidad === 'rollos' ? '1' : '0.01'}
+                            value={noEncontrado.cantidad}
+                            onChange={(e) => setNoEncontrado((n) => ({ ...n, cantidad: e.target.value }))}
+                        />
+                        <Input
+                            label="Códigos de los rollos que no aparecen (opcional)"
+                            value={noEncontrado.codigos}
+                            onChange={(e) => setNoEncontrado((n) => ({ ...n, codigos: e.target.value }))}
+                            placeholder="Ej.: FQH-001-26-012, FQH-001-26-013"
+                        />
+                        <p className="-mt-2 text-xs text-warm-500">
+                            Si el sistema decía que había ese rollo y no está, escribe su código: queda <strong>en revisión</strong> (no se vuelve a ofrecer como
+                            disponible) hasta que lo ubiquen o se confirme su pérdida en Stock por rollo.
+                        </p>
+                        <Input label="Observación (opcional)" value={noEncontrado.obs} onChange={(e) => setNoEncontrado((n) => ({ ...n, obs: e.target.value }))} placeholder="Ej.: no estaba en el rack B-03" />
+                    </div>
+                )}
             </Modal>
 
             {/* El cliente ya no necesita todo lo pedido: se baja la cantidad de la línea (no lo preparado). */}

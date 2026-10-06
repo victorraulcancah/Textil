@@ -50,6 +50,39 @@ const ESTADO_ROLLO = {
     agotado: { label: 'Agotado', variant: 'gray' },
 };
 
+/**
+ * Un documento puede mover varios colores (una recepción trae un movimiento por color): en el kardex es
+ * una sola fila, con lo que entró o salió en total y el stock con que quedó al final. El detalle por
+ * color y por rollo se ve al abrir el documento.
+ */
+const juntarPorDocumento = (movs) => {
+    const grupos = new Map();
+    movs.forEach((m) => {
+        const clave = m.documento_referencia_id
+            ? [m.documento_referencia_tipo, m.documento_referencia_id, m.almacen_id, m.tipo_movimiento].join(':')
+            : `solo:${m.id}`;
+        if (!grupos.has(clave)) grupos.set(clave, []);
+        grupos.get(clave).push(m);
+    });
+
+    return [...grupos.values()].map((grupo) => {
+        // El último movimiento del documento deja el stock y el costo promedio con que quedó.
+        const ultimo = grupo.reduce((a, b) => (b.id > a.id ? b : a));
+        if (grupo.length === 1) return ultimo;
+
+        const total = grupo.reduce((s, m) => s + Math.abs(Number(m.cantidad) || 0), 0);
+        const costo = grupo.reduce((s, m) => s + Math.abs(Number(m.cantidad) || 0) * (Number(m.costo_unitario) || 0), 0);
+        const signo = Number(ultimo.cantidad) < 0 ? -1 : 1;
+
+        return {
+            ...ultimo,
+            cantidad: signo * total,
+            // El costo del documento: el promedio de sus líneas, pesado por lo que entró o salió.
+            costo_unitario: total > 0 ? costo / total : ultimo.costo_unitario,
+        };
+    });
+};
+
 export default function Movimientos() {
     /** Las telas que se pueden buscar: no se lista nada hasta elegir una. */
     const [telas, setTelas] = useState([]);
@@ -130,12 +163,13 @@ export default function Movimientos() {
     const filterCount = Object.keys(activeFilters).length;
 
     /**
-     * El kardex de la tela, como un libro: por almacén (cada uno lleva su propio stock) y, dentro de
-     * cada uno, del movimiento más antiguo al más reciente para que el stock se lea de arriba abajo.
+     * El kardex de la tela, como un libro: una fila por documento (los colores y rollos se ven al abrirlo),
+     * por almacén (cada uno lleva su propio stock) y, dentro de cada uno, del documento más antiguo al más
+     * reciente para que el stock se lea de arriba abajo.
      */
     const kardex = useMemo(() => {
         const a = activeFilters;
-        const lista = (movs ?? []).filter((m) => {
+        const lista = juntarPorDocumento(movs ?? []).filter((m) => {
             if (a.tipo && m.tipo_movimiento !== a.tipo) return false;
             if (a.almacen && String(m.almacen_id ?? m.almacen?.id) !== a.almacen) return false;
             if (a.origen && m.origen !== a.origen) return false;
@@ -261,26 +295,6 @@ export default function Movimientos() {
             width: '120px',
             getSearchValue: (row) => row.producto?.categoria?.nombre,
             render: (row) => texto(row.producto?.categoria?.nombre, '120px'),
-        },
-        {
-            // Solo lo saben los movimientos que nacen de rollos; lo demás (cargas antiguas) queda sin color.
-            key: 'color',
-            label: 'Color',
-            width: '150px',
-            getSearchValue: (row) => row.color?.nombre,
-            render: (row) =>
-                row.color ? (
-                    <span className="inline-flex items-center gap-1.5 text-warm-800">
-                        <span
-                            className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-black/10"
-                            style={{ backgroundColor: row.color.hex || '#9ca3af' }}
-                        />
-                        <span className="truncate">{row.color.nombre}</span>
-                        {row.color.codigo && <span className="text-xs text-gray-400">({row.color.codigo})</span>}
-                    </span>
-                ) : (
-                    <span className="text-gray-400">Sin color</span>
-                ),
         },
         {
             key: 'almacen',

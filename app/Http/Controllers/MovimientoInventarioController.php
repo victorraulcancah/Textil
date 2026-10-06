@@ -50,7 +50,7 @@ class MovimientoInventarioController extends Controller
 
     /**
      * Los rollos que entraron o salieron en un movimiento del kardex, con su color y su metraje:
-     * lo que se abre al tocar un documento. Los de un color solo si el movimiento era de ese color.
+     * lo que se abre al tocar un documento: todos los del documento, de cualquier color.
      */
     public function rollos(MovimientoInventario $movimiento)
     {
@@ -67,7 +67,6 @@ class MovimientoInventarioController extends Controller
                 ->where('rm.documento_id', $documento)
                 ->whereIn('rm.tipo', ['ingreso', 'despacho', 'venta', 'corte', 'traslado', 'ajuste'])
                 ->where('r.producto_id', $movimiento->producto_id)
-                ->when($movimiento->producto_color_id, fn ($q) => $q->where('r.producto_color_id', $movimiento->producto_color_id))
                 ->get(['r.id', 'r.codigo', 'r.producto_color_id', 'r.metros_inicial', 'r.metros_actual', 'r.estado', 'rm.metros as metros_movimiento']);
 
             // Un ajuste que creó los rollos los deja sin documento en su historial: se ubican por su línea.
@@ -77,7 +76,6 @@ class MovimientoInventarioController extends Controller
                     DB::table('rollos as r')
                         ->whereIn('r.ajuste_detalle_id', $lineas)
                         ->where('r.producto_id', $movimiento->producto_id)
-                        ->when($movimiento->producto_color_id, fn ($q) => $q->where('r.producto_color_id', $movimiento->producto_color_id))
                         ->get(['r.id', 'r.codigo', 'r.producto_color_id', 'r.metros_inicial', 'r.metros_actual', 'r.estado', 'r.metros_inicial as metros_movimiento'])
                 );
             }

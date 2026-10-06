@@ -484,7 +484,9 @@ export default function Movimientos() {
                     </div>
                 ) : rollos.length === 0 ? (
                     <p className="py-10 text-center text-sm text-warm-500">
-                        Este movimiento no tiene rollos registrados (es una carga de antes de llevar el control por rollos).
+                        {movModal?.origen === 'recepcion_deshecha'
+                            ? 'Esta recepción se deshizo: sus rollos se eliminaron junto con ella.'
+                            : 'Este documento se cargó sin rollos ni colores (es de antes de llevar el control por rollos), por eso no hay detalle que mostrar.'}
                     </p>
                 ) : (
                     <div className="space-y-4">

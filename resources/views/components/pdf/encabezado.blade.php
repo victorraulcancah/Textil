@@ -1,4 +1,4 @@
-@props(['empresa', 'titulo', 'numero' => null, 'estado' => null, 'bajoLogo' => null])
+@props(['empresa', 'titulo', 'numero' => null, 'estado' => null, 'bajoLogo' => null, 'rotuloNumero' => null])
 
 @php
     // Logo subido por la empresa (storage/app/public), ya con tamaño calculado
@@ -32,7 +32,7 @@
             <table class="docbox">
                 <tr><td>R.U.C. {{ $empresa?->ruc ?? '—' }}</td></tr>
                 <tr><td class="hl">{{ $titulo }}</td></tr>
-                <tr><td class="num">{{ $numero }}@if ($estado) <span class="muted" style="font-weight: normal;">({{ $estado }})</span>@endif</td></tr>
+                <tr><td class="num">@if ($rotuloNumero)<div class="muted" style="font-size: 8px; font-weight: normal; letter-spacing: .5px;">{{ $rotuloNumero }}</div>@endif{{ $numero }}@if ($estado) <span class="muted" style="font-weight: normal;">({{ $estado }})</span>@endif</td></tr>
             </table>
         </td>
     </tr>

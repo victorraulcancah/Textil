@@ -176,7 +176,7 @@ export default function OrdenesCompra() {
         },
         {
             key: 'proveedor_codigo_corto',
-            label: 'Código corto',
+            label: 'N° contrato',
             // Código corto del proveedor + n.º de orden de ese proveedor + año de emisión: HAN-002-26.
             render: (row) => {
                 const anio = String(row.fecha_emision ?? '').slice(2, 4);

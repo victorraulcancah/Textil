@@ -32,7 +32,9 @@
             formato="ticket" />
         @if ($compra->observaciones)<div class="muted">Obs.: {{ $compra->observaciones }}</div>@endif
     @else
-        <x-pdf.encabezado :empresa="$empresa" titulo="COMPRA" :numero="$documento" :bajoLogo="$po ? 'PO: ' . $po : null" />
+        {{-- El recuadro: la serie de la compra con el tipo de pago en la franja (C001-002 - CONTADO) y, abajo, el N° de
+             contrato: el de la orden de la que salió la compra (HLS-001-26), o un guion si no salió de una orden. --}}
+        <x-pdf.encabezado :empresa="$empresa" :titulo="$documento . ' - ' . strtoupper($pagoTxt)" :numero="$po ?: '—'" rotuloNumero="N° CONTRATO" :bajoLogo="$po ? 'PO: ' . $po : null" />
         <x-pdf.meta
             :items="[
                 'Proveedor' => $compra->proveedor?->nombre ?: '—',

@@ -148,6 +148,11 @@ export default function Compras() {
             render: (row) => (row.orden_compra?.codigo ? <Badge variant="gray">{row.orden_compra.codigo}</Badge> : <span className="text-warm-400">—</span>),
         },
         {
+            key: 'numero_contrato',
+            label: 'N° contrato',
+            render: (row) => (row.numero_contrato ? <Badge variant="gray" className="whitespace-nowrap">{row.numero_contrato}</Badge> : <span className="text-warm-400">—</span>),
+        },
+        {
             key: 'documento',
             label: 'Documento',
             render: (row) => (

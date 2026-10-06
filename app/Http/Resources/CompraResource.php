@@ -68,6 +68,8 @@ class CompraResource extends JsonResource
 
             'proveedor' => $this->whenLoaded('proveedor'),
             'orden_compra' => $this->whenLoaded('ordenCompra'),
+            // El número de contrato de la orden de la que salió la compra (el mismo que lleva su PDF: HLS-001-26).
+            'numero_contrato' => $this->whenLoaded('ordenCompra', fn () => $this->ordenCompra?->codigoDocumento()),
             'detalles' => CompraDetalleResource::collection($this->whenLoaded('detalles')),
             'pagos' => CompraPagoResource::collection($this->whenLoaded('pagos')),
             'gastos' => $this->whenLoaded('gastos'),

@@ -20,7 +20,8 @@ class CompraController extends Controller
     /** Relaciones que acompañan a una compra en las respuestas de detalle. */
     private const RELACIONES = [
         'proveedor:id,nombre',
-        'ordenCompra:id,codigo',
+        'ordenCompra:id,codigo,proveedor_id,numero_proveedor,fecha_emision',
+        'ordenCompra.proveedor:id,codigo_corto',
         'detalles.presentacion.producto',
         'detalles.color',
         'pagos',
@@ -31,7 +32,8 @@ class CompraController extends Controller
     {
         $compras = Compra::with([
             'proveedor:id,nombre',
-            'ordenCompra:id,codigo',
+            'ordenCompra:id,codigo,proveedor_id,numero_proveedor,fecha_emision',
+            'ordenCompra.proveedor:id,codigo_corto',
             'detalles.presentacion.producto.marca',
             // Solo las vigentes: una recepción deshecha devolvió su mercadería.
             'recepciones' => fn ($q) => $q->where('activo', true)->with('detalles'),

@@ -34,7 +34,7 @@
     @else
         {{-- El recuadro: el tipo y la serie de la compra en la franja (COMPRA - C001-002) y, abajo, el N° de
              contrato: el de la orden de la que salió la compra (HLS-001-26), o un guion si no salió de una orden. --}}
-        <x-pdf.encabezado :empresa="$empresa" :titulo="'COMPRA - ' . $documento" :numero="$po ?: '—'" :bajoLogo="$po ? 'PO: ' . $po : null" />
+        <x-pdf.encabezado :empresa="$empresa" :titulo="'COMPRA - ' . $documento" :numero="$po ?: '—'" />
         <x-pdf.meta
             :items="[
                 'Proveedor' => $compra->proveedor?->nombre ?: '—',

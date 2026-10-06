@@ -16,6 +16,10 @@
         // Vertical (50 x 80): el QR va debajo del texto y centrado. Horizontal (80 x 50): a la derecha del texto.
         $vertical = (float) config('rollos.etiqueta.alto_mm') > (float) config('rollos.etiqueta.ancho_mm');
         $altoPx = (int) round(config('rollos.etiqueta.alto_mm') * 96 / 25.4) - ($vertical ? 14 : 13);
+        // Girada: la hoja es de lado (alto x ancho) y el diseño se gira 90° a la izquierda dentro de ella.
+        $girar = (bool) config('rollos.etiqueta.girar');
+        $diseñoAncho = (int) round(config('rollos.etiqueta.ancho_mm') * 96 / 25.4);
+        $diseñoAlto = (int) round(config('rollos.etiqueta.alto_mm') * 96 / 25.4);
     @endphp
     <style>
         @page { margin: 0; }
@@ -75,6 +79,10 @@
 </head>
 <body>
 @foreach ($etiquetas as $e)
+    @if ($girar)
+        <div style="position: relative; width: {{ $diseñoAlto }}px; height: {{ $diseñoAncho - 2 }}px; overflow: hidden; page-break-after: {{ $loop->last ? 'auto' : 'always' }};">
+        <div style="position: absolute; left: 0; top: 0; width: {{ $diseñoAncho }}px; height: {{ $diseñoAlto }}px; transform-origin: 0 0; transform: translateY({{ $diseñoAncho }}px) rotate(-90deg);">
+    @endif
     <div class="etiqueta">
         <table style="width: 100%;">
             <tr>
@@ -135,6 +143,10 @@
 
         <div class="pie">{{ $empresa?->nombre_comercial ?? $empresa?->razon_social }} · {{ $e['ubicacion'] }}</div>
     </div>
+    @if ($girar)
+        </div>
+        </div>
+    @endif
 @endforeach
 </body>
 </html>

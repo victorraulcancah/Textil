@@ -80,12 +80,11 @@ class PdfService
     /** Papel de la etiqueta del rollo: el rollo de etiquetas adhesivas. */
     private function papelEtiqueta(): array
     {
-        return [
-            0,
-            0,
-            (float) config('rollos.etiqueta.ancho_mm', 100) * self::MM_A_PT,
-            (float) config('rollos.etiqueta.alto_mm', 60) * self::MM_A_PT,
-        ];
+        $ancho = (float) config('rollos.etiqueta.ancho_mm', 80) * self::MM_A_PT;
+        $alto = (float) config('rollos.etiqueta.alto_mm', 50) * self::MM_A_PT;
+
+        // Girada: el papel es el del diseño pero de lado (50 x 80); el contenido se gira en la vista.
+        return config('rollos.etiqueta.girar') ? [0, 0, $alto, $ancho] : [0, 0, $ancho, $alto];
     }
 
     /** Papel del ticket: ancho fijo (config), alto grande que dompdf recorta. */

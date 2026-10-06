@@ -12,6 +12,11 @@
 <head>
     <meta charset="utf-8">
     <title>Etiquetas de rollo</title>
+    @php
+        // Vertical (50 x 80): el QR va debajo del texto y centrado. Horizontal (80 x 50): a la derecha del texto.
+        $vertical = (float) config('rollos.etiqueta.alto_mm') > (float) config('rollos.etiqueta.ancho_mm');
+        $altoPx = (int) round(config('rollos.etiqueta.alto_mm') * 96 / 25.4) - ($vertical ? 14 : 13);
+    @endphp
     <style>
         @page { margin: 0; }
         * { box-sizing: border-box; }
@@ -21,17 +26,17 @@
             margin: 0;
         }
 
-        /* Papel de 80x50 mm (~302x189 px a 96 dpi). dompdf suma el padding al alto: se deja margen. */
+        /* El alto sale del papel (a 96 dpi); dompdf suma el padding al alto, por eso se deja margen. */
         .etiqueta {
-            height: 176px;
-            padding: 5px 8px;
+            height: {{ $altoPx }}px;
+            padding: 5px {{ $vertical ? 7 : 8 }}px;
             overflow: hidden;
             page-break-after: always;
         }
         .etiqueta:last-child { page-break-after: auto; }
 
         .producto {
-            font-size: 11px;
+            font-size: {{ $vertical ? 10.5 : 11 }}px;
             font-weight: bold;
             text-transform: uppercase;
             letter-spacing: .3px;
@@ -42,9 +47,9 @@
 
         /* El código y el metraje son lo que se lee de lejos, en el rack. */
         .codigo {
-            font-size: 13px;
+            font-size: {{ $vertical ? 12 : 13 }}px;
             font-weight: bold;
-            letter-spacing: .3px;
+            letter-spacing: .2px;
             margin-top: 2px;
         }
         .metraje {
@@ -57,12 +62,14 @@
             font-size: 9px;
             font-weight: normal;
             color: {{ config('theme.muted') }};
+            display: {{ $vertical ? 'block' : 'inline' }};
+            margin-top: {{ $vertical ? 1 : 0 }}px;
         }
 
         .codigos { margin-top: 2px; }
         .codigos td { vertical-align: middle; text-align: center; padding: 0 4px; }
-        .qr { height: 60px; width: 60px; }
-        .barras { height: 30px; width: 100%; }
+        .qr { height: {{ $vertical ? 72 : 60 }}px; width: {{ $vertical ? 72 : 60 }}px; }
+        .barras { height: {{ $vertical ? 32 : 30 }}px; width: 100%; }
         .pie { font-size: 6.5px; color: {{ config('theme.muted_light') }}; margin-top: 2px; }
     </style>
 </head>
@@ -82,7 +89,7 @@
                     <div class="metraje">
                         {{ $e['metros_fabrica'] }} m
                         @if ($e['peso_kg'])
-                            <span class="peso">· peso neto {{ $e['peso_kg'] }} kg</span>
+                            <span class="peso">@unless ($vertical)· @endunless peso neto {{ $e['peso_kg'] }} kg</span>
                         @endif
                     </div>
                     <div class="linea">
@@ -102,13 +109,20 @@
                         @endif
                     </div>
                 </td>
-                @if ($e['qr'])
+                @if ($e['qr'] && ! $vertical)
                     <td style="width: 66px; text-align: right; vertical-align: top;">
                         <img class="qr" src="{{ $e['qr'] }}" alt="{{ $e['codigo'] }}">
                     </td>
                 @endif
             </tr>
         </table>
+
+        {{-- En vertical el QR va centrado debajo del texto. --}}
+        @if ($e['qr'] && $vertical)
+            <div style="text-align: center; margin-top: 4px;">
+                <img class="qr" src="{{ $e['qr'] }}" alt="{{ $e['codigo'] }}">
+            </div>
+        @endif
 
         @if ($e['barras'])
             <table class="codigos" style="width: 100%;">

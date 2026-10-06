@@ -96,6 +96,11 @@ export default function AtenderRequerimientos() {
     }, [cargar, cargarDetalle]);
 
     useEffect(() => {
+        // No le quita el cursor a quien está escribiendo en otro campo o en una ventana (el refresco automático cambia
+        // `detalle` cada pocos segundos y, sin esto, el foco saltaba al escáner a mitad de una frase).
+        const activo = document.activeElement;
+        const escribiendo = ['INPUT', 'TEXTAREA', 'SELECT'].includes(activo?.tagName) && activo !== inputRef.current;
+        if (escribiendo || document.querySelector('[role=dialog]')) return;
         inputRef.current?.focus();
     }, [detalle, ultimo]);
 

@@ -22,9 +22,9 @@ return [
     'etiqueta' => [
         'simbologia' => env('ROLLOS_SIMBOLOGIA', 'ambos'),
 
-        // Tamaño del papel de la etiqueta, en milímetros.
-        'ancho_mm' => 100,
-        'alto_mm' => 60,
+        // Tamaño del papel de la etiqueta, en milímetros (la etiqueta adhesiva es de 80 x 50 mm).
+        'ancho_mm' => (float) env('ROLLOS_ETIQUETA_ANCHO_MM', 80),
+        'alto_mm' => (float) env('ROLLOS_ETIQUETA_ALTO_MM', 50),
 
         // Alto del código de barras en píxeles del PNG que se incrusta.
         'barras_alto' => 60,

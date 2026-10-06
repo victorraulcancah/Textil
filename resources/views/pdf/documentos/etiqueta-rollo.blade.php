@@ -21,49 +21,49 @@
             margin: 0;
         }
 
-        /* Papel de 100x60 mm (~378x227 px a 96 dpi). dompdf suma el padding al alto: se deja margen. */
+        /* Papel de 80x50 mm (~302x189 px a 96 dpi). dompdf suma el padding al alto: se deja margen. */
         .etiqueta {
-            height: 204px;
-            padding: 8px 12px;
+            height: 176px;
+            padding: 5px 8px;
             overflow: hidden;
             page-break-after: always;
         }
         .etiqueta:last-child { page-break-after: auto; }
 
         .producto {
-            font-size: 13px;
+            font-size: 11px;
             font-weight: bold;
             text-transform: uppercase;
             letter-spacing: .3px;
             line-height: 1.1;
         }
-        .linea { font-size: 9px; margin-top: 2px; }
+        .linea { font-size: 7.5px; margin-top: 1px; }
         .linea .et { color: {{ config('theme.muted') }}; }
 
         /* El código y el metraje son lo que se lee de lejos, en el rack. */
         .codigo {
-            font-size: 15px;
+            font-size: 13px;
             font-weight: bold;
-            letter-spacing: .5px;
-            margin-top: 4px;
+            letter-spacing: .3px;
+            margin-top: 2px;
         }
         .metraje {
-            font-size: 20px;
+            font-size: 17px;
             font-weight: bold;
             color: {{ config('theme.primary') }};
             line-height: 1;
         }
         .metraje .peso {
-            font-size: 11px;
+            font-size: 9px;
             font-weight: normal;
             color: {{ config('theme.muted') }};
         }
 
-        .codigos { margin-top: 4px; }
+        .codigos { margin-top: 2px; }
         .codigos td { vertical-align: middle; text-align: center; padding: 0 4px; }
-        .qr { height: 70px; width: 70px; }
-        .barras { height: 38px; width: 100%; }
-        .pie { font-size: 7px; color: {{ config('theme.muted_light') }}; margin-top: 3px; }
+        .qr { height: 60px; width: 60px; }
+        .barras { height: 30px; width: 100%; }
+        .pie { font-size: 6.5px; color: {{ config('theme.muted_light') }}; margin-top: 2px; }
     </style>
 </head>
 <body>
@@ -103,7 +103,7 @@
                     </div>
                 </td>
                 @if ($e['qr'])
-                    <td style="width: 78px; text-align: right; vertical-align: top;">
+                    <td style="width: 66px; text-align: right; vertical-align: top;">
                         <img class="qr" src="{{ $e['qr'] }}" alt="{{ $e['codigo'] }}">
                     </td>
                 @endif

@@ -404,6 +404,18 @@ export default function Pedidos() {
             >
                 {detalle && (
                     <div className="space-y-3">
+                        {detalle.orden_origen && (
+                            <Alert variant="info">Es el saldo de <strong>{detalle.orden_origen.documento}</strong>: lo que no se pudo entregar en esa ocasión.</Alert>
+                        )}
+                        {detalle.saldo_accion && (
+                            <Alert variant="warning">
+                                <strong>Entrega parcial.</strong> Salió solo lo preparado.{' '}
+                                {detalle.saldo_accion === 'pendiente'
+                                    ? <>Lo que faltó quedó pendiente{detalle.orden_saldo ? <> en <strong>{detalle.orden_saldo.documento}</strong></> : ''}.</>
+                                    : 'Lo que faltó se canceló.'}
+                                {detalle.saldo_detalle && <span className="mt-1 block text-xs">Faltó: {detalle.saldo_detalle}</span>}
+                            </Alert>
+                        )}
                         {/* El mismo siguiente paso que en escritorio: cada estado
                             ofrece solo su propia transición. */}
                         <div className="flex flex-wrap items-center gap-2">
@@ -560,6 +572,21 @@ function DetallePedido({ pedido, procesando, onAccion, onFacturar, onPdf }) {
                     )}
                 </div>
             </div>
+
+            {pedido.orden_origen && (
+                <div className="border-b border-edge bg-primary-50 px-4 py-2 text-xs text-primary-800">
+                    Es el saldo de <strong>{pedido.orden_origen.documento}</strong>: lo que no se pudo entregar en esa ocasión.
+                </div>
+            )}
+            {pedido.saldo_accion && (
+                <div className="border-b border-edge bg-amber-50 px-4 py-2 text-xs text-amber-900">
+                    <strong>Entrega parcial.</strong> Salió solo lo preparado.{' '}
+                    {pedido.saldo_accion === 'pendiente'
+                        ? <>Lo que faltó quedó pendiente{pedido.orden_saldo ? <> en <strong>{pedido.orden_saldo.documento}</strong></> : ''}.</>
+                        : 'Lo que faltó se canceló.'}
+                    {pedido.saldo_detalle && <span className="mt-0.5 block">Faltó: {pedido.saldo_detalle}</span>}
+                </div>
+            )}
 
             {pedido.estado === 'solicitado' && (
                 <div className="border-b border-edge bg-amber-50/70 px-4 py-2 text-xs text-amber-800">

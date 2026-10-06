@@ -29,6 +29,8 @@ class Rollo extends Model
     public const AGOTADO = 'agotado';
     /** Viaja en un traslado: ya salió del origen y aún no se recibe en el destino. */
     public const EN_TRANSITO = 'en_transito';
+    /** No se encontró al prepararlo: queda bloqueado (no se ofrece como disponible) hasta que se revise. */
+    public const EN_REVISION = 'en_revision';
 
     /** Etiqueta legible de cada estado, para pantallas y PDFs. */
     public const ESTADOS = [
@@ -39,6 +41,7 @@ class Rollo extends Model
         self::VENDIDO => 'Vendido',
         self::AGOTADO => 'Agotado',
         self::EN_TRANSITO => 'En tránsito',
+        self::EN_REVISION => 'En revisión',
     ];
 
     protected $fillable = [

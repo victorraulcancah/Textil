@@ -17,6 +17,7 @@ import { useAlmacenPropio } from '../lib/almacenes';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
+import RollosEnRevision from '../components/RollosEnRevision';
 import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select } from '../components/ui';
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
@@ -32,6 +33,7 @@ const COLOR_ESTADO = {
     despachado: 'blue',
     vendido: 'gray',
     agotado: 'red',
+    en_revision: 'amber',
 };
 
 const ESTADOS = [
@@ -43,6 +45,7 @@ const ESTADOS = [
     { value: 'despachado', label: 'Despachado' },
     { value: 'vendido', label: 'Vendido' },
     { value: 'agotado', label: 'Agotado' },
+    { value: 'en_revision', label: 'En revisión' },
 ];
 
 /**
@@ -429,6 +432,9 @@ export default function StockPorRollo() {
             />
 
             {error && <Alert variant="error" className="mb-4">{error}</Alert>}
+
+            {/* Los que no se encontraron al preparar un pedido: bloqueados hasta resolverlos. */}
+            <RollosEnRevision almacenId={almacenId} onCambio={load} />
 
             {/* Primer nivel: solo los tipos de tela, con su stock. Doble clic abre sus colores y rollos. */}
             {filtroAlmacen}

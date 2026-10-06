@@ -136,6 +136,9 @@ export function gruposDePedido(detalles = []) {
                     precio,
                     total: precio == null ? null : Number(d.subtotal) || 0,
                     detalle: null,
+                    // Para el despacho: lo que falta de esta línea se puede reducir.
+                    detalleId: d.id,
+                    pendienteMetros: esTela ? Number(d.metros_pendientes) || 0 : 0,
                 },
             });
             return;
@@ -214,6 +217,9 @@ export function gruposDePedido(detalles = []) {
                     precio,
                     total: porRollo > 0 ? importe(redondear(porRollo * cuantos)) : PENDIENTE,
                     detalle: porRollo > 0 ? `pedido de ${porRollo} m por rollo` : null,
+                    // Para el despacho: lo que falta de esta línea se puede reducir.
+                    detalleId: d.id,
+                    pendienteRollos: cuantos,
                 },
             });
         }

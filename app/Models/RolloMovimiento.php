@@ -21,6 +21,7 @@ class RolloMovimiento extends Model
     public const CORTE = 'corte';
     public const TRASLADO = 'traslado';
     public const AJUSTE = 'ajuste';
+    public const REVISION = 'revision';
 
     public const TIPOS = [
         self::INGRESO => 'Ingreso',
@@ -32,6 +33,7 @@ class RolloMovimiento extends Model
         self::CORTE => 'Corte',
         self::TRASLADO => 'Traslado',
         self::AJUSTE => 'Ajuste',
+        self::REVISION => 'Revisión',
     ];
 
     protected $fillable = [

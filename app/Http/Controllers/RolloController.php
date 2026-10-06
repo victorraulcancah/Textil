@@ -9,10 +9,14 @@ use App\Models\Almacen;
 use App\Models\Producto;
 use App\Models\ProductoColor;
 use App\Models\RecepcionCompra;
+use App\Models\MotivoMovimiento;
 use App\Models\Rollo;
+use App\Models\RolloMovimiento;
 use App\Pdf\Documentos\EtiquetaRolloPdf;
 use App\Pdf\PdfService;
+use App\Services\AjusteRolloService;
 use App\Services\RolloService;
+use App\Support\AlmacenAcceso;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -211,6 +215,71 @@ class RolloController extends Controller
         $archivo = 'etiquetas-'.$rollos->count().'-rollos.pdf';
 
         return $request->boolean('descargar') ? $pdf->download($archivo) : $pdf->stream($archivo);
+    }
+
+    /** Los motivos con los que se puede confirmar la pérdida de un rollo en revisión (los de salida de Ajustes). */
+    public function motivosAjuste()
+    {
+        return response()->json(
+            MotivoMovimiento::where('ambito', 'inventario')->where('tipo', 'salida')
+                ->where('activo', true)->where('es_sistema', false)->whereNull('categoria_gasto')
+                ->orderBy('id')->get(['id', 'nombre'])
+        );
+    }
+
+    /** Un rollo "en revisión" (no se encontró al preparar un pedido) apareció: vuelve a estar disponible. */
+    public function revisionAparecio(Rollo $rollo)
+    {
+        AlmacenAcceso::exigir($rollo->almacen_id);
+        if ($rollo->estado !== Rollo::EN_REVISION) {
+            throw new \DomainException('Este rollo no está en revisión.');
+        }
+
+        $this->rollos->cambiarEstado(
+            $rollo,
+            (float) $rollo->metros_actual > 0 ? Rollo::DISPONIBLE : Rollo::AGOTADO,
+            RolloMovimiento::REVISION,
+            'revision',
+            null,
+            auth()->id(),
+            'Apareció: vuelve a estar disponible.',
+        );
+
+        return new RolloResource($rollo->fresh()->load(self::RELACIONES));
+    }
+
+    /**
+     * Se confirma que el rollo en revisión se perdió: se registra el ajuste de inventario (salida de todo su metraje,
+     * con su motivo) y el rollo queda agotado. Es un paso aparte de la entrega del pedido, que ya salió sin él.
+     */
+    public function revisionPerdido(Request $request, Rollo $rollo, AjusteRolloService $ajustes)
+    {
+        AlmacenAcceso::exigir($rollo->almacen_id);
+        $datos = $request->validate([
+            'motivo' => 'required|string|max:255',
+            'observaciones' => 'nullable|string|max:500',
+        ]);
+
+        if ($rollo->estado !== Rollo::EN_REVISION) {
+            throw new \DomainException('Este rollo no está en revisión.');
+        }
+
+        $motivo = MotivoMovimiento::where('ambito', 'inventario')->where('tipo', 'salida')
+            ->where('activo', true)->where('es_sistema', false)->where('nombre', $datos['motivo'])->first();
+        if (! $motivo) {
+            return response()->json(['message' => 'Elige un motivo de ajuste válido.'], 422);
+        }
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($rollo, $motivo, $datos, $ajustes) {
+            $ajustes->descontar(
+                $rollo,
+                (float) $rollo->metros_actual,
+                $motivo->nombre,
+                trim('Rollo '.$rollo->codigo.' perdido tras la revisión. '.($datos['observaciones'] ?? '')),
+            );
+        });
+
+        return new RolloResource($rollo->fresh()->load(self::RELACIONES));
     }
 
     /** Cambia el rollo de rack o de almacén. */

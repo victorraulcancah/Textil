@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Camera, Check, ClipboardList, FileText, PackageCheck, PlusCircle, ScanLine, Scissors, TriangleAlert, UserPlus, Users, X } from 'lucide-react';
+import { Camera, Check, ClipboardList, FileText, MinusCircle, PackageCheck, PackageSearch, PlusCircle, ScanLine, Scissors, TriangleAlert, UserPlus, Users, X } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
@@ -45,6 +45,15 @@ export default function Despacho() {
     const [detalle, setDetalle] = useState(null);
     const [despachando, setDespachando] = useState(false);
     const [tomando, setTomando] = useState(false);
+    /** Entrega parcial: la ventana, qué pasa con lo que falta (pendiente | cancelar). */
+    const [parcial, setParcial] = useState(false);
+    const [saldo, setSaldo] = useState('pendiente');
+    /** Rollo que no se encontró en el rack (null = ventana cerrada) y su observación. */
+    const [noEncontrado, setNoEncontrado] = useState(null);
+    const [obsNoEncontrado, setObsNoEncontrado] = useState('');
+    /** Reducir lo pedido de una línea: { detalle, nueva } (null = ventana cerrada). */
+    const [reduccion, setReduccion] = useState(null);
+    const [guardandoAccion, setGuardandoAccion] = useState(false);
     /** Visor de la cámara abierto. */
     const [camara, setCamara] = useState(false);
     const [pdf, setPdf] = useState(null);
@@ -288,18 +297,74 @@ export default function Despacho() {
      * El almacenero terminó de juntar los rollos: quedan apartados en el
      * almacén, verificados y esperando su salida.
      */
-    const separar = async () => {
+    const separar = async (conFaltantes = false) => {
         setTomando(true);
         try {
-            const { data } = await api.post(`/ordenes-venta/${detalle.id}/separar`);
+            const { data } = await api.post(
+                `/ordenes-venta/${detalle.id}/separar`,
+                conFaltantes ? { parcial: true, saldo } : undefined,
+            );
             const orden = data?.data ?? data;
             setDetalle(orden);
-            toast.success(`${orden.documento} separado y listo para salir.`);
+            setParcial(false);
+            toast.success(conFaltantes ? `${orden.documento}: separado lo preparado, listo para salir.` : `${orden.documento} separado y listo para salir.`);
             await cargar();
         } catch (err) {
             toast.error(err.response?.data?.message ?? 'No se pudo dar por separado.');
         } finally {
             setTomando(false);
+        }
+    };
+
+    /** El rollo no está en el rack: sale del pedido y queda bloqueado en revisión; los demás rollos se conservan. */
+    const confirmarNoEncontrado = async () => {
+        setGuardandoAccion(true);
+        try {
+            const { data } = await api.post(`/ordenes-venta/${detalle.id}/rollo-no-encontrado`, {
+                rollo_id: noEncontrado.rollo_id,
+                observaciones: obsNoEncontrado || undefined,
+            });
+            setDetalle(data?.data ?? data);
+            toast.success(`${noEncontrado.codigo} quedó en revisión. Escanea otro rollo para reemplazarlo.`);
+            setNoEncontrado(null);
+            await cargar(true);
+        } catch (err) {
+            toast.error(err.response?.data?.message ?? 'No se pudo apartar el rollo.');
+        } finally {
+            setGuardandoAccion(false);
+        }
+    };
+
+    /** La línea con lo pedido, lo preparado y lo que se puede bajar. */
+    const abrirReduccion = (detalleId) => {
+        const d = (detalle?.detalles ?? []).find((x) => x.id === detalleId);
+        if (!d) return;
+        const porRollos = d.modo === 'rollos';
+        setReduccion({
+            id: d.id,
+            nombre: `${d.producto}${d.color?.nombre ? ` · ${d.color.nombre}` : ''}`,
+            unidad: porRollos ? 'rollos' : 'm',
+            pedido: porRollos ? Number(d.rollos_pedidos) : Number(d.metros),
+            preparado: porRollos ? Number(d.rollos_asignados) : Number(d.metros_asignados),
+            nueva: String(porRollos ? Number(d.rollos_pedidos) : Number(d.metros)),
+        });
+    };
+
+    const guardarReduccion = async () => {
+        setGuardandoAccion(true);
+        try {
+            const { data } = await api.post(`/ordenes-venta/${detalle.id}/reducir`, {
+                detalle_id: reduccion.id,
+                cantidad: Number(reduccion.nueva),
+            });
+            setDetalle(data?.data ?? data);
+            toast.success('Lo pedido se redujo; lo preparado se conserva.');
+            setReduccion(null);
+            await cargar(true);
+        } catch (err) {
+            toast.error(err.response?.data?.message ?? 'No se pudo reducir lo pedido.');
+        } finally {
+            setGuardandoAccion(false);
         }
     };
 
@@ -359,6 +424,14 @@ export default function Despacho() {
         .filter(Boolean)
         .join(' · ');
     const completo = lineas.length > 0 && lineas.every((d) => d.cubierta);
+    /** Lo que todavía falta de cada línea: es lo que quedaría pendiente (o cancelado) en una entrega parcial. */
+    const faltan = lineas
+        .filter((d) => !d.cubierta)
+        .map((d) => ({
+            id: d.id,
+            nombre: `${d.producto}${d.color?.nombre ? ` · ${d.color.nombre}` : ''}`,
+            texto: d.modo === 'rollos' ? rollosTexto(d.rollos_pendientes) : `${num(d.metros_pendientes)} m`,
+        }));
 
     return (
         <Layout>
@@ -520,10 +593,19 @@ export default function Despacho() {
                                                 Despachar
                                             </Button>
                                         ) : (
-                                            <Button size="sm" loading={tomando} disabled={!completo} onClick={separar}>
-                                                <PackageCheck className="h-4 w-4" />
-                                                Separado
-                                            </Button>
+                                            <>
+                                                {/* No se encuentra un rollo o falta mercadería: se entrega lo ya preparado. */}
+                                                {!completo && detalle.parcial_posible && (
+                                                    <Button variant="secondary" size="sm" onClick={() => { setSaldo('pendiente'); setParcial(true); }}>
+                                                        <PackageCheck className="h-4 w-4" />
+                                                        Entregar lo preparado
+                                                    </Button>
+                                                )}
+                                                <Button size="sm" loading={tomando} disabled={!completo} onClick={() => separar(false)}>
+                                                    <PackageCheck className="h-4 w-4" />
+                                                    Separado
+                                                </Button>
+                                            </>
                                         )}
                                     </div>
                                 </div>
@@ -536,6 +618,20 @@ export default function Despacho() {
                                     </div>
                                 )}
 
+                                {detalle.orden_origen && (
+                                    <div className="border-b border-edge bg-primary-50 px-4 py-2.5 text-sm text-primary-800">
+                                        Es el saldo de <strong>{detalle.orden_origen.documento}</strong>: lo que no se pudo entregar en esa ocasión.
+                                    </div>
+                                )}
+                                {separado && detalle.saldo_accion && (
+                                    <div className="border-b border-edge bg-amber-50 px-4 py-2.5 text-sm text-amber-900">
+                                        <strong>Entrega parcial.</strong> Sale solo lo preparado.{' '}
+                                        {detalle.saldo_accion === 'pendiente'
+                                            ? 'Lo que falta queda pendiente: al despachar nace otro pedido con ese saldo.'
+                                            : 'Lo que falta se cancela: el cliente ya no lo necesita.'}
+                                        {faltan.length > 0 && <span className="mt-1 block text-xs">Falta: {faltan.map((f) => `${f.nombre} (${f.texto})`).join('; ')}</span>}
+                                    </div>
+                                )}
                                 {separado && (
                                     <div className="border-b border-edge bg-green-50 px-4 py-2.5 text-sm text-green-800">
                                         Pedido separado y verificado. Los rollos están apartados
@@ -616,6 +712,12 @@ export default function Despacho() {
                                     )}
                                 </form>
 
+                                {!completo && escaneando && detalle.parcial_posible && (
+                                    <div className="border-b border-edge bg-amber-50/70 px-4 py-2 text-sm text-amber-800">
+                                        ¿No encuentras un rollo? Márcalo como <strong>no encontrado</strong> (queda en revisión) y escanea otro, o
+                                        <strong> entrega lo preparado</strong>: lo que falta queda pendiente o se cancela, sin anular el pedido.
+                                    </div>
+                                )}
                                 {completo && escaneando && (
                                     <div className="border-b border-edge bg-green-50 px-4 py-2 text-sm text-green-800">
                                         Todo lo pedido está cubierto. Pulsa <strong>Separado</strong> para
@@ -650,6 +752,15 @@ export default function Despacho() {
                                                               </button>
                                                               <button
                                                                   type="button"
+                                                                  aria-label={`No se encontró ${f.detalle ?? 'el rollo'}`}
+                                                                  title="No se encontró este rollo: sale del pedido y queda en revisión"
+                                                                  onClick={() => { setNoEncontrado(rolloDelPedido(f.rolloId)); setObsNoEncontrado(''); }}
+                                                                  className="rounded p-0.5 text-amber-600 transition hover:bg-amber-50"
+                                                              >
+                                                                  <PackageSearch className="h-3.5 w-3.5" />
+                                                              </button>
+                                                              <button
+                                                                  type="button"
                                                                   aria-label={`Quitar ${f.detalle ?? 'rollo'}`}
                                                                   title={separado ? 'Quitar este rollo: el pedido vuelve a preparación' : 'Quitar este rollo del pedido'}
                                                                   onClick={() => quitarRollo(f.rolloId)}
@@ -658,6 +769,16 @@ export default function Despacho() {
                                                                   <X className="h-3.5 w-3.5" />
                                                               </button>
                                                           </span>
+                                                      ) : f.detalleId && (f.pendienteRollos > 0 || f.pendienteMetros > 0) ? (
+                                                          <button
+                                                              type="button"
+                                                              aria-label="Reducir lo pedido"
+                                                              title="Reducir lo pedido de esta línea (el cliente ya no lo necesita)"
+                                                              onClick={() => abrirReduccion(f.detalleId)}
+                                                              className="rounded p-0.5 text-warm-500 transition hover:bg-gray-100"
+                                                          >
+                                                              <MinusCircle className="h-3.5 w-3.5" />
+                                                          </button>
                                                       ) : null
                                                 : null
                                         }
@@ -675,6 +796,130 @@ export default function Despacho() {
                 onLeer={verificar}
                 titulo={detalle ? `${detalle.requerimiento_numero ?? detalle.documento} · ${avance}` : 'Escanear rollo'}
             />
+
+            {/* Entrega parcial: se despacha lo preparado y se decide qué pasa con lo que falta. */}
+            <Modal
+                open={parcial}
+                onClose={() => setParcial(false)}
+                title="Entrega parcial"
+                description="Sale solo lo que ya está preparado; los rollos separados no se pierden."
+                footer={
+                    <>
+                        <Button variant="secondary" onClick={() => setParcial(false)}>Volver</Button>
+                        <Button loading={tomando} onClick={() => separar(true)}>
+                            <PackageCheck className="h-4 w-4" /> Entregar lo preparado
+                        </Button>
+                    </>
+                }
+            >
+                <div className="space-y-4">
+                    <div>
+                        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-warm-500">Lo que falta</p>
+                        <ul className="divide-y divide-edge rounded-lg border border-edge text-sm">
+                            {faltan.map((f) => (
+                                <li key={f.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                                    <span className="font-medium text-warm-900">{f.nombre}</span>
+                                    <span className="font-semibold text-red-600">{f.texto}</span>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                    <fieldset className="space-y-2">
+                        <legend className="mb-1 text-xs font-semibold uppercase tracking-wide text-warm-500">¿Qué pasa con lo que falta?</legend>
+                        {[
+                            ['pendiente', 'Dejarlo pendiente de entrega', 'Se crea otro pedido con lo que falta, ya solicitado al almacén, para entregarlo después.'],
+                            ['cancelar', 'Cancelar el saldo', 'El cliente ya no lo necesita: este pedido se entrega y se factura con lo preparado.'],
+                        ].map(([valor, titulo, texto]) => (
+                            <label
+                                key={valor}
+                                className={cn(
+                                    'flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2.5 transition',
+                                    saldo === valor ? 'border-primary-500 bg-primary-50' : 'border-edge hover:bg-gray-50',
+                                )}
+                            >
+                                <input type="radio" name="saldo-pedido" value={valor} checked={saldo === valor} onChange={() => setSaldo(valor)} className="mt-1" />
+                                <span>
+                                    <span className="block text-sm font-semibold text-warm-900">{titulo}</span>
+                                    <span className="block text-xs text-warm-600">{texto}</span>
+                                </span>
+                            </label>
+                        ))}
+                    </fieldset>
+                </div>
+            </Modal>
+
+            {/* Un rollo que no aparece en el rack: sale del pedido y queda bloqueado para revisarlo. */}
+            <Modal
+                open={Boolean(noEncontrado)}
+                onClose={() => setNoEncontrado(null)}
+                title="Rollo no encontrado"
+                description={noEncontrado ? `${noEncontrado.codigo} · ${num(noEncontrado.metros_rollo ?? noEncontrado.metros)} m` : ''}
+                size="sm"
+                footer={
+                    <>
+                        <Button variant="secondary" onClick={() => setNoEncontrado(null)}>Cancelar</Button>
+                        <Button loading={guardandoAccion} onClick={confirmarNoEncontrado}>
+                            <PackageSearch className="h-4 w-4" /> Sacarlo del pedido
+                        </Button>
+                    </>
+                }
+            >
+                <div className="space-y-3">
+                    <Alert variant="warning">
+                        El rollo sale de este pedido y queda <strong>en revisión</strong>: no se vuelve a ofrecer como disponible hasta que alguien lo ubique o
+                        se confirme su pérdida (el ajuste de inventario se registra aparte, en Stock por rollo). Los demás rollos separados se conservan.
+                    </Alert>
+                    <Input label="Observación (opcional)" value={obsNoEncontrado} onChange={(e) => setObsNoEncontrado(e.target.value)} placeholder="Ej.: no estaba en el rack B-03" />
+                </div>
+            </Modal>
+
+            {/* El cliente ya no necesita todo lo pedido: se baja la cantidad de la línea (no lo preparado). */}
+            <Modal
+                open={Boolean(reduccion)}
+                onClose={() => setReduccion(null)}
+                title="Reducir lo pedido"
+                description={reduccion?.nombre}
+                size="sm"
+                footer={
+                    <>
+                        <Button variant="secondary" onClick={() => setReduccion(null)}>Cancelar</Button>
+                        <Button
+                            loading={guardandoAccion}
+                            disabled={!reduccion || !(Number(reduccion.nueva) >= reduccion.preparado) || Number(reduccion.nueva) > reduccion.pedido}
+                            onClick={guardarReduccion}
+                        >
+                            Reducir
+                        </Button>
+                    </>
+                }
+            >
+                {reduccion && (
+                    <div className="space-y-3">
+                        <dl className="grid grid-cols-2 gap-2 text-sm">
+                            <div className="rounded-lg bg-gray-50 px-3 py-2">
+                                <dt className="text-xs uppercase tracking-wide text-warm-500">Pedido</dt>
+                                <dd className="font-semibold text-warm-900">{num(reduccion.pedido)} {reduccion.unidad}</dd>
+                            </div>
+                            <div className="rounded-lg bg-gray-50 px-3 py-2">
+                                <dt className="text-xs uppercase tracking-wide text-warm-500">Preparado</dt>
+                                <dd className="font-semibold text-green-700">{num(reduccion.preparado)} {reduccion.unidad}</dd>
+                            </div>
+                        </dl>
+                        <Input
+                            label={`Nueva cantidad pedida (${reduccion.unidad})`}
+                            type="number"
+                            min={reduccion.preparado}
+                            max={reduccion.pedido}
+                            step={reduccion.unidad === 'rollos' ? '1' : '0.01'}
+                            value={reduccion.nueva}
+                            onChange={(e) => setReduccion((r) => ({ ...r, nueva: e.target.value }))}
+                        />
+                        <p className="text-xs text-warm-500">
+                            Solo se baja lo que aún no está preparado: no puede quedar por debajo de lo que ya tienes separado. No se anula el pedido.
+                        </p>
+                    </div>
+                )}
+            </Modal>
 
             <PdfViewerModal
                 open={Boolean(pdf)}

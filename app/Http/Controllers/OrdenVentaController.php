@@ -39,6 +39,8 @@ class OrdenVentaController extends Controller
         // Quién escaneó cada rollo: varios almaceneros pueden preparar el
         // mismo pedido y se necesita saber quién trajo cuál.
         'detalles.rollos.usuario:id,name',
+        'ordenSaldo:id,serie,numero,orden_origen_id',
+        'ordenOrigen:id,serie,numero',
     ];
 
     public function __construct(private OrdenVentaService $pedidos) {}
@@ -143,11 +145,18 @@ class OrdenVentaController extends Controller
      * El almacenero terminó de juntar los rollos: quedan apartados dentro del
      * almacén, verificados y esperando su salida.
      */
-    public function separar(OrdenVenta $ordenesVenta)
+    public function separar(Request $request, OrdenVenta $ordenesVenta)
     {
         AlmacenAcceso::exigir($ordenesVenta->almacen_id);
+        // Con `parcial` se separa solo lo escaneado; `saldo` dice qué pasa con lo que falta (pendiente | cancelar).
+        $datos = $request->validate([
+            'parcial' => 'nullable|boolean',
+            'saldo' => 'nullable|in:pendiente,cancelar',
+        ]);
+
         return new OrdenVentaResource(
-            $this->pedidos->marcarSeparado($ordenesVenta)->load(self::RELACIONES)
+            $this->pedidos->marcarSeparado($ordenesVenta, (bool) ($datos['parcial'] ?? false), $datos['saldo'] ?? null)
+                ->load(self::RELACIONES)
         );
     }
 
@@ -257,6 +266,36 @@ class OrdenVentaController extends Controller
 
         return new OrdenVentaResource(
             $this->pedidos->descontarMetraje($ordenesVenta, (int) $datos['rollo_id'], (float) $datos['metros'], $motivo->nombre, $datos['observaciones'] ?? null)
+                ->load(self::RELACIONES)
+        );
+    }
+
+    /** El rollo no está en el rack: sale del pedido y queda bloqueado en revisión (los demás rollos se conservan). */
+    public function rolloNoEncontrado(Request $request, OrdenVenta $ordenesVenta)
+    {
+        AlmacenAcceso::exigir($ordenesVenta->almacen_id);
+        $datos = $request->validate([
+            'rollo_id' => 'required|integer',
+            'observaciones' => 'nullable|string|max:500',
+        ]);
+
+        return new OrdenVentaResource(
+            $this->pedidos->rolloNoEncontrado($ordenesVenta, (int) $datos['rollo_id'], $datos['observaciones'] ?? null)
+                ->load(self::RELACIONES)
+        );
+    }
+
+    /** Baja lo pedido de una línea (solo lo que aún no está preparado), sin anular el pedido. */
+    public function reducir(Request $request, OrdenVenta $ordenesVenta)
+    {
+        AlmacenAcceso::exigir($ordenesVenta->almacen_id);
+        $datos = $request->validate([
+            'detalle_id' => 'required|integer',
+            'cantidad' => 'required|numeric|min:0',
+        ]);
+
+        return new OrdenVentaResource(
+            $this->pedidos->reducirCantidad($ordenesVenta, (int) $datos['detalle_id'], (float) $datos['cantidad'])
                 ->load(self::RELACIONES)
         );
     }

@@ -188,6 +188,11 @@ return [
                     'label' => 'Stock por rollo',
                     'apis' => ['rollos'],
                     'pdf' => ['etiqueta-rollo'],
+                    // Resolver un rollo que no se encontró al preparar un pedido: editar, no solo ver.
+                    'patrones' => [
+                        'rollos/*/revision-aparecio' => 'editar',
+                        'rollos/*/revision-perdido' => 'editar',
+                    ],
                 ],
                 'importaciones' => [
                     'label' => 'Importaciones',
@@ -209,6 +214,8 @@ return [
                         'ordenes-venta/motivos-ajuste/nuevo' => 'editar',
                         'ordenes-venta/*/descontar-metraje' => 'editar',
                         'ordenes-venta/*/quitar-rollo' => 'editar',
+                        'ordenes-venta/*/rollo-no-encontrado' => 'editar',
+                        'ordenes-venta/*/reducir' => 'editar',
                         'ordenes-venta/*/separar' => 'editar',
                         'ordenes-venta/*/despachar' => 'editar',
                         // Atender un requerimiento de traslado es el mismo trabajo del almacenero que despachar un pedido:

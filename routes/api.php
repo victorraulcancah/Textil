@@ -205,9 +205,13 @@ Route::middleware('auth:api')->group(function () {
     Route::get('rollos/etiquetas', [RolloController::class, 'etiquetas']);
     // Antes que {rollo} para que "codigo" no se confunda con un id.
     Route::get('rollos/codigo/{codigo}', [RolloController::class, 'porCodigo']);
+    Route::get('rollos/motivos-ajuste', [RolloController::class, 'motivosAjuste']);
     Route::get('rollos/{rollo}', [RolloController::class, 'show']);
     Route::post('rollos/ingresar', [RolloController::class, 'ingresar']);
     Route::post('rollos/{rollo}/trasladar', [RolloController::class, 'trasladar']);
+    // Un rollo en revisión (no se encontró al preparar un pedido): apareció, o se confirma que se perdió.
+    Route::post('rollos/{rollo}/revision-aparecio', [RolloController::class, 'revisionAparecio']);
+    Route::post('rollos/{rollo}/revision-perdido', [RolloController::class, 'revisionPerdido']);
 
     // Importaciones: el embarque del que llegó cada rollo. Se abren solas al
     // recepcionar, por eso no hay POST.
@@ -228,6 +232,9 @@ Route::middleware('auth:api')->group(function () {
     Route::post('ordenes-venta/{ordenesVenta}/devolver', [OrdenVentaController::class, 'devolver']);
     Route::post('ordenes-venta/{ordenesVenta}/descontar-metraje', [OrdenVentaController::class, 'descontarMetraje']);
     Route::post('ordenes-venta/{ordenesVenta}/quitar-rollo', [OrdenVentaController::class, 'quitarRollo']);
+    // Entrega parcial: el rollo no está en el rack (queda en revisión) y bajar lo pedido de una línea.
+    Route::post('ordenes-venta/{ordenesVenta}/rollo-no-encontrado', [OrdenVentaController::class, 'rolloNoEncontrado']);
+    Route::post('ordenes-venta/{ordenesVenta}/reducir', [OrdenVentaController::class, 'reducir']);
     Route::post('ordenes-venta/{ordenesVenta}/separar', [OrdenVentaController::class, 'separar']);
     Route::post('ordenes-venta/{ordenesVenta}/asignar', [OrdenVentaController::class, 'asignar']);
     Route::post('ordenes-venta/{ordenesVenta}/escanear', [OrdenVentaController::class, 'escanear']);

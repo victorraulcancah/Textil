@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
-import { ArrowDownLeft, ArrowRightLeft, ArrowUpRight, Package } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { PackageSearch } from 'lucide-react';
 import api, { asList } from '../lib/api';
-import { DOC_LABEL, ORIGEN_LABEL } from '../lib/movimientos';
+import { ORIGEN_LABEL } from '../lib/movimientos';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
-import { Alert, Badge, Button, DataTable, DateRangePicker, Modal, SearchSelect, Select } from '../components/ui';
+import { Alert, Badge, Button, DataTable, DateRangePicker, Modal, SearchSelect, Select, Spinner } from '../components/ui';
 
 /** Fecha y hora en dos líneas: cabe en una columna estrecha sin desbordarse. */
 const fmtFecha = (value) => {
@@ -16,57 +16,71 @@ const fmtFecha = (value) => {
     };
 };
 
-const tipoInfo = (tipo) => {
-    if (tipo === 'entrada') return { label: 'Entrada', variant: 'green', icon: ArrowDownLeft };
-    if (tipo === 'salida') return { label: 'Salida', variant: 'red', icon: ArrowUpRight };
-    return { label: tipo ?? '—', variant: 'gray', icon: ArrowRightLeft };
+// Sin el "-0.00" que deja un redondeo.
+const num = (n) =>
+    (Math.abs(Number(n ?? 0)) < 0.005 ? 0 : Number(n)).toLocaleString('es-PE', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    });
+/** Precios y costos unitarios: hasta 4 decimales, que es como se pagan (S/ 1.2500 el metro). */
+const precio = (n) => Number(n ?? 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+const entero = (n) => Number(n ?? 0).toLocaleString('es-PE');
+
+const vacio = <span className="text-gray-300">—</span>;
+const texto = (valor, ancho) =>
+    valor ? (
+        <span className="block truncate" style={ancho ? { maxWidth: ancho } : undefined} title={valor}>
+            {valor}
+        </span>
+    ) : (
+        vacio
+    );
+
+const esEntrada = (row) => row.tipo_movimiento === 'entrada';
+const cantAbs = (row) => Math.abs(Number(row.cantidad ?? 0));
+
+const ESTADO_ROLLO = {
+    disponible: { label: 'Disponible', variant: 'green' },
+    separado: { label: 'Separado', variant: 'amber' },
+    en_preparacion: { label: 'En preparación', variant: 'amber' },
+    en_transito: { label: 'En tránsito', variant: 'blue' },
+    en_revision: { label: 'En revisión', variant: 'amber' },
+    despachado: { label: 'Despachado', variant: 'gray' },
+    vendido: { label: 'Vendido', variant: 'gray' },
+    agotado: { label: 'Agotado', variant: 'gray' },
 };
 
-const money = (n) =>
-    new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(Number(n) || 0);
-
-const num = (n) => Number(n ?? 0).toLocaleString('es-PE', { maximumFractionDigits: 2 });
-
 export default function Movimientos() {
-    const [movimientos, setMovimientos] = useState([]);
+    /** Las telas que se pueden buscar: no se lista nada hasta elegir una. */
+    const [telas, setTelas] = useState([]);
     const [almacenes, setAlmacenes] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    /** Unidad elegida por fila para expresar la cantidad: { [id del movimiento]: nombre }. */
-    const [unidadPorFila, setUnidadPorFila] = useState({});
+    const [telaId, setTelaId] = useState('');
+    /** Los movimientos de la tela elegida: null mientras cargan. */
+    const [movs, setMovs] = useState(null);
 
     const [filterTipo, setFilterTipo] = useState('');
     const [filterAlmacen, setFilterAlmacen] = useState('');
-    const [filterProducto, setFilterProducto] = useState('');
-    const [filterProveedor, setFilterProveedor] = useState('');
     const [filterOrigen, setFilterOrigen] = useState('');
     const [filterDesde, setFilterDesde] = useState('');
     const [filterHasta, setFilterHasta] = useState('');
     const [activeFilters, setActiveFilters] = useState({});
 
-    /** Producto cuyo historial completo se ve en el modal, o null si está cerrado. */
-    const [productoModal, setProductoModal] = useState(null);
-    /** Filtros propios del modal, detrás de su propio ícono de filtros. */
-    const [modalFilterTipo, setModalFilterTipo] = useState('');
-    const [modalFilterAlmacen, setModalFilterAlmacen] = useState('');
-    const [modalFilterOrigen, setModalFilterOrigen] = useState('');
-    const [modalFilterDesde, setModalFilterDesde] = useState('');
-    const [modalFilterHasta, setModalFilterHasta] = useState('');
-    const [modalActiveFilters, setModalActiveFilters] = useState({});
+    /** El movimiento (documento) abierto en el modal, con los rollos que entraron o salieron en él. */
+    const [movModal, setMovModal] = useState(null);
+    const [rollos, setRollos] = useState(null);
 
     const load = useCallback(async () => {
         setLoading(true);
         setError(null);
         try {
-            const [movRes, almRes] = await Promise.all([
-                api.get('/movimientos'),
-                api.get('/almacenes'),
-            ]);
-            setMovimientos(asList(movRes));
+            const [telasRes, almRes] = await Promise.all([api.get('/movimientos/telas'), api.get('/almacenes')]);
+            setTelas(asList(telasRes));
             setAlmacenes(asList(almRes));
         } catch {
-            setError('No se pudieron cargar los movimientos.');
+            setError('No se pudo cargar el kardex.');
         } finally {
             setLoading(false);
         }
@@ -76,12 +90,28 @@ export default function Movimientos() {
         load();
     }, [load]);
 
+    const tela = telas.find((t) => String(t.id) === String(telaId)) ?? null;
+    const unidad = tela?.unidad ?? '';
+
+    const elegirTela = (id) => {
+        setTelaId(id ?? '');
+        setMovs(null);
+        setFilterTipo('');
+        setFilterAlmacen('');
+        setFilterOrigen('');
+        setFilterDesde('');
+        setFilterHasta('');
+        setActiveFilters({});
+        if (!id) return;
+        api.get('/movimientos', { params: { producto_id: id } })
+            .then((res) => setMovs(asList(res)))
+            .catch(() => setMovs([]));
+    };
+
     const applyFilters = () => {
         const next = {};
         if (filterTipo) next.tipo = filterTipo;
         if (filterAlmacen) next.almacen = filterAlmacen;
-        if (filterProducto) next.producto = filterProducto;
-        if (filterProveedor) next.proveedor = filterProveedor;
         if (filterOrigen) next.origen = filterOrigen;
         if (filterDesde) next.desde = filterDesde;
         if (filterHasta) next.hasta = filterHasta;
@@ -91,92 +121,69 @@ export default function Movimientos() {
     const clearFilters = () => {
         setFilterTipo('');
         setFilterAlmacen('');
-        setFilterProducto('');
-        setFilterProveedor('');
         setFilterOrigen('');
         setFilterDesde('');
         setFilterHasta('');
         setActiveFilters({});
     };
 
-    const filtered = movimientos.filter((m) => {
-        if (activeFilters.tipo && m.tipo_movimiento !== activeFilters.tipo) return false;
-        if (activeFilters.almacen) {
-            const id = m.almacen_id ?? m.almacen?.id;
-            if (String(id) !== activeFilters.almacen) return false;
-        }
-        if (activeFilters.producto && String(m.producto_id) !== String(activeFilters.producto)) return false;
-        if (activeFilters.proveedor && m.proveedor_nombre !== activeFilters.proveedor) return false;
-        if (activeFilters.origen && m.origen !== activeFilters.origen) return false;
-        if (activeFilters.desde && (!m.fecha || m.fecha.slice(0, 10) < activeFilters.desde)) return false;
-        if (activeFilters.hasta && (!m.fecha || m.fecha.slice(0, 10) > activeFilters.hasta)) return false;
-        return true;
-    });
-
     const filterCount = Object.keys(activeFilters).length;
 
     /**
-     * Abre el historial completo de un producto. Nace con los filtros que ya
-     * estén activos en la tabla principal (fecha, tipo, almacén, movimiento):
-     * si venías viendo "desde el 1 de setiembre", el historial de este
-     * producto también arranca ahí, no desde el principio de los tiempos.
+     * El kardex de la tela, como un libro: por almacén (cada uno lleva su propio stock) y, dentro de
+     * cada uno, del movimiento más antiguo al más reciente para que el stock se lea de arriba abajo.
      */
-    const abrirHistorial = (row) => {
-        if (!row.producto_id) return;
-        setProductoModal({ id: row.producto_id, nombre: row.producto?.nombre ?? '—' });
-        setModalFilterTipo(activeFilters.tipo ?? '');
-        setModalFilterAlmacen(activeFilters.almacen ?? '');
-        setModalFilterOrigen(activeFilters.origen ?? '');
-        setModalFilterDesde(activeFilters.desde ?? '');
-        setModalFilterHasta(activeFilters.hasta ?? '');
-        setModalActiveFilters({
-            ...(activeFilters.tipo && { tipo: activeFilters.tipo }),
-            ...(activeFilters.almacen && { almacen: activeFilters.almacen }),
-            ...(activeFilters.origen && { origen: activeFilters.origen }),
-            ...(activeFilters.desde && { desde: activeFilters.desde }),
-            ...(activeFilters.hasta && { hasta: activeFilters.hasta }),
+    const kardex = useMemo(() => {
+        const a = activeFilters;
+        const lista = (movs ?? []).filter((m) => {
+            if (a.tipo && m.tipo_movimiento !== a.tipo) return false;
+            if (a.almacen && String(m.almacen_id ?? m.almacen?.id) !== a.almacen) return false;
+            if (a.origen && m.origen !== a.origen) return false;
+            if (a.desde && (!m.fecha || m.fecha.slice(0, 10) < a.desde)) return false;
+            if (a.hasta && (!m.fecha || m.fecha.slice(0, 10) > a.hasta)) return false;
+            return true;
         });
+        const ordenada = [...lista].sort(
+            (x, y) =>
+                (x.almacen?.nombre ?? '').localeCompare(y.almacen?.nombre ?? '', 'es') ||
+                String(x.fecha).localeCompare(String(y.fecha)) ||
+                x.id - y.id,
+        );
+        return ordenada.map((m, i) => ({ ...m, _inicio: i > 0 && ordenada[i - 1].almacen_id !== m.almacen_id }));
+    }, [movs, activeFilters]);
+
+    const abrirMovimiento = (mov) => {
+        setMovModal(mov);
+        setRollos(null);
+        api.get(`/movimientos/${mov.id}/rollos`)
+            .then((res) => setRollos(asList(res)))
+            .catch(() => setRollos([]));
     };
 
-    const applyModalFilters = () => {
-        const next = {};
-        if (modalFilterTipo) next.tipo = modalFilterTipo;
-        if (modalFilterAlmacen) next.almacen = modalFilterAlmacen;
-        if (modalFilterOrigen) next.origen = modalFilterOrigen;
-        if (modalFilterDesde) next.desde = modalFilterDesde;
-        if (modalFilterHasta) next.hasta = modalFilterHasta;
-        setModalActiveFilters(next);
-    };
-
-    const clearModalFilters = () => {
-        setModalFilterTipo('');
-        setModalFilterAlmacen('');
-        setModalFilterOrigen('');
-        setModalFilterDesde('');
-        setModalFilterHasta('');
-        setModalActiveFilters({});
-    };
-
-    const modalFilterCount = Object.keys(modalActiveFilters).length;
-
-    /** El historial de ese producto, con los filtros propios del modal ya aplicados. */
-    const historialProducto = productoModal
-        ? movimientos.filter((m) => {
-              if (String(m.producto_id) !== String(productoModal.id)) return false;
-              if (modalActiveFilters.tipo && m.tipo_movimiento !== modalActiveFilters.tipo) return false;
-              if (modalActiveFilters.almacen) {
-                  const id = m.almacen_id ?? m.almacen?.id;
-                  if (String(id) !== modalActiveFilters.almacen) return false;
-              }
-              if (modalActiveFilters.origen && m.origen !== modalActiveFilters.origen) return false;
-              if (modalActiveFilters.desde && (!m.fecha || m.fecha.slice(0, 10) < modalActiveFilters.desde)) return false;
-              if (modalActiveFilters.hasta && (!m.fecha || m.fecha.slice(0, 10) > modalActiveFilters.hasta)) return false;
-              return true;
-          })
-        : [];
+    /** Los rollos del movimiento abierto, agrupados por color: cuántos y cuántos metros de cada uno. */
+    const rollosPorColor = useMemo(() => {
+        const grupos = new Map();
+        (rollos ?? []).forEach((r) => {
+            const clave = String(r.color?.id ?? 'sin');
+            if (!grupos.has(clave)) grupos.set(clave, { color: r.color, rollos: [], metros: 0 });
+            const g = grupos.get(clave);
+            g.rollos.push(r);
+            g.metros += Number(r.metros) || 0;
+        });
+        return [...grupos.values()].sort((a, b) => (a.color?.nombre ?? '~').localeCompare(b.color?.nombre ?? '~', 'es'));
+    }, [rollos]);
 
     const filters = (
         <div className="flex flex-wrap items-end gap-3">
+            <SearchSelect
+                label="Almacén"
+                value={filterAlmacen}
+                onChange={(v) => setFilterAlmacen(v ?? '')}
+                placeholder="Todos"
+                emptyText="Sin coincidencias"
+                options={almacenes.map((a) => ({ value: String(a.id), label: a.nombre }))}
+                className="w-44"
+            />
             <Select
                 label="Tipo"
                 value={filterTipo}
@@ -186,40 +193,7 @@ export default function Movimientos() {
                     { value: 'entrada', label: 'Entrada' },
                     { value: 'salida', label: 'Salida' },
                 ]}
-                className="w-40"
-            />
-            <SearchSelect
-                label="Almacén"
-                value={filterAlmacen}
-                onChange={(v) => setFilterAlmacen(v ?? '')}
-                placeholder="Todos"
-                emptyText="Sin coincidencias"
-                options={almacenes.map((a) => ({ value: String(a.id), label: a.nombre }))}
-                className="w-48"
-            />
-            <SearchSelect
-                label="Producto"
-                value={filterProducto}
-                onChange={(v) => setFilterProducto(v ?? '')}
-                placeholder="Todos"
-                emptyText="Sin coincidencias"
-                options={[
-                    ...new Map(
-                        movimientos.filter((m) => m.producto_id).map((m) => [String(m.producto_id), m.producto?.nombre]),
-                    ).entries(),
-                ].map(([value, label]) => ({ value, label }))}
-                className="w-56"
-            />
-            <SearchSelect
-                label="Proveedor"
-                value={filterProveedor}
-                onChange={(v) => setFilterProveedor(v ?? '')}
-                placeholder="Todos"
-                emptyText="Sin coincidencias"
-                options={[...new Set(movimientos.map((m) => m.proveedor_nombre).filter(Boolean))]
-                    .sort((a, b) => a.localeCompare(b, 'es'))
-                    .map((nombre) => ({ value: nombre, label: nombre }))}
-                className="w-52"
+                className="w-36"
             />
             <Select
                 label="Movimiento"
@@ -227,12 +201,12 @@ export default function Movimientos() {
                 onChange={(e) => setFilterOrigen(e.target.value)}
                 options={[
                     { value: '', label: 'Todos' },
-                    ...[...new Set(movimientos.map((m) => m.origen).filter(Boolean))].map((origen) => ({
+                    ...[...new Set((movs ?? []).map((m) => m.origen).filter(Boolean))].map((origen) => ({
                         value: origen,
                         label: ORIGEN_LABEL[origen] ?? origen,
                     })),
                 ]}
-                className="w-48"
+                className="w-44"
             />
             <DateRangePicker
                 label="Rango de fecha"
@@ -246,87 +220,15 @@ export default function Movimientos() {
         </div>
     );
 
-    /** Los mismos filtros de arriba, pero detrás del ícono de filtros del modal. */
-    const modalFiltersUI = (
-        <div className="flex flex-wrap items-end gap-3">
-            <Select
-                label="Tipo"
-                value={modalFilterTipo}
-                onChange={(e) => setModalFilterTipo(e.target.value)}
-                options={[
-                    { value: '', label: 'Todos' },
-                    { value: 'entrada', label: 'Entrada' },
-                    { value: 'salida', label: 'Salida' },
-                ]}
-                className="w-36"
-            />
-            <SearchSelect
-                label="Almacén"
-                value={modalFilterAlmacen}
-                onChange={(v) => setModalFilterAlmacen(v ?? '')}
-                placeholder="Todos"
-                emptyText="Sin coincidencias"
-                options={almacenes.map((a) => ({ value: String(a.id), label: a.nombre }))}
-                className="w-44"
-            />
-            <Select
-                label="Movimiento"
-                value={modalFilterOrigen}
-                onChange={(e) => setModalFilterOrigen(e.target.value)}
-                options={[
-                    { value: '', label: 'Todos' },
-                    ...[
-                        ...new Set(
-                            movimientos
-                                .filter((m) => String(m.producto_id) === String(productoModal?.id))
-                                .map((m) => m.origen)
-                                .filter(Boolean),
-                        ),
-                    ].map((origen) => ({ value: origen, label: ORIGEN_LABEL[origen] ?? origen })),
-                ]}
-                className="w-44"
-            />
-            <DateRangePicker
-                label="Rango de fecha"
-                desde={modalFilterDesde}
-                hasta={modalFilterHasta}
-                onChange={(d, h) => {
-                    setModalFilterDesde(d);
-                    setModalFilterHasta(h);
-                }}
-            />
-        </div>
-    );
-
-    const esEntrada = (row) => row.tipo_movimiento === 'entrada';
-    const cantAbs = (row) => Math.abs(Number(row.cantidad ?? 0));
-
-    /** Formatos activos del producto de esa fila, del más chico al más grande. */
-    const formatosDe = (row) =>
-        (row.producto?.presentaciones ?? [])
-            .filter((p) => p.activo !== false && p.nombre?.trim())
-            .sort((a, b) => (Number(a.factor_conversion) || 1) - (Number(b.factor_conversion) || 1));
-
-    /**
-     * Cuántas unidades base vale la unidad elegida en esa fila. Las cantidades
-     * se guardan en unidad base: una salida de 100 kg son 2 sacos de 50.
-     */
-    const factorDeFila = (row) => {
-        const elegida = unidadPorFila[row.id];
-        if (!elegida) return 1;
-        const pres = formatosDe(row).find((p) => p.nombre.trim() === elegida);
-        return pres ? Number(pres.factor_conversion) || 1 : 1;
-    };
-
     const columns = [
-        { key: 'id', label: '#', width: '56px', render: (row) => <span className="text-gray-500">{row.id}</span> },
         {
             key: 'fecha',
             label: 'Fecha',
-            width: '110px',
+            width: '105px',
+            getSearchValue: (row) => row.fecha,
             render: (row) => {
                 const f = fmtFecha(row.fecha);
-                if (!f) return <span className="text-gray-400">—</span>;
+                if (!f) return vacio;
                 return (
                     <div className="leading-tight">
                         <div className="whitespace-nowrap text-gray-700">{f.dia}</div>
@@ -336,44 +238,35 @@ export default function Movimientos() {
             },
         },
         {
-            key: 'codigo',
-            label: 'Código',
-            width: '110px',
-            getSearchValue: (row) => row.producto?.codigo,
+            key: 'documento',
+            label: 'Documento',
+            width: '130px',
+            getSearchValue: (row) => row.documento_numero,
             render: (row) => (
-                <span className="block truncate">
-                    {row.producto?.codigo ?? <span className="text-gray-400">—</span>}
+                <span className="whitespace-nowrap font-medium text-primary-700 underline decoration-dotted underline-offset-2">
+                    {row.documento_numero ?? '—'}
                 </span>
             ),
         },
         {
-            key: 'producto',
-            label: 'Producto',
-            getSearchValue: (row) => row.producto?.nombre,
-            render: (row) =>
-                row.producto_id ? (
-                    <button
-                        type="button"
-                        onClick={() => abrirHistorial(row)}
-                        title="Ver todo el historial de este producto"
-                        className="inline-flex items-center gap-2 font-medium text-primary-700 underline decoration-dotted underline-offset-2 transition hover:text-primary-900"
-                    >
-                        <Package className="h-4 w-4 shrink-0 text-primary-600" />
-                        <span className="truncate">{row.producto?.nombre ?? '—'}</span>
-                    </button>
-                ) : (
-                    <span className="inline-flex items-center gap-2 font-medium text-warm-900">
-                        <Package className="h-4 w-4 text-primary-600" />
-                        {row.producto?.nombre ?? '—'}
-                    </span>
-                ),
+            key: 'nombre',
+            label: 'Nombre',
+            width: '210px',
+            getSearchValue: (row) => row.nombre,
+            render: (row) => texto(row.nombre, '210px'),
         },
         {
-            // Solo lo saben los movimientos que nacen de rollos (recepciones y
-            // ventas que cortan un rollo). El resto queda en "—".
+            key: 'categoria',
+            label: 'Categoría',
+            width: '120px',
+            getSearchValue: (row) => row.producto?.categoria?.nombre,
+            render: (row) => texto(row.producto?.categoria?.nombre, '120px'),
+        },
+        {
+            // Solo lo saben los movimientos que nacen de rollos; lo demás (cargas antiguas) queda sin color.
             key: 'color',
             label: 'Color',
-            width: '140px',
+            width: '150px',
             getSearchValue: (row) => row.color?.nombre,
             render: (row) =>
                 row.color ? (
@@ -386,202 +279,254 @@ export default function Movimientos() {
                         {row.color.codigo && <span className="text-xs text-gray-400">({row.color.codigo})</span>}
                     </span>
                 ) : (
-                    <span className="text-gray-400">—</span>
+                    <span className="text-gray-400">Sin color</span>
                 ),
         },
         {
-            key: 'proveedor',
-            label: 'Proveedor',
-            width: '150px',
-            getSearchValue: (row) => row.proveedor_nombre,
-            render: (row) => (
-                <span className="block truncate" title={row.proveedor_nombre ?? ''}>
-                    {row.proveedor_nombre ?? <span className="text-gray-400">—</span>}
-                </span>
-            ),
-        },
-        {
-            key: 'tipo_movimiento',
-            label: 'Tipo',
-            width: '110px',
-            render: (row) => {
-                const { label, variant, icon: Icon } = tipoInfo(row.tipo_movimiento);
-                return (
-                    <Badge variant={variant}>
-                        <Icon className="mr-1 h-3 w-3" />
-                        {label}
-                    </Badge>
-                );
-            },
-        },
-        {
-            key: 'origen',
-            label: 'Mov.',
-            width: '120px',
-            render: (row) => <Badge variant="gray">{ORIGEN_LABEL[row.origen] ?? row.origen ?? '—'}</Badge>,
-        },
-        {
-            key: 'documento',
-            label: 'Doc.',
+            key: 'almacen',
+            label: 'Almacén',
             width: '130px',
-            searchable: false,
-            render: (row) =>
-                row.documento_referencia_tipo ? (
-                    <span className="whitespace-nowrap text-gray-600">
-                        {DOC_LABEL[row.documento_referencia_tipo] ?? row.documento_referencia_tipo}
-                        {row.documento_referencia_id ? ` #${row.documento_referencia_id}` : ''}
-                    </span>
-                ) : (
-                    <span className="text-gray-400">—</span>
-                ),
+            getSearchValue: (row) => row.almacen?.nombre,
+            render: (row) => texto(row.almacen?.nombre, '130px'),
         },
         {
-            // Cada producto tiene sus formatos: la unidad se elige por fila y
-            // la cantidad se muestra en ella.
-            key: 'unidad',
-            label: 'Ver en',
-            width: '150px',
-            searchable: false,
-            render: (row) => {
-                const formatos = formatosDe(row);
-                const base = row.producto?.unidad_base?.nombre ?? 'Unidad base';
-
-                if (formatos.length === 0) return <span className="text-gray-500">{base}</span>;
-
-                return (
-                    <select
-                        value={unidadPorFila[row.id] ?? ''}
-                        onChange={(e) =>
-                            setUnidadPorFila((prev) => ({ ...prev, [row.id]: e.target.value }))
-                        }
-                        className="h-8 w-full rounded-md border border-gray-300 bg-white px-2 text-xs"
-                    >
-                        <option value="">{base} (base)</option>
-                        {formatos.map((f) => (
-                            <option key={f.id} value={f.nombre.trim()}>
-                                {f.nombre.trim()}
-                            </option>
-                        ))}
-                    </select>
-                );
-            },
-        },
-        {
-            key: 'cantidad',
-            label: 'Cant.',
-            width: '80px',
-            align: 'right',
-            render: (row) => (
-                <span className="text-gray-700">{num(cantAbs(row) / factorDeFila(row))}</span>
-            ),
-        },
-        {
-            key: 'costo_anterior',
-            label: 'C. Ant.',
-            width: '95px',
-            align: 'right',
-            searchable: false,
-            render: (row) => <span className="text-gray-600">{money(row.costo_anterior)}</span>,
-        },
-        {
-            key: 'costo_actual',
-            label: 'C. Act.',
-            width: '95px',
-            align: 'right',
-            searchable: false,
-            render: (row) => <span className="text-gray-700">{money(row.costo_actual)}</span>,
-        },
-        {
-            key: 'stock_anterior',
-            label: 'St. Ant.',
-            width: '85px',
-            align: 'right',
-            searchable: false,
-            render: (row) => <span className="text-gray-600">{num(row.stock_anterior)}</span>,
-        },
-        {
-            key: 'ingreso',
-            label: 'Ing.',
-            width: '80px',
+            key: 'entra',
+            label: 'Entra',
+            width: '110px',
             align: 'right',
             searchable: false,
             render: (row) =>
                 esEntrada(row) ? (
-                    <span className="font-semibold text-green-600">+{num(cantAbs(row))}</span>
+                    <span className="whitespace-nowrap font-semibold text-green-600">
+                        {num(cantAbs(row))} <span className="text-[11px] font-normal text-gray-400">{unidad}</span>
+                    </span>
                 ) : (
-                    <span className="text-gray-300">—</span>
+                    vacio
                 ),
         },
         {
-            key: 'salida',
-            label: 'Sal.',
-            width: '80px',
+            key: 'sale',
+            label: 'Sale',
+            width: '110px',
             align: 'right',
             searchable: false,
             render: (row) =>
                 !esEntrada(row) ? (
-                    <span className="font-semibold text-red-600">−{num(cantAbs(row))}</span>
+                    <span className="whitespace-nowrap font-semibold text-red-600">
+                        {num(cantAbs(row))} <span className="text-[11px] font-normal text-gray-400">{unidad}</span>
+                    </span>
                 ) : (
-                    <span className="text-gray-300">—</span>
+                    vacio
                 ),
         },
         {
-            key: 'saldo_stock',
-            label: 'St. Act.',
+            // El stock de la tela en ese almacén tras el movimiento.
+            key: 'stock',
+            label: 'Stock',
+            width: '105px',
+            align: 'right',
+            searchable: false,
+            render: (row) => <span className="whitespace-nowrap font-semibold text-gray-900">{num(row.saldo_stock)}</span>,
+        },
+        {
+            key: 'precio',
+            label: 'Precio',
             width: '90px',
             align: 'right',
             searchable: false,
+            render: (row) => <span className="text-gray-600">{precio(row.costo_unitario)}</span>,
+        },
+        {
+            // Costo promedio unitario tras el movimiento.
+            key: 'cpu',
+            label: 'C.P.U.',
+            width: '90px',
+            align: 'right',
+            searchable: false,
+            render: (row) => <span className="text-gray-700">{precio(row.costo_actual)}</span>,
+        },
+        {
+            // Lo que vale el stock que quedó: stock × C.P.U.
+            key: 'total',
+            label: 'Total',
+            width: '110px',
+            align: 'right',
+            searchable: false,
+            render: (row) => <span className="font-medium text-gray-900">{num(Number(row.saldo_stock ?? 0) * Number(row.costo_actual ?? 0))}</span>,
+        },
+        {
+            key: 'glosa',
+            label: 'Glosa',
+            width: '210px',
+            getSearchValue: (row) => [row.glosa, ORIGEN_LABEL[row.origen] ?? row.origen].join(' '),
             render: (row) => (
-                <span className="font-medium text-gray-900">
-                    {num(Number(row.saldo_stock ?? 0) / factorDeFila(row))}
+                <span className="block min-w-0">
+                    <span className="block truncate text-gray-700" title={row.glosa ?? ''}>
+                        {row.glosa ?? '—'}
+                    </span>
+                    {(ORIGEN_LABEL[row.origen] ?? row.origen) !== row.glosa && (
+                        <span className="block truncate text-xs text-gray-400">{ORIGEN_LABEL[row.origen] ?? row.origen ?? ''}</span>
+                    )}
                 </span>
             ),
         },
+        {
+            key: 'referencia',
+            label: 'Referencia',
+            width: '130px',
+            getSearchValue: (row) => row.referencia,
+            render: (row) => texto(row.referencia, '130px'),
+        },
+        {
+            key: 'orden_compra',
+            label: 'O.Compra',
+            width: '110px',
+            getSearchValue: (row) => row.orden_compra,
+            render: (row) => texto(row.orden_compra, '110px'),
+        },
+        {
+            key: 'doc_registro',
+            label: 'Doc. Registro',
+            width: '120px',
+            getSearchValue: (row) => row.doc_registro,
+            render: (row) => texto(row.doc_registro, '120px'),
+        },
     ];
 
-    // El producto y el código ya están en el título del modal: sobran en su tabla.
-    const columnasHistorial = columns.filter((c) => c.key !== 'producto' && c.key !== 'codigo');
+    const totalRollos = rollosPorColor.reduce((s, g) => s + g.rollos.length, 0);
+    const totalMetros = rollosPorColor.reduce((s, g) => s + g.metros, 0);
 
     return (
         <Layout>
-            <PageHeader
-                title="Kardex"
-                description="Historial de entradas y salidas de inventario por producto"
-            />
+            <PageHeader title="Kardex" description="Busca una tela y mira todos sus movimientos por documento" />
 
             {error && <Alert variant="error" className="mb-4">{error}</Alert>}
 
-            <DataTable
-                columns={columns}
-                rows={filtered}
-                loading={loading}
-                searchPlaceholder="Buscar en el kardex..."
-                filterable
-                filters={filters}
-                filterCount={filterCount}
-                onApplyFilters={applyFilters}
-                onClearFilters={clearFilters}
-            />
-
-            <Modal
-                open={Boolean(productoModal)}
-                onClose={() => setProductoModal(null)}
-                title={productoModal ? `Historial de ${productoModal.nombre}` : ''}
-                description="Nace con los mismos filtros que tengas activos arriba; ajústalos aquí sin afectar la tabla principal."
-                size="3xl"
-                footer={<Button variant="secondary" onClick={() => setProductoModal(null)}>Cerrar</Button>}
-            >
-                <DataTable
-                    columns={columnasHistorial}
-                    rows={historialProducto}
-                    searchPlaceholder="Buscar en este historial..."
-                    emptyMessage="Sin movimientos con estos filtros."
-                    filterable
-                    filters={modalFiltersUI}
-                    filterCount={modalFilterCount}
-                    onApplyFilters={applyModalFilters}
-                    onClearFilters={clearModalFilters}
+            <div className="mb-4 max-w-xl">
+                <SearchSelect
+                    value={telaId}
+                    onChange={elegirTela}
+                    placeholder={loading ? 'Cargando telas…' : 'Escribe el nombre o el código de la tela…'}
+                    emptyText="Ninguna tela coincide"
+                    options={telas.map((t) => ({
+                        value: String(t.id),
+                        label: [t.codigo, t.nombre, t.tipo_tela].filter(Boolean).join(' · '),
+                    }))}
                 />
+            </div>
+
+            {!tela ? (
+                <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-edge bg-white py-20 text-center">
+                    <PackageSearch className="h-8 w-8 text-warm-500" />
+                    <p className="text-sm text-warm-500">Elige una tela y aquí aparecerán sus movimientos.</p>
+                </div>
+            ) : movs === null ? (
+                <div className="flex items-center justify-center py-20">
+                    <Spinner size="lg" className="text-primary-600" />
+                </div>
+            ) : (
+                <>
+                    <DataTable
+                        columns={columns}
+                        rows={kardex}
+                        searchPlaceholder="Buscar en este kardex..."
+                        emptyMessage="Esta tela no tiene movimientos con estos filtros."
+                        onRowClick={abrirMovimiento}
+                        // Una raya separa cada almacén: ahí empieza su propio stock.
+                        rowClassName={(row) => (row._inicio ? 'border-t-2 border-t-primary-200' : '')}
+                        filterable
+                        filters={filters}
+                        filterCount={filterCount}
+                        onApplyFilters={applyFilters}
+                        onClearFilters={clearFilters}
+                    />
+                    {movs.length >= 1000 && <p className="mt-2 text-xs text-warm-500">Se muestran los últimos 1000 movimientos.</p>}
+                </>
+            )}
+
+            {/* Al abrir un documento: los rollos que entraron o salieron, por color y con su metraje. */}
+            <Modal
+                open={Boolean(movModal)}
+                onClose={() => setMovModal(null)}
+                title={movModal ? `${movModal.documento_numero ?? 'Movimiento'} · ${tela?.nombre ?? ''}` : ''}
+                description={
+                    movModal
+                        ? [
+                              ORIGEN_LABEL[movModal.origen] ?? movModal.origen,
+                              movModal.nombre,
+                              movModal.almacen?.nombre,
+                              `${esEntrada(movModal) ? 'Entran' : 'Salen'} ${num(cantAbs(movModal))} ${unidad}`,
+                          ]
+                              .filter(Boolean)
+                              .join(' · ')
+                        : ''
+                }
+                size="2xl"
+                footer={<Button variant="secondary" onClick={() => setMovModal(null)}>Cerrar</Button>}
+            >
+                {rollos === null ? (
+                    <div className="flex items-center justify-center py-12">
+                        <Spinner size="lg" className="text-primary-600" />
+                    </div>
+                ) : rollos.length === 0 ? (
+                    <p className="py-10 text-center text-sm text-warm-500">
+                        Este movimiento no tiene rollos registrados (es una carga de antes de llevar el control por rollos).
+                    </p>
+                ) : (
+                    <div className="space-y-4">
+                        <p className="text-sm text-warm-600">
+                            <strong className="text-warm-900">{entero(totalRollos)}</strong> rollo{totalRollos === 1 ? '' : 's'} ·{' '}
+                            <strong className="text-warm-900">{num(totalMetros)} {unidad}</strong>
+                        </p>
+                        {rollosPorColor.map((g) => (
+                            <div key={g.color?.id ?? 'sin'} className="overflow-hidden rounded-lg border border-edge">
+                                <div className="flex items-center gap-2 bg-gray-50 px-3 py-2">
+                                    <span
+                                        className="h-3 w-3 shrink-0 rounded-full ring-1 ring-black/10"
+                                        style={{ backgroundColor: g.color?.hex || '#9ca3af' }}
+                                    />
+                                    <span className="text-sm font-semibold uppercase text-warm-900">{g.color?.nombre ?? 'Sin color'}</span>
+                                    {g.color?.codigo && <span className="text-xs text-gray-400">({g.color.codigo})</span>}
+                                    <span className="ml-auto text-xs text-warm-600">
+                                        {entero(g.rollos.length)} rollo{g.rollos.length === 1 ? '' : 's'} ·{' '}
+                                        <strong className="text-warm-900">{num(g.metros)} {unidad}</strong>
+                                    </span>
+                                </div>
+                                <div className="max-h-64 overflow-auto">
+                                    <table className="w-full text-sm">
+                                        <thead className="sticky top-0 bg-white text-left text-[11px] font-semibold uppercase tracking-wide text-warm-500">
+                                            <tr>
+                                                <th className="px-3 py-1.5">Rollo</th>
+                                                <th className="px-3 py-1.5 text-right">Metraje</th>
+                                                <th className="px-3 py-1.5 text-right">Hoy tiene</th>
+                                                <th className="px-3 py-1.5">Estado</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {g.rollos.map((r) => {
+                                                const estado = ESTADO_ROLLO[r.estado] ?? { label: r.estado, variant: 'gray' };
+                                                return (
+                                                    <tr key={r.id}>
+                                                        <td className="px-3 py-1.5 font-mono text-xs text-warm-800">{r.codigo}</td>
+                                                        <td className="px-3 py-1.5 text-right font-medium text-warm-900">
+                                                            {num(r.metros)} {unidad}
+                                                        </td>
+                                                        <td className="px-3 py-1.5 text-right text-warm-600">
+                                                            {num(r.metros_actual)} {unidad}
+                                                        </td>
+                                                        <td className="px-3 py-1.5">
+                                                            <Badge variant={estado.variant}>{estado.label}</Badge>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </Modal>
         </Layout>
     );

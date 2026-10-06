@@ -210,7 +210,8 @@ class AjusteInventarioController extends Controller
         ]);
         Rollo::whereIn('id', $creados->pluck('id'))->update(['ajuste_detalle_id' => $linea->id]);
 
-        $stock->entrada($presentacion, $almacen, $cantidad, 0, 'ajuste_manual', 'ajuste_inventario', $ajuste->id, auth()->id());
+        // El color queda en el kardex: así se sabe cuánto hay de cada color, no solo de la tela.
+        $stock->entrada($presentacion, $almacen, $cantidad, 0, 'ajuste_manual', 'ajuste_inventario', $ajuste->id, auth()->id(), colorId: $color?->id);
 
         return $subtotal;
     }
@@ -251,7 +252,7 @@ class AjusteInventarioController extends Controller
             'subtotal' => $subtotal,
         ]);
 
-        $stock->salida($presentacion, $almacen, $cantidad, 0, 'ajuste_manual', 'ajuste_inventario', $ajuste->id, auth()->id());
+        $stock->salida($presentacion, $almacen, $cantidad, 0, 'ajuste_manual', 'ajuste_inventario', $ajuste->id, auth()->id(), colorId: $rollo->producto_color_id);
 
         return $subtotal;
     }

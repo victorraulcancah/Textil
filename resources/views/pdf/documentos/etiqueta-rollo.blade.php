@@ -35,7 +35,7 @@
         /* El alto sale del papel (a 96 dpi); dompdf suma el padding al alto, por eso se deja margen. */
         .etiqueta {
             height: {{ $altoPx - ($grande ? 10 : 0) }}px;
-            padding: {{ $grande ? 8 : 5 }}px {{ $vertical ? 7 : ($grande ? 24 : 16) }}px;
+            padding: {{ $grande ? 8 : 5 }}px {{ $vertical ? 14 : ($grande ? 24 : 16) }}px;
             overflow: hidden;
             page-break-after: always;
         }
@@ -121,7 +121,7 @@
                     <div class="linea">
                         <span class="et">Metraje de fábrica</span>
                         @if ($e['metros'] !== $e['metros_fabrica'])
-                            &nbsp;·&nbsp;<span class="et">Saldo actual:</span> <strong>{{ $e['metros'] }} m</strong>
+                            &nbsp;·&nbsp;<span style="white-space: nowrap;"><span class="et">Saldo actual:</span> <strong>{{ $e['metros'] }} m</strong></span>
                         @endif
                     </div>
                 </td>

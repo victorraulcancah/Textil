@@ -24,11 +24,11 @@ return [
         // cualquier pistola láser; el QR necesita un lector 2D o la cámara).
         'simbologia' => env('ROLLOS_SIMBOLOGIA', 'qr'),
 
-        // Tamaño del papel de la etiqueta, en milímetros: ANCHO x ALTO. La etiqueta es de 80 de ancho por 50 de alto
-        // (horizontal).
+        // Tamaño del papel de la etiqueta, en milímetros: ANCHO x ALTO. La etiqueta es de 50 de ancho por 80 de alto
+        // (vertical).
         // Con el alto mayor que el ancho el diseño se arma en vertical; al revés, en horizontal.
-        'ancho_mm' => (float) env('ROLLOS_ETIQUETA_ANCHO_MM', 80),
-        'alto_mm' => (float) env('ROLLOS_ETIQUETA_ALTO_MM', 50),
+        'ancho_mm' => (float) env('ROLLOS_ETIQUETA_ANCHO_MM', 50),
+        'alto_mm' => (float) env('ROLLOS_ETIQUETA_ALTO_MM', 80),
 
         // Girada: el papel sale de 50 x 80 con el diseño de 80 x 50 girado 90° a la izquierda. Por defecto NO: la hoja
         // sale de 80 x 50 (horizontal) y el texto se lee derecho, que es el papel que la etiquetadora tiene configurado.

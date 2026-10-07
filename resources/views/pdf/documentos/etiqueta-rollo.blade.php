@@ -101,6 +101,10 @@
         <div style="position: absolute; left: 0; top: 0; width: {{ $diseñoAncho }}px; height: {{ $diseñoAlto }}px; transform-origin: 0 0; transform: translateY({{ $diseñoAncho }}px) rotate(-90deg);">
     @endif
     <div class="etiqueta @if ($grande && $e['barras'] && $e['peso_kg']) compacta @endif">
+        @if ($vertical)
+            {{-- En vertical todo va centrado a lo alto de la etiqueta, no pegado arriba. --}}
+            <table style="width: 100%; border-spacing: 0;"><tr><td style="height: {{ $altoPx - 14 }}px; vertical-align: middle; padding: 0;">
+        @endif
         <table style="width: 100%; border-spacing: 0;">
             <tr>
                 <td style="vertical-align: top; padding: 0;">
@@ -137,7 +141,7 @@
         @if ($e['qr'] && $vertical)
             {{-- El QR ya trae su propio borde blanco: va pegado al texto, sin pisarlo (su fondo blanco tapa lo que toque). --}}
             <div style="text-align: center; margin-top: 0;">
-                <img class="qr" @unless ($e['barras']) style="height: 104px; width: 104px;" @endunless src="{{ $e['qr'] }}" alt="{{ $e['codigo'] }}">
+                <img class="qr" @unless ($e['barras']) style="height: 124px; width: 124px;" @endunless src="{{ $e['qr'] }}" alt="{{ $e['codigo'] }}">
             </div>
         @endif
 
@@ -150,6 +154,9 @@
         @endif
 
         <div class="pie">{{ $empresa?->nombre_comercial ?? $empresa?->razon_social }} · {{ $e['ubicacion'] }}</div>
+        @if ($vertical)
+            </td></tr></table>
+        @endif
     </div>
     @if ($girar)
         </div>

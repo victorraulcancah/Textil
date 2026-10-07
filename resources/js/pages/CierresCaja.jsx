@@ -2,10 +2,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { Coins, Printer } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { destinoDe, useCatalogoDestinos } from '../lib/destinosCaja';
+import { diaLocal } from '../lib/fechas';
 import Layout from '../components/Layout';
 import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
 import PageHeader from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
+import FiltroFechas from '../components/FiltroFechas';
 import { Alert, Badge, Button, DataTable, SearchSelect, Select } from '../components/ui';
 
 const money = (n, moneda = 'PEN') =>
@@ -34,6 +36,9 @@ export default function CierresCaja() {
     const [movimientos, setMovimientos] = useState([]);
     const [cargandoDetalle, setCargandoDetalle] = useState(false);
 
+    // Desde y hasta, a la vista; filtran por la fecha del cierre. Vacíos muestran todos.
+    const [fDesde, setFDesde] = useState('');
+    const [fHasta, setFHasta] = useState('');
     const [filtroCaja, setFiltroCaja] = useState('');
     const [filtroDiferencia, setFiltroDiferencia] = useState('');
     const [filtrosActivos, setFiltrosActivos] = useState({});
@@ -99,6 +104,9 @@ export default function CierresCaja() {
 
     const visibles = cierres.filter((c) => {
         if (filtrosActivos.caja && String(c.apertura?.caja?.id) !== filtrosActivos.caja) return false;
+        const dia = c.fecha_cierre ? diaLocal(c.fecha_cierre) : '';
+        if (fDesde && (!dia || dia < fDesde)) return false;
+        if (fHasta && (!dia || dia > fHasta)) return false;
         const dif = Number(c.diferencia) || 0;
         if (filtrosActivos.diferencia === 'cuadra' && Math.abs(dif) > 0.001) return false;
         if (filtrosActivos.diferencia === 'falta' && dif >= -0.001) return false;
@@ -428,6 +436,7 @@ export default function CierresCaja() {
             <PageHeader
                 title="Cierres de Caja"
                 description="Registro de arqueos: lo esperado, lo contado y los movimientos de cada apertura"
+                actions={<FiltroFechas desde={fDesde} hasta={fHasta} onDesde={setFDesde} onHasta={setFHasta} />}
             />
 
             {error && <Alert variant="error" className="mb-4">{error}</Alert>}

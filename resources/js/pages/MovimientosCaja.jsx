@@ -1,10 +1,13 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowDownCircle, ArrowUpCircle, Printer } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
+import FiltroFechas from '../components/FiltroFechas';
+import MenuImprimir from '../components/MenuImprimir';
+import { hoyIso } from '../lib/fechas';
 import MetodoCajaPicker from '../components/MetodoCajaPicker';
 import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select } from '../components/ui';
 
@@ -46,6 +49,10 @@ export default function MovimientosCaja() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [fTipo, setFTipo] = useState('');
+    // Por defecto, los movimientos del día; desde y hasta van a la vista, en la misma fila que Imprimir.
+    const [fDesde, setFDesde] = useState(hoyIso);
+    const [fHasta, setFHasta] = useState(hoyIso);
+    const [reportePdf, setReportePdf] = useState(null);
 
     const [modalOpen, setModalOpen] = useState(false);
     const [pdfTarget, setPdfTarget] = useState(null);
@@ -53,16 +60,27 @@ export default function MovimientosCaja() {
     const [formErrors, setFormErrors] = useState({});
     const [saving, setSaving] = useState(false);
 
+    /** Los filtros de la pantalla, tal como los entiende el servidor: el listado, el Excel y el PDF salen con las mismas filas. */
+    const parametrosReporte = () => {
+        const p = { tipo: fTipo, desde: fDesde, hasta: fHasta };
+        return Object.fromEntries(Object.entries(p).filter(([, v]) => v));
+    };
+
+    /** Cada carga lleva su número: si cambias las fechas antes de que llegue la anterior, solo vale la última. */
+    const cargaActual = useRef(0);
+
     const load = useCallback(async () => {
+        const numero = ++cargaActual.current;
         setLoading(true);
         setError(null);
         try {
             const [movRes, motivosRes, cajasRes, meRes] = await Promise.all([
-                api.get('/movimientos-caja'),
+                api.get('/movimientos-caja', { params: { desde: fDesde || undefined, hasta: fHasta || undefined } }),
                 api.get('/motivos-movimiento?ambito=caja'),
                 api.get('/cajas'),
                 api.get('/me'),
             ]);
+            if (numero !== cargaActual.current) return;
             setRows(asList(movRes));
             setMotivos(asList(motivosRes));
             setCajas(asList(cajasRes));
@@ -71,15 +89,32 @@ export default function MovimientosCaja() {
             const rolNombres = Array.isArray(me.roles) ? me.roles.map((r) => r.name) : [];
             setEsSuperAdmin(rolNombres.includes('super-admin'));
         } catch {
-            setError('No se pudieron cargar los movimientos de caja.');
+            if (numero === cargaActual.current) setError('No se pudieron cargar los movimientos de caja.');
         } finally {
-            setLoading(false);
+            if (numero === cargaActual.current) setLoading(false);
         }
-    }, []);
+    }, [fDesde, fHasta]);
 
     useEffect(() => {
         load();
     }, [load]);
+
+    const exportarExcel = async () => {
+        try {
+            const { data } = await api.get('/movimientos-caja/reporte/excel', { params: parametrosReporte(), responseType: 'blob' });
+            const url = URL.createObjectURL(data);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `movimientos-caja-${hoyIso()}.xlsx`;
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 4000);
+        } catch {
+            toast.error('No se pudo generar el Excel.');
+        }
+    };
+
+    const exportarPdf = () =>
+        setReportePdf({ url: `/movimientos-caja/reporte/pdf?${new URLSearchParams(parametrosReporte()).toString()}` });
 
     const openCreate = (tipo) => {
         setForm(emptyForm(tipo));
@@ -184,6 +219,8 @@ export default function MovimientosCaja() {
                 description="Historial de ingresos y egresos por caja"
                 actions={
                     <>
+                        <FiltroFechas desde={fDesde} hasta={fHasta} onDesde={setFDesde} onHasta={setFHasta} />
+                        <MenuImprimir onExcel={exportarExcel} onPdf={exportarPdf} />
                         <Button variant="success" onClick={() => openCreate('ingreso')}>
                             <ArrowUpCircle className="h-4 w-4" /> Nuevo ingreso
                         </Button>
@@ -312,7 +349,16 @@ export default function MovimientosCaja() {
                     )}
                 </form>
             </Modal>
-                    <PdfViewerModal
+                    {/* El listado en PDF, con los filtros de la pantalla. */}
+            <PdfViewerModal
+                open={Boolean(reportePdf)}
+                onClose={() => setReportePdf(null)}
+                url={reportePdf?.url}
+                titulo="Movimientos de caja"
+                nombre={`Movimientos de caja ${hoyIso()}`}
+            />
+
+            <PdfViewerModal
                 open={Boolean(pdfTarget)}
                 onClose={() => setPdfTarget(null)}
                 tipo="movimiento-caja"

@@ -9,6 +9,7 @@ import PageHeader from '../components/PageHeader';
 import LetraCambioModal from '../components/LetraCambioModal';
 import PagosCuentaModal from '../components/PagosCuentaModal';
 import PdfViewerModal from '../components/PdfViewerModal';
+import FiltroFechas from '../components/FiltroFechas';
 import { Alert, Badge, Button, DataTable, SearchSelect, Select } from '../components/ui';
 
 const ESTADOS = [
@@ -52,6 +53,9 @@ export default function CuentasPorCobrar() {
     const [letraEmitida, setLetraEmitida] = useState(null);
     const [fEstado, setFEstado] = useState('');
     const [fCliente, setFCliente] = useState('');
+    // Desde y hasta, a la vista; filtran por la fecha de la venta. Vacíos muestran todas las deudas.
+    const [fDesde, setFDesde] = useState('');
+    const [fHasta, setFHasta] = useState('');
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -221,6 +225,7 @@ export default function CuentasPorCobrar() {
             <PageHeader
                 title="Cuentas por Cobrar"
                 description="Deudas pendientes de tus clientes (ventas al crédito)"
+                actions={<FiltroFechas desde={fDesde} hasta={fHasta} onDesde={setFDesde} onHasta={setFHasta} />}
             />
 
             {error && <Alert variant="error" className="mb-4">{error}</Alert>}
@@ -230,6 +235,9 @@ export default function CuentasPorCobrar() {
                 rows={rows.filter((r) => {
                     if (fEstado && r.estado !== fEstado) return false;
                     if (fCliente && String(r.cliente_id) !== String(fCliente)) return false;
+                    const dia = String(r.nota_venta?.fecha_emision ?? r.created_at ?? '').slice(0, 10);
+                    if (fDesde && (!dia || dia < fDesde)) return false;
+                    if (fHasta && (!dia || dia > fHasta)) return false;
                     return true;
                 })}
                 loading={loading}

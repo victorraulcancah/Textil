@@ -25,22 +25,30 @@ class MovimientoCajaController extends Controller
 
     public function index(Request $request)
     {
+        return response()->json(
+            $this->consulta($request)->latest('created_at')->latest('id')->limit(500)->get()
+        );
+    }
+
+    /**
+     * Los movimientos que puede ver quien pide, con los filtros de caja y de fecha (desde/hasta). La usan el listado
+     * y el reporte (Excel y PDF), así los dos ven exactamente lo mismo.
+     */
+    public function consulta(Request $request)
+    {
         $user = auth('api')->user();
         $cajaPropia = $user?->cajaActual()?->id;
 
-        $query = MovimientoCaja::with(self::WITH)
+        return MovimientoCaja::with(self::WITH)
             ->when($request->filled('caja_id'), fn ($q) => $q->whereHas('apertura', fn ($a) => $a->where('caja_id', $request->integer('caja_id'))))
+            ->when($request->filled('desde'), fn ($q) => $q->whereDate('fecha', '>=', $request->input('desde')))
+            ->when($request->filled('hasta'), fn ($q) => $q->whereDate('fecha', '<=', $request->input('hasta')))
             ->when(
                 $cajaPropia && ! $user->hasRole('super-admin'),
                 fn ($q) => $q->whereHas('apertura', fn ($a) => $a->where('caja_id', $cajaPropia))
             )
             // Tesorería por sucursal: cada almacén ve los movimientos de sus cajas.
-            ->whereHas('apertura.caja', fn ($c) => AlmacenAcceso::limitar($c))
-            ->latest('created_at')
-            ->latest('id')
-            ->limit(500);
-
-        return response()->json($query->get());
+            ->whereHas('apertura.caja', fn ($c) => AlmacenAcceso::limitar($c));
     }
 
     public function store(Request $request)

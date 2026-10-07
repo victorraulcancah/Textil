@@ -160,6 +160,8 @@ Route::middleware('auth:api')->group(function () {
     Route::put('almacen-ubicaciones/{ubicacione}', [AlmacenUbicacionController::class, 'update']);
     Route::delete('almacen-ubicaciones/{ubicacione}', [AlmacenUbicacionController::class, 'destroy']);
     Route::get('movimientos/telas', [MovimientoInventarioController::class, 'telas']);
+    Route::get('movimientos/colores', [MovimientoInventarioController::class, 'colores']);
+    Route::get('movimientos/colores/rollos', [MovimientoInventarioController::class, 'rollosDeColor']);
     Route::get('movimientos/{movimiento}/rollos', [MovimientoInventarioController::class, 'rollos']);
     Route::get('movimientos', [MovimientoInventarioController::class, 'index']);
     // Validar un rollo escaneado al armar un traslado (para escoger rollos exactos en vez de "N rollos").

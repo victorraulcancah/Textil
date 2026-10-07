@@ -61,7 +61,7 @@
             margin-top: {{ $grande ? 4 : 2 }}px;
         }
         .metraje {
-            font-size: {{ $grande ? 20 : 17 }}px;
+            font-size: {{ $grande ? 20 : ($vertical ? 25 : 17) }}px;
             font-weight: bold;
             color: #000;
             line-height: 1;

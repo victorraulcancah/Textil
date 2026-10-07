@@ -124,10 +124,24 @@ export default function StockPorRollo() {
         load();
     }, [load]);
 
+    /**
+     * El resumen visto con el estado elegido (por defecto, disponible): cada color cuenta solo los rollos de ese
+     * estado y los que no tienen ninguno no salen. Sin estado, se ve todo.
+     */
+    const resumenVista = useMemo(() => {
+        if (!estado) return resumen;
+        return resumen
+            .map((f) => {
+                const e = f.por_estado?.[estado];
+                return e ? { ...f, rollos: e.rollos, metros: e.metros, valor: e.valor ?? 0 } : null;
+            })
+            .filter(Boolean);
+    }, [resumen, estado]);
+
     /** Los tipos de tela con su stock: lo primero que se ve. Salen de las filas del resumen. */
     const tipos = useMemo(() => {
         const grupos = new Map();
-        resumen.forEach((f) => {
+        resumenVista.forEach((f) => {
             const clave = claveTipo(f);
             const g = grupos.get(clave) ?? {
                 clave,
@@ -149,10 +163,10 @@ export default function StockPorRollo() {
         return [...grupos.values()]
             .map((g) => ({ ...g, telas: g.telas.size, nombres: [...g.nombres].sort().join(', ') }))
             .sort((a, b) => a.nombre.localeCompare(b.nombre));
-    }, [resumen]);
+    }, [resumenVista]);
 
     const tipoActual = tipos.find((t) => t.clave === tipoSel) ?? null;
-    const filasTipo = useMemo(() => resumen.filter((f) => claveTipo(f) === tipoSel), [resumen, tipoSel]);
+    const filasTipo = useMemo(() => resumenVista.filter((f) => claveTipo(f) === tipoSel), [resumenVista, tipoSel]);
 
     /** El color elegido: de él cuelga la tabla de rollos. */
     const seleccion = useMemo(
@@ -433,6 +447,13 @@ export default function StockPorRollo() {
                 ]}
                 className="w-56"
             />
+            <Select
+                label="Estado"
+                value={estado}
+                onChange={(e) => setEstado(e.target.value)}
+                options={ESTADOS}
+                className="w-48"
+            />
         </div>
     );
 
@@ -517,7 +538,7 @@ export default function StockPorRollo() {
                             </Button>
                         }
                     />
-                    <Alert variant="warning">Ese tipo de tela o color ya no tiene stock en este almacén.</Alert>
+                    <Alert variant="warning">Ese tipo de tela o color no tiene rollos con ese estado en este almacén.</Alert>
                 </>
             ) : tipoSel || productoSel ? (
                 <div className="flex items-center justify-center py-20">

@@ -20,6 +20,8 @@
         $girar = (bool) config('rollos.etiqueta.girar');
         $diseñoAncho = (int) round(config('rollos.etiqueta.ancho_mm') * 96 / 25.4);
         $diseñoAlto = (int) round(config('rollos.etiqueta.alto_mm') * 96 / 25.4);
+        // La etiqueta de 100 x 60 tiene más lugar que la de 80 x 50: letras y códigos van un poco más grandes.
+        $grande = ! $vertical && (float) config('rollos.etiqueta.ancho_mm') >= 95;
     @endphp
     <style>
         @page { margin: 0; }
@@ -33,31 +35,31 @@
         /* El alto sale del papel (a 96 dpi); dompdf suma el padding al alto, por eso se deja margen. */
         .etiqueta {
             height: {{ $altoPx }}px;
-            padding: 5px {{ $vertical ? 7 : 8 }}px;
+            padding: {{ $grande ? 9 : 5 }}px {{ $vertical ? 7 : ($grande ? 12 : 8) }}px;
             overflow: hidden;
             page-break-after: always;
         }
         .etiqueta:last-child { page-break-after: auto; }
 
         .producto {
-            font-size: {{ $vertical ? 10.5 : 11 }}px;
+            font-size: {{ $vertical ? 10.5 : ($grande ? 14 : 11) }}px;
             font-weight: bold;
             text-transform: uppercase;
             letter-spacing: .3px;
             line-height: 1.1;
         }
-        .linea { font-size: 7.5px; margin-top: 1px; }
+        .linea { font-size: {{ $grande ? 9 : 7.5 }}px; margin-top: {{ $grande ? 3 : 1 }}px; }
         .linea .et { color: {{ config('theme.muted') }}; }
 
         /* El código y el metraje son lo que se lee de lejos, en el rack. */
         .codigo {
-            font-size: {{ $vertical ? 12 : 13 }}px;
+            font-size: {{ $vertical ? 12 : ($grande ? 16 : 13) }}px;
             font-weight: bold;
             letter-spacing: .2px;
-            margin-top: 2px;
+            margin-top: {{ $grande ? 5 : 2 }}px;
         }
         .metraje {
-            font-size: 17px;
+            font-size: {{ $grande ? 22 : 17 }}px;
             font-weight: bold;
             color: {{ config('theme.primary') }};
             line-height: 1;
@@ -70,11 +72,11 @@
             margin-top: 1px;
         }
 
-        .codigos { margin-top: 2px; }
+        .codigos { margin-top: {{ $grande ? 8 : 2 }}px; }
         .codigos td { vertical-align: middle; text-align: center; padding: 0 4px; }
-        .qr { height: {{ $vertical ? 72 : 60 }}px; width: {{ $vertical ? 72 : 60 }}px; }
-        .barras { height: {{ $vertical ? 32 : 30 }}px; width: 100%; }
-        .pie { font-size: 6.5px; color: {{ config('theme.muted_light') }}; margin-top: 2px; }
+        .qr { height: {{ $vertical ? 72 : ($grande ? 84 : 60) }}px; width: {{ $vertical ? 72 : ($grande ? 84 : 60) }}px; }
+        .barras { height: {{ $vertical ? 32 : ($grande ? 52 : 30) }}px; width: 100%; }
+        .pie { font-size: {{ $grande ? 8 : 6.5 }}px; color: {{ config('theme.muted_light') }}; margin-top: {{ $grande ? 5 : 2 }}px; }
     </style>
 </head>
 <body>
@@ -119,7 +121,7 @@
                 </td>
                 @if ($e['qr'] && ! $vertical)
                     {{-- Sin código de barras sobra espacio: el QR se imprime más grande, que se lee mejor. --}}
-                    <td style="width: {{ $e['barras'] ? 66 : 100 }}px; text-align: right; vertical-align: top;">
+                    <td style="width: {{ $e['barras'] ? ($grande ? 90 : 66) : 100 }}px; text-align: right; vertical-align: top;">
                         <img class="qr" @unless ($e['barras']) style="height: 92px; width: 92px;" @endunless src="{{ $e['qr'] }}" alt="{{ $e['codigo'] }}">
                     </td>
                 @endif

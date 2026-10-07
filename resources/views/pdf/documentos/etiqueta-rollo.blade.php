@@ -135,8 +135,8 @@
 
         {{-- En vertical el QR va centrado debajo del texto. --}}
         @if ($e['qr'] && $vertical)
-            {{-- El QR ya trae su propio borde blanco: se sube un poco para que quede pegado al texto. --}}
-            <div style="text-align: center; margin-top: -4px;">
+            {{-- El QR ya trae su propio borde blanco: va pegado al texto, sin pisarlo (su fondo blanco tapa lo que toque). --}}
+            <div style="text-align: center; margin-top: 0;">
                 <img class="qr" @unless ($e['barras']) style="height: 104px; width: 104px;" @endunless src="{{ $e['qr'] }}" alt="{{ $e['codigo'] }}">
             </div>
         @endif

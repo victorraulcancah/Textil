@@ -125,6 +125,8 @@ export default function CrearPedido() {
         // Una tela puede pedirse con un metraje por rollo ("1 rollo de 50 m").
         conMetraje: false,
         metros_por_rollo: '',
+        // Una tela también se puede vender por metros ("120 m de negro"), no solo en rollos.
+        porMetros: false,
     });
 
     /* ------------------------------ carga ------------------------------ */
@@ -406,19 +408,21 @@ export default function CrearPedido() {
         setNueva((prev) =>
             prev.precioManual
                 ? prev
-                : { ...prev, precio_unitario: precioDeLista(presentacion, esTelaNueva ? 1 : prev.cantidad || 1) },
+                : { ...prev, precio_unitario: precioDeLista(presentacion, esTelaNueva && !prev.porMetros ? 1 : prev.cantidad || 1) },
         );
-    }, [presentacion?.id, tipoPrecioId, nueva.cantidad]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [presentacion?.id, tipoPrecioId, nueva.cantidad, nueva.porMetros]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const puedeAgregar =
         nueva.producto_presentacion_id &&
         Number(nueva.cantidad) > 0 &&
         Number(nueva.precio_unitario) >= 0 &&
-        // Una tela: rollos enteros y, si tiene colores, el color (cada rollo es de uno).
+        // Una tela: en rollos enteros (con su metraje si se pide) o en metros; en los dos, si tiene colores, el color.
         (!esTelaNueva ||
-            (Number.isInteger(Number(nueva.cantidad)) &&
-                (!nueva.conMetraje || Number(nueva.metros_por_rollo) > 0) &&
-                (!(producto?.colores?.length > 0) || Boolean(nueva.producto_color_id))));
+            (nueva.porMetros
+                ? !(producto?.colores?.length > 0) || Boolean(nueva.producto_color_id)
+                : Number.isInteger(Number(nueva.cantidad)) &&
+                  (!nueva.conMetraje || Number(nueva.metros_por_rollo) > 0) &&
+                  (!(producto?.colores?.length > 0) || Boolean(nueva.producto_color_id))));
 
     /** Suma rollos de un color de una tela a las líneas: si ya estaba pedido, se le suman. */
     const conRollos = (lista, { producto: prod, metro, color, rollos, descripcion = '', precio = null, manual = false, metrosPorRollo = '' }) => {
@@ -464,7 +468,7 @@ export default function CrearPedido() {
             (c) => String(c.id) === String(nueva.producto_color_id),
         );
 
-        if (esTelaNueva) {
+        if (esTelaNueva && !nueva.porMetros) {
             setLineas((prev) =>
                 conRollos(prev, {
                     producto,
@@ -483,23 +487,43 @@ export default function CrearPedido() {
             const tipo = tipoUnidad(presentacion);
             if (tipo) setUnidadPreferida(tipo);
 
-            setLineas((prev) => [
-                ...prev,
-                {
-                    producto_presentacion_id: nueva.producto_presentacion_id,
-                    producto_color_id: nueva.producto_color_id || '',
-                    producto: producto?.nombre,
-                    color: colorElegido?.nombre ?? '',
-                    modo: 'metros',
-                    rollos_pedidos: '',
-                    presentacion: presentacion?.nombre,
-                    descripcion: nueva.descripcion.trim(),
-                    cantidad: nueva.cantidad,
-                    precio_unitario: nueva.precio_unitario,
-                    precio_oculto: false,
-                    precio_manual: Boolean(nueva.precioManual),
-                },
-            ]);
+            setLineas((prev) => {
+                // Una tela por metros: los metros del mismo color se suman en una sola línea.
+                if (esTelaNueva) {
+                    const j = prev.findIndex(
+                        (l) =>
+                            l.modo !== ROLLOS &&
+                            String(l.producto_presentacion_id) === String(nueva.producto_presentacion_id) &&
+                            String(l.producto_color_id || '') === String(nueva.producto_color_id || ''),
+                    );
+                    if (j !== -1) {
+                        const total = (Number(prev[j].cantidad) || 0) + Number(nueva.cantidad);
+                        return prev.map((l, k) =>
+                            k === j
+                                ? { ...l, cantidad: String(total), ...(l.precio_manual ? {} : { precio_unitario: precioDeLista(presentacion, total) }) }
+                                : l,
+                        );
+                    }
+                }
+
+                return [
+                    ...prev,
+                    {
+                        producto_presentacion_id: nueva.producto_presentacion_id,
+                        producto_color_id: nueva.producto_color_id || '',
+                        producto: producto?.nombre,
+                        color: colorElegido?.nombre ?? '',
+                        modo: 'metros',
+                        rollos_pedidos: '',
+                        presentacion: presentacion?.nombre,
+                        descripcion: nueva.descripcion.trim(),
+                        cantidad: nueva.cantidad,
+                        precio_unitario: nueva.precio_unitario,
+                        precio_oculto: false,
+                        precio_manual: Boolean(nueva.precioManual),
+                    },
+                ];
+            });
         }
 
         // Lo escrito se queda: para pedir otro color de la misma tela solo se
@@ -518,6 +542,7 @@ export default function CrearPedido() {
             precioManual: false,
             conMetraje: false,
             metros_por_rollo: '',
+            porMetros: false,
         });
 
     /**
@@ -829,16 +854,37 @@ export default function CrearPedido() {
                                 value={
                                     !producto
                                         ? ''
-                                        : esTelaNueva
-                                          ? `${num(rollosLibres)} rollo${rollosLibres === 1 ? '' : 's'}`
-                                          : `${num(stockEnUnidad)} ${presentacion?.nombre ?? ''}`.trim()
+                                        : esTelaNueva && nueva.porMetros
+                                          ? `${num(stockEnUnidad)} m`
+                                          : esTelaNueva
+                                            ? `${num(rollosLibres)} rollo${rollosLibres === 1 ? '' : 's'}`
+                                            : `${num(stockEnUnidad)} ${presentacion?.nombre ?? ''}`.trim()
                                 }
                                 readOnly
                                 disabled
                             />
-                            {/* Una tela se pide siempre en rollos; lo demás, en la unidad que se elija. */}
+                            {/* Una tela, en rollos o en metros; lo demás, en la unidad que se elija. */}
                             {esTelaNueva ? (
-                                <Input label="Unidad" value="Rollo" readOnly disabled />
+                                <SearchSelect
+                                    label="Unidad"
+                                    value={nueva.porMetros ? 'metro' : 'rollo'}
+                                    clearable={false}
+                                    onChange={(id) => {
+                                        if (!id) return;
+                                        setNueva((prev) => ({
+                                            ...prev,
+                                            porMetros: id === 'metro',
+                                            cantidad: '',
+                                            conMetraje: false,
+                                            metros_por_rollo: '',
+                                            precioManual: false,
+                                        }));
+                                    }}
+                                    options={[
+                                        { value: 'rollo', label: 'Rollo' },
+                                        { value: 'metro', label: 'Metro' },
+                                    ]}
+                                />
                             ) : (
                                 <SearchSelect
                                     label="Unidad"
@@ -860,9 +906,9 @@ export default function CrearPedido() {
                                 />
                             )}
                             <Input
-                                label={esTelaNueva ? 'Rollos' : 'Cantidad'}
+                                label={esTelaNueva && !nueva.porMetros ? 'Rollos' : esTelaNueva ? 'Metros' : 'Cantidad'}
                                 type="number"
-                                step={esTelaNueva ? '1' : '0.01'}
+                                step={esTelaNueva && !nueva.porMetros ? '1' : '0.01'}
                                 min="0"
                                 value={nueva.cantidad}
                                 onChange={(e) => setNueva((prev) => ({ ...prev, cantidad: e.target.value }))}
@@ -880,8 +926,16 @@ export default function CrearPedido() {
                             />
                         </div>
 
+                        {/* Por metros: el almacén corta lo que se pide de los rollos del color. */}
+                        {esTelaNueva && nueva.porMetros && (
+                            <p className="-mt-2 text-xs text-warm-500">
+                                {producto?.colores?.length > 0 && !nueva.producto_color_id ? 'Elige el color de la tela. ' : ''}
+                                Se piden metros sueltos: el almacén los corta de los rollos del color y se cobra lo que salga.
+                            </p>
+                        )}
+
                         {/* Una tela: rollos enteros, o rollos de un metraje que el almacén corta si no lo tiene. */}
-                        {esTelaNueva && (
+                        {esTelaNueva && !nueva.porMetros && (
                             <div className="-mt-2 space-y-2">
                                 <div className="flex flex-wrap items-end gap-4">
                                     <label className="flex cursor-pointer items-center gap-2 pb-2 text-sm font-medium text-warm-700">

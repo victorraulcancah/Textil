@@ -71,6 +71,31 @@ export const faltantesDeStock = ({ lineas, existencias, productos, almacen = 'el
                         : `Pides ${num(pide)} rollo${pide === 1 ? '' : 's'} y solo hay ${num(hay)} disponible${hay === 1 ? '' : 's'}`,
                 });
             }
+        } else if (l.modo === 'metros') {
+            // Una tela vendida por metros: se compara con los metros libres de su color (lo demás no se mide aquí).
+            const prod = productoDe(l.producto_presentacion_id);
+            const pres = (prod?.presentaciones ?? []).find((pr) => String(pr.id) === String(l.producto_presentacion_id));
+            // Solo una tela con color tiene metros por color que comparar; lo demás no se mide aquí.
+            if (!prod || !l.producto_color_id || (pres?.unidad_base?.abreviatura ?? '').toLowerCase() !== 'm') return;
+
+            let hay = 0;
+            existencias
+                .filter((f) => String(f.producto?.id ?? f.producto_id) === String(prod.id))
+                .forEach((f) =>
+                    (f.colores ?? []).forEach((c) => {
+                        if (!l.producto_color_id || String(c.id) === String(l.producto_color_id)) hay += Number(c.metros_disponibles ?? c.metros) || 0;
+                    }),
+                );
+            // Lo que piden todas las líneas de ese mismo color, en metros.
+            const pide = lineas
+                .filter((x) => x.modo === 'metros' && String(x.producto_color_id || '') === String(l.producto_color_id || '') && productoDe(x.producto_presentacion_id)?.id === prod.id)
+                .reduce((s, x) => s + (Number(x.cantidad) || 0) * (Number((prod.presentaciones ?? []).find((pr) => String(pr.id) === String(x.producto_presentacion_id))?.factor_conversion) || 1), 0);
+            if (pide > hay + 0.001) {
+                faltantes.push({
+                    i,
+                    mensaje: hay <= 0 ? `Sin stock disponible en ${almacen}` : `Pides ${num(pide)} m y solo hay ${num(hay)} m disponibles`,
+                });
+            }
         } else if (l.modo === 'cantidad') {
             const prod = productoDe(l.producto_presentacion_id);
             const pres = (prod?.presentaciones ?? []).find((pr) => String(pr.id) === String(l.producto_presentacion_id));

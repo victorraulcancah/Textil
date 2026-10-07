@@ -193,6 +193,9 @@ Route::middleware('auth:api')->group(function () {
     Route::post('transferencias/{transferencia}/recepcion/quitar', [\App\Http\Controllers\RecepcionTrasladoController::class, 'quitar']);
     Route::post('transferencias/{transferencia}/recepcion/confirmar', [\App\Http\Controllers\RecepcionTrasladoController::class, 'confirmar']);
     Route::post('transferencias/{transferencia}/anular', [TransferenciaController::class, 'anular']);
+    // El detalle del ajuste desde Excel: la plantilla y la lectura (antes del resource, para que "plantilla" no se lea como un {ajuste}).
+    Route::get('ajustes/plantilla', [\App\Http\Controllers\AjusteImportController::class, 'plantilla']);
+    Route::post('ajustes/importar-detalle', [\App\Http\Controllers\AjusteImportController::class, 'importar']);
     Route::apiResource('ajustes', AjusteInventarioController::class);
     Route::apiResource('tomas-inventario', TomaInventarioController::class);
     Route::post('tomas-inventario/{toma}/cerrar', [TomaInventarioController::class, 'cerrar']);

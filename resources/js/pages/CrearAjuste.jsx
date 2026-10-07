@@ -1,6 +1,6 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ChevronRight, Plus, Scale, Trash2 } from 'lucide-react';
+import { ArrowLeft, ChevronRight, Download, Plus, Scale, Trash2, Upload } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { opcionesAlmacen, useAlmacenPropio } from '../lib/almacenes';
 import { useToast } from '../lib/toast';
@@ -61,6 +61,11 @@ export default function CrearAjuste() {
     const [items, setItems] = useState([]);
     const [errors, setErrors] = useState({});
     const [saving, setSaving] = useState(false);
+
+    /** El detalle desde Excel: el archivo que se carga y las filas que no se pudieron leer. */
+    const inputExcel = useRef(null);
+    const [importando, setImportando] = useState(false);
+    const [erroresExcel, setErroresExcel] = useState([]);
 
     /** El buscador de productos y la tabla de colores de una tela (entrada). */
     const [picker, setPicker] = useState({ open: false, query: '' });
@@ -409,6 +414,80 @@ export default function CrearAjuste() {
     const totalDe = (it) => redondear(cantidadDe(it) * (Number(it.costo) || 0));
     const totalAjuste = items.reduce((s, it) => s + totalDe(it), 0);
 
+    /** La plantilla de Excel para llenar el detalle: sus columnas cambian según sea entrada o salida. */
+    const descargarPlantilla = async () => {
+        try {
+            const { data } = await api.get('/ajustes/plantilla', {
+                params: { tipo: form.tipo, almacen_id: form.almacen_id || undefined },
+                responseType: 'blob',
+            });
+            const url = URL.createObjectURL(data);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `plantilla-ajuste-${form.tipo}.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 4000);
+        } catch {
+            toast.error('No se pudo descargar la plantilla.');
+        }
+    };
+
+    /**
+     * Carga el Excel: el servidor lo lee y devuelve las líneas ya resueltas (producto, color, rollo, unidad y costo)
+     * y las filas que no pudo leer. Las líneas se agregan a la tabla; nada se guarda hasta registrar el ajuste.
+     */
+    const importarExcel = async (archivo) => {
+        if (!archivo) return;
+        if (!form.almacen_id) return toast.error('Elige primero el almacén.');
+        const datos = new FormData();
+        datos.append('archivo', archivo);
+        datos.append('tipo', form.tipo);
+        datos.append('almacen_id', form.almacen_id);
+
+        setImportando(true);
+        try {
+            const { data } = await api.post('/ajustes/importar-detalle', datos, { headers: { 'Content-Type': 'multipart/form-data' } });
+            const errores = [...(data.errores ?? [])];
+            const nuevos = [];
+            const tomados = new Set(items.filter((it) => it.tipo === 'rollo').map((it) => String(it.rollo_id)));
+
+            (data.items ?? []).forEach((it) => {
+                // Un rollo que ya está en la tabla no se vuelve a agregar.
+                if (it.tipo === 'rollo' && tomados.has(String(it.rollo_id))) {
+                    errores.push({ fila: null, mensaje: `El rollo ${it.rollo_codigo} ya estaba en la tabla.` });
+                    return;
+                }
+                nuevos.push(it);
+            });
+
+            setItems((prev) => {
+                const next = [...prev];
+                nuevos.forEach((it) => {
+                    const i =
+                        it.tipo === 'comun'
+                            ? next.findIndex((x) => x.tipo === 'comun' && String(x.producto_presentacion_id) === String(it.producto_presentacion_id))
+                            : -1;
+                    if (i !== -1) next[i] = { ...next[i], cantidad: String((Number(next[i].cantidad) || 0) + (Number(it.cantidad) || 0)) };
+                    else next.push(it);
+                });
+                return next;
+            });
+            if (nuevos.length) limpiarError('detalles');
+            setErroresExcel(errores);
+
+            if (nuevos.length) toast.success(`${nuevos.length} línea${nuevos.length === 1 ? '' : 's'} agregada${nuevos.length === 1 ? '' : 's'} desde el Excel.`);
+            if (errores.length) toast.error(`${errores.length} fila${errores.length === 1 ? '' : 's'} no se pudieron cargar: revisa la lista.`);
+            if (!nuevos.length && !errores.length) toast.error('El archivo no tiene filas para cargar.');
+        } catch (err) {
+            toast.error(err.response?.data?.message ?? 'No se pudo leer el Excel.');
+        } finally {
+            setImportando(false);
+            if (inputExcel.current) inputExcel.current.value = '';
+        }
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setErrors({});
@@ -645,7 +724,49 @@ export default function CrearAjuste() {
 
                         {/* Lo agregado: una fila por tela, con sus colores desplegables (como el pedido). */}
                         <div className="rounded-xl border border-edge bg-white p-5 shadow-sm">
-                            <h2 className="mb-3 text-sm font-semibold text-warm-900">Detalle del ajuste</h2>
+                            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                                <h2 className="text-sm font-semibold text-warm-900">Detalle del ajuste</h2>
+                                <div className="flex flex-wrap gap-2">
+                                    <Button type="button" variant="secondary" size="sm" onClick={descargarPlantilla}>
+                                        <Download className="h-4 w-4" /> Plantilla Excel
+                                    </Button>
+                                    <Button type="button" variant="secondary" size="sm" loading={importando} onClick={() => inputExcel.current?.click()}>
+                                        <Upload className="h-4 w-4" /> Cargar Excel
+                                    </Button>
+                                    <input
+                                        ref={inputExcel}
+                                        type="file"
+                                        accept=".xlsx,.xls"
+                                        className="hidden"
+                                        onChange={(e) => importarExcel(e.target.files?.[0])}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Las filas del Excel que no se pudieron cargar, para corregirlas y volver a subir. */}
+                            {erroresExcel.length > 0 && (
+                                <Alert variant="warning" className="mb-3">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <p className="font-medium">
+                                                {erroresExcel.length} fila{erroresExcel.length === 1 ? '' : 's'} del Excel no se cargaron:
+                                            </p>
+                                            <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm">
+                                                {erroresExcel.slice(0, 12).map((er, i) => (
+                                                    <li key={i}>
+                                                        {er.fila ? <strong>Fila {er.fila}: </strong> : null}
+                                                        {er.mensaje}
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                            {erroresExcel.length > 12 && <p className="mt-1 text-sm">…y {erroresExcel.length - 12} más.</p>}
+                                        </div>
+                                        <button type="button" onClick={() => setErroresExcel([])} className="shrink-0 text-xs font-medium underline">
+                                            Cerrar
+                                        </button>
+                                    </div>
+                                </Alert>
+                            )}
                             <div className="overflow-x-auto rounded-lg border border-edge">
                                 <table className="w-full min-w-[760px] text-sm">
                                     <thead>
@@ -662,7 +783,7 @@ export default function CrearAjuste() {
                                         {items.length === 0 && (
                                             <tr>
                                                 <td colSpan={6} className="px-3 py-10 text-center text-warm-400">
-                                                    Agrega productos con el buscador de arriba.
+                                                    Agrega productos con el buscador de arriba o carga un Excel.
                                                 </td>
                                             </tr>
                                         )}

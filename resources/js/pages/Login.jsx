@@ -2,10 +2,22 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Button, Input, Alert } from '../components/ui';
 import CreditoMagus from '../components/CreditoMagus';
+import CintaMetrica from '../components/CintaMetrica';
 import { useAuth } from '../lib/auth';
 import api from '../lib/api';
 
 const REMEMBER_KEY = 'brava_remember';
+
+// La esterilla de corte: cuadrícula fina cada 24 px y una marcada cada 120 px, en blanco sobre el azul de la marca.
+const ESTERILLA = {
+    backgroundImage: [
+        'linear-gradient(rgba(255,255,255,.12) 1px, transparent 1px)',
+        'linear-gradient(90deg, rgba(255,255,255,.12) 1px, transparent 1px)',
+        'linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px)',
+        'linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px)',
+    ].join(','),
+    backgroundSize: '120px 120px, 120px 120px, 24px 24px, 24px 24px',
+};
 
 function EyeIcon({ open }) {
     return (
@@ -112,93 +124,115 @@ export default function Login() {
         }
     };
 
+    // Cada campo lleno avanza el marcador de la cinta; un error lo pone en rojo y lo deja ahí.
+    const llenos = (form.email.trim() ? 1 : 0) + (form.password ? 1 : 0);
+    const hayError = Boolean(formError) || Object.values(errors).some(Boolean);
+
     return (
-        <div className="flex min-h-screen items-center justify-center bg-surface px-4 py-12">
-            <div className="w-full max-w-md">
-                <div className="mb-8 text-center">
-                    <img
-                        src={branding?.logo_url ?? '/img/logo-telas.svg'}
-                        alt={branding?.nombre_comercial ?? 'Logo'}
-                        className="mx-auto h-20 w-auto object-contain"
-                    />
-                    <p className="mt-4 text-sm text-warm-500">
-                        Ingresa a tu cuenta para continuar
+        <div className="min-h-screen bg-white lg:grid lg:grid-cols-[minmax(0,45fr)_minmax(0,55fr)]">
+            {/* La esterilla de corte (escritorio): cuadrícula fina sobre el azul de la marca y la cinta métrica. */}
+            <aside className="relative hidden flex-col justify-between overflow-hidden bg-primary-800 text-white lg:flex" style={ESTERILLA}>
+                <div className="p-12 xl:p-16">
+                    <h2 className="max-w-md text-balance text-4xl font-semibold leading-[1.1] tracking-tight xl:text-5xl">
+                        Telas, rollo por rollo.
+                    </h2>
+                    <p className="mt-5 max-w-sm text-base leading-relaxed text-primary-100">
+                        Compras, inventario, despacho y caja del negocio, en un solo lugar.
                     </p>
                 </div>
 
-                <div className="rounded-2xl border border-edge bg-white p-6 shadow-xl shadow-primary-600/5 sm:p-8">
-                    {formError && (
-                        <Alert variant="error" className="mb-4">
-                            {formError}
-                        </Alert>
-                    )}
+                <div>
+                    <CintaMetrica progreso={llenos / 2} error={hayError} />
+                    <div className="p-12 pt-8 xl:px-16 xl:pb-14">
+                        <CreditoMagus variante="bloque" />
+                    </div>
+                </div>
+            </aside>
 
-                    <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-                        <Input
-                            label="Correo electrónico"
-                            name="email"
-                            type="email"
-                            autoComplete="email"
-                            placeholder="tucorreo@empresa.com"
-                            value={form.email}
-                            onChange={handleChange}
-                            error={errors.email}
+            <main className="flex min-h-screen flex-col lg:min-h-0">
+                {/* En celular la cinta va arriba, del ancho de la pantalla. */}
+                <CintaMetrica className="lg:hidden" progreso={llenos / 2} error={hayError} />
+
+                <div className="flex flex-1 flex-col items-center justify-center px-5 py-10 sm:px-8 lg:px-12">
+                    <div className="w-full max-w-sm">
+                        <img
+                            src={branding?.logo_url ?? '/img/logo-telas.svg'}
+                            alt={branding?.nombre_comercial ?? 'Logo'}
+                            className="h-16 w-auto object-contain"
                         />
 
-                        <div className="relative">
+                        <h1 className="mt-8 text-2xl font-semibold tracking-tight text-warm-900">Ingresa a tu cuenta</h1>
+                        <p className="mt-1.5 text-sm text-warm-500">Usa el correo y la contraseña de tu usuario del sistema.</p>
+
+                        {formError && (
+                            <Alert variant="error" className="mt-6">
+                                {formError}
+                            </Alert>
+                        )}
+
+                        <form onSubmit={handleSubmit} className="mt-6 space-y-4" noValidate>
                             <Input
-                                label="Contraseña"
-                                name="password"
-                                type={showPassword ? 'text' : 'password'}
-                                autoComplete={showPassword ? 'off' : 'current-password'}
-                                placeholder="••••••••"
-                                value={form.password}
+                                label="Correo electrónico"
+                                name="email"
+                                type="email"
+                                autoComplete="email"
+                                placeholder="tucorreo@empresa.com"
+                                value={form.email}
                                 onChange={handleChange}
-                                error={errors.password}
-                                className="pr-11"
+                                error={errors.email}
                             />
-                            <button
-                                type="button"
-                                onClick={() => setShowPassword((v) => !v)}
-                                aria-label={showPassword ? 'Ocultar contraseña' : 'Ver contraseña'}
-                                aria-pressed={showPassword}
-                                className="absolute right-3 top-[38px] text-warm-500 transition hover:text-primary-600"
-                            >
-                                <EyeIcon open={showPassword} />
-                            </button>
-                        </div>
 
-                        <div className="flex items-center justify-between pt-1">
-                            <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-gray-600">
-                                <input
-                                    type="checkbox"
-                                    checked={remember}
-                                    onChange={(e) => setRemember(e.target.checked)}
-                                    className="h-4 w-4 rounded border-gray-300 text-primary-600 accent-primary-600 focus:ring-primary-500"
+                            <div className="relative">
+                                <Input
+                                    label="Contraseña"
+                                    name="password"
+                                    type={showPassword ? 'text' : 'password'}
+                                    autoComplete={showPassword ? 'off' : 'current-password'}
+                                    placeholder="••••••••"
+                                    value={form.password}
+                                    onChange={handleChange}
+                                    error={errors.password}
+                                    className="pr-11"
                                 />
-                                Recordar credenciales
-                            </label>
-                            <Link
-                                to="/recuperar"
-                                className="text-sm font-medium text-primary-600 hover:text-primary-700"
-                            >
-                                ¿Olvidaste tu contraseña?
-                            </Link>
-                        </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword((v) => !v)}
+                                    aria-label={showPassword ? 'Ocultar contraseña' : 'Ver contraseña'}
+                                    aria-pressed={showPassword}
+                                    className="absolute right-3 top-[38px] text-warm-500 transition hover:text-primary-600"
+                                >
+                                    <EyeIcon open={showPassword} />
+                                </button>
+                            </div>
 
-                        <Button
-                            type="submit"
-                            size="lg"
-                            loading={loading}
-                            className="w-full"
-                        >
-                            {loading ? 'Ingresando...' : 'Iniciar sesión'}
-                        </Button>
-                    </form>
+                            <div className="flex items-center justify-between gap-3 pt-1">
+                                <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-gray-600">
+                                    <input
+                                        type="checkbox"
+                                        checked={remember}
+                                        onChange={(e) => setRemember(e.target.checked)}
+                                        className="h-4 w-4 rounded border-gray-300 text-primary-600 accent-primary-600 focus:ring-primary-500"
+                                    />
+                                    Recordar credenciales
+                                </label>
+                                <Link
+                                    to="/recuperar"
+                                    className="text-right text-sm font-medium text-primary-600 hover:text-primary-700"
+                                >
+                                    ¿Olvidaste tu contraseña?
+                                </Link>
+                            </div>
+
+                            <Button type="submit" size="lg" loading={loading} className="w-full">
+                                {loading ? 'Ingresando...' : 'Iniciar sesión'}
+                            </Button>
+                        </form>
+
+                        {/* En escritorio la firma vive en la esterilla; aquí solo en celular y tablet. */}
+                        <CreditoMagus variante="bloque" className="mt-10 lg:hidden" />
+                    </div>
                 </div>
-
-                <CreditoMagus variante="bloque" className="mt-6" />
-            </div>
+            </main>
         </div>
     );
 }

@@ -182,7 +182,9 @@ class MovimientoInventarioController extends Controller
      */
     public function documento(string $tipo, int $id)
     {
-        $movs = AlmacenAcceso::limitar(MovimientoInventario::query())
+        // Sin limitar por el almacén activo: el listado del kardex tampoco lo hace, y un documento que se ve en la
+        // lista tiene que poder abrirse (un traslado, por ejemplo, toca dos almacenes).
+        $movs = MovimientoInventario::query()
             ->where('documento_referencia_tipo', $tipo)
             ->where('documento_referencia_id', $id)
             ->with([

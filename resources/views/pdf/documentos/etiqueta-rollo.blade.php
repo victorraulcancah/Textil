@@ -34,38 +34,38 @@
 
         /* El alto sale del papel (a 96 dpi); dompdf suma el padding al alto, por eso se deja margen. */
         .etiqueta {
-            height: {{ $altoPx - ($grande ? 4 : 0) }}px;
-            padding: {{ $grande ? 7 : 5 }}px {{ $vertical ? 7 : ($grande ? 12 : 8) }}px;
+            height: {{ $altoPx - ($grande ? 10 : 0) }}px;
+            padding: {{ $grande ? 8 : 5 }}px {{ $vertical ? 7 : ($grande ? 12 : 8) }}px;
             overflow: hidden;
             page-break-after: always;
         }
         .etiqueta:last-child { page-break-after: auto; }
 
         .producto {
-            font-size: {{ $vertical ? 10.5 : ($grande ? 12 : 11) }}px;
+            font-size: {{ $vertical ? 10.5 : ($grande ? 13 : 11) }}px;
             font-weight: bold;
             text-transform: uppercase;
             letter-spacing: .3px;
             line-height: 1.1;
         }
-        .linea { font-size: {{ $grande ? 8.5 : 7.5 }}px; margin-top: 1px; }
+        .linea { font-size: {{ $grande ? 9 : 7.5 }}px; margin-top: {{ $grande ? 2 : 1 }}px; }
         .linea .et { color: {{ config('theme.muted') }}; }
 
         /* El código y el metraje son lo que se lee de lejos, en el rack. */
         .codigo {
             font-size: {{ $vertical ? 12 : ($grande ? 15 : 13) }}px;
             font-weight: bold;
-            letter-spacing: .2px;
-            margin-top: {{ $grande ? 3 : 2 }}px;
+            letter-spacing: {{ $grande ? .5 : .2 }}px;
+            margin-top: {{ $grande ? 4 : 2 }}px;
         }
         .metraje {
-            font-size: {{ $grande ? 19 : 17 }}px;
+            font-size: {{ $grande ? 20 : 17 }}px;
             font-weight: bold;
             color: {{ config('theme.primary') }};
             line-height: 1;
         }
         .metraje .peso {
-            font-size: {{ $grande ? 8.5 : 9 }}px;
+            font-size: {{ $grande ? 9 : 9 }}px;
             font-weight: normal;
             color: {{ config('theme.muted') }};
             display: block;
@@ -74,9 +74,22 @@
 
         .codigos { margin-top: {{ $grande ? 4 : 2 }}px; }
         .codigos td { vertical-align: middle; text-align: center; padding: 0 4px; }
-        .qr { height: {{ $vertical ? 72 : ($grande ? 72 : 60) }}px; width: {{ $vertical ? 72 : ($grande ? 72 : 60) }}px; }
-        .barras { height: {{ $vertical ? 32 : ($grande ? 36 : 30) }}px; width: 100%; }
-        .pie { font-size: {{ $grande ? 7.5 : 6.5 }}px; color: {{ config('theme.muted_light') }}; margin-top: {{ $grande ? 3 : 2 }}px; }
+        .qr { height: {{ $vertical ? 72 : ($grande ? 70 : 60) }}px; width: {{ $vertical ? 72 : ($grande ? 70 : 60) }}px; }
+        .barras { height: {{ $vertical ? 32 : ($grande ? 38 : 30) }}px; width: 100%; }
+        .pie { font-size: {{ $grande ? 7 : 6.5 }}px; color: {{ config('theme.muted_light') }}; margin-top: {{ $grande ? 3 : 2 }}px; }
+
+        @if ($grande)
+        /* Con más datos (peso, posición, orden) se aprieta un poco para que todo siga entrando en una sola hoja. */
+        .etiqueta.compacta { height: {{ $altoPx - 4 }}px; padding: 7px 12px; }
+        .compacta .producto { font-size: 12px; }
+        .compacta .linea { font-size: 8.5px; margin-top: 1px; }
+        .compacta .codigo { font-size: 15px; letter-spacing: .2px; margin-top: 3px; }
+        .compacta .metraje { font-size: 19px; }
+        .compacta .metraje .peso { font-size: 8.5px; }
+        .compacta .qr { height: 72px; width: 72px; }
+        .compacta .barras { height: 36px; }
+        .compacta .pie { font-size: 7.5px; }
+        @endif
     </style>
 </head>
 <body>
@@ -85,7 +98,7 @@
         <div style="position: relative; width: {{ $diseñoAlto }}px; height: {{ $diseñoAncho - 2 }}px; overflow: hidden; page-break-after: {{ $loop->last ? 'auto' : 'always' }};">
         <div style="position: absolute; left: 0; top: 0; width: {{ $diseñoAncho }}px; height: {{ $diseñoAlto }}px; transform-origin: 0 0; transform: translateY({{ $diseñoAncho }}px) rotate(-90deg);">
     @endif
-    <div class="etiqueta">
+    <div class="etiqueta @if ($grande && ($e['peso_kg'] || $e['posicion'] || $e['orden'])) compacta @endif">
         <table style="width: 100%;">
             <tr>
                 <td style="vertical-align: top;">
@@ -121,7 +134,7 @@
                 </td>
                 @if ($e['qr'] && ! $vertical)
                     {{-- Sin código de barras sobra espacio: el QR se imprime más grande, que se lee mejor. --}}
-                    <td style="width: {{ $e['barras'] ? ($grande ? 84 : 66) : 100 }}px; text-align: right; vertical-align: top;">
+                    <td style="width: {{ $e['barras'] ? ($grande ? 80 : 66) : 100 }}px; text-align: right; vertical-align: top;">
                         <img class="qr" @unless ($e['barras']) style="height: 92px; width: 92px;" @endunless src="{{ $e['qr'] }}" alt="{{ $e['codigo'] }}">
                     </td>
                 @endif

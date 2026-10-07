@@ -2,23 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import api, { asList } from '../lib/api';
-import { DOC_LABEL, ORIGEN_LABEL } from '../lib/movimientos';
+import { DOC_LABEL } from '../lib/movimientos';
+import { entero, fmtFecha, num, precio, simboloMoneda, texto, vacio } from '../lib/kardex';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import { Alert, Badge, Button, DataTable, Modal, Spinner } from '../components/ui';
-
-const num = (n) =>
-    (Math.abs(Number(n ?? 0)) < 0.005 ? 0 : Number(n)).toLocaleString('es-PE', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    });
-const precio = (n) => Number(n ?? 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
-const entero = (n) => Number(n ?? 0).toLocaleString('es-PE');
-
-const fmtFecha = (value) =>
-    value
-        ? new Date(value).toLocaleString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-        : '—';
 
 const ESTADO_ROLLO = {
     disponible: { label: 'Disponible', variant: 'green' },
@@ -31,11 +19,26 @@ const ESTADO_ROLLO = {
     agotado: { label: 'Agotado', variant: 'gray' },
 };
 
-const vacio = <span className="text-gray-300">—</span>;
+/** El estado de un documento, con su nombre de pantalla. */
+const ESTADO_DOC = {
+    completa: 'Completa',
+    deshecha: 'Deshecha',
+    emitida: 'Emitida',
+    borrador: 'Borrador',
+    solicitado: 'Solicitado',
+    preparando: 'Preparando',
+    separado: 'Separado',
+    despachado: 'Despachado',
+    facturado: 'Facturado',
+    anulado: 'Anulado',
+    solicitada: 'Solicitada',
+    recibida: 'Recibida',
+    aprobado: 'Aprobado',
+};
 
 /**
- * Un documento del kardex visto completo: arriba su ficha, abajo su detalle (los productos y colores que movió).
- * Tocar una línea muestra los rollos que entraron o salieron en ella.
+ * Un documento del kardex visto completo, como una nota: arriba el documento en una tabla y abajo, en otra, su detalle
+ * (los productos y colores que movió). Tocar una línea muestra los rollos que entraron o salieron en ella.
  */
 export default function KardexDocumento() {
     const { tipo, id } = useParams();
@@ -72,18 +75,42 @@ export default function KardexDocumento() {
     };
 
     const cab = datos?.cabecera;
-    const lineas = datos?.lineas ?? [];
+    const lineas = useMemo(() => (datos?.lineas ?? []).map((l, i) => ({ ...l, _i: i })), [datos]);
+    const nombreTipo = DOC_LABEL[tipo] ?? 'Documento';
 
-    const totales = useMemo(
-        () => ({
-            rollos: lineas.reduce((s, l) => s + (Number(l.rollos) || 0), 0),
-            total: lineas.reduce((s, l) => s + (Number(l.total) || 0), 0),
-        }),
-        [lineas],
-    );
+    const totalRollos = lineas.reduce((s, l) => s + (Number(l.rollos) || 0), 0);
 
-    const columnas = [
-        { key: 'n', label: '#', width: '50px', searchable: false, render: (row) => <span className="text-gray-400">{row._i + 1}</span> },
+    // ───────────── La tabla del documento (una sola fila)
+    const columnasDocumento = [
+        { key: 'documento', label: 'Número', width: '130px', render: (r) => <span className="whitespace-nowrap font-semibold text-primary-700">{r.documento ?? '—'}</span> },
+        {
+            key: 'fecha',
+            label: 'Fecha',
+            width: '150px',
+            render: (r) => {
+                const f = fmtFecha(r.fecha);
+                return f ? <span className="whitespace-nowrap text-gray-700">{f.dia} <span className="text-xs text-gray-400">{f.hora}</span></span> : vacio;
+            },
+        },
+        { key: 'nombre', label: 'Nombre', width: '260px', render: (r) => texto(r.nombre, '260px') },
+        { key: 'almacen', label: 'Almacén', width: '170px', render: (r) => texto((r.almacenes ?? []).join(' · '), '170px') },
+        { key: 'moneda', label: 'M', width: '60px', render: (r) => <span className="text-gray-700">{simboloMoneda(r.moneda)}</span> },
+        { key: 'tipo_cambio', label: 'T/C', width: '80px', align: 'right', render: (r) => (r.tipo_cambio ? <span className="text-gray-700">{Number(r.tipo_cambio).toFixed(4)}</span> : vacio) },
+        { key: 'total', label: 'Total', width: '120px', align: 'right', render: (r) => <span className="font-semibold text-gray-900">{num(r.total)}</span> },
+        {
+            key: 'estado',
+            label: 'St.',
+            width: '110px',
+            render: (r) => (r.estado ? <Badge variant={['deshecha', 'anulado'].includes(r.estado) ? 'red' : 'gray'}>{ESTADO_DOC[r.estado] ?? r.estado}</Badge> : vacio),
+        },
+        { key: 'glosa', label: 'Glosa', width: '200px', render: (r) => texto(r.glosa, '200px') },
+        { key: 'referencia', label: 'Doc. Referencia', width: '140px', render: (r) => texto(r.referencia, '140px') },
+        { key: 'orden_compra', label: 'O.Compra', width: '110px', render: (r) => texto(r.orden_compra, '110px') },
+        { key: 'doc_registro', label: 'Doc. Registro', width: '120px', render: (r) => texto(r.doc_registro, '120px') },
+    ];
+
+    // ───────────── El detalle: los productos del documento
+    const columnasDetalle = [
         {
             key: 'codigo',
             label: 'Código',
@@ -91,35 +118,22 @@ export default function KardexDocumento() {
             getSearchValue: (row) => [row.producto_codigo, row.color?.codigo].filter(Boolean).join('-'),
             render: (row) => <span className="whitespace-nowrap text-gray-700">{[row.producto_codigo, row.color?.codigo].filter(Boolean).join('-') || '—'}</span>,
         },
+        { key: 'marca', label: 'Marca', width: '120px', getSearchValue: (row) => row.marca, render: (row) => texto(row.marca, '120px') },
         {
-            key: 'producto',
-            label: 'Producto',
+            key: 'descripcion',
+            label: 'Descripción',
+            width: '340px',
             getSearchValue: (row) => `${row.producto} ${row.color?.nombre ?? ''}`,
-            render: (row) => <span className="font-medium text-gray-900">{row.producto}</span>,
-        },
-        {
-            key: 'color',
-            label: 'Color',
-            width: '170px',
-            getSearchValue: (row) => row.color?.nombre,
-            render: (row) =>
-                row.color ? (
-                    <span className="inline-flex items-center gap-1.5 text-warm-800">
-                        <span className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-black/10" style={{ backgroundColor: row.color.hex || '#9ca3af' }} />
-                        <span className="truncate uppercase">{row.color.nombre}</span>
-                    </span>
-                ) : (
-                    <span className="text-gray-400">Sin color</span>
-                ),
-        },
-        { key: 'almacen', label: 'Almacén', width: '150px', getSearchValue: (row) => row.almacen, render: (row) => row.almacen ?? vacio },
-        {
-            key: 'tipo_movimiento',
-            label: 'Movimiento',
-            width: '110px',
-            searchable: false,
             render: (row) => (
-                <Badge variant={row.tipo_movimiento === 'entrada' ? 'green' : 'red'}>{row.tipo_movimiento === 'entrada' ? 'Entra' : 'Sale'}</Badge>
+                <span className="inline-flex min-w-0 items-center gap-2">
+                    {row.color && (
+                        <span className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-black/10" style={{ backgroundColor: row.color.hex || '#9ca3af' }} />
+                    )}
+                    <span className="truncate font-medium uppercase text-gray-900">
+                        {row.producto}
+                        {row.color ? ` - ${row.color.nombre}` : ''}
+                    </span>
+                </span>
             ),
         },
         {
@@ -128,22 +142,26 @@ export default function KardexDocumento() {
             width: '80px',
             align: 'right',
             searchable: false,
-            render: (row) => (Number(row.rollos) > 0 ? <span className="font-medium text-primary-700 underline decoration-dotted underline-offset-2">{entero(row.rollos)}</span> : vacio),
+            render: (row) =>
+                Number(row.rollos) > 0 ? (
+                    <span className="font-medium text-primary-700 underline decoration-dotted underline-offset-2">{entero(row.rollos)}</span>
+                ) : (
+                    vacio
+                ),
         },
-        {
-            key: 'cantidad',
-            label: 'Cantidad',
-            width: '130px',
-            align: 'right',
-            searchable: false,
-            render: (row) => (
-                <span className="whitespace-nowrap font-semibold text-gray-900">
-                    {num(row.cantidad)} <span className="text-[11px] font-normal text-gray-400">{row.unidad}</span>
-                </span>
-            ),
-        },
-        { key: 'costo', label: 'Precio', width: '100px', align: 'right', searchable: false, render: (row) => <span className="text-gray-600">{precio(row.costo_unitario)}</span> },
+        { key: 'cantidad', label: 'Cantidad', width: '120px', align: 'right', searchable: false, render: (row) => <span className="font-semibold text-gray-900">{num(row.cantidad)}</span> },
+        { key: 'um', label: 'UM', width: '60px', searchable: false, render: (row) => <span className="uppercase text-gray-500">{row.unidad}</span> },
+        { key: 'precio', label: 'Precio', width: '100px', align: 'right', searchable: false, render: (row) => <span className="text-gray-700">{precio(row.costo_unitario)}</span> },
         { key: 'total', label: 'Total', width: '120px', align: 'right', searchable: false, render: (row) => <span className="font-medium text-gray-900">{num(row.total)}</span> },
+        { key: 'descuento', label: 'Dscto', width: '90px', align: 'right', searchable: false, render: (row) => <span className="text-gray-500">{num(row.descuento)}</span> },
+        { key: 'almacen', label: 'Almacén', width: '150px', getSearchValue: (row) => row.almacen, render: (row) => texto(row.almacen, '150px') },
+        {
+            key: 'tipo_movimiento',
+            label: 'Mov.',
+            width: '90px',
+            searchable: false,
+            render: (row) => <Badge variant={row.tipo_movimiento === 'entrada' ? 'green' : 'red'}>{row.tipo_movimiento === 'entrada' ? 'Entra' : 'Sale'}</Badge>,
+        },
     ];
 
     const rollosPorColor = useMemo(() => {
@@ -158,21 +176,11 @@ export default function KardexDocumento() {
         return [...grupos.values()];
     }, [rollos]);
 
-    /** Un dato de la ficha: rótulo chico arriba y el valor abajo. */
-    const Dato = ({ rotulo, children }) => (
-        <div className="min-w-0">
-            <dt className="text-[11px] font-semibold uppercase tracking-wide text-warm-500">{rotulo}</dt>
-            <dd className="mt-0.5 truncate text-sm text-warm-900" title={typeof children === 'string' ? children : undefined}>
-                {children || vacio}
-            </dd>
-        </div>
-    );
-
     return (
         <Layout>
             <PageHeader
-                title={cab ? `${DOC_LABEL[cab.tipo] ?? 'Documento'} ${cab.documento ?? ''}` : 'Documento'}
-                description="La ficha del documento y el detalle de lo que movió"
+                title={cab ? `${nombreTipo} ${cab.documento ?? ''}` : 'Documento'}
+                description="El documento arriba y, abajo, el detalle de lo que movió"
                 actions={
                     <Button variant="secondary" onClick={volver}>
                         <ArrowLeft className="h-4 w-4" /> Volver al kardex
@@ -189,43 +197,35 @@ export default function KardexDocumento() {
             )}
 
             {cab && (
-                <div className="space-y-6">
-                    {/* La ficha del documento. */}
-                    <section>
-                        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-warm-600">Documento</h2>
-                        <dl className="grid grid-cols-2 gap-x-6 gap-y-4 rounded-xl border border-edge bg-white p-5 md:grid-cols-3 xl:grid-cols-5">
-                            <Dato rotulo="Documento">{cab.documento}</Dato>
-                            <Dato rotulo="Tipo">{DOC_LABEL[cab.tipo] ?? cab.tipo}</Dato>
-                            <Dato rotulo="Fecha">{fmtFecha(cab.fecha)}</Dato>
-                            <Dato rotulo="Nombre">{cab.nombre}</Dato>
-                            <Dato rotulo="Almacén">{(cab.almacenes ?? []).join(' · ')}</Dato>
-                            <Dato rotulo="Movimiento">{ORIGEN_LABEL[cab.origen] ?? cab.origen}</Dato>
-                            <Dato rotulo="Glosa">{cab.glosa}</Dato>
-                            <Dato rotulo="Referencia">{cab.referencia}</Dato>
-                            <Dato rotulo="O.Compra">{cab.orden_compra}</Dato>
-                            <Dato rotulo="Doc. Registro">{cab.doc_registro}</Dato>
-                            <Dato rotulo="Registrado por">{cab.usuario}</Dato>
-                        </dl>
-                    </section>
+                <div className="space-y-5">
+                    {/* El documento: una fila con sus datos. */}
+                    <DataTable
+                        columns={columnasDocumento}
+                        rows={[{ ...cab, id: 'documento' }]}
+                        searchable={false}
+                        toggleableColumns={false}
+                        dense
+                    />
 
-                    {/* El detalle: los productos (con su color) que movió. */}
-                    <section>
-                        <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-                            <h2 className="text-sm font-semibold uppercase tracking-wide text-warm-600">Detalle del documento</h2>
-                            <p className="text-sm text-warm-600">
-                                {lineas.length} línea{lineas.length === 1 ? '' : 's'} · <strong className="text-warm-900">{entero(totales.rollos)}</strong> rollos ·
-                                Total <strong className="text-warm-900">{num(totales.total)}</strong>
-                            </p>
+                    {/* Su detalle: los productos. */}
+                    <div>
+                        <div className="rounded-t-lg border border-b-0 border-edge bg-gray-100 px-4 py-2 text-center text-sm font-semibold text-warm-800">
+                            Detalle de la {nombreTipo.toLowerCase()}: {cab.documento}
+                            <span className="ml-3 font-normal text-warm-500">
+                                {lineas.length} línea{lineas.length === 1 ? '' : 's'} · {entero(totalRollos)} rollos
+                            </span>
                         </div>
                         <DataTable
-                            columns={columnas}
-                            rows={lineas.map((l, i) => ({ ...l, _i: i }))}
+                            columns={columnasDetalle}
+                            rows={lineas}
                             keyField="_i"
-                            searchPlaceholder="Buscar en el detalle..."
+                            searchable={false}
+                            toggleableColumns={false}
+                            dense
                             emptyMessage="Este documento no tiene líneas."
                             onRowClick={(l) => Number(l.rollos) > 0 && abrirLinea(l)}
                         />
-                    </section>
+                    </div>
                 </div>
             )}
 

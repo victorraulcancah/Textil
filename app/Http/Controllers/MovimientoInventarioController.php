@@ -186,8 +186,9 @@ class MovimientoInventarioController extends Controller
             ->where('documento_referencia_tipo', $tipo)
             ->where('documento_referencia_id', $id)
             ->with([
-                'producto:id,codigo,nombre,unidad_base_id',
+                'producto:id,codigo,nombre,unidad_base_id,marca_id',
                 'producto.unidadBase:id,abreviatura',
+                'producto.marca:id,nombre',
                 'color:id,nombre,codigo,hex',
                 'almacen:id,nombre',
                 'usuario:id,name',
@@ -198,6 +199,7 @@ class MovimientoInventarioController extends Controller
         abort_if($movs->isEmpty(), 404, 'No hay movimientos de este documento.');
 
         $datos = $this->datosDeDocumentos($movs)["{$tipo}:{$id}"] ?? [];
+        $comercial = $this->datosComerciales($tipo, $id);
 
         // Cuántos rollos movió el documento de cada producto y color.
         $rollosPorLinea = $this->rollosDelDocumento($tipo, $id)
@@ -206,17 +208,23 @@ class MovimientoInventarioController extends Controller
 
         $lineas = $movs
             ->groupBy(fn ($m) => implode(':', [$m->producto_id, $m->producto_color_id ?? 'sin', $m->almacen_id, $m->tipo_movimiento]))
-            ->map(function ($grupo) use ($rollosPorLinea) {
+            ->map(function ($grupo) use ($rollosPorLinea, $comercial) {
                 $primero = $grupo->first();
                 $cantidad = (float) $grupo->sum(fn ($m) => abs((float) $m->cantidad));
                 $costo = $cantidad > 0
                     ? $grupo->sum(fn ($m) => abs((float) $m->cantidad) * (float) $m->costo_unitario) / $cantidad
                     : (float) $primero->costo_unitario;
 
+                // El precio del documento comercial (compra, pedido o nota de venta); si no hay, el costo del movimiento.
+                $comercialLinea = $comercial['precios'][$primero->producto_id.':'.($primero->producto_color_id ?? 'sin')] ?? null;
+                $precio = $comercialLinea['precio'] ?? $costo;
+                $descuento = $comercialLinea['descuento'] ?? 0;
+
                 return [
                     // Cualquiera de sus movimientos sirve para pedir el detalle de rollos.
                     'movimiento_id' => $grupo->max('id'),
                     'producto_codigo' => $primero->producto?->codigo,
+                    'marca' => $primero->producto?->marca?->nombre,
                     'producto' => $primero->producto?->nombre,
                     'unidad' => $primero->producto?->unidadBase?->abreviatura,
                     'color' => $primero->color ? ['nombre' => $primero->color->nombre, 'codigo' => $primero->color->codigo, 'hex' => $primero->color->hex] : null,
@@ -224,8 +232,9 @@ class MovimientoInventarioController extends Controller
                     'tipo_movimiento' => $primero->tipo_movimiento,
                     'rollos' => (int) ($rollosPorLinea[$primero->producto_id.':'.($primero->producto_color_id ?? 'sin')] ?? 0),
                     'cantidad' => round($cantidad, 2),
-                    'costo_unitario' => round($costo, 4),
-                    'total' => round($cantidad * $costo, 2),
+                    'costo_unitario' => round($precio, 4),
+                    'descuento' => round((float) $descuento, 2),
+                    'total' => round($cantidad * $precio - $descuento, 2),
                 ];
             })
             ->sortBy(fn ($l) => [$l['producto'], $l['color']['nombre'] ?? '~'])
@@ -238,6 +247,11 @@ class MovimientoInventarioController extends Controller
                 'tipo' => $tipo,
                 'documento' => $datos['documento'] ?? null,
                 'fecha' => $movs->min('fecha'),
+                'moneda' => $comercial['moneda'],
+                'tipo_cambio' => $comercial['tipo_cambio'],
+                'estado' => $comercial['estado'],
+                // El total del documento si lo trae; si no, la suma de su detalle.
+                'total' => $comercial['total'] ?? round((float) $lineas->sum('total'), 2),
                 'nombre' => $datos['nombre'] ?? null,
                 'almacenes' => $movs->pluck('almacen.nombre')->filter()->unique()->values(),
                 'glosa' => $datos['glosa'] ?? null,
@@ -249,6 +263,94 @@ class MovimientoInventarioController extends Controller
             ],
             'lineas' => $lineas,
         ]);
+    }
+
+    /**
+     * Lo comercial de un documento, para mostrarlo como en una nota: moneda, tipo de cambio, estado y el precio y
+     * descuento de cada producto y color (de la compra, el pedido o la nota de venta de la que sale).
+     *
+     * @return array{moneda: ?string, tipo_cambio: mixed, estado: ?string, total: ?float, precios: array<string, array{precio: float, descuento: float}>}
+     */
+    private function datosComerciales(string $tipo, int $id): array
+    {
+        $salida = ['moneda' => 'PEN', 'tipo_cambio' => null, 'estado' => null, 'total' => null, 'precios' => []];
+
+        // Precio promedio (ponderado por cantidad) y descuento por producto y color.
+        $precios = fn ($filas) => collect($filas)
+            ->groupBy(fn ($f) => $f->producto_id.':'.($f->producto_color_id ?? 'sin'))
+            ->map(function ($g) {
+                $cantidad = (float) $g->sum('cantidad');
+
+                return [
+                    'precio' => round($cantidad > 0 ? $g->sum(fn ($f) => (float) $f->cantidad * (float) $f->precio) / $cantidad : (float) $g->avg('precio'), 4),
+                    'descuento' => round((float) $g->sum('descuento'), 2),
+                ];
+            })->all();
+
+        switch ($tipo) {
+            case 'recepcion_compra':
+                $r = DB::table('recepciones_compra as r')
+                    ->leftJoin('compras as c', 'c.id', '=', 'r.compra_id')
+                    ->where('r.id', $id)
+                    ->first(['r.estado', 'c.id as compra_id', 'c.moneda_origen', 'c.tipo_cambio']);
+                if ($r) {
+                    $salida['estado'] = $r->estado;
+                    $salida['moneda'] = $r->moneda_origen ?: 'PEN';
+                    $salida['tipo_cambio'] = $r->tipo_cambio;
+                    $salida['precios'] = $precios(
+                        DB::table('compra_detalles as d')
+                            ->join('producto_presentaciones as pp', 'pp.id', '=', 'd.producto_presentacion_id')
+                            ->where('d.compra_id', $r->compra_id)
+                            ->get(['pp.producto_id', 'd.producto_color_id', 'd.cantidad', 'd.costo_unitario as precio', DB::raw('0 as descuento')])
+                    );
+                }
+                break;
+
+            case 'nota_venta':
+                $n = DB::table('notas_venta')->where('id', $id)->first(['estado', 'moneda', 'tipo_cambio', 'total']);
+                if ($n) {
+                    $salida = array_merge($salida, ['estado' => $n->estado, 'moneda' => $n->moneda ?: 'PEN', 'tipo_cambio' => $n->tipo_cambio, 'total' => (float) $n->total]);
+                    $salida['precios'] = $precios(
+                        DB::table('nota_venta_detalles as d')
+                            ->join('producto_presentaciones as pp', 'pp.id', '=', 'd.producto_presentacion_id')
+                            ->leftJoin('rollos as r', 'r.id', '=', 'd.rollo_id')
+                            ->where('d.nota_venta_id', $id)
+                            ->get(['pp.producto_id', 'r.producto_color_id', 'd.cantidad', 'd.precio_unitario as precio', 'd.descuento'])
+                    );
+                }
+                break;
+
+            case 'orden_venta':
+                $o = DB::table('ordenes_venta')->where('id', $id)->first(['estado', 'moneda', 'tipo_cambio', 'total']);
+                if ($o) {
+                    $salida = array_merge($salida, ['estado' => $o->estado, 'moneda' => $o->moneda ?: 'PEN', 'tipo_cambio' => $o->tipo_cambio, 'total' => (float) $o->total]);
+                    $salida['precios'] = $precios(
+                        DB::table('orden_venta_detalles as d')
+                            ->join('producto_presentaciones as pp', 'pp.id', '=', 'd.producto_presentacion_id')
+                            ->where('d.orden_venta_id', $id)
+                            ->get(['pp.producto_id', 'd.producto_color_id', 'd.cantidad', 'd.precio_unitario as precio', 'd.descuento'])
+                    );
+                }
+                break;
+
+            case 'transferencia':
+                $salida['estado'] = DB::table('transferencias')->where('id', $id)->value('estado');
+                break;
+
+            case 'ajuste_inventario':
+                $salida['estado'] = DB::table('ajustes_inventario')->where('id', $id)->value('estado');
+                break;
+
+            case 'prestamo':
+                $salida['estado'] = DB::table('prestamos')->where('id', $id)->value('estado');
+                break;
+
+            case 'toma_inventario':
+                $salida['estado'] = DB::table('tomas_inventario')->where('id', $id)->value('estado');
+                break;
+        }
+
+        return $salida;
     }
 
     /** Los rollos que dejaron huella en el historial con ese documento (sin reservas ni pasos de preparación). */

@@ -119,8 +119,7 @@
                             <span class="peso">peso neto {{ $e['peso_kg'] }} kg</span>
                         @endif
                     </div>
-                    <div class="linea"><span class="et">Metraje de fábrica</span></div>
-                    {{-- El saldo va en su propia línea: junto al metraje no entra en la etiqueta angosta. --}}
+                    {{-- El saldo (solo si ya no es el de fábrica) va en su propia línea: junto al metraje no entra en la etiqueta angosta. --}}
                     @if ($e['metros'] !== $e['metros_fabrica'])
                         <div class="linea"><span class="et">Saldo actual:</span> <strong>{{ $e['metros'] }} m</strong></div>
                     @endif
@@ -136,7 +135,8 @@
 
         {{-- En vertical el QR va centrado debajo del texto. --}}
         @if ($e['qr'] && $vertical)
-            <div style="text-align: center; margin-top: 4px;">
+            {{-- El QR ya trae su propio borde blanco: se sube un poco para que quede pegado al texto. --}}
+            <div style="text-align: center; margin-top: -4px;">
                 <img class="qr" @unless ($e['barras']) style="height: 104px; width: 104px;" @endunless src="{{ $e['qr'] }}" alt="{{ $e['codigo'] }}">
             </div>
         @endif

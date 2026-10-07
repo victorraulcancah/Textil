@@ -110,6 +110,7 @@ class RolloController extends Controller
                         $f->estado => [
                             'rollos' => (int) $f->rollos,
                             'metros' => round((float) $f->metros, 2),
+                            'valor' => round((float) $f->valor, 2),
                         ],
                     ]),
                 ];

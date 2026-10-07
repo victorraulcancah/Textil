@@ -96,6 +96,8 @@ const routes = [
     { path: '/almacenes', element: <Almacenes /> },
     { path: '/existencias', element: <Existencias /> },
     { path: '/stock-rollos', element: <StockPorRollo /> },
+    // Los colores de un tipo de tela y los rollos de un color: la misma pantalla, en la dirección.
+    { path: '/stock-rollos/*', element: <StockPorRollo /> },
     { path: '/stock-rollos/reporte', element: <StockRollosReporte /> },
     { path: '/kardex', element: <Movimientos /> },
     { path: '/kardex/color/:telaId/:colorId', element: <KardexColor /> },

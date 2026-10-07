@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
+    ArrowLeft,
     ChevronRight,
     FileSpreadsheet,
     Layers,
@@ -18,7 +19,7 @@ import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
 import RollosEnRevision from '../components/RollosEnRevision';
-import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select } from '../components/ui';
+import { Alert, Badge, Button, DataTable, Input, SearchSelect, Select, Spinner } from '../components/ui';
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
 const money = (n) =>
@@ -66,23 +67,38 @@ export default function StockPorRollo() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    /** El tipo de tela elegido (su clave): la pantalla abre solo con los tipos y al elegir uno baja a sus telas y colores. */
-    const [tipoSel, setTipoSel] = useState(null);
+    /**
+     * Tres vistas con la misma pantalla, según la dirección: los tipos de tela (/stock-rollos), los colores de un tipo
+     * (/stock-rollos/tipo/<tipo>) y los rollos de un color (/stock-rollos/tipo/<tipo>/color/<tela>/<color>).
+     */
+    const ruta = (useParams()['*'] ?? '').split('/').filter(Boolean);
+    const tipoSel = ruta[0] === 'tipo' ? (ruta[1] ?? null) : null;
+    const productoSel = ruta[2] === 'color' ? (ruta[3] ?? null) : null;
+    const colorSel = ruta[2] === 'color' ? (ruta[4] ?? null) : null;
 
-    /** Color elegido: de él cuelga la tabla de rollos. */
-    const [seleccion, setSeleccion] = useState(null);
     const [rollos, setRollos] = useState([]);
     const [cargandoRollos, setCargandoRollos] = useState(false);
 
+    const [params, setParams] = useSearchParams();
     const { propioId } = useAlmacenPropio();
-    /** Arranca en el almacén en el que se trabaja; "todos" muestra el consolidado. */
-    const [almacenSel, setAlmacenSel] = useState(propioId ? String(propioId) : 'todos');
+    /** Arranca en el almacén en el que se trabaja; "todos" muestra el consolidado. El almacén viaja en la dirección. */
+    const [almacenSel, setAlmacenSel] = useState(params.get('almacen') ?? (propioId ? String(propioId) : 'todos'));
     const almacenId = almacenSel === 'todos' ? '' : almacenSel;
-    const [estado, setEstado] = useState('');
+    // Por defecto se ven los rollos disponibles: lo que se puede vender.
+    const [estado, setEstado] = useState('disponible');
     const [metrosDesde, setMetrosDesde] = useState('');
     const [metrosHasta, setMetrosHasta] = useState('');
 
     const [pdf, setPdf] = useState(null);
+
+    const cambiarAlmacen = (valor) => {
+        setAlmacenSel(valor);
+        setParams({ almacen: valor }, { replace: true });
+    };
+    const q = `?almacen=${almacenSel}`;
+    const irATipos = () => navigate(`/stock-rollos${q}`);
+    const irATipo = (clave) => navigate(`/stock-rollos/tipo/${clave}${q}`);
+    const irAColor = (fila) => navigate(`/stock-rollos/tipo/${tipoSel}/color/${fila.producto_id}/${fila.producto_color_id ?? 'sin'}${q}`);
 
     /* ------------------------------ carga ------------------------------ */
 
@@ -97,9 +113,6 @@ export default function StockPorRollo() {
             const filas = resumenRes.data?.resumen ?? [];
             setResumen(filas);
             setAlmacenes(asList(almacenesRes));
-            setSeleccion((prev) =>
-                filas.find((f) => claveColor(f) === (prev && claveColor(prev))) ?? null,
-            );
         } catch {
             setError('No se pudieron cargar los rollos.');
         } finally {
@@ -139,11 +152,16 @@ export default function StockPorRollo() {
     }, [resumen]);
 
     const tipoActual = tipos.find((t) => t.clave === tipoSel) ?? null;
-    const cerrarTipo = () => {
-        setTipoSel(null);
-        setSeleccion(null);
-    };
     const filasTipo = useMemo(() => resumen.filter((f) => claveTipo(f) === tipoSel), [resumen, tipoSel]);
+
+    /** El color elegido: de él cuelga la tabla de rollos. */
+    const seleccion = useMemo(
+        () =>
+            productoSel == null
+                ? null
+                : (resumen.find((f) => String(f.producto_id) === productoSel && String(f.producto_color_id ?? 'sin') === colorSel) ?? null),
+        [resumen, productoSel, colorSel],
+    );
 
     /** Los rollos del color elegido, con los filtros aplicados. */
     const cargarRollos = useCallback(async () => {
@@ -405,7 +423,7 @@ export default function StockPorRollo() {
             <SearchSelect
                 label="Almacén"
                 value={almacenSel}
-                onChange={(v) => setAlmacenSel(v || 'todos')}
+                onChange={(v) => cambiarAlmacen(v || 'todos')}
                 clearable={false}
                 placeholder="Todos los almacenes"
                 emptyText="Sin coincidencias"
@@ -418,102 +436,123 @@ export default function StockPorRollo() {
         </div>
     );
 
+    const sinResultado = !loading && ((tipoSel && !tipoActual) || (productoSel && !seleccion));
+
     return (
         <Layout>
-            <PageHeader
-                title="Stock por rollo"
-                description="Cada rollo con su metraje, su estado y dónde está"
-                actions={
-                    <Button variant="secondary" onClick={() => navigate('/stock-rollos/reporte')}>
-                        <FileSpreadsheet className="h-4 w-4" />
-                        Reporte
-                    </Button>
-                }
-            />
+            {seleccion ? (
+                /* Tercer nivel: los rollos del color elegido. */
+                <>
+                    <PageHeader
+                        title={`Rollos de ${seleccion.color ?? seleccion.producto}`}
+                        description={`${seleccion.producto} · ${rollos.length} rollos · ${num(rollos.reduce((t, r) => t + Number(r.metros_actual || 0), 0))} m`}
+                        actions={
+                            <>
+                                <Button variant="secondary" onClick={() => irATipo(tipoSel)}>
+                                    <ArrowLeft className="h-4 w-4" />
+                                    Volver a los colores
+                                </Button>
+                                <Button
+                                    variant="secondary"
+                                    onClick={() =>
+                                        setPdf({
+                                            url: `/rollos/etiquetas?producto_id=${seleccion.producto_id}&producto_color_id=${seleccion.producto_color_id}`,
+                                            titulo: `Etiquetas · ${seleccion.color}`,
+                                        })
+                                    }
+                                >
+                                    <Printer className="h-4 w-4" />
+                                    Etiquetas del color
+                                </Button>
+                            </>
+                        }
+                    />
+                    <DataTable
+                        columns={columnasRollos}
+                        rows={rollos}
+                        loading={cargandoRollos}
+                        searchPlaceholder="Buscar por código de rollo..."
+                        filterable
+                        filters={filtrosRollos}
+                        filterCount={filtrosActivos}
+                        dense
+                    />
+                </>
+            ) : tipoActual ? (
+                /* Segundo nivel: los colores del tipo de tela. Doble clic en un color abre sus rollos. */
+                <>
+                    <PageHeader
+                        title={tipoActual.nombre}
+                        description={tipoActual.familia ?? undefined}
+                        actions={
+                            <Button variant="secondary" onClick={irATipos}>
+                                <ArrowLeft className="h-4 w-4" />
+                                Volver a los tipos de tela
+                            </Button>
+                        }
+                    />
+                    {filtroAlmacen}
+                    <div className="mb-4 grid gap-3 sm:grid-cols-3">
+                        <Tarjeta icono={Layers} titulo="Rollos" valor={tipoActual.rollos} />
+                        <Tarjeta icono={Ruler} titulo="Metros" valor={`${num(tipoActual.metros)} m`} />
+                        <Tarjeta icono={Package} titulo="Valor del inventario" valor={money(tipoActual.valor)} />
+                    </div>
+                    <DataTable
+                        columns={columnasResumen}
+                        rows={filasTipo}
+                        loading={loading}
+                        searchPlaceholder="Buscar tela o color..."
+                        onRowDoubleClick={irAColor}
+                    />
+                    <p className="mt-2 text-xs text-warm-400">Doble clic en un color para ver sus rollos.</p>
+                </>
+            ) : sinResultado ? (
+                <>
+                    <PageHeader
+                        title="Stock por rollo"
+                        actions={
+                            <Button variant="secondary" onClick={irATipos}>
+                                <ArrowLeft className="h-4 w-4" />
+                                Volver a los tipos de tela
+                            </Button>
+                        }
+                    />
+                    <Alert variant="warning">Ese tipo de tela o color ya no tiene stock en este almacén.</Alert>
+                </>
+            ) : tipoSel || productoSel ? (
+                <div className="flex items-center justify-center py-20">
+                    <Spinner size="lg" className="text-primary-600" />
+                </div>
+            ) : (
+                /* Primer nivel: solo los tipos de tela, con su stock. Doble clic abre sus colores. */
+                <>
+                    <PageHeader
+                        title="Stock por rollo"
+                        description="Cada rollo con su metraje, su estado y dónde está"
+                        actions={
+                            <Button variant="secondary" onClick={() => navigate('/stock-rollos/reporte')}>
+                                <FileSpreadsheet className="h-4 w-4" />
+                                Reporte
+                            </Button>
+                        }
+                    />
 
-            {error && <Alert variant="error" className="mb-4">{error}</Alert>}
+                    {error && <Alert variant="error" className="mb-4">{error}</Alert>}
 
-            {/* Los que no se encontraron al preparar un pedido: bloqueados hasta resolverlos. */}
-            <RollosEnRevision almacenId={almacenId} onCambio={load} />
+                    {/* Los que no se encontraron al preparar un pedido: bloqueados hasta resolverlos. */}
+                    <RollosEnRevision almacenId={almacenId} onCambio={load} />
 
-            {/* Primer nivel: solo los tipos de tela, con su stock. Doble clic abre sus colores y rollos. */}
-            {filtroAlmacen}
-            <DataTable
-                columns={columnasTipos}
-                rows={tipos}
-                loading={loading}
-                searchPlaceholder="Buscar tipo de tela..."
-                onRowDoubleClick={(row) => setTipoSel(row.clave)}
-            />
-            <p className="mt-2 text-xs text-warm-400">Doble clic en un tipo de tela para ver sus colores y rollos.</p>
-
-            {/* Segundo nivel: los colores del tipo de tela. Doble clic en un color abre sus rollos. */}
-            <Modal
-                open={Boolean(tipoActual)}
-                onClose={cerrarTipo}
-                title={tipoActual?.nombre ?? ''}
-                description={tipoActual?.familia ?? undefined}
-                size="full"
-            >
-                {tipoActual && (
-                    <>
-                        <div className="mb-4 grid gap-3 sm:grid-cols-3">
-                            <Tarjeta icono={Layers} titulo="Rollos" valor={tipoActual.rollos} />
-                            <Tarjeta icono={Ruler} titulo="Metros" valor={`${num(tipoActual.metros)} m`} />
-                            <Tarjeta icono={Package} titulo="Valor del inventario" valor={money(tipoActual.valor)} />
-                        </div>
-
-                        <DataTable
-                            columns={columnasResumen}
-                            rows={filasTipo}
-                            loading={loading}
-                            searchPlaceholder="Buscar tela o color..."
-                            onRowDoubleClick={(row) => setSeleccion(row)}
-                        />
-                        <p className="mt-2 text-xs text-warm-400">Doble clic en un color para ver sus rollos.</p>
-                    </>
-                )}
-            </Modal>
-
-            {/* Tercer nivel: los rollos del color elegido. */}
-            <Modal
-                open={Boolean(tipoActual && seleccion)}
-                onClose={() => setSeleccion(null)}
-                title={seleccion ? `Rollos de ${seleccion.color ?? seleccion.producto}` : ''}
-                description={
-                    seleccion
-                        ? `${rollos.length} rollos · ${num(rollos.reduce((t, r) => t + Number(r.metros_actual || 0), 0))} m`
-                        : undefined
-                }
-                size="full"
-                footer={
-                    seleccion ? (
-                        <Button
-                            variant="secondary"
-                            onClick={() =>
-                                setPdf({
-                                    url: `/rollos/etiquetas?producto_id=${seleccion.producto_id}&producto_color_id=${seleccion.producto_color_id}`,
-                                    titulo: `Etiquetas · ${seleccion.color}`,
-                                })
-                            }
-                        >
-                            <Printer className="h-4 w-4" />
-                            Etiquetas del color
-                        </Button>
-                    ) : null
-                }
-            >
-                <DataTable
-                    columns={columnasRollos}
-                    rows={rollos}
-                    loading={cargandoRollos}
-                    searchPlaceholder="Buscar por código de rollo..."
-                    filterable
-                    filters={filtrosRollos}
-                    filterCount={filtrosActivos}
-                    dense
-                />
-            </Modal>
+                    {filtroAlmacen}
+                    <DataTable
+                        columns={columnasTipos}
+                        rows={tipos}
+                        loading={loading}
+                        searchPlaceholder="Buscar tipo de tela..."
+                        onRowDoubleClick={(row) => irATipo(row.clave)}
+                    />
+                    <p className="mt-2 text-xs text-warm-400">Doble clic en un tipo de tela para ver sus colores y rollos.</p>
+                </>
+            )}
 
             <PdfViewerModal
                 open={Boolean(pdf)}

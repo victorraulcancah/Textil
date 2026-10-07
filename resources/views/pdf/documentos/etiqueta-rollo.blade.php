@@ -34,7 +34,7 @@
 
         /* El alto sale del papel (a 96 dpi); dompdf suma el padding al alto, por eso se deja margen. */
         .etiqueta {
-            height: {{ $altoPx }}px;
+            height: {{ $altoPx - ($grande ? 8 : 0) }}px;
             padding: {{ $grande ? 9 : 5 }}px {{ $vertical ? 7 : ($grande ? 12 : 8) }}px;
             overflow: hidden;
             page-break-after: always;
@@ -42,13 +42,13 @@
         .etiqueta:last-child { page-break-after: auto; }
 
         .producto {
-            font-size: {{ $vertical ? 10.5 : ($grande ? 14 : 11) }}px;
+            font-size: {{ $vertical ? 10.5 : ($grande ? 12 : 11) }}px;
             font-weight: bold;
             text-transform: uppercase;
             letter-spacing: .3px;
             line-height: 1.1;
         }
-        .linea { font-size: {{ $grande ? 9 : 7.5 }}px; margin-top: {{ $grande ? 3 : 1 }}px; }
+        .linea { font-size: {{ $grande ? 9 : 7.5 }}px; margin-top: {{ $grande ? 2 : 1 }}px; }
         .linea .et { color: {{ config('theme.muted') }}; }
 
         /* El código y el metraje son lo que se lee de lejos, en el rack. */
@@ -59,7 +59,7 @@
             margin-top: {{ $grande ? 5 : 2 }}px;
         }
         .metraje {
-            font-size: {{ $grande ? 22 : 17 }}px;
+            font-size: {{ $grande ? 20 : 17 }}px;
             font-weight: bold;
             color: {{ config('theme.primary') }};
             line-height: 1;
@@ -72,10 +72,10 @@
             margin-top: 1px;
         }
 
-        .codigos { margin-top: {{ $grande ? 8 : 2 }}px; }
+        .codigos { margin-top: {{ $grande ? 6 : 2 }}px; }
         .codigos td { vertical-align: middle; text-align: center; padding: 0 4px; }
-        .qr { height: {{ $vertical ? 72 : ($grande ? 84 : 60) }}px; width: {{ $vertical ? 72 : ($grande ? 84 : 60) }}px; }
-        .barras { height: {{ $vertical ? 32 : ($grande ? 52 : 30) }}px; width: 100%; }
+        .qr { height: {{ $vertical ? 72 : ($grande ? 78 : 60) }}px; width: {{ $vertical ? 72 : ($grande ? 78 : 60) }}px; }
+        .barras { height: {{ $vertical ? 32 : ($grande ? 44 : 30) }}px; width: 100%; }
         .pie { font-size: {{ $grande ? 8 : 6.5 }}px; color: {{ config('theme.muted_light') }}; margin-top: {{ $grande ? 5 : 2 }}px; }
     </style>
 </head>

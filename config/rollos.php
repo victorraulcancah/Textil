@@ -28,9 +28,10 @@ return [
         'ancho_mm' => (float) env('ROLLOS_ETIQUETA_ANCHO_MM', 80),
         'alto_mm' => (float) env('ROLLOS_ETIQUETA_ALTO_MM', 50),
 
-        // Girada: el diseño es de 80 x 50 (horizontal) pero el papel sale de 50 x 80 con el contenido girado 90° a la
-        // izquierda, que es como la etiquetadora toma el rollo (la cinta mide 50 mm de ancho y avanza 80 de largo).
-        'girar' => (bool) env('ROLLOS_ETIQUETA_GIRAR', true),
+        // Girada: el papel sale de 50 x 80 con el diseño de 80 x 50 girado 90° a la izquierda. Por defecto NO: la hoja
+        // sale de 80 x 50 (horizontal) y el texto se lee derecho, que es el papel que la etiquetadora tiene configurado.
+        // Con ROLLOS_ETIQUETA_GIRAR=true vuelve a salir de 50 x 80 con el texto de lado.
+        'girar' => (bool) env('ROLLOS_ETIQUETA_GIRAR', false),
 
         // Alto del código de barras en píxeles del PNG que se incrusta.
         'barras_alto' => 60,

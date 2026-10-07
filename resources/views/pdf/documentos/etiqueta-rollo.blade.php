@@ -24,11 +24,12 @@
         $grande = ! $vertical && (float) config('rollos.etiqueta.ancho_mm') >= 95;
     @endphp
     <style>
+        /* Todo el texto va en negro: la etiqueta se imprime en una térmica, que no reproduce bien los colores ni los grises. */
         @page { margin: 0; }
         * { box-sizing: border-box; }
         body {
             font-family: 'DejaVu Sans', sans-serif;
-            color: {{ config('theme.text') }};
+            color: #000;
             margin: 0;
         }
 
@@ -50,7 +51,7 @@
             line-height: 1.1;
         }
         .linea { font-size: {{ $grande ? 9 : 7.5 }}px; margin-top: {{ $grande ? 2 : 1 }}px; }
-        .linea .et { color: {{ config('theme.muted') }}; }
+        .linea .et { color: #000; }
 
         /* El código y el metraje son lo que se lee de lejos, en el rack. */
         .codigo {
@@ -62,13 +63,13 @@
         .metraje {
             font-size: {{ $grande ? 20 : 17 }}px;
             font-weight: bold;
-            color: {{ config('theme.primary') }};
+            color: #000;
             line-height: 1;
         }
         .metraje .peso {
             font-size: {{ $grande ? 9 : 9 }}px;
             font-weight: normal;
-            color: {{ config('theme.muted') }};
+            color: #000;
             display: block;
             margin-top: 1px;
         }
@@ -77,7 +78,7 @@
         .codigos td { vertical-align: middle; text-align: center; padding: 0 4px; }
         .qr { height: {{ $vertical ? 72 : ($grande ? 70 : 60) }}px; width: {{ $vertical ? 72 : ($grande ? 70 : 60) }}px; }
         .barras { height: {{ $vertical ? 32 : ($grande ? 38 : 30) }}px; width: 100%; }
-        .pie { font-size: {{ $grande ? 7 : 6.5 }}px; color: {{ config('theme.muted_light') }}; margin-top: {{ $grande ? 3 : 2 }}px; }
+        .pie { font-size: {{ $grande ? 7 : 6.5 }}px; color: #000; margin-top: {{ $grande ? 3 : 2 }}px; }
 
         @if ($grande)
         /* Con código de barras y peso se aprieta un poco para que todo siga entrando en una sola hoja. */
@@ -118,12 +119,11 @@
                             <span class="peso">peso neto {{ $e['peso_kg'] }} kg</span>
                         @endif
                     </div>
-                    <div class="linea">
-                        <span class="et">Metraje de fábrica</span>
-                        @if ($e['metros'] !== $e['metros_fabrica'])
-                            &nbsp;·&nbsp;<span style="white-space: nowrap;"><span class="et">Saldo actual:</span> <strong>{{ $e['metros'] }} m</strong></span>
-                        @endif
-                    </div>
+                    <div class="linea"><span class="et">Metraje de fábrica</span></div>
+                    {{-- El saldo va en su propia línea: junto al metraje no entra en la etiqueta angosta. --}}
+                    @if ($e['metros'] !== $e['metros_fabrica'])
+                        <div class="linea"><span class="et">Saldo actual:</span> <strong>{{ $e['metros'] }} m</strong></div>
+                    @endif
                 </td>
                 @if ($e['qr'] && ! $vertical)
                     {{-- Sin código de barras sobra espacio: el QR se imprime más grande, que se lee mejor. --}}

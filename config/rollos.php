@@ -30,10 +30,10 @@ return [
         'ancho_mm' => (float) env('ROLLOS_ETIQUETA_ANCHO_MM', 50),
         'alto_mm' => (float) env('ROLLOS_ETIQUETA_ALTO_MM', 80),
 
-        // Girada: la hoja se rota 90° a la izquierda. El diseño es el de ancho x alto de arriba (50 x 80, vertical) y el
-        // papel sale de lado, de 80 x 50 mm, con el diseño girado dentro. Con ROLLOS_ETIQUETA_GIRAR=false la hoja sale
-        // sin girar, de 50 x 80 mm.
-        'girar' => (bool) env('ROLLOS_ETIQUETA_GIRAR', true),
+        // Girada: con ROLLOS_ETIQUETA_GIRAR=true la hoja se rota 90° a la izquierda: el papel sale de lado, de 80 x 50 mm,
+        // con el diseño de ancho x alto de arriba (50 x 80, vertical) girado dentro. Por defecto NO: la hoja sale sin
+        // girar, de 50 x 80 mm.
+        'girar' => (bool) env('ROLLOS_ETIQUETA_GIRAR', false),
 
         // Alto del código de barras en píxeles del PNG que se incrusta.
         'barras_alto' => 60,

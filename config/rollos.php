@@ -20,8 +20,9 @@ return [
     | que no hace falta meter más información en el código.
     */
     'etiqueta' => [
-        // Por ahora solo QR: la etiqueta ya no lleva código de barras (se vuelve a activar con ROLLOS_SIMBOLOGIA=ambos).
-        'simbologia' => env('ROLLOS_SIMBOLOGIA', 'qr'),
+        // QR y código de barras, como antes: cualquier lector sirve (la pistola láser lee las barras, la cámara el QR).
+        // Con ROLLOS_SIMBOLOGIA=qr la etiqueta lleva solo el QR.
+        'simbologia' => env('ROLLOS_SIMBOLOGIA', 'ambos'),
 
         // Tamaño del papel de la etiqueta, en milímetros: ANCHO x ALTO. La etiqueta adhesiva es de 80 x 50 mm (horizontal).
         // Con el alto mayor que el ancho el diseño se arma en vertical; al revés, en horizontal.

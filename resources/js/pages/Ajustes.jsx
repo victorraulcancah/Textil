@@ -552,17 +552,6 @@ export default function Ajustes() {
             ),
         },
         {
-            key: 'proveedor',
-            label: 'Proveedor',
-            width: '150px',
-            getSearchValue: (row) => proveedoresDe(row).join(' '),
-            render: (row) => (
-                <span className="block truncate text-warm-500" title={proveedoresDe(row).join(', ')}>
-                    {proveedoresDe(row).join(', ') || '—'}
-                </span>
-            ),
-        },
-        {
             key: 'motivo',
             label: 'Motivo',
             width: '150px',
@@ -858,14 +847,13 @@ export default function Ajustes() {
                             )}
                         </div>
                         <div className="overflow-x-auto">
-                            <table className="w-full min-w-[960px] text-sm">
+                            <table className="w-full min-w-[820px] text-sm">
                                 <thead>
                                     <tr className="bg-primary-600 text-left text-xs font-semibold uppercase tracking-wide text-white">
                                         <th className="w-12 px-3 py-2.5 text-center">#</th>
                                         <th className="w-28 px-3 py-2.5">Código</th>
                                         <th className="px-3 py-2.5">Descripción</th>
                                         <th className="w-32 px-3 py-2.5">Marca</th>
-                                        <th className="w-40 px-3 py-2.5">Proveedor</th>
                                         <th className="w-24 px-3 py-2.5 text-right">Cantidad</th>
                                         <th className="w-32 px-3 py-2.5">U. Medida</th>
                                         <th className="w-28 px-3 py-2.5 text-right">Costo</th>
@@ -875,7 +863,7 @@ export default function Ajustes() {
                                 <tbody className="divide-y divide-gray-100">
                                     {detalleSeleccionado.length === 0 && (
                                         <tr>
-                                            <td colSpan={9} className="px-3 py-10 text-center text-sm text-warm-500">
+                                            <td colSpan={8} className="px-3 py-10 text-center text-sm text-warm-500">
                                                 {seleccionado
                                                     ? 'Este ajuste no tiene productos.'
                                                     : 'Selecciona un ajuste arriba para ver su detalle.'}
@@ -903,9 +891,6 @@ export default function Ajustes() {
                                                 </td>
                                                 <td className="px-3 py-2 text-warm-500">
                                                     {producto?.marca?.nombre ?? '—'}
-                                                </td>
-                                                <td className="px-3 py-2 text-warm-700">
-                                                    {proveedorDeLinea(seleccionado, d) || '—'}
                                                 </td>
                                                 <td className="px-3 py-2 text-right font-medium text-warm-900">
                                                     {num(d.cantidad)}

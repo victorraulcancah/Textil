@@ -125,14 +125,6 @@ export default function Movimientos() {
             ),
         },
         {
-            key: 'rollos',
-            label: 'Rollos',
-            width: '80px',
-            align: 'right',
-            searchable: false,
-            render: (row) => <span className="text-gray-700">{entero(row.rollos)}</span>,
-        },
-        {
             key: 'fisico',
             label: 'Stock físico',
             width: '120px',

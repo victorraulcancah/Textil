@@ -2,7 +2,7 @@
     Etiqueta adhesiva del rollo.
 
     No extiende el layout A4 porque el papel es otro: un rollo de etiquetas de
-    100x60 mm. Una etiqueta por página, para que la impresora corte donde debe.
+    80x50 mm (el tamaño sale de config/rollos.php). Una etiqueta por página, para que la impresora corte donde debe.
 
     Se imprime una o muchas: el mismo blade sirve para la etiqueta suelta y
     para el lote de un color entero.

@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 
+// Prueba del despliegue automático: este comentario viaja solo del push al servidor.
 Route::get('/', function () {
     return view('app');
 });

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { PackageSearch } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { ORIGEN_LABEL } from '../lib/movimientos';
@@ -83,6 +84,10 @@ const juntarPorDocumento = (movs) => {
 };
 
 export default function Movimientos() {
+    const navigate = useNavigate();
+    // La tela y el color elegidos viajan en la dirección: al volver de un documento todo sigue donde estaba.
+    const [params, setParams] = useSearchParams();
+
     /** Las telas que se pueden buscar: no se lista nada hasta elegir una. */
     const [telas, setTelas] = useState([]);
     const [almacenes, setAlmacenes] = useState([]);
@@ -106,10 +111,6 @@ export default function Movimientos() {
     const [filterDesde, setFilterDesde] = useState('');
     const [filterHasta, setFilterHasta] = useState('');
     const [activeFilters, setActiveFilters] = useState({});
-
-    /** El documento abierto sobre el modal, con los rollos que entraron o salieron en él. */
-    const [movModal, setMovModal] = useState(null);
-    const [rollosDoc, setRollosDoc] = useState(null);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -145,11 +146,14 @@ export default function Movimientos() {
         };
     }, [telaId, almacenId]);
 
-    const elegirTela = (id) => {
+    const elegirTela = (id, conservarColor = false) => {
         setTelaId(id ?? '');
         setColores(null);
         setMovs(null);
         setColorModal(null);
+        // Al volver de un documento el color de la dirección se conserva, para reabrirlo.
+        const color = conservarColor ? params.get('color') : null;
+        setParams(id ? { tela: id, ...(color ? { color } : {}) } : {}, { replace: true });
         if (!id) return;
         api.get('/movimientos', { params: { producto_id: id } })
             .then((res) => setMovs(asList(res)))
@@ -157,6 +161,7 @@ export default function Movimientos() {
     };
 
     const abrirColor = (color) => {
+        setParams({ tela: telaId, color: claveColor(color.id) }, { replace: true });
         setColorModal(color);
         setPestana('movimientos');
         setRollosColor(null);
@@ -217,17 +222,32 @@ export default function Movimientos() {
         return ordenada.map((m, i) => ({ ...m, _inicio: i > 0 && ordenada[i - 1].almacen_id !== m.almacen_id }));
     }, [movs, colorModal, almacenId, activeFilters]);
 
-    const abrirDocumento = (mov) => {
-        setMovModal(mov);
-        setRollosDoc(null);
-        api.get(`/movimientos/${mov.id}/rollos`, { params: { solo_color: 1 } })
-            .then((res) => setRollosDoc(asList(res)))
-            .catch(() => setRollosDoc([]));
+    const cerrarColor = () => {
+        setColorModal(null);
+        setParams(telaId ? { tela: telaId } : {}, { replace: true });
     };
 
-    /** Los rollos del documento abierto, con su metraje: cuántos y cuántos metros. */
-    const totalDocRollos = (rollosDoc ?? []).length;
-    const totalDocMetros = (rollosDoc ?? []).reduce((s, r) => s + (Number(r.metros) || 0), 0);
+    /** Un documento se ve completo en su propia vista: su ficha arriba y su detalle abajo. */
+    const abrirDocumento = (mov) => {
+        if (!mov.documento_referencia_id) return;
+        navigate(`/kardex/documento/${mov.documento_referencia_tipo}/${mov.documento_referencia_id}`);
+    };
+
+    // Al entrar con una tela (y color) en la dirección —por ejemplo al volver de un documento— se vuelve a abrir.
+    useEffect(() => {
+        const t = params.get('tela');
+        if (t && !telaId && telas.some((x) => String(x.id) === t)) elegirTela(t, true);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [telas]);
+
+    useEffect(() => {
+        const c = params.get('color');
+        if (c && colores && !colorModal) {
+            const color = colores.find((x) => claveColor(x.id) === c);
+            if (color) abrirColor(color);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [colores]);
 
     const resumen = useMemo(() => {
         const lista = colores ?? [];
@@ -292,59 +312,57 @@ export default function Movimientos() {
             render: () => <span className="text-gray-500">{unidad}</span>,
         },
         {
-            // Rollos que viajan entre almacenes: ya no están en el de origen y aún no llegan al de destino.
+            // Lo comprado que aún no llega, con la orden de compra de la que viene.
             key: 'transito',
             label: 'Tránsito',
-            width: '100px',
+            width: '140px',
             align: 'right',
-            searchable: false,
-            render: (row) => (Number(row.transito) > 0 ? <span className="text-blue-700">{num(row.transito)}</span> : vacio),
+            getSearchValue: (row) => (row.ordenes ?? []).map((o) => o.codigo).join(' '),
+            render: (row) =>
+                Number(row.transito) > 0 ? (
+                    <span className="block text-right leading-tight" title={(row.ordenes ?? []).map((o) => `${o.codigo}: ${num(o.metros)} ${unidad}`).join('\n')}>
+                        <span className="block text-blue-700">{num(row.transito)}</span>
+                        <span className="block truncate text-[11px] text-gray-500">{(row.ordenes ?? []).map((o) => o.codigo).join(', ')}</span>
+                    </span>
+                ) : (
+                    vacio
+                ),
         },
         {
-            // Rollos concretos que un pedido ya apartó o está preparando.
-            key: 'reservado_f',
-            label: 'Reservado (F)',
-            width: '120px',
-            align: 'right',
-            searchable: false,
-            render: (row) => (Number(row.reservado_f) > 0 ? <span className="text-amber-700">{num(row.reservado_f)}</span> : vacio),
-        },
-        {
-            // Lo que los pedidos piden y aún no tiene rollo asignado.
+            // Los rollos que un pedido ya separó o está preparando, con su pedido.
             key: 'reservado_p',
             label: 'Reservado (P)',
-            width: '120px',
+            width: '150px',
             align: 'right',
-            searchable: false,
-            render: (row) => (Number(row.reservado_p) > 0 ? <span className="text-amber-700">{num(row.reservado_p)}</span> : vacio),
+            getSearchValue: (row) => (row.pedidos ?? []).map((p) => `${p.pedido} ${p.cliente ?? ''}`).join(' '),
+            render: (row) =>
+                Number(row.reservado_p) > 0 ? (
+                    <span
+                        className="block text-right leading-tight"
+                        title={(row.pedidos ?? []).map((p) => `${p.pedido} · ${p.cliente ?? ''} · ${p.rollos} rollo${p.rollos === 1 ? '' : 's'} · ${num(p.metros)} ${unidad} (${p.estado})`).join('\n')}
+                    >
+                        <span className="block text-amber-700">{num(row.reservado_p)}</span>
+                        <span className="block truncate text-[11px] text-gray-500">{(row.pedidos ?? []).map((p) => p.pedido).join(', ')}</span>
+                    </span>
+                ) : (
+                    vacio
+                ),
         },
         {
+            // El stock físico menos lo reservado.
             key: 'disponible',
             label: 'Disponible',
             width: '115px',
             align: 'right',
             searchable: false,
             render: (row) => (
-                <span className={Number(row.disponible) > 0 ? 'font-semibold text-green-700' : 'font-semibold text-red-600'}>
+                <span
+                    className={Number(row.disponible) > 0 ? 'font-semibold text-green-700' : 'font-semibold text-red-600'}
+                    title={`Stock físico ${num(row.fisico)} − reservado ${num(row.reservado_p)}${Number(row.reservado_f) > 0 ? ` − pedido sin rollo asignado ${num(row.reservado_f)}` : ''}`}
+                >
                     {num(row.disponible)}
                 </span>
             ),
-        },
-        {
-            key: 'zonas',
-            label: 'Zonificación',
-            width: '230px',
-            getSearchValue: (row) => (row.zonas ?? []).join(' '),
-            render: (row) => {
-                const zonas = row.zonas ?? [];
-                if (zonas.length === 0) return vacio;
-                return (
-                    <span className="block truncate text-gray-600" title={zonas.join('\n')}>
-                        {zonas[0]}
-                        {zonas.length > 1 && <span className="ml-1 text-xs text-gray-400">+{zonas.length - 1} más</span>}
-                    </span>
-                );
-            },
         },
     ];
 
@@ -574,26 +592,7 @@ export default function Movimientos() {
             getSearchValue: (row) => row.almacen,
             render: (row) => texto(row.almacen),
         },
-        {
-            key: 'zona',
-            label: 'Zonificación',
-            getSearchValue: (row) => row.zona,
-            render: (row) => texto(row.zona),
-        },
     ];
-
-    // Los rollos de un documento, agrupados por color (el modal de un documento).
-    const rollosDocPorColor = useMemo(() => {
-        const grupos = new Map();
-        (rollosDoc ?? []).forEach((r) => {
-            const clave = String(r.color?.id ?? 'sin');
-            if (!grupos.has(clave)) grupos.set(clave, { color: r.color, rollos: [], metros: 0 });
-            const g = grupos.get(clave);
-            g.rollos.push(r);
-            g.metros += Number(r.metros) || 0;
-        });
-        return [...grupos.values()];
-    }, [rollosDoc]);
 
     return (
         <Layout>
@@ -605,7 +604,7 @@ export default function Movimientos() {
                 <div className="min-w-[260px] max-w-xl flex-1">
                     <SearchSelect
                         value={telaId}
-                        onChange={elegirTela}
+                        onChange={(v) => elegirTela(v)}
                         placeholder={loading ? 'Cargando telas…' : 'Escribe el nombre o el código de la tela…'}
                         emptyText="Ninguna tela coincide"
                         options={telas.map((t) => ({
@@ -658,7 +657,7 @@ export default function Movimientos() {
             {/* Al abrir un color: sus documentos (kardex) y sus rollos. */}
             <Modal
                 open={Boolean(colorModal)}
-                onClose={() => setColorModal(null)}
+                onClose={cerrarColor}
                 title={colorModal ? `${colorModal.nombre} · ${tela?.nombre ?? ''}` : ''}
                 description={
                     colorModal
@@ -666,7 +665,7 @@ export default function Movimientos() {
                         : ''
                 }
                 size="full"
-                footer={<Button variant="secondary" onClick={() => setColorModal(null)}>Cerrar</Button>}
+                footer={<Button variant="secondary" onClick={cerrarColor}>Cerrar</Button>}
             >
                 <div className="space-y-4">
                     <Tabs
@@ -714,92 +713,6 @@ export default function Movimientos() {
                 </div>
             </Modal>
 
-            {/* Al abrir un documento del kardex: los rollos que entraron o salieron en él, con su metraje. */}
-            <Modal
-                open={Boolean(movModal)}
-                onClose={() => setMovModal(null)}
-                title={movModal ? `${movModal.documento_numero ?? 'Movimiento'} · ${tela?.nombre ?? ''}` : ''}
-                description={
-                    movModal
-                        ? [
-                              ORIGEN_LABEL[movModal.origen] ?? movModal.origen,
-                              movModal.nombre,
-                              movModal.almacen?.nombre,
-                              `${esEntrada(movModal) ? 'Entran' : 'Salen'} ${num(cantAbs(movModal))} ${unidad}`,
-                          ]
-                              .filter(Boolean)
-                              .join(' · ')
-                        : ''
-                }
-                size="2xl"
-                footer={<Button variant="secondary" onClick={() => setMovModal(null)}>Cerrar</Button>}
-            >
-                {rollosDoc === null ? (
-                    <div className="flex items-center justify-center py-12">
-                        <Spinner size="lg" className="text-primary-600" />
-                    </div>
-                ) : rollosDoc.length === 0 ? (
-                    <p className="py-10 text-center text-sm text-warm-500">
-                        {movModal?.origen === 'recepcion_deshecha'
-                            ? 'Esta recepción se deshizo: sus rollos se eliminaron junto con ella.'
-                            : 'Este documento se cargó sin rollos ni colores (es de antes de llevar el control por rollos), por eso no hay detalle que mostrar.'}
-                    </p>
-                ) : (
-                    <div className="space-y-4">
-                        <p className="text-sm text-warm-600">
-                            <strong className="text-warm-900">{entero(totalDocRollos)}</strong> rollo{totalDocRollos === 1 ? '' : 's'} ·{' '}
-                            <strong className="text-warm-900">{num(totalDocMetros)} {unidad}</strong>
-                        </p>
-                        {rollosDocPorColor.map((g) => (
-                            <div key={g.color?.id ?? 'sin'} className="overflow-hidden rounded-lg border border-edge">
-                                <div className="flex items-center gap-2 bg-gray-50 px-3 py-2">
-                                    <span
-                                        className="h-3 w-3 shrink-0 rounded-full ring-1 ring-black/10"
-                                        style={{ backgroundColor: g.color?.hex || '#9ca3af' }}
-                                    />
-                                    <span className="text-sm font-semibold uppercase text-warm-900">{g.color?.nombre ?? 'Sin color'}</span>
-                                    {g.color?.codigo && <span className="text-xs text-gray-400">({g.color.codigo})</span>}
-                                    <span className="ml-auto text-xs text-warm-600">
-                                        {entero(g.rollos.length)} rollo{g.rollos.length === 1 ? '' : 's'} ·{' '}
-                                        <strong className="text-warm-900">{num(g.metros)} {unidad}</strong>
-                                    </span>
-                                </div>
-                                <div className="max-h-64 overflow-auto">
-                                    <table className="w-full text-sm">
-                                        <thead className="sticky top-0 bg-white text-left text-[11px] font-semibold uppercase tracking-wide text-warm-500">
-                                            <tr>
-                                                <th className="px-3 py-1.5">Rollo</th>
-                                                <th className="px-3 py-1.5 text-right">Metraje</th>
-                                                <th className="px-3 py-1.5 text-right">Hoy tiene</th>
-                                                <th className="px-3 py-1.5">Estado</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-100">
-                                            {g.rollos.map((r) => {
-                                                const estado = ESTADO_ROLLO[r.estado] ?? { label: r.estado, variant: 'gray' };
-                                                return (
-                                                    <tr key={r.id}>
-                                                        <td className="px-3 py-1.5 font-mono text-xs text-warm-800">{r.codigo}</td>
-                                                        <td className="px-3 py-1.5 text-right font-medium text-warm-900">
-                                                            {num(r.metros)} {unidad}
-                                                        </td>
-                                                        <td className="px-3 py-1.5 text-right text-warm-600">
-                                                            {num(r.metros_actual)} {unidad}
-                                                        </td>
-                                                        <td className="px-3 py-1.5">
-                                                            <Badge variant={estado.variant}>{estado.label}</Badge>
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </Modal>
         </Layout>
     );
 }

@@ -24,6 +24,7 @@ import Almacenes from './pages/Almacenes';
 import Existencias from './pages/Existencias';
 import StockPorRollo from './pages/StockPorRollo';
 import Movimientos from './pages/Movimientos';
+import KardexDocumento from './pages/KardexDocumento';
 import Transferencias from './pages/Transferencias';
 import CrearTransferencia from './pages/CrearTransferencia';
 import Ajustes from './pages/Ajustes';
@@ -96,6 +97,7 @@ const routes = [
     { path: '/stock-rollos', element: <StockPorRollo /> },
     { path: '/stock-rollos/reporte', element: <StockRollosReporte /> },
     { path: '/kardex', element: <Movimientos /> },
+    { path: '/kardex/documento/:tipo/:id', element: <KardexDocumento /> },
     // Alias del nombre anterior, para no romper enlaces guardados.
     { path: '/movimientos', element: <Movimientos /> },
     { path: '/transferencias', element: <Transferencias /> },

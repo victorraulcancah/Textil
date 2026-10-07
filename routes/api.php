@@ -162,6 +162,7 @@ Route::middleware('auth:api')->group(function () {
     Route::get('movimientos/telas', [MovimientoInventarioController::class, 'telas']);
     Route::get('movimientos/colores', [MovimientoInventarioController::class, 'colores']);
     Route::get('movimientos/colores/rollos', [MovimientoInventarioController::class, 'rollosDeColor']);
+    Route::get('movimientos/documento/{tipo}/{id}', [MovimientoInventarioController::class, 'documento'])->whereNumber('id');
     Route::get('movimientos/{movimiento}/rollos', [MovimientoInventarioController::class, 'rollos']);
     Route::get('movimientos', [MovimientoInventarioController::class, 'index']);
     // Validar un rollo escaneado al armar un traslado (para escoger rollos exactos en vez de "N rollos").

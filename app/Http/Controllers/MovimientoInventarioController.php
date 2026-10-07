@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Compra;
 use App\Models\MovimientoInventario;
+use App\Models\OrdenCompra;
 use App\Models\Producto;
 use App\Models\ProductoColor;
 use App\Models\RecepcionCompra;
@@ -173,6 +175,103 @@ class MovimientoInventarioController extends Controller
         return response()->json($movimientos);
     }
 
+    /**
+     * Un documento del kardex visto completo: arriba su ficha (número, fecha, con quién, almacén, glosa y referencias)
+     * y abajo su detalle, una línea por producto y color con lo que entró o salió. Es la vista a la que lleva tocar un
+     * documento en el kardex.
+     */
+    public function documento(string $tipo, int $id)
+    {
+        $movs = AlmacenAcceso::limitar(MovimientoInventario::query())
+            ->where('documento_referencia_tipo', $tipo)
+            ->where('documento_referencia_id', $id)
+            ->with([
+                'producto:id,codigo,nombre,unidad_base_id',
+                'producto.unidadBase:id,abreviatura',
+                'color:id,nombre,codigo,hex',
+                'almacen:id,nombre',
+                'usuario:id,name',
+            ])
+            ->orderBy('id')
+            ->get();
+
+        abort_if($movs->isEmpty(), 404, 'No hay movimientos de este documento.');
+
+        $datos = $this->datosDeDocumentos($movs)["{$tipo}:{$id}"] ?? [];
+
+        // Cuántos rollos movió el documento de cada producto y color.
+        $rollosPorLinea = $this->rollosDelDocumento($tipo, $id)
+            ->groupBy(fn ($r) => $r->producto_id.':'.($r->producto_color_id ?? 'sin'))
+            ->map(fn ($grupo) => $grupo->unique('id')->count());
+
+        $lineas = $movs
+            ->groupBy(fn ($m) => implode(':', [$m->producto_id, $m->producto_color_id ?? 'sin', $m->almacen_id, $m->tipo_movimiento]))
+            ->map(function ($grupo) use ($rollosPorLinea) {
+                $primero = $grupo->first();
+                $cantidad = (float) $grupo->sum(fn ($m) => abs((float) $m->cantidad));
+                $costo = $cantidad > 0
+                    ? $grupo->sum(fn ($m) => abs((float) $m->cantidad) * (float) $m->costo_unitario) / $cantidad
+                    : (float) $primero->costo_unitario;
+
+                return [
+                    // Cualquiera de sus movimientos sirve para pedir el detalle de rollos.
+                    'movimiento_id' => $grupo->max('id'),
+                    'producto_codigo' => $primero->producto?->codigo,
+                    'producto' => $primero->producto?->nombre,
+                    'unidad' => $primero->producto?->unidadBase?->abreviatura,
+                    'color' => $primero->color ? ['nombre' => $primero->color->nombre, 'codigo' => $primero->color->codigo, 'hex' => $primero->color->hex] : null,
+                    'almacen' => $primero->almacen?->nombre,
+                    'tipo_movimiento' => $primero->tipo_movimiento,
+                    'rollos' => (int) ($rollosPorLinea[$primero->producto_id.':'.($primero->producto_color_id ?? 'sin')] ?? 0),
+                    'cantidad' => round($cantidad, 2),
+                    'costo_unitario' => round($costo, 4),
+                    'total' => round($cantidad * $costo, 2),
+                ];
+            })
+            ->sortBy(fn ($l) => [$l['producto'], $l['color']['nombre'] ?? '~'])
+            ->values();
+
+        $primero = $movs->first();
+
+        return response()->json([
+            'cabecera' => [
+                'tipo' => $tipo,
+                'documento' => $datos['documento'] ?? null,
+                'fecha' => $movs->min('fecha'),
+                'nombre' => $datos['nombre'] ?? null,
+                'almacenes' => $movs->pluck('almacen.nombre')->filter()->unique()->values(),
+                'glosa' => $datos['glosa'] ?? null,
+                'referencia' => $datos['referencia'] ?? null,
+                'orden_compra' => $datos['orden_compra'] ?? null,
+                'doc_registro' => $datos['doc_registro'] ?? null,
+                'usuario' => $primero->usuario?->name,
+                'origen' => $primero->origen,
+            ],
+            'lineas' => $lineas,
+        ]);
+    }
+
+    /** Los rollos que dejaron huella en el historial con ese documento (sin reservas ni pasos de preparación). */
+    private function rollosDelDocumento(string $tipo, int $id)
+    {
+        $filas = DB::table('rollo_movimientos as rm')
+            ->join('rollos as r', 'r.id', '=', 'rm.rollo_id')
+            ->where('rm.documento_tipo', $tipo)
+            ->where('rm.documento_id', $id)
+            ->whereIn('rm.tipo', ['ingreso', 'despacho', 'venta', 'corte', 'traslado', 'ajuste'])
+            ->get(['r.id', 'r.producto_id', 'r.producto_color_id']);
+
+        // Un ajuste que creó los rollos los deja sin documento en su historial: se ubican por su línea.
+        if ($tipo === 'ajuste_inventario') {
+            $lineas = DB::table('ajuste_detalles')->where('ajuste_id', $id)->pluck('id');
+            $filas = $filas->concat(
+                DB::table('rollos as r')->whereIn('r.ajuste_detalle_id', $lineas)->get(['r.id', 'r.producto_id', 'r.producto_color_id'])
+            );
+        }
+
+        return $filas;
+    }
+
     /** La zona de un rollo dentro del almacén: su ubicación estructurada o, en los rollos viejos, el texto que traían. */
     private function zonaDe(Rollo $r): string
     {
@@ -191,9 +290,72 @@ class MovimientoInventarioController extends Controller
     }
 
     /**
-     * Lo que hay de cada color de una tela: una fila por color con sus rollos y sus metros, lo que está en
-     * tránsito, lo reservado (ya en rollos concretos y lo pedido que aún no tiene rollo), lo disponible y en qué
-     * zonas del almacén está. Es la tabla que se ve al buscar una tela en el kardex.
+     * Lo que viene en camino de una tela, por color: los metros que se compraron y aún no llegan, con la orden de
+     * compra de la que vienen. Cuenta lo pendiente de las compras registradas (o con recepción parcial) y, de las
+     * órdenes aprobadas o enviadas que todavía no tienen compra, todo lo ordenado.
+     *
+     * @return array<string, array{metros: float, ordenes: array<string, float>}> por color ('' = sin color)
+     */
+    private function enCamino(int $productoId): array
+    {
+        $camino = [];
+        $sumar = function (?int $colorId, string $codigo, float $metros) use (&$camino) {
+            if ($metros <= 0) {
+                return;
+            }
+            $clave = (string) $colorId;
+            $camino[$clave] ??= ['metros' => 0.0, 'ordenes' => []];
+            $camino[$clave]['metros'] = round($camino[$clave]['metros'] + $metros, 2);
+            $camino[$clave]['ordenes'][$codigo] = round(($camino[$clave]['ordenes'][$codigo] ?? 0) + $metros, 2);
+        };
+        $esDeLaTela = fn ($q) => $q->whereHas('presentacion', fn ($p) => $p->where('producto_id', $productoId));
+
+        // Compras que aún no terminan de llegar: lo que falta de cada línea.
+        $compras = Compra::query()
+            ->whereIn('estado', ['registrada', 'parcial'])
+            ->where('finalizado', false)
+            ->whereHas('detalles', $esDeLaTela)
+            ->with(['detalles.presentacion:id,producto_id,factor_conversion', 'ordenCompra:id,codigo'])
+            ->get();
+        foreach ($compras as $compra) {
+            $pendiente = $compra->pendientePorLinea();
+            foreach ($compra->detalles as $d) {
+                if ((int) $d->presentacion?->producto_id !== $productoId) {
+                    continue;
+                }
+                $sumar(
+                    $d->producto_color_id,
+                    $compra->ordenCompra?->codigo ?? $compra->numero_compra ?? "Compra {$compra->id}",
+                    (float) ($pendiente[$d->id] ?? 0) * (float) ($d->presentacion->factor_conversion ?: 1),
+                );
+            }
+        }
+
+        // Órdenes ya aprobadas o enviadas que aún no se convirtieron en compra: todo lo ordenado viene en camino.
+        $conCompra = Compra::query()->whereNotNull('orden_compra_id')->where('estado', '!=', 'anulada')->pluck('orden_compra_id');
+        $ordenes = OrdenCompra::query()
+            ->whereIn('estado', ['aprobada', 'enviada'])
+            ->whereNotIn('id', $conCompra)
+            ->whereHas('detalles', $esDeLaTela)
+            ->with(['detalles.presentacion:id,producto_id,factor_conversion'])
+            ->get();
+        foreach ($ordenes as $orden) {
+            foreach ($orden->detalles as $d) {
+                if ((int) $d->presentacion?->producto_id !== $productoId) {
+                    continue;
+                }
+                $sumar($d->producto_color_id, $orden->codigo, (float) $d->cantidad * (float) ($d->presentacion->factor_conversion ?: 1));
+            }
+        }
+
+        return $camino;
+    }
+
+    /**
+     * Lo que hay de cada color de una tela: una fila por color con sus rollos y sus metros, lo que viene en camino
+     * (con su orden de compra), lo reservado (lo pedido que aún no tiene rollo, y los rollos que un pedido ya separó
+     * o está preparando, con su pedido) y lo disponible, que es el stock menos lo reservado. Es la tabla que se ve al
+     * buscar una tela en el kardex.
      */
     public function colores(Request $request)
     {
@@ -205,7 +367,6 @@ class MovimientoInventarioController extends Controller
             ->where('producto_id', $productoId)
             ->when($almacenId, fn ($q) => $q->where('almacen_id', $almacenId))
             ->where('metros_actual', '>', 0)
-            ->with(['ubicacion', 'almacen:id,nombre'])
             ->get()
             ->groupBy(fn (Rollo $r) => (string) $r->producto_color_id);
 
@@ -217,9 +378,11 @@ class MovimientoInventarioController extends Controller
             ->pluck('producto_color_id')
             ->map(fn ($id) => (string) $id);
 
-        // Lo que los pedidos ya reservaron de un color sin rollo asignado (metros) y los rollos que piden sin asignar.
+        $camino = $this->enCamino($productoId);
+
+        // Lo pedido que aún no tiene rollo: metros ya reservados y rollos por asignar (a metraje promedio).
         $delProducto = fn ($q) => $q->whereHas('presentacion', fn ($p) => $p->where('producto_id', $productoId));
-        $pendientes = $delProducto(\App\Models\OrdenVentaDetalle::query())
+        $sinRollo = $delProducto(\App\Models\OrdenVentaDetalle::query())
             ->whereNotNull('cantidad_reservada')->whereNotNull('producto_color_id')
             ->when($almacenId, fn ($q) => $q->where('reserva_almacen_id', $almacenId))
             ->with(['presentacion:id,producto_id', 'rollos'])
@@ -234,13 +397,42 @@ class MovimientoInventarioController extends Controller
             ->groupBy('producto_color_id')
             ->map(fn ($g) => $g->sum(fn ($d) => $d->rollosPendientes()));
 
-        $colores = ProductoColor::whereIn('id', $rollos->keys()->merge($enMovimientos)->filter()->unique()->values())
+        // Los rollos que un pedido ya separó o está preparando, y a qué pedido pertenecen.
+        $apartados = [Rollo::SEPARADO, Rollo::EN_PREPARACION];
+        $pedidosPorColor = \App\Models\OrdenVentaRollo::query()
+            ->whereHas('rollo', fn ($r) => $r->where('producto_id', $productoId)->whereIn('estado', $apartados)
+                ->when($almacenId, fn ($q) => $q->where('almacen_id', $almacenId)))
+            ->whereHas('detalle.ordenVenta', fn ($o) => $o->whereIn('estado', [
+                \App\Models\OrdenVenta::SOLICITADO,
+                \App\Models\OrdenVenta::PREPARANDO,
+                \App\Models\OrdenVenta::SEPARADO,
+            ]))
+            ->with(['rollo:id,producto_color_id,metros_actual', 'detalle.ordenVenta:id,serie,numero,estado,cliente_id', 'detalle.ordenVenta.cliente:id,nombre'])
+            ->get()
+            ->groupBy(fn ($v) => (string) $v->rollo?->producto_color_id)
+            ->map(fn ($grupo) => $grupo
+                ->groupBy(fn ($v) => $v->detalle?->orden_venta_id)
+                ->map(function ($lineas) {
+                    $orden = $lineas->first()->detalle?->ordenVenta;
+
+                    return [
+                        'pedido' => $orden?->documento,
+                        'cliente' => $orden?->cliente?->nombre,
+                        'estado' => $orden?->estado,
+                        'rollos' => $lineas->pluck('rollo_id')->unique()->count(),
+                        'metros' => round((float) $lineas->unique('rollo_id')->sum(fn ($v) => (float) $v->rollo?->metros_actual), 2),
+                    ];
+                })
+                ->values()->all());
+
+        $claves = $rollos->keys()->merge($enMovimientos)->merge(array_keys($camino))->unique()->values();
+        $colores = ProductoColor::whereIn('id', $claves->filter()->values())
             ->get(['id', 'nombre', 'codigo', 'hex'])->keyBy('id');
 
-        $enAlmacen = [Rollo::DISPONIBLE, Rollo::SEPARADO, Rollo::EN_PREPARACION, Rollo::EN_REVISION];
-        $apartados = [Rollo::SEPARADO, Rollo::EN_PREPARACION];
+        // Stock físico: lo que está en el almacén y se puede mover (un rollo en revisión queda aparte, bloqueado).
+        $enAlmacen = [Rollo::DISPONIBLE, Rollo::SEPARADO, Rollo::EN_PREPARACION];
 
-        $filas = $rollos->keys()->merge($enMovimientos)->unique()->values()->map(function ($clave) use ($rollos, $colores, $pendientes, $porAsignar, $enAlmacen, $apartados) {
+        $filas = $claves->map(function ($clave) use ($rollos, $colores, $camino, $sinRollo, $porAsignar, $pedidosPorColor, $enAlmacen, $apartados) {
             $color = $clave === '' ? null : $colores->get((int) $clave);
             $grupo = $rollos->get($clave, collect());
             $metros = fn ($lista) => round((float) $lista->sum('metros_actual'), 2);
@@ -249,9 +441,10 @@ class MovimientoInventarioController extends Controller
             $libres = $grupo->where('estado', Rollo::DISPONIBLE);
             $promedio = $libres->isNotEmpty() ? $metros($libres) / $libres->count() : 0;
 
-            // Lo pedido que aún no tiene rollo: metros ya reservados y rollos por asignar (a metraje promedio).
-            $reservadoP = round((float) ($pendientes[$clave] ?? 0) + (int) ($porAsignar[$clave] ?? 0) * $promedio, 2);
-            $variosAlmacenes = $fisicos->pluck('almacen_id')->unique()->count() > 1;
+            // F: lo pedido que aún no tiene rollo asignado. P: los rollos que un pedido ya separó o está preparando.
+            $reservadoF = round((float) ($sinRollo[$clave] ?? 0) + (int) ($porAsignar[$clave] ?? 0) * $promedio, 2);
+            $reservadoP = $metros($grupo->whereIn('estado', $apartados));
+            $fisico = $metros($fisicos);
 
             return [
                 'id' => $color?->id,
@@ -259,14 +452,14 @@ class MovimientoInventarioController extends Controller
                 'nombre' => $color?->nombre ?? 'Sin color',
                 'hex' => $color?->hex,
                 'rollos' => $fisicos->count(),
-                'fisico' => $metros($fisicos),
-                'transito' => $metros($grupo->where('estado', Rollo::EN_TRANSITO)),
-                'reservado_f' => $metros($grupo->whereIn('estado', $apartados)),
+                'fisico' => $fisico,
+                'transito' => $camino[$clave]['metros'] ?? 0,
+                'ordenes' => collect($camino[$clave]['ordenes'] ?? [])->map(fn ($m, $codigo) => ['codigo' => $codigo, 'metros' => $m])->values()->all(),
+                'reservado_f' => $reservadoF,
                 'reservado_p' => $reservadoP,
-                'disponible' => round(max(0, $metros($libres) - $reservadoP), 2),
-                'zonas' => $fisicos
-                    ->map(fn (Rollo $r) => ($variosAlmacenes ? ($r->almacen?->nombre.': ') : '').$this->zonaDe($r))
-                    ->unique()->sort()->values()->all(),
+                'pedidos' => $pedidosPorColor[$clave] ?? [],
+                // El stock menos lo reservado.
+                'disponible' => round(max(0, $fisico - $reservadoF - $reservadoP), 2),
             ];
         })
             ->sortBy(fn ($f) => ($f['id'] === null ? '~' : '').$f['nombre'])

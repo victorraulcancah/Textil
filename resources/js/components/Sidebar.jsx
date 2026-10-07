@@ -6,6 +6,7 @@ import { navigation } from '../config/navigation';
 import api from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { cn } from './ui';
+import CreditoMagus from './CreditoMagus';
 
 const GROUPS_STORAGE = 'sidebar_groups';
 const GROUP_LABELS = navigation.filter((i) => i.children).map((i) => i.label);
@@ -418,6 +419,10 @@ export default function Sidebar({ collapsed = false, onToggleCollapse }) {
                     )}
                 </nav>
 
+                {/* La firma de quien hizo el sistema: con el menú replegado, solo el logo. */}
+                <div className="shrink-0 border-t border-edge px-2 py-2.5">
+                    <CreditoMagus compacto={rail} className="w-full" />
+                </div>
             </aside>
 
             {/* Submenú del modo contraído. Va en un portal porque el nav recorta

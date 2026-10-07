@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Button, Input, Alert } from '../components/ui';
+import CreditoMagus from '../components/CreditoMagus';
 import { useAuth } from '../lib/auth';
 import api from '../lib/api';
 
@@ -195,6 +196,8 @@ export default function Login() {
                         </Button>
                     </form>
                 </div>
+
+                <CreditoMagus variante="bloque" className="mt-6" />
             </div>
         </div>
     );

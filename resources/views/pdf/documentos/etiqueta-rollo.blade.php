@@ -34,8 +34,8 @@
 
         /* El alto sale del papel (a 96 dpi); dompdf suma el padding al alto, por eso se deja margen. */
         .etiqueta {
-            height: {{ $altoPx - ($grande ? 8 : 0) }}px;
-            padding: {{ $grande ? 9 : 5 }}px {{ $vertical ? 7 : ($grande ? 12 : 8) }}px;
+            height: {{ $altoPx - ($grande ? 4 : 0) }}px;
+            padding: {{ $grande ? 7 : 5 }}px {{ $vertical ? 7 : ($grande ? 12 : 8) }}px;
             overflow: hidden;
             page-break-after: always;
         }
@@ -48,35 +48,35 @@
             letter-spacing: .3px;
             line-height: 1.1;
         }
-        .linea { font-size: {{ $grande ? 9 : 7.5 }}px; margin-top: {{ $grande ? 2 : 1 }}px; }
+        .linea { font-size: {{ $grande ? 8.5 : 7.5 }}px; margin-top: 1px; }
         .linea .et { color: {{ config('theme.muted') }}; }
 
         /* El código y el metraje son lo que se lee de lejos, en el rack. */
         .codigo {
-            font-size: {{ $vertical ? 12 : ($grande ? 16 : 13) }}px;
+            font-size: {{ $vertical ? 12 : ($grande ? 15 : 13) }}px;
             font-weight: bold;
             letter-spacing: .2px;
-            margin-top: {{ $grande ? 5 : 2 }}px;
+            margin-top: {{ $grande ? 3 : 2 }}px;
         }
         .metraje {
-            font-size: {{ $grande ? 20 : 17 }}px;
+            font-size: {{ $grande ? 19 : 17 }}px;
             font-weight: bold;
             color: {{ config('theme.primary') }};
             line-height: 1;
         }
         .metraje .peso {
-            font-size: 9px;
+            font-size: {{ $grande ? 8.5 : 9 }}px;
             font-weight: normal;
             color: {{ config('theme.muted') }};
             display: block;
             margin-top: 1px;
         }
 
-        .codigos { margin-top: {{ $grande ? 6 : 2 }}px; }
+        .codigos { margin-top: {{ $grande ? 4 : 2 }}px; }
         .codigos td { vertical-align: middle; text-align: center; padding: 0 4px; }
-        .qr { height: {{ $vertical ? 72 : ($grande ? 78 : 60) }}px; width: {{ $vertical ? 72 : ($grande ? 78 : 60) }}px; }
-        .barras { height: {{ $vertical ? 32 : ($grande ? 44 : 30) }}px; width: 100%; }
-        .pie { font-size: {{ $grande ? 8 : 6.5 }}px; color: {{ config('theme.muted_light') }}; margin-top: {{ $grande ? 5 : 2 }}px; }
+        .qr { height: {{ $vertical ? 72 : ($grande ? 72 : 60) }}px; width: {{ $vertical ? 72 : ($grande ? 72 : 60) }}px; }
+        .barras { height: {{ $vertical ? 32 : ($grande ? 36 : 30) }}px; width: 100%; }
+        .pie { font-size: {{ $grande ? 7.5 : 6.5 }}px; color: {{ config('theme.muted_light') }}; margin-top: {{ $grande ? 3 : 2 }}px; }
     </style>
 </head>
 <body>
@@ -115,13 +115,13 @@
                             &nbsp;·&nbsp;<span class="et">{{ $e['posicion'] }} de esta tela y color</span>
                         @endif
                         @if ($e['orden'])
-                            &nbsp;·&nbsp;<span class="et">Orden:</span> {{ $e['orden'] }}
+                            &nbsp;·&nbsp;<span style="white-space: nowrap;"><span class="et">Orden:</span> {{ $e['orden'] }}</span>
                         @endif
                     </div>
                 </td>
                 @if ($e['qr'] && ! $vertical)
                     {{-- Sin código de barras sobra espacio: el QR se imprime más grande, que se lee mejor. --}}
-                    <td style="width: {{ $e['barras'] ? ($grande ? 90 : 66) : 100 }}px; text-align: right; vertical-align: top;">
+                    <td style="width: {{ $e['barras'] ? ($grande ? 84 : 66) : 100 }}px; text-align: right; vertical-align: top;">
                         <img class="qr" @unless ($e['barras']) style="height: 92px; width: 92px;" @endunless src="{{ $e['qr'] }}" alt="{{ $e['codigo'] }}">
                     </td>
                 @endif

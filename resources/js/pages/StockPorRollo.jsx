@@ -360,13 +360,15 @@ export default function StockPorRollo() {
             ),
         },
         {
-            key: 'importacion',
-            label: 'Importación',
+            // La orden de compra de la que viene el rollo (su código, como en Órdenes de compra).
+            key: 'orden_compra',
+            label: 'Orden de compra',
+            getSearchValue: (row) => row.orden_compra?.codigo,
             render: (row) =>
-                row.importacion ? (
+                row.orden_compra ? (
                     <span className="inline-flex items-center gap-1.5 text-warm-600">
                         <Ship className="h-3.5 w-3.5 shrink-0 text-warm-400" />
-                        <span className="truncate">{row.importacion.codigo}</span>
+                        <span className="truncate">{row.orden_compra.codigo}</span>
                     </span>
                 ) : (
                     <span className="text-warm-400">—</span>

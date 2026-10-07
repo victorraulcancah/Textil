@@ -70,6 +70,13 @@ class RolloResource extends JsonResource
                 'fecha_llegada' => $this->importacion->fecha_llegada,
             ] : null),
 
+            // La orden de compra de la que viene (por su recepción); null si entró por un ajuste o una carga inicial.
+            'orden_compra' => $this->whenLoaded('recepcion', function () {
+                $orden = $this->recepcion?->ordenCompra ?? $this->recepcion?->compra?->ordenCompra;
+
+                return $orden ? ['id' => $orden->id, 'codigo' => $orden->codigo] : null;
+            }),
+
             'cliente_id' => $this->cliente_id,
             'cliente' => $this->whenLoaded('cliente', fn () => $this->cliente?->nombre),
 

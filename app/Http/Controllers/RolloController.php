@@ -30,6 +30,8 @@ class RolloController extends Controller
     private const RELACIONES = [
         'producto:id,codigo,nombre', 'color', 'almacen:id,nombre', 'cliente:id,nombre',
         'importacion:id,codigo,documento,fecha_llegada',
+        // La orden de compra de la que viene el rollo: la de su recepción o, si no, la de la compra recibida.
+        'recepcion:id,orden_compra_id,compra_id', 'recepcion.ordenCompra:id,codigo', 'recepcion.compra:id,orden_compra_id', 'recepcion.compra.ordenCompra:id,codigo',
         'cortesPendientes.detalle.ordenVenta:id,serie,numero,estado',
         // Hasta 5 niveles: piso → pasillo → rack → nivel → posición.
         'ubicacion.padre.padre.padre.padre',

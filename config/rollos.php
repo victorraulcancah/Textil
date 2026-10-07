@@ -20,9 +20,9 @@ return [
     | que no hace falta meter más información en el código.
     */
     'etiqueta' => [
-        // QR y código de barras, como antes: cualquier lector sirve (la pistola láser lee las barras, la cámara el QR).
-        // Con ROLLOS_SIMBOLOGIA=qr la etiqueta lleva solo el QR.
-        'simbologia' => env('ROLLOS_SIMBOLOGIA', 'ambos'),
+        // Solo QR: la etiqueta no lleva código de barras. Con ROLLOS_SIMBOLOGIA=ambos vuelven las barras (las lee
+        // cualquier pistola láser; el QR necesita un lector 2D o la cámara).
+        'simbologia' => env('ROLLOS_SIMBOLOGIA', 'qr'),
 
         // Tamaño del papel de la etiqueta, en milímetros: ANCHO x ALTO. La etiqueta es de 100 x 60 mm (horizontal): el PDF
         // sale de ese tamaño (99.8 x 60.0 en el visor) y la impresora lo ajusta a su papel.

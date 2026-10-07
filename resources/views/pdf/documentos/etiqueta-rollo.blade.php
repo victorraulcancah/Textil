@@ -35,12 +35,13 @@
         /* El alto sale del papel (a 96 dpi); dompdf suma el padding al alto, por eso se deja margen. */
         .etiqueta {
             height: {{ $altoPx - ($grande ? 10 : 0) }}px;
-            padding: {{ $grande ? 8 : 5 }}px {{ $vertical ? 7 : ($grande ? 12 : 8) }}px;
+            padding: {{ $grande ? 8 : 5 }}px {{ $vertical ? 7 : ($grande ? 8 : 8) }}px;
             overflow: hidden;
             page-break-after: always;
         }
         .etiqueta:last-child { page-break-after: auto; }
 
+        .producto.color { margin-top: 1px; }
         .producto {
             font-size: {{ $vertical ? 10.5 : ($grande ? 13 : 11) }}px;
             font-weight: bold;
@@ -79,8 +80,8 @@
         .pie { font-size: {{ $grande ? 7 : 6.5 }}px; color: {{ config('theme.muted_light') }}; margin-top: {{ $grande ? 3 : 2 }}px; }
 
         @if ($grande)
-        /* Con más datos (peso, posición, orden) se aprieta un poco para que todo siga entrando en una sola hoja. */
-        .etiqueta.compacta { height: {{ $altoPx - 4 }}px; padding: 7px 12px; }
+        /* Con código de barras y peso se aprieta un poco para que todo siga entrando en una sola hoja. */
+        .etiqueta.compacta { height: {{ $altoPx - 4 }}px; padding: 7px 8px; }
         .compacta .producto { font-size: 12px; }
         .compacta .linea { font-size: 8.5px; margin-top: 1px; }
         .compacta .codigo { font-size: 15px; letter-spacing: .2px; margin-top: 3px; }
@@ -98,11 +99,13 @@
         <div style="position: relative; width: {{ $diseñoAlto }}px; height: {{ $diseñoAncho - 2 }}px; overflow: hidden; page-break-after: {{ $loop->last ? 'auto' : 'always' }};">
         <div style="position: absolute; left: 0; top: 0; width: {{ $diseñoAncho }}px; height: {{ $diseñoAlto }}px; transform-origin: 0 0; transform: translateY({{ $diseñoAncho }}px) rotate(-90deg);">
     @endif
-    <div class="etiqueta @if ($grande && ($e['peso_kg'] || $e['posicion'] || $e['orden'])) compacta @endif">
-        <table style="width: 100%;">
+    <div class="etiqueta @if ($grande && $e['barras'] && $e['peso_kg']) compacta @endif">
+        <table style="width: 100%; border-spacing: 0;">
             <tr>
-                <td style="vertical-align: top;">
-                    <div class="producto">{{ $e['producto'] }} · {{ $e['color'] }}</div>
+                <td style="vertical-align: top; padding: 0;">
+                    <div class="producto">{{ $e['producto'] }}</div>
+                    {{-- El color va aparte, debajo del nombre de la tela. --}}
+                    <div class="producto color">{{ $e['color'] }}</div>
                     <div class="linea">
                         {{-- El producto es la tela más su color: 01-01-030-0074. --}}
                         <span class="et">Producto:</span>
@@ -121,21 +124,11 @@
                             &nbsp;·&nbsp;<span class="et">Saldo actual:</span> <strong>{{ $e['metros'] }} m</strong>
                         @endif
                     </div>
-                    <div class="linea">
-                        {{-- El último número del código es el del rollo: se dice aparte. --}}
-                        <span class="et">Rollo Nº</span> <strong>{{ $e['numero'] }}</strong>
-                        @if ($e['posicion'])
-                            &nbsp;·&nbsp;<span class="et">{{ $e['posicion'] }} de esta tela y color</span>
-                        @endif
-                        @if ($e['orden'])
-                            &nbsp;·&nbsp;<span style="white-space: nowrap;"><span class="et">Orden:</span> {{ $e['orden'] }}</span>
-                        @endif
-                    </div>
                 </td>
                 @if ($e['qr'] && ! $vertical)
                     {{-- Sin código de barras sobra espacio: el QR se imprime más grande, que se lee mejor. --}}
-                    <td style="width: {{ $e['barras'] ? ($grande ? 80 : 66) : 100 }}px; text-align: right; vertical-align: top;">
-                        <img class="qr" @unless ($e['barras']) style="height: 92px; width: 92px;" @endunless src="{{ $e['qr'] }}" alt="{{ $e['codigo'] }}">
+                    <td style="width: {{ $e['barras'] ? ($grande ? 80 : 66) : ($grande ? 132 : 100) }}px; text-align: right; vertical-align: top; padding: 0;">
+                        <img class="qr" @unless ($e['barras']) style="height: {{ $grande ? 124 : 92 }}px; width: {{ $grande ? 124 : 92 }}px;" @endunless src="{{ $e['qr'] }}" alt="{{ $e['codigo'] }}">
                     </td>
                 @endif
             </tr>

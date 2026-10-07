@@ -415,16 +415,16 @@ export default function CrearAjuste() {
     const totalAjuste = items.reduce((s, it) => s + totalDe(it), 0);
 
     /** La plantilla de Excel para llenar el detalle: sus columnas cambian según sea entrada o salida. */
-    const descargarPlantilla = async () => {
+    const descargarPlantilla = async (conEjemplos = false) => {
         try {
             const { data } = await api.get('/ajustes/plantilla', {
-                params: { tipo: form.tipo, almacen_id: form.almacen_id || undefined },
+                params: { tipo: form.tipo, almacen_id: form.almacen_id || undefined, ejemplo: conEjemplos ? 1 : undefined },
                 responseType: 'blob',
             });
             const url = URL.createObjectURL(data);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `plantilla-ajuste-${form.tipo}.xlsx`;
+            a.download = `plantilla-ajuste-${form.tipo}${conEjemplos ? '-prueba' : ''}.xlsx`;
             document.body.appendChild(a);
             a.click();
             a.remove();
@@ -727,8 +727,17 @@ export default function CrearAjuste() {
                             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                                 <h2 className="text-sm font-semibold text-warm-900">Detalle del ajuste</h2>
                                 <div className="flex flex-wrap gap-2">
-                                    <Button type="button" variant="secondary" size="sm" onClick={descargarPlantilla}>
+                                    <Button type="button" variant="secondary" size="sm" onClick={() => descargarPlantilla(false)}>
                                         <Download className="h-4 w-4" /> Plantilla Excel
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="secondary"
+                                        size="sm"
+                                        title="La misma plantilla con filas de prueba hechas con productos y rollos reales, para ver cómo se carga"
+                                        onClick={() => descargarPlantilla(true)}
+                                    >
+                                        <Download className="h-4 w-4" /> Con datos de prueba
                                     </Button>
                                     <Button type="button" variant="secondary" size="sm" loading={importando} onClick={() => inputExcel.current?.click()}>
                                         <Upload className="h-4 w-4" /> Cargar Excel

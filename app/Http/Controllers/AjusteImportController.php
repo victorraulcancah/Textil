@@ -60,6 +60,11 @@ class AjusteImportController extends Controller
         // Los códigos van como texto: "001" no debe quedar en 1.
         $hoja->getStyle("A2:B1000")->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_TEXT);
 
+        // Con ?ejemplo=1 la hoja trae filas de prueba, hechas con productos y rollos reales del sistema.
+        if ($request->boolean('ejemplo')) {
+            $this->filasDePrueba($hoja, $tipo, $almacenId);
+        }
+
         // Hoja 2: los códigos válidos.
         $codigos = $libro->createSheet();
         $codigos->setTitle($tipo === 'salida' ? 'Rollos y productos' : 'Productos');
@@ -390,6 +395,62 @@ class AjusteImportController extends Controller
             'errores' => $errores,
             'leidas' => $leidas,
         ]);
+    }
+
+    /**
+     * Filas de prueba en la hoja "Detalle", con datos reales: en la entrada, telas con sus colores y varios metrajes de
+     * un mismo color; en la salida, rollos disponibles del almacén (uno entero y un corte).
+     */
+    private function filasDePrueba($hoja, string $tipo, ?int $almacenId): void
+    {
+        $fila = 2;
+
+        if ($tipo === 'salida') {
+            $rollos = AlmacenAcceso::limitar(Rollo::query())
+                ->where('estado', Rollo::DISPONIBLE)
+                ->where('metros_actual', '>', 0)
+                ->when($almacenId, fn ($q) => $q->where('almacen_id', $almacenId))
+                ->orderBy('producto_id')->orderBy('producto_color_id')->orderBy('numero')
+                ->limit(4)
+                ->get();
+            foreach ($rollos as $i => $r) {
+                // El segundo rollo se saca solo en parte, para probar el corte; los demás, enteros.
+                $metros = $i === 1 && (float) $r->metros_actual >= 2 ? round((float) $r->metros_actual / 2, 2) : '';
+                $hoja->setCellValueExplicit("A{$fila}", '', DataType::TYPE_STRING);
+                $hoja->setCellValueExplicit("B{$fila}", (string) $r->codigo, DataType::TYPE_STRING);
+                if ($metros !== '') {
+                    $hoja->setCellValue("C{$fila}", $metros);
+                }
+                $fila++;
+            }
+
+            return;
+        }
+
+        $telas = Producto::query()->where('activo', true)
+            ->with(['presentaciones.unidadBase:id,abreviatura', 'colores' => fn ($q) => $q->where('activo', true)->orderBy('codigo')])
+            ->orderBy('codigo')->get()
+            ->filter(fn ($p) => $p->presentacionMetro() !== null && $p->colores->isNotEmpty())
+            ->take(2);
+
+        foreach ($telas as $tela) {
+            $colores = $tela->colores->values();
+            // El primer color con dos metrajes distintos; el segundo, con uno y un costo propio.
+            $lineas = [[$colores[0], 1, 50, ''], [$colores[0], 2, 80, '']];
+            if ($colores->count() > 1) {
+                $lineas[] = [$colores[1], 3, 100, 1.5];
+            }
+            foreach ($lineas as [$color, $rollos, $metros, $costo]) {
+                $hoja->setCellValueExplicit("A{$fila}", (string) $tela->codigo, DataType::TYPE_STRING);
+                $hoja->setCellValueExplicit("B{$fila}", (string) $color->codigo, DataType::TYPE_STRING);
+                $hoja->setCellValue("C{$fila}", $rollos);
+                $hoja->setCellValue("D{$fila}", $metros);
+                if ($costo !== '') {
+                    $hoja->setCellValue("E{$fila}", $costo);
+                }
+                $fila++;
+            }
+        }
     }
 
     /** La unidad en la que se cuenta un producto que no es tela: su unidad base (la presentación de menor factor). */

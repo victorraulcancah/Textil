@@ -35,7 +35,7 @@
         /* El alto sale del papel (a 96 dpi); dompdf suma el padding al alto, por eso se deja margen. */
         .etiqueta {
             height: {{ $altoPx - ($grande ? 10 : 0) }}px;
-            padding: {{ $grande ? 8 : 5 }}px {{ $vertical ? 7 : ($grande ? 8 : 8) }}px;
+            padding: {{ $grande ? 8 : 5 }}px {{ $vertical ? 7 : ($grande ? 24 : 8) }}px;
             overflow: hidden;
             page-break-after: always;
         }
@@ -81,7 +81,7 @@
 
         @if ($grande)
         /* Con código de barras y peso se aprieta un poco para que todo siga entrando en una sola hoja. */
-        .etiqueta.compacta { height: {{ $altoPx - 4 }}px; padding: 7px 8px; }
+        .etiqueta.compacta { height: {{ $altoPx - 4 }}px; padding: 7px 24px; }
         .compacta .producto { font-size: 12px; }
         .compacta .linea { font-size: 8.5px; margin-top: 1px; }
         .compacta .codigo { font-size: 15px; letter-spacing: .2px; margin-top: 3px; }
@@ -127,8 +127,8 @@
                 </td>
                 @if ($e['qr'] && ! $vertical)
                     {{-- Sin código de barras sobra espacio: el QR se imprime más grande, que se lee mejor. --}}
-                    <td style="width: {{ $e['barras'] ? ($grande ? 80 : 66) : ($grande ? 132 : 100) }}px; text-align: right; vertical-align: top; padding: 0;">
-                        <img class="qr" @unless ($e['barras']) style="height: {{ $grande ? 124 : 92 }}px; width: {{ $grande ? 124 : 92 }}px;" @endunless src="{{ $e['qr'] }}" alt="{{ $e['codigo'] }}">
+                    <td style="width: {{ $e['barras'] ? ($grande ? 80 : 66) : ($grande ? 116 : 100) }}px; text-align: right; vertical-align: top; padding: 0;">
+                        <img class="qr" @unless ($e['barras']) style="height: {{ $grande ? 110 : 92 }}px; width: {{ $grande ? 110 : 92 }}px;" @endunless src="{{ $e['qr'] }}" alt="{{ $e['codigo'] }}">
                     </td>
                 @endif
             </tr>

@@ -14,7 +14,8 @@ use Spatie\Permission\PermissionRegistrar;
  *
  * Borra todo lo que se cargó —productos, clientes, proveedores, almacenes,
  * compras, ventas, stock, rollos, cajas, auditoría…— y conserva solo el
- * acceso (roles, permisos y usuarios) y los datos de la empresa.
+ * acceso (roles, permisos, excepciones de permiso y usuarios) y los datos de
+ * la empresa. No toca ni una fila de roles, permisos ni usuarios.
  *
  * Los catálogos base del sistema (unidades de medida, métodos de pago,
  * motivos) se vacían y se vuelven a sembrar limpios, como en una instalación
@@ -39,6 +40,9 @@ class LimpiarDatos extends Command
         'role_has_permissions',
         'model_has_roles',
         'model_has_permissions',
+        // Los permisos por excepción y sus solicitudes también son acceso.
+        'permiso_excepciones',
+        'solicitudes_permiso',
         'users',
         'empresas',
     ];
@@ -101,7 +105,7 @@ class LimpiarDatos extends Command
 
         $this->newLine();
         $this->line('  <fg=green;options=bold>Se CONSERVA</>: '.$conservadas->map(fn ($n, $t) => "{$t} ({$n})")->implode(', '));
-        $this->line('  Luego se vuelven a sembrar limpios: unidades de medida, métodos de pago, motivos de movimiento y de traslado, y el tipo de precio principal.');
+        $this->line('  Luego se vuelven a sembrar limpios: unidades de medida, métodos de pago, motivos de movimiento y de traslado, el tipo de precio principal, y los conceptos de gasto y tipos de contenedor.');
         $this->newLine();
 
         if ($this->option('simular')) {

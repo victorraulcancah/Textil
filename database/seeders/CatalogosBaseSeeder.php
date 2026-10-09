@@ -21,6 +21,7 @@ class CatalogosBaseSeeder extends Seeder
             MotivosMovimientoSeeder::class,
             MotivosTrasladoSeeder::class,
             TiposPrecioSeeder::class,
+            ConceptosYContenedoresSeeder::class,
         ]);
     }
 }

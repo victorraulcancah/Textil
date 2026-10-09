@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Models\Almacen;
 use Database\Seeders\CatalogosBaseSeeder;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
@@ -105,7 +106,7 @@ class LimpiarDatos extends Command
 
         $this->newLine();
         $this->line('  <fg=green;options=bold>Se CONSERVA</>: '.$conservadas->map(fn ($n, $t) => "{$t} ({$n})")->implode(', '));
-        $this->line('  Luego se vuelven a sembrar limpios: unidades de medida, métodos de pago, motivos de movimiento y de traslado, el tipo de precio principal, y los conceptos de gasto y tipos de contenedor.');
+        $this->line('  Luego se vuelven a sembrar limpios: unidades de medida, métodos de pago, motivos de movimiento y de traslado, el tipo de precio principal, los conceptos de gasto, los tipos de contenedor y el almacén principal.');
         $this->newLine();
 
         if ($this->option('simular')) {
@@ -132,6 +133,19 @@ class LimpiarDatos extends Command
         $this->borrar($aBorrar->keys()->all());
 
         $this->call('db:seed', ['--class' => CatalogosBaseSeeder::class, '--force' => true]);
+
+        // Los usuarios se conservan, pero su almacén ya no existe: quien apuntaba
+        // a uno borrado pasa al almacén principal para poder trabajar.
+        $principal = Almacen::where('activo', true)->orderByDesc('predeterminado')->orderBy('id')->value('id');
+        if ($principal) {
+            $huerfanos = DB::table('users')
+                ->whereNotNull('almacen_id')
+                ->whereNotIn('almacen_id', DB::table('almacenes')->select('id'))
+                ->update(['almacen_id' => $principal]);
+            if ($huerfanos) {
+                $this->line("  {$huerfanos} usuario(s) pasaron al almacén principal (el suyo ya no existía).");
+            }
+        }
 
         // Sembrar los catálogos también deja su rastro en la auditoría: se
         // vacía de nuevo para que arranque limpia.

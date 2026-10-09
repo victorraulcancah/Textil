@@ -22,6 +22,7 @@ class CatalogosBaseSeeder extends Seeder
             MotivosTrasladoSeeder::class,
             TiposPrecioSeeder::class,
             ConceptosYContenedoresSeeder::class,
+            AlmacenPrincipalSeeder::class,
         ]);
     }
 }

@@ -1182,7 +1182,11 @@ class OrdenVentaService
                 continue;
             }
 
-            $this->stock->liberarReserva($linea->presentacion, $linea->almacenReserva, (float) $linea->cantidad_reservada);
+            // Si borraron el producto de la línea ya no hay stock que devolver: solo se suelta la reserva,
+            // para que el pedido se pueda anular o devolver a borrador igual.
+            if ($linea->presentacion) {
+                $this->stock->liberarReserva($linea->presentacion, $linea->almacenReserva, (float) $linea->cantidad_reservada);
+            }
 
             $linea->update(['reserva_almacen_id' => null, 'cantidad_reservada' => null]);
         }
@@ -1206,7 +1210,8 @@ class OrdenVentaService
                 }
             }
 
-            if ($orden->almacen) {
+            // Una línea cuyo producto ya no existe no tiene stock al que volver.
+            if ($orden->almacen && $linea->presentacion) {
                 $this->stock->entrada(
                     $linea->presentacion,
                     $orden->almacen,

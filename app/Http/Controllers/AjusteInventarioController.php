@@ -32,6 +32,8 @@ class AjusteInventarioController extends Controller
         'detalles.color:id,nombre,codigo,hex,proveedor_id',
         'detalles.color.proveedor:id,nombre',
         'detalles.rollo:id,codigo,metros_inicial,recepcion_compra_id,importacion_id',
+        // Una entrada de telas crea sus rollos: sus códigos salen en el detalle.
+        'detalles.rollosCreados:id,codigo,ajuste_detalle_id',
         // De dónde vino el rollo: la recepción de la compra o la importación, que dicen quién lo vendió.
         'detalles.rollo.recepcion:id,proveedor_id',
         'detalles.rollo.recepcion.proveedor:id,nombre',

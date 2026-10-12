@@ -282,6 +282,11 @@ export function gruposDeAjuste(detalles = []) {
                 (d.presentacion?.unidad_base?.abreviatura ?? '').toLowerCase() === 'm';
             const precio = Number(d.costo_unitario) || 0;
 
+            // Una entrada crea sus rollos: se muestra su código (o el primero y el último si son muchos).
+            const creados = (d.rollos_creados ?? []).map((r) => r.codigo).filter(Boolean).sort();
+            const codigosCreados =
+                creados.length === 0 ? null : creados.length <= 3 ? creados.join(' · ') : `${creados[0]} … ${creados[creados.length - 1]}`;
+
             return {
                 grupo: String(d.presentacion?.producto_id ?? producto?.id ?? producto?.codigo ?? 'sin'),
                 titulo: tituloDe(esTela, producto?.codigo, producto?.nombre),
@@ -295,7 +300,7 @@ export function gruposDeAjuste(detalles = []) {
                     metros: cantidad,
                     precio,
                     total: Number(d.subtotal) || redondear(cantidad * precio),
-                    detalle: d.rollo?.codigo ?? null,
+                    detalle: d.rollo?.codigo ?? codigosCreados,
                 },
             };
         }),

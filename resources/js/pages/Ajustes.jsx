@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowDownLeft, ArrowUpRight, BadgeCheck, Download, Edit, Lock, Printer, Scale, Trash2 } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, BadgeCheck, Download, Edit, Lock, Printer, QrCode, Scale, Trash2 } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
@@ -63,6 +63,8 @@ export default function Ajustes() {
     const [seleccionado, setSeleccionado] = useState(null);
     const sheet = useSheet();
     const [pdfTarget, setPdfTarget] = useState(null);
+    /** Las etiquetas QR de los rollos que creó un ingreso. */
+    const [etiquetas, setEtiquetas] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
@@ -514,6 +516,10 @@ export default function Ajustes() {
 
     const detalleSeleccionado = seleccionado?.detalles ?? [];
 
+    /** ¿El ajuste creó rollos? Solo un ingreso de telas tiene etiquetas que imprimir. */
+    const tieneRollos = (a) => a?.tipo === 'entrada' && (a.detalles ?? []).some((d) => (d.rollos_creados ?? []).length > 0);
+    const verEtiquetas = (a) => setEtiquetas({ url: `/rollos/etiquetas?ajuste_id=${a.id}`, titulo: `Etiquetas QR · ${a.documento ?? `#${a.id}`}` });
+
     const columns = [
         {
             key: 'idx',
@@ -628,6 +634,13 @@ export default function Ajustes() {
                         className="rounded-md p-1.5 text-warm-600 transition hover:bg-gray-100 hover:text-warm-900">
                         <Printer className="h-4 w-4" />
                     </button>
+                    {tieneRollos(row) && (
+                        <button aria-label="Etiquetas QR" title="Ver las etiquetas QR de los rollos que ingresaron"
+                            onClick={(e) => { e.stopPropagation(); verEtiquetas(row); }}
+                            className="rounded-md p-1.5 text-warm-600 transition hover:bg-gray-100 hover:text-warm-900">
+                            <QrCode className="h-4 w-4" />
+                        </button>
+                    )}
 
                     <button
                         aria-label="Editar"
@@ -839,11 +852,18 @@ export default function Ajustes() {
                                 Detalle {seleccionado?.documento ? `de ${seleccionado.documento}` : ''}
                             </h2>
                             {seleccionado && (
-                                <span className="text-xs text-warm-500">
+                                <span className="flex items-center gap-3 text-xs text-warm-500">
+                                    {tieneRollos(seleccionado) && (
+                                        <Button variant="secondary" size="sm" onClick={() => verEtiquetas(seleccionado)}>
+                                            <QrCode className="h-4 w-4" /> Etiquetas QR
+                                        </Button>
+                                    )}
+                                    <span>
                                     {detalleSeleccionado.length}{' '}
                                     {detalleSeleccionado.length === 1 ? 'producto' : 'productos'} ·{' '}
                                     <span className="font-semibold text-primary-600">
                                         {money(seleccionado.total)}
+                                    </span>
                                     </span>
                                 </span>
                             )}
@@ -1043,6 +1063,15 @@ export default function Ajustes() {
                 nombre={pdfTarget?.documento}
                 titulo="Ajuste de inventario"
                 formatos={['a4', 'ticket']}
+            />
+
+            {/* Las etiquetas QR de lo que ingresó. */}
+            <PdfViewerModal
+                open={Boolean(etiquetas)}
+                onClose={() => setEtiquetas(null)}
+                url={etiquetas?.url}
+                titulo={etiquetas?.titulo}
+                nombre={etiquetas?.titulo}
             />
         </Layout>
     );

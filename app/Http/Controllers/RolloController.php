@@ -200,6 +200,11 @@ class RolloController extends Controller
             ->when($request->filled('producto_id'), fn ($q) => $q->where('producto_id', $request->producto_id))
             ->when($request->filled('producto_color_id'), fn ($q) => $q->where('producto_color_id', $request->producto_color_id))
             ->when($request->filled('recepcion_compra_id'), fn ($q) => $q->where('recepcion_compra_id', $request->recepcion_compra_id))
+            // Los rollos que creó un ajuste de entrada.
+            ->when($request->filled('ajuste_id'), fn ($q) => $q->whereIn(
+                'ajuste_detalle_id',
+                \App\Models\AjusteDetalle::where('ajuste_id', $request->integer('ajuste_id'))->select('id'),
+            ))
             ->orderBy('numero')
             ->get();
 

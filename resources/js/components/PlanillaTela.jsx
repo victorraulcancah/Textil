@@ -118,7 +118,7 @@ export default function PlanillaTela({ grupos = [], moneda = 'PEN', pendiente = 
                                                 <tr key={f.clave} className={cn('hover:bg-gray-50', completa?.(f) && 'bg-green-50/60')}>
                                                     <td className={`${td} whitespace-nowrap font-mono text-xs`}>
                                                         {f.item}
-                                                        {f.detalle && <span className="block text-[10px] text-warm-400">{f.detalle}</span>}
+                                                        {f.detalle && <span className="block max-w-[11rem] whitespace-normal break-words text-[10px] leading-tight text-warm-400">{f.detalle}</span>}
                                                     </td>
                                                     {colorCode && <td className={`${td} text-center font-mono text-xs`}>{f.color_code ?? ''}</td>}
                                                     <td className={`${td} uppercase`}>

@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\UnidadMedida;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Catálogo de unidades de medida, y única fuente de verdad de `factor_base`.
@@ -27,8 +28,18 @@ use Illuminate\Database\Seeder;
  */
 class UnidadesMedidaSeeder extends Seeder
 {
-    /** [abreviatura, nombre, factor_base] */
+    /**
+     * [abreviatura, nombre, factor_base, otros nombres con los que ya puede existir].
+     *
+     * Metro y Rollo no son opcionales en una textil: el sistema reconoce una
+     * tela porque su formato se mide en la unidad de abreviatura `m`. Con otra
+     * ("MT", "mts") el producto se trata como uno cualquiera y no pide color.
+     */
     public const UNIDADES = [
+        // Tela
+        ['m', 'Metro', 1, ['mt', 'mts', 'metros']],
+        ['RLL', 'Rollo', 1, ['rollos']],
+
         // Pieza
         ['u', 'Unidad', 1],
         ['doc', 'Docena', 12],
@@ -60,13 +71,30 @@ class UnidadesMedidaSeeder extends Seeder
         $creadas = 0;
         $corregidas = 0;
 
-        foreach (self::UNIDADES as [$abrev, $nombre, $factor]) {
+        foreach (self::UNIDADES as $fila) {
+            [$abrev, $nombre, $factor] = $fila;
+            $otros = $fila[3] ?? [];
+
             // Se busca por abreviatura y también por nombre: la misma unidad
             // puede estar guardada con otra abreviatura ("Unidad" como `un` en
             // vez de `u`) y crearla otra vez la duplicaría.
             $unidad = UnidadMedida::where('abreviatura', $abrev)
                 ->orWhereRaw('LOWER(nombre) = ?', [mb_strtolower($nombre)])
                 ->first();
+
+            // O con otro nombre que es la misma ("METROS" con abreviatura MT).
+            if (! $unidad && $otros) {
+                $unidad = UnidadMedida::whereIn(DB::raw('LOWER(abreviatura)'), $otros)
+                    ->orWhereIn(DB::raw('LOWER(nombre)'), $otros)
+                    ->first();
+            }
+
+            // El metro se reconoce por su abreviatura: si existe con otra, se corrige.
+            if ($unidad && $abrev === 'm' && $unidad->abreviatura !== 'm') {
+                $this->command?->warn("  {$unidad->nombre}: abreviatura {$unidad->abreviatura} -> m");
+                $unidad->update(['abreviatura' => 'm']);
+                $corregidas++;
+            }
 
             if (! $unidad) {
                 UnidadMedida::create([

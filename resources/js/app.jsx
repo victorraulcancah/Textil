@@ -1,4 +1,4 @@
-import { StrictMode } from 'react';
+import { StrictMode, Suspense, lazy } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './lib/auth';
@@ -6,65 +6,66 @@ import { ToastProvider } from './lib/toast';
 import ProtectedRoute from './components/ProtectedRoute';
 import AccesoDenegado from './components/AccesoDenegado';
 import RutaProtegida, { pantallaInicial } from './components/RutaProtegida';
+import { Spinner } from './components/ui';
 import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
-import Roles from './pages/Roles';
-import Usuarios from './pages/Usuarios';
-import Empresa from './pages/Empresa';
-import Productos from './pages/Productos';
-import ListaPrecios from './pages/ListaPrecios';
-import Colores from './pages/Colores';
-import TiposTela from './pages/TiposTela';
-import StockRollosReporte from './pages/StockRollosReporte';
-import FamiliaTela from './pages/FamiliaTela';
-import Marcas from './pages/Marcas';
-import SubMarcas from './pages/SubMarcas';
-import UnidadesMedida from './pages/UnidadesMedida';
-import Almacenes from './pages/Almacenes';
-import Existencias from './pages/Existencias';
-import StockPorRollo from './pages/StockPorRollo';
-import Movimientos from './pages/Movimientos';
-import KardexDocumento from './pages/KardexDocumento';
-import KardexColor from './pages/KardexColor';
-import Transferencias from './pages/Transferencias';
-import CrearTransferencia from './pages/CrearTransferencia';
-import Ajustes from './pages/Ajustes';
-import CrearAjuste from './pages/CrearAjuste';
-import TomasInventario from './pages/TomasInventario';
-import Prestamos from './pages/Prestamos';
-import Proveedores from './pages/Proveedores';
-import OrdenesCompra from './pages/OrdenesCompra';
-import CrearOrdenCompra from './pages/CrearOrdenCompra';
-import Compras from './pages/Compras';
-import CrearCompra from './pages/CrearCompra';
-import RecepcionesCompra from './pages/RecepcionesCompra';
-import Clientes from './pages/Clientes';
-import CatalogoComercial from './pages/CatalogosComerciales';
-import NotasVenta from './pages/NotasVenta';
-import Pedidos from './pages/Pedidos';
-import CrearPedido from './pages/CrearPedido';
-import Despacho from './pages/Despacho';
-import Requerimientos from './pages/Requerimientos';
-import AtenderRequerimientos from './pages/AtenderRequerimientos';
-import CrearRequerimiento from './pages/CrearRequerimiento';
-import CrearVenta from './pages/CrearVenta';
-import MetodosDePago from './pages/MetodosDePago';
-import MiCaja from './pages/MiCaja';
-import Cajas from './pages/Cajas';
-import MovimientosCaja from './pages/MovimientosCaja';
-import CierresCaja from './pages/CierresCaja';
-import MotivosMovimiento from './pages/MotivosMovimiento';
-import CuentasPorCobrar from './pages/CuentasPorCobrar';
-import LetrasCambio from './pages/LetrasCambio';
-import Renovaciones from './pages/Renovaciones';
-import EstadoCuenta from './pages/EstadoCuenta';
-import CuentasPorPagar from './pages/CuentasPorPagar';
-import Utilidades from './pages/Utilidades';
-import Ganancias from './pages/Ganancias';
-import Auditoria from './pages/Auditoria';
-import Accesos from './pages/Accesos';
-import Inicio from './pages/Inicio';
-import EnConstruccion from './pages/EnConstruccion';
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Roles = lazy(() => import('./pages/Roles'));
+const Usuarios = lazy(() => import('./pages/Usuarios'));
+const Empresa = lazy(() => import('./pages/Empresa'));
+const Productos = lazy(() => import('./pages/Productos'));
+const ListaPrecios = lazy(() => import('./pages/ListaPrecios'));
+const Colores = lazy(() => import('./pages/Colores'));
+const TiposTela = lazy(() => import('./pages/TiposTela'));
+const StockRollosReporte = lazy(() => import('./pages/StockRollosReporte'));
+const FamiliaTela = lazy(() => import('./pages/FamiliaTela'));
+const Marcas = lazy(() => import('./pages/Marcas'));
+const SubMarcas = lazy(() => import('./pages/SubMarcas'));
+const UnidadesMedida = lazy(() => import('./pages/UnidadesMedida'));
+const Almacenes = lazy(() => import('./pages/Almacenes'));
+const Existencias = lazy(() => import('./pages/Existencias'));
+const StockPorRollo = lazy(() => import('./pages/StockPorRollo'));
+const Movimientos = lazy(() => import('./pages/Movimientos'));
+const KardexDocumento = lazy(() => import('./pages/KardexDocumento'));
+const KardexColor = lazy(() => import('./pages/KardexColor'));
+const Transferencias = lazy(() => import('./pages/Transferencias'));
+const CrearTransferencia = lazy(() => import('./pages/CrearTransferencia'));
+const Ajustes = lazy(() => import('./pages/Ajustes'));
+const CrearAjuste = lazy(() => import('./pages/CrearAjuste'));
+const TomasInventario = lazy(() => import('./pages/TomasInventario'));
+const Prestamos = lazy(() => import('./pages/Prestamos'));
+const Proveedores = lazy(() => import('./pages/Proveedores'));
+const OrdenesCompra = lazy(() => import('./pages/OrdenesCompra'));
+const CrearOrdenCompra = lazy(() => import('./pages/CrearOrdenCompra'));
+const Compras = lazy(() => import('./pages/Compras'));
+const CrearCompra = lazy(() => import('./pages/CrearCompra'));
+const RecepcionesCompra = lazy(() => import('./pages/RecepcionesCompra'));
+const Clientes = lazy(() => import('./pages/Clientes'));
+const CatalogoComercial = lazy(() => import('./pages/CatalogosComerciales'));
+const NotasVenta = lazy(() => import('./pages/NotasVenta'));
+const Pedidos = lazy(() => import('./pages/Pedidos'));
+const CrearPedido = lazy(() => import('./pages/CrearPedido'));
+const Despacho = lazy(() => import('./pages/Despacho'));
+const Requerimientos = lazy(() => import('./pages/Requerimientos'));
+const AtenderRequerimientos = lazy(() => import('./pages/AtenderRequerimientos'));
+const CrearRequerimiento = lazy(() => import('./pages/CrearRequerimiento'));
+const CrearVenta = lazy(() => import('./pages/CrearVenta'));
+const MetodosDePago = lazy(() => import('./pages/MetodosDePago'));
+const MiCaja = lazy(() => import('./pages/MiCaja'));
+const Cajas = lazy(() => import('./pages/Cajas'));
+const MovimientosCaja = lazy(() => import('./pages/MovimientosCaja'));
+const CierresCaja = lazy(() => import('./pages/CierresCaja'));
+const MotivosMovimiento = lazy(() => import('./pages/MotivosMovimiento'));
+const CuentasPorCobrar = lazy(() => import('./pages/CuentasPorCobrar'));
+const LetrasCambio = lazy(() => import('./pages/LetrasCambio'));
+const Renovaciones = lazy(() => import('./pages/Renovaciones'));
+const EstadoCuenta = lazy(() => import('./pages/EstadoCuenta'));
+const CuentasPorPagar = lazy(() => import('./pages/CuentasPorPagar'));
+const Utilidades = lazy(() => import('./pages/Utilidades'));
+const Ganancias = lazy(() => import('./pages/Ganancias'));
+const Auditoria = lazy(() => import('./pages/Auditoria'));
+const Accesos = lazy(() => import('./pages/Accesos'));
+const Inicio = lazy(() => import('./pages/Inicio'));
+const EnConstruccion = lazy(() => import('./pages/EnConstruccion'));
 
 /**
  * La raíz lleva al escritorio si el usuario puede verlo y, si no, a su Inicio;
@@ -154,6 +155,8 @@ createRoot(document.getElementById('root')).render(
             <ToastProvider>
                 <AuthProvider>
                     <AccesoDenegado />
+                    {/* Cada pantalla es su propio archivo: mientras baja, un indicador en vez de pantalla en blanco. */}
+                    <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><Spinner size="lg" className="text-primary-600" /></div>}>
                     <Routes>
                     <Route path="/login" element={<Login />} />
                     {routes.map(({ path, element }) => (
@@ -179,6 +182,7 @@ createRoot(document.getElementById('root')).render(
                             }
                         />
                     </Routes>
+                    </Suspense>
                 </AuthProvider>
             </ToastProvider>
         </BrowserRouter>

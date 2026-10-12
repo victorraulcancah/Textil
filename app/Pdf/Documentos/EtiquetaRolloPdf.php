@@ -45,6 +45,15 @@ class EtiquetaRolloPdf implements DocumentoPdf
      */
     public function etiqueta(Rollo $rollo): array
     {
+        return $this->datosDe($rollo) + $this->etiquetas->codigos($rollo->codigo);
+    }
+
+    /**
+     * Lo que dice la etiqueta, sin los códigos escaneables. Es lo único que cambia lo impreso: con esto se sabe si un
+     * lote ya se imprimió igual antes, sin dibujar ni un QR.
+     */
+    public function datosDe(Rollo $rollo): array
+    {
         return [
             'rollo' => $rollo,
             'producto' => $rollo->producto?->nombre ?? '—',
@@ -70,7 +79,13 @@ class EtiquetaRolloPdf implements DocumentoPdf
             'orden' => $this->orden($rollo),
             'posicion' => $this->posicion($rollo),
             'ubicacion' => $rollo->ubicacionLegible(),
-        ] + $this->etiquetas->codigos($rollo->codigo);
+        ];
+    }
+
+    /** Agrega los códigos escaneables a los datos de una etiqueta. */
+    public function conCodigos(array $datos): array
+    {
+        return $datos + $this->etiquetas->codigos($datos['codigo']);
     }
 
     /** El código de la orden del rollo, o null si su código es el del producto con su color. */

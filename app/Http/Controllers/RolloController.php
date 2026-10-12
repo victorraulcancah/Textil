@@ -19,6 +19,7 @@ use App\Services\RolloService;
 use App\Support\AlmacenAcceso;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Los rollos: stock general, stock por color, consulta por código y el
@@ -218,16 +219,50 @@ class RolloController extends Controller
         $this->ampliarLimites($rollos->count());
 
         $documento = app(EtiquetaRolloPdf::class);
+        $datos = $rollos->map(fn ($r) => $documento->datosDe($r))->all();
 
-        $pdf = app(PdfService::class)->generarVista(
-            $documento->vista(),
-            ['etiquetas' => $rollos->map(fn ($r) => $documento->etiqueta($r))->all()],
-            'etiqueta',
-        );
+        // El mismo lote, con lo mismo impreso y el mismo diseño, da el mismo PDF: se guarda y se reutiliza.
+        $clave = sha1(json_encode([
+            'v' => 2,
+            'diseno' => (int) @filemtime(resource_path('views/pdf/documentos/etiqueta-rollo.blade.php')),
+            'config' => config('rollos.etiqueta'),
+            'etiquetas' => $datos,
+        ]));
+        $ruta = "etiquetas/{$clave}.pdf";
+        $disco = Storage::disk('local');
+
+        $contenido = $disco->exists($ruta) ? $disco->get($ruta) : null;
+
+        if ($contenido === null) {
+            $pdf = app(PdfService::class)->generarVista(
+                $documento->vista(),
+                ['etiquetas' => array_map(fn ($d) => $documento->conCodigos($d), $datos)],
+                'etiqueta',
+            );
+            $contenido = $pdf->output();
+
+            $disco->put($ruta, $contenido);
+            $this->limpiarEtiquetasViejas($disco);
+        }
 
         $archivo = 'etiquetas-'.$rollos->count().'-rollos.pdf';
 
-        return $request->boolean('descargar') ? $pdf->download($archivo) : $pdf->stream($archivo);
+        return response($contenido, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => ($request->boolean('descargar') ? 'attachment' : 'inline').'; filename="'.$archivo.'"',
+        ]);
+    }
+
+    /** Los PDF de etiquetas guardados no se acumulan: los de más de 14 días se borran. */
+    private function limpiarEtiquetasViejas($disco): void
+    {
+        $limite = now()->subDays(14)->getTimestamp();
+
+        foreach ($disco->files('etiquetas') as $archivo) {
+            if ($disco->lastModified($archivo) < $limite) {
+                $disco->delete($archivo);
+            }
+        }
     }
 
     /** Sube la memoria y el tiempo de esta petición según cuántas etiquetas se imprimen (nunca los baja). */

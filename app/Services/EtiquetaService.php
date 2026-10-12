@@ -6,6 +6,7 @@ use Endroid\QrCode\Encoding\Encoding;
 use Endroid\QrCode\ErrorCorrectionLevel;
 use Endroid\QrCode\QrCode;
 use Endroid\QrCode\Writer\PngWriter;
+use Illuminate\Support\Facades\Cache;
 use Picqer\Barcode\Types\TypeCode128;
 
 /**
@@ -42,17 +43,51 @@ class EtiquetaService
     /** QR con el código del rollo, como data URI listo para un <img src>. */
     public function qr(string $texto): string
     {
+        $lado = (int) config('rollos.etiqueta.qr_lado', 220);
+
+        // El QR de un código es siempre el mismo: dibujarlo cuesta ~12 ms y un lote son cientos.
+        return Cache::rememberForever("etiqueta.qr.{$lado}.".sha1($texto), fn () => $this->dibujarQr($texto, $lado));
+    }
+
+    private function dibujarQr(string $texto, int $lado): string
+    {
         $qr = new QrCode(
             data: $texto,
             encoding: new Encoding('UTF-8'),
             // Alta corrección de errores: la etiqueta va pegada a un rollo de
             // tela, se dobla y se ensucia, y aun así tiene que leerse.
             errorCorrectionLevel: ErrorCorrectionLevel::High,
-            size: (int) config('rollos.etiqueta.qr_lado', 220),
+            size: $lado,
             margin: 8,
         );
 
-        return (new PngWriter)->write($qr)->getDataUri();
+        $png = (new PngWriter)->write($qr)->getString();
+
+        return 'data:image/png;base64,'.base64_encode($this->aCuatroBits($png));
+    }
+
+    /**
+     * Pasa el QR (PNG de 1 bit) a uno de 4 bits: se ve exactamente igual, pero dompdf trata los PNG de paleta de
+     * otras profundidades como imágenes con transparencia y las procesa pixel a pixel (31 ms cada una; con 4 bits,
+     * 5 ms). En un lote de cientos de etiquetas es la mayor parte del tiempo del PDF.
+     */
+    private function aCuatroBits(string $png): string
+    {
+        $imagen = @imagecreatefromstring($png);
+        if (! $imagen || imageistruecolor($imagen) || imagecolorstotal($imagen) > 2) {
+            return $png;
+        }
+
+        // Con entre 3 y 16 colores en la paleta, GD escribe el PNG con 4 bits por pixel. Los extras no se usan.
+        for ($i = imagecolorstotal($imagen); $i < 16; $i++) {
+            imagecolorallocate($imagen, 10 + $i, 10, 10);
+        }
+
+        ob_start();
+        imagepng($imagen, null, 9);
+        $salida = ob_get_clean();
+
+        return $salida !== false && $salida !== '' ? $salida : $png;
     }
 
     /**

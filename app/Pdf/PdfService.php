@@ -63,7 +63,8 @@ class PdfService
 
         match ($formato) {
             'ticket' => $pdf->setPaper($this->papelTicket())->setOption('dpi', 96),
-            'etiqueta' => $pdf->setPaper($this->papelEtiqueta())->setOption('dpi', 96),
+            // Las fuentes van en subconjunto: un lote de cientos de etiquetas pesaba ~1.6 MB solo por repetir la tipografía.
+            'etiqueta' => $pdf->setPaper($this->papelEtiqueta())->setOption('dpi', 96)->setOption('isFontSubsettingEnabled', true),
             // A4 horizontal: los reportes con muchas columnas.
             'a4h' => $pdf->setPaper('a4', 'landscape'),
             default => $pdf->setPaper('a4'),

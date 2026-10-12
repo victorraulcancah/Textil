@@ -263,6 +263,46 @@ export function gruposDeRecepcion(detalles = []) {
 }
 
 /**
+ * Un ajuste de inventario, en el mismo formato de la compra: cada color de una tela con sus rollos y su factor.
+ * Una salida por rollo trae el rollo concreto (1R, o un corte si se saca solo una parte) con su código.
+ */
+export function gruposDeAjuste(detalles = []) {
+    return agrupar(
+        detalles.map((d) => {
+            const producto = d.presentacion?.producto;
+            const cantidad = Number(d.cantidad) || 0;
+            const esRollo = Boolean(d.rollo);
+            const metrosRollo = Number(d.rollo?.metros_inicial) || 0;
+            const corte = esRollo && metrosRollo > 0 && cantidad < metrosRollo - 0.001;
+            const rollos = esRollo ? (corte ? 0 : 1) : Number(d.rollos) || 0;
+            const esTela =
+                esRollo ||
+                rollos > 0 ||
+                Boolean(d.color) ||
+                (d.presentacion?.unidad_base?.abreviatura ?? '').toLowerCase() === 'm';
+            const precio = Number(d.costo_unitario) || 0;
+
+            return {
+                grupo: String(d.presentacion?.producto_id ?? producto?.id ?? producto?.codigo ?? 'sin'),
+                titulo: tituloDe(esTela, producto?.codigo, producto?.nombre),
+                rollos,
+                fila: {
+                    item: codigoItem(producto?.codigo, d.color?.codigo),
+                    color: d.color?.nombre ?? '',
+                    hex: d.color?.hex ?? null,
+                    rollo: esRollo ? (corte ? 'Corte' : '1R') : esTela ? (rollos > 0 ? `${rollos}R` : '') : (d.presentacion?.nombre ?? ''),
+                    factor: esRollo ? (metrosRollo > 0 ? metrosRollo : null) : esTela && rollos > 0 ? redondear(cantidad / rollos) : null,
+                    metros: cantidad,
+                    precio,
+                    total: Number(d.subtotal) || redondear(cantidad * precio),
+                    detalle: d.rollo?.codigo ?? null,
+                },
+            };
+        }),
+    );
+}
+
+/**
  * Una orden de compra o una compra: cada color de una tela con sus rollos y su
  * factor (los metros de cada rollo), y el código de color que se escribió en la
  * línea. `campoPrecio` es "precio_unitario" (orden) o "costo_unitario" (compra).

@@ -12,6 +12,8 @@ import { descargarExcel } from '../components/reportes/ReporteUI';
 import { Alert, Badge, Button, DataTable, Input, Modal, Select, Tabs } from '../components/ui';
 import { hoyIso } from '../lib/fechas';
 import FiltroFechas from '../components/FiltroFechas';
+import PlanillaTela from '../components/PlanillaTela';
+import { gruposDeAjuste } from '../lib/planilla';
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
 
@@ -846,69 +848,17 @@ export default function Ajustes() {
                                 </span>
                             )}
                         </div>
-                        <div className="overflow-x-auto">
-                            <table className="w-full min-w-[820px] text-sm">
-                                <thead>
-                                    <tr className="bg-primary-600 text-left text-xs font-semibold uppercase tracking-wide text-white">
-                                        <th className="w-12 px-3 py-2.5 text-center">#</th>
-                                        <th className="w-28 px-3 py-2.5">Código</th>
-                                        <th className="px-3 py-2.5">Descripción</th>
-                                        <th className="w-32 px-3 py-2.5">Marca</th>
-                                        <th className="w-24 px-3 py-2.5 text-right">Cantidad</th>
-                                        <th className="w-32 px-3 py-2.5">U. Medida</th>
-                                        <th className="w-28 px-3 py-2.5 text-right">Costo</th>
-                                        <th className="w-28 px-3 py-2.5 text-right">Total</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-100">
-                                    {detalleSeleccionado.length === 0 && (
-                                        <tr>
-                                            <td colSpan={8} className="px-3 py-10 text-center text-sm text-warm-500">
-                                                {seleccionado
-                                                    ? 'Este ajuste no tiene productos.'
-                                                    : 'Selecciona un ajuste arriba para ver su detalle.'}
-                                            </td>
-                                        </tr>
-                                    )}
-
-                                    {detalleSeleccionado.map((d, i) => {
-                                        const producto = d.presentacion?.producto;
-                                        return (
-                                            <tr key={d.id}>
-                                                <td className="px-3 py-2 text-center text-warm-500">{i + 1}</td>
-                                                <td className="px-3 py-2 text-warm-500">{producto?.codigo ?? '—'}</td>
-                                                <td className="px-3 py-2 font-semibold text-warm-900">
-                                                    {producto?.nombre ?? '—'}
-                                                    {d.color && (
-                                                        <span className="ml-2 text-xs font-normal uppercase text-warm-500">· {d.color.nombre}</span>
-                                                    )}
-                                                    {d.rollos ? (
-                                                        <span className="ml-2 text-xs font-normal text-warm-500">({d.rollos} rollos)</span>
-                                                    ) : null}
-                                                    {d.rollo && (
-                                                        <span className="ml-2 text-xs font-normal text-warm-500">(rollo {d.rollo.codigo})</span>
-                                                    )}
-                                                </td>
-                                                <td className="px-3 py-2 text-warm-500">
-                                                    {producto?.marca?.nombre ?? '—'}
-                                                </td>
-                                                <td className="px-3 py-2 text-right font-medium text-warm-900">
-                                                    {num(d.cantidad)}
-                                                </td>
-                                                <td className="px-3 py-2 text-warm-500">
-                                                    {d.presentacion?.nombre ?? '—'}
-                                                </td>
-                                                <td className="px-3 py-2 text-right text-warm-900">
-                                                    {money(d.costo_unitario)}
-                                                </td>
-                                                <td className="px-3 py-2 text-right font-semibold text-primary-600">
-                                                    {money(d.subtotal)}
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
+                        {/* El mismo formato de la compra y del pedido: una tabla por tela, con cada color, sus rollos y el factor. */}
+                        <div className="max-h-[60vh] overflow-auto p-4">
+                            {detalleSeleccionado.length === 0 ? (
+                                <p className="px-3 py-10 text-center text-sm text-warm-500">
+                                    {seleccionado
+                                        ? 'Este ajuste no tiene productos.'
+                                        : 'Selecciona un ajuste arriba para ver su detalle.'}
+                                </p>
+                            ) : (
+                                <PlanillaTela grupos={gruposDeAjuste(detalleSeleccionado)} moneda="PEN" />
+                            )}
                         </div>
                     </div>
                 </>

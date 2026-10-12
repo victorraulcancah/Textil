@@ -28,9 +28,10 @@ class AjusteInventarioController extends Controller
         'usuarioSolicita:id,name',
         'detalles.presentacion.producto.marca',
         'detalles.presentacion.producto.unidadMedida',
-        'detalles.color:id,nombre,codigo,proveedor_id',
+        'detalles.presentacion.unidadBase:id,abreviatura',
+        'detalles.color:id,nombre,codigo,hex,proveedor_id',
         'detalles.color.proveedor:id,nombre',
-        'detalles.rollo:id,codigo,recepcion_compra_id,importacion_id',
+        'detalles.rollo:id,codigo,metros_inicial,recepcion_compra_id,importacion_id',
         // De dónde vino el rollo: la recepción de la compra o la importación, que dicen quién lo vendió.
         'detalles.rollo.recepcion:id,proveedor_id',
         'detalles.rollo.recepcion.proveedor:id,nombre',

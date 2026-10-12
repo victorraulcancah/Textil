@@ -212,6 +212,11 @@ class RolloController extends Controller
             return response()->json(['message' => 'No hay rollos que etiquetar con ese filtro.'], 404);
         }
 
+        // Cada etiqueta es una página con su QR: un lote grande (cientos de rollos de una importación) pesa y tarda
+        // más de lo que permite el PHP por defecto (128 MB y 30 s), y terminaba en un 500. Se sube el límite según
+        // el tamaño del lote: ~0.5 MB y ~0.1 s por etiqueta, con piso en lo que ya tuviera el servidor.
+        $this->ampliarLimites($rollos->count());
+
         $documento = app(EtiquetaRolloPdf::class);
 
         $pdf = app(PdfService::class)->generarVista(
@@ -223,6 +228,19 @@ class RolloController extends Controller
         $archivo = 'etiquetas-'.$rollos->count().'-rollos.pdf';
 
         return $request->boolean('descargar') ? $pdf->download($archivo) : $pdf->stream($archivo);
+    }
+
+    /** Sube la memoria y el tiempo de esta petición según cuántas etiquetas se imprimen (nunca los baja). */
+    private function ampliarLimites(int $etiquetas): void
+    {
+        $actual = ini_parse_quantity((string) ini_get('memory_limit'));
+        $necesaria = (int) ((128 + $etiquetas * 0.6) * 1048576);
+
+        if ($actual !== -1 && $actual < $necesaria) {
+            @ini_set('memory_limit', (string) min($necesaria, 1536 * 1048576));
+        }
+
+        @set_time_limit(max(120, (int) ceil($etiquetas * 0.5)));
     }
 
     /** Los motivos con los que se puede confirmar la pérdida de un rollo en revisión (los de salida de Ajustes). */

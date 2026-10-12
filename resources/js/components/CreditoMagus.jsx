@@ -1,7 +1,7 @@
 import { ArrowUpRight } from 'lucide-react';
 import { cn } from './ui';
 
-const SITIO = 'https://magus-ecommerce.com/';
+const SITIO = 'https://magustechnologies.com/';
 
 /**
  * La firma de quien desarrolló el sistema. El logo de Magus es celeste neón: sobre blanco casi no se ve, así que
@@ -21,7 +21,7 @@ export default function CreditoMagus({ variante = 'chip', compacto = false, clas
                 href={SITIO}
                 target="_blank"
                 rel="noopener noreferrer"
-                aria-label="Desarrollado por Magus Technologies (abre magus-ecommerce.com)"
+                aria-label="Desarrollado por Magus Technologies (abre magustechnologies.com)"
                 className={cn(comun, 'gap-4 rounded-2xl px-5 py-4 hover:shadow-[0_10px_32px_-10px_rgba(0,229,255,0.5)]', className)}
             >
                 <img src="/img/mgs.png" alt="" className="h-10 w-auto shrink-0" />
@@ -30,7 +30,7 @@ export default function CreditoMagus({ variante = 'chip', compacto = false, clas
                         Desarrollado por Magus Technologies
                     </span>
                     <span className="mt-0.5 flex items-center gap-1 text-xs text-[#7fefff]">
-                        magus-ecommerce.com
+                        magustechnologies.com
                         <ArrowUpRight className="h-3.5 w-3.5 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
                     </span>
                 </span>
@@ -44,7 +44,7 @@ export default function CreditoMagus({ variante = 'chip', compacto = false, clas
             target="_blank"
             rel="noopener noreferrer"
             title="Desarrollado por Magus Technologies"
-            aria-label="Desarrollado por Magus Technologies (abre magus-ecommerce.com)"
+            aria-label="Desarrollado por Magus Technologies (abre magustechnologies.com)"
             className={cn(comun, 'justify-center gap-2.5 rounded-xl', compacto ? 'px-1.5 py-2' : 'px-3 py-2.5', className)}
         >
             <img src="/img/mgs.png" alt="" className={cn('w-auto shrink-0', compacto ? 'h-3.5' : 'h-5')} />

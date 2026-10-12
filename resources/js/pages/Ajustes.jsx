@@ -517,7 +517,7 @@ export default function Ajustes() {
     const detalleSeleccionado = seleccionado?.detalles ?? [];
 
     /** ¿El ajuste creó rollos? Solo un ingreso de telas tiene etiquetas que imprimir. */
-    const tieneRollos = (a) => a?.tipo === 'entrada' && (a.detalles ?? []).some((d) => (d.rollos_creados ?? []).length > 0);
+    const tieneRollos = (a) => a?.tipo === 'entrada' && (a.detalles ?? []).some((d) => Number(d.rollos_creados_count) > 0);
     const verEtiquetas = (a) => setEtiquetas({ url: `/rollos/etiquetas?ajuste_id=${a.id}`, titulo: `Etiquetas QR · ${a.documento ?? `#${a.id}`}` });
 
     const columns = [

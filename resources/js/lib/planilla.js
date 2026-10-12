@@ -282,10 +282,11 @@ export function gruposDeAjuste(detalles = []) {
                 (d.presentacion?.unidad_base?.abreviatura ?? '').toLowerCase() === 'm';
             const precio = Number(d.costo_unitario) || 0;
 
-            // Una entrada crea sus rollos: se muestra su código (o el primero y el último si son muchos).
-            const creados = (d.rollos_creados ?? []).map((r) => r.codigo).filter(Boolean).sort();
-            const codigosCreados =
-                creados.length === 0 ? null : creados.length <= 3 ? creados.join(' · ') : `${creados[0]} … ${creados[creados.length - 1]}`;
+            // Una entrada crea sus rollos: se muestra su código, o el primero y el último si son varios.
+            const cuantos = Number(d.rollos_creados_count) || 0;
+            const primero = d.rollos_creados_min_codigo;
+            const ultimo = d.rollos_creados_max_codigo;
+            const codigosCreados = cuantos === 0 || !primero ? null : cuantos === 1 || primero === ultimo ? primero : `${primero} … ${ultimo}`;
 
             return {
                 grupo: String(d.presentacion?.producto_id ?? producto?.id ?? producto?.codigo ?? 'sin'),

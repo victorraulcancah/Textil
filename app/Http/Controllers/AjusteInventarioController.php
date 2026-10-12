@@ -32,8 +32,6 @@ class AjusteInventarioController extends Controller
         'detalles.color:id,nombre,codigo,hex,proveedor_id',
         'detalles.color.proveedor:id,nombre',
         'detalles.rollo:id,codigo,metros_inicial,recepcion_compra_id,importacion_id',
-        // Una entrada de telas crea sus rollos: sus códigos salen en el detalle.
-        'detalles.rollosCreados:id,codigo,ajuste_detalle_id',
         // De dónde vino el rollo: la recepción de la compra o la importación, que dicen quién lo vendió.
         'detalles.rollo.recepcion:id,proveedor_id',
         'detalles.rollo.recepcion.proveedor:id,nombre',
@@ -41,11 +39,24 @@ class AjusteInventarioController extends Controller
         'detalles.rollo.importacion.proveedor:id,nombre',
     ];
 
+    /**
+     * Las relaciones de un ajuste. De los rollos que creó una entrada no se mandan todos (una carga inicial puede
+     * traer cientos): solo cuántos son y el primer y último código, que es lo que el detalle muestra.
+     */
+    private function relaciones(): array
+    {
+        return self::RELACIONES + [
+            'detalles' => fn ($q) => $q->withCount('rollosCreados')
+                ->withMin('rollosCreados', 'codigo')
+                ->withMax('rollosCreados', 'codigo'),
+        ];
+    }
+
     public function index()
     {
         return response()->json(
             // Cada sucursal ve sus ajustes (el Super Admin, todos).
-            AlmacenAcceso::limitar(AjusteInventario::with(self::RELACIONES)->withCount('detalles'))->latest('id')->get()
+            AlmacenAcceso::limitar(AjusteInventario::with($this->relaciones())->withCount('detalles'))->latest('id')->get()
         );
     }
 
@@ -133,7 +144,7 @@ class AjusteInventarioController extends Controller
         }
 
         return response()->json(
-            $ajuste->load(self::RELACIONES),
+            $ajuste->load($this->relaciones()),
             201
         );
     }
@@ -262,7 +273,7 @@ class AjusteInventarioController extends Controller
 
     public function show(AjusteInventario $ajuste)
     {
-        return response()->json($ajuste->load(self::RELACIONES));
+        return response()->json($ajuste->load($this->relaciones()));
     }
 
     public function update(Request $request, AjusteInventario $ajuste)

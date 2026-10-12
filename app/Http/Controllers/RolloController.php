@@ -206,6 +206,10 @@ class RolloController extends Controller
                 'ajuste_detalle_id',
                 \App\Models\AjusteDetalle::where('ajuste_id', $request->integer('ajuste_id'))->select('id'),
             ))
+            // Agrupadas por tela y color, y dentro de cada color por su número: todos los NEGRO juntos (1 al 10) y luego
+            // los del otro color. Solo por número salían mezcladas (el 1 de cada color, luego el 2 de cada color…).
+            ->orderBy('producto_id')
+            ->orderBy('producto_color_id')
             ->orderBy('numero')
             ->get();
 

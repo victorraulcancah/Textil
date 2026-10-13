@@ -3,28 +3,22 @@
 namespace App\Http\Controllers;
 
 use App\Models\TarjetaBancaria;
-use App\Models\CuentaBancaria;
-use App\Support\AlmacenAcceso;
 use Illuminate\Http\Request;
 
 class TarjetaBancariaController extends Controller
 {
     public function index()
     {
-        // Una tarjeta es del almacén de su cuenta.
+        // Las tarjetas son de la empresa: todos los almacenes ven las mismas.
         return response()->json(
-            TarjetaBancaria::with('cuentaBancaria.banco:id,nombre')
-                ->whereHas('cuentaBancaria', fn ($c) => AlmacenAcceso::limitar($c))
-                ->latest('id')->get()
+            TarjetaBancaria::with('cuentaBancaria.banco:id,nombre')->latest('id')->get()
         );
     }
 
     public function store(Request $request)
     {
-        $data = $this->validated($request);
-        AlmacenAcceso::exigir(CuentaBancaria::whereKey($data['cuenta_bancaria_id'])->value('almacen_id'));
         return response()->json(
-            TarjetaBancaria::create($data)->load('cuentaBancaria.banco:id,nombre'),
+            TarjetaBancaria::create($this->validated($request))->load('cuentaBancaria.banco:id,nombre'),
             201
         );
     }
@@ -36,16 +30,12 @@ class TarjetaBancariaController extends Controller
 
     public function update(Request $request, TarjetaBancaria $tarjetas_bancaria)
     {
-        AlmacenAcceso::exigir($tarjetas_bancaria->cuentaBancaria?->almacen_id);
-        $data = $this->validated($request);
-        AlmacenAcceso::exigir(CuentaBancaria::whereKey($data['cuenta_bancaria_id'])->value('almacen_id'));
-        $tarjetas_bancaria->update($data);
+        $tarjetas_bancaria->update($this->validated($request));
         return response()->json($tarjetas_bancaria->load('cuentaBancaria.banco:id,nombre'));
     }
 
     public function destroy(TarjetaBancaria $tarjetas_bancaria)
     {
-        AlmacenAcceso::exigir($tarjetas_bancaria->cuentaBancaria?->almacen_id);
         $tarjetas_bancaria->delete();
         return response()->json(['message' => 'Eliminado']);
     }

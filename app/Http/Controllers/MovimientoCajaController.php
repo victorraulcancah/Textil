@@ -72,7 +72,7 @@ class MovimientoCajaController extends Controller
             throw ValidationException::withMessages(['caja_id' => 'No tienes una caja asignada.']);
         }
 
-        $caja = Caja::with(['cuentasBancarias:id', 'billeteras:id'])->findOrFail($cajaId);
+        $caja = Caja::findOrFail($cajaId);
         AlmacenAcceso::exigir($caja->almacen_id);
 
         $apertura = AperturaCaja::where('caja_id', $cajaId)
@@ -105,22 +105,18 @@ class MovimientoCajaController extends Controller
             ]);
         }
 
-        // Validar la forma contra lo que la caja acepta.
+        // Toda caja recibe efectivo y las cuentas y billeteras activas de la empresa.
         $cuentaId = null;
         $billeteraId = null;
-        if ($data['forma'] === 'efectivo') {
-            if (! $caja->acepta_efectivo) {
-                throw ValidationException::withMessages(['forma' => 'Esta caja no acepta efectivo.']);
-            }
-        } elseif ($data['forma'] === 'transferencia') {
+        if ($data['forma'] === 'transferencia') {
             $cuentaId = $data['cuenta_bancaria_id'] ?? null;
-            if (! $cuentaId || ! $caja->cuentasBancarias->contains('id', $cuentaId)) {
-                throw ValidationException::withMessages(['cuenta_bancaria_id' => 'Selecciona una cuenta bancaria habilitada para esta caja.']);
+            if (! $cuentaId || ! \App\Models\CuentaBancaria::whereKey($cuentaId)->where('activo', true)->exists()) {
+                throw ValidationException::withMessages(['cuenta_bancaria_id' => 'Selecciona una cuenta bancaria activa.']);
             }
-        } else { // billetera
+        } elseif ($data['forma'] === 'billetera') {
             $billeteraId = $data['billetera_id'] ?? null;
-            if (! $billeteraId || ! $caja->billeteras->contains('id', $billeteraId)) {
-                throw ValidationException::withMessages(['billetera_id' => 'Selecciona una billetera habilitada para esta caja.']);
+            if (! $billeteraId || ! \App\Models\BilleteraDigital::whereKey($billeteraId)->where('activo', true)->exists()) {
+                throw ValidationException::withMessages(['billetera_id' => 'Selecciona una billetera activa.']);
             }
         }
 

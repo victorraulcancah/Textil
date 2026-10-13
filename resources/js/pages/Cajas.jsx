@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Banknote, Coins, CreditCard, Edit, Smartphone, Trash2 } from 'lucide-react';
+import { Coins, Edit, Trash2 } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import { opcionesAlmacen, useAlmacenPropio } from '../lib/almacenes';
@@ -12,9 +12,6 @@ const emptyForm = {
     almacen_id: '',
     usuarios: [],
     activo: true,
-    acepta_efectivo: true,
-    cuentas_bancarias: [],
-    billeteras: [],
 };
 
 export default function Cajas() {
@@ -23,8 +20,6 @@ export default function Cajas() {
     const [almacenes, setAlmacenes] = useState([]);
     const [fAlmacen, setFAlmacen] = useState('');
     const [cajas, setCajas] = useState([]);
-    const [cuentas, setCuentas] = useState([]);
-    const [billeteras, setBilleteras] = useState([]);
     const [usuarios, setUsuarios] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -43,17 +38,13 @@ export default function Cajas() {
         setLoading(true);
         setError(null);
         try {
-            const [cajasRes, cuentasRes, billeterasRes, usuariosRes, almacenesRes] = await Promise.all([
+            const [cajasRes, usuariosRes, almacenesRes] = await Promise.all([
                 api.get('/cajas'),
-                api.get('/cuentas-bancarias'),
-                api.get('/billeteras-digitales'),
                 api.get('/users'),
                 api.get('/almacenes'),
             ]);
             setAlmacenes(asList(almacenesRes));
             setCajas(asList(cajasRes));
-            setCuentas(asList(cuentasRes));
-            setBilleteras(asList(billeterasRes));
             setUsuarios(asList(usuariosRes));
         } catch {
             setError('No se pudieron cargar las cajas.');
@@ -81,9 +72,6 @@ export default function Cajas() {
             almacen_id: caja.almacen_id ? String(caja.almacen_id) : '',
             usuarios: (caja.usuarios ?? []).map((u) => u.id),
             activo: Boolean(caja.activo),
-            acepta_efectivo: Boolean(caja.acepta_efectivo),
-            cuentas_bancarias: (caja.cuentas_bancarias ?? []).map((c) => c.id),
-            billeteras: (caja.billeteras ?? []).map((b) => b.id),
         });
         setFormErrors({});
         setModalOpen(true);
@@ -105,9 +93,6 @@ export default function Cajas() {
             almacen_id: form.almacen_id || null,
             usuarios: form.usuarios,
             activo: form.activo,
-            acepta_efectivo: form.acepta_efectivo,
-            cuentas_bancarias: form.cuentas_bancarias,
-            billeteras: form.billeteras,
         };
         try {
             if (editing) {
@@ -144,7 +129,6 @@ export default function Cajas() {
         }
     };
 
-    const cuentaLabel = (c) => `${c.alias || 'Cuenta'}${c.numero_cuenta ? ` · ${c.numero_cuenta}` : ''}`;
 
     const columns = [
         {
@@ -187,17 +171,6 @@ export default function Cajas() {
                 ) : (
                     <span className="text-gray-400">—</span>
                 ),
-        },
-        {
-            key: 'metodos',
-            label: 'Acepta',
-            render: (row) => {
-                const chips = [];
-                if (row.acepta_efectivo) chips.push(<Badge key="ef" variant="green">Efectivo</Badge>);
-                if ((row.cuentas_bancarias ?? []).length) chips.push(<Badge key="tr" variant="blue">{row.cuentas_bancarias.length} transferencia(s)</Badge>);
-                if ((row.billeteras ?? []).length) chips.push(<Badge key="bi" variant="amber">{row.billeteras.length} billetera(s)</Badge>);
-                return chips.length ? <div className="flex flex-wrap gap-1">{chips}</div> : <span className="text-gray-400">—</span>;
-            },
         },
         {
             key: 'activo',
@@ -334,72 +307,10 @@ export default function Cajas() {
                         {formErrors.usuarios && <p className="mt-1 text-xs text-red-600">{formErrors.usuarios}</p>}
                     </div>
 
-                    <div>
-                        <label className="mb-2 block text-sm font-medium text-gray-700">Métodos de pago aceptados</label>
-
-                        {/* Efectivo (opcional) */}
-                        <label className="flex cursor-pointer items-center gap-2 rounded-md border border-edge px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                            <input
-                                type="checkbox"
-                                checked={form.acepta_efectivo}
-                                onChange={(e) => setForm((prev) => ({ ...prev, acepta_efectivo: e.target.checked }))}
-                                className="h-4 w-4 rounded border-gray-300 accent-primary-600"
-                            />
-                            <Banknote className="h-4 w-4 text-green-600" />
-                            <span className="flex-1">Efectivo</span>
-                        </label>
-
-                        {/* Transferencia → cuentas bancarias */}
-                        <div className="mt-3">
-                            <p className="mb-1 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-warm-500">
-                                <CreditCard className="h-4 w-4" /> Transferencia (cuentas bancarias)
-                            </p>
-                            {cuentas.length === 0 ? (
-                                <p className="text-xs text-gray-400">No hay cuentas bancarias registradas.</p>
-                            ) : (
-                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                                    {cuentas.map((c) => (
-                                        <label key={c.id} className="flex cursor-pointer items-center gap-2 rounded-md border border-edge px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                                            <input
-                                                type="checkbox"
-                                                checked={form.cuentas_bancarias.includes(c.id)}
-                                                onChange={() => toggleId('cuentas_bancarias', c.id)}
-                                                className="h-4 w-4 rounded border-gray-300 accent-primary-600"
-                                            />
-                                            <span className="flex-1">{cuentaLabel(c)}</span>
-                                        </label>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Billeteras digitales */}
-                        <div className="mt-3">
-                            <p className="mb-1 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-warm-500">
-                                <Smartphone className="h-4 w-4" /> Billeteras digitales
-                            </p>
-                            {billeteras.length === 0 ? (
-                                <p className="text-xs text-gray-400">No hay billeteras registradas.</p>
-                            ) : (
-                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                                    {billeteras.map((b) => (
-                                        <label key={b.id} className="flex cursor-pointer items-center gap-2 rounded-md border border-edge px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                                            <input
-                                                type="checkbox"
-                                                checked={form.billeteras.includes(b.id)}
-                                                onChange={() => toggleId('billeteras', b.id)}
-                                                className="h-4 w-4 rounded border-gray-300 accent-primary-600"
-                                            />
-                                            <span className="flex-1">{b.nombre}</span>
-                                        </label>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                        <p className="mt-2 text-xs text-gray-400">
-                            Marca los medios que acepta esta caja. Al registrar un movimiento solo aparecerán estos.
-                        </p>
-                    </div>
+                    <p className="rounded-md bg-warm-50 px-3 py-2 text-xs text-warm-600">
+                        Toda caja recibe efectivo, transferencias y billeteras: usa las cuentas y billeteras registradas en
+                        Cuentas y Medios de Pago. No hace falta configurarlo aquí.
+                    </p>
 
                     <label className="flex items-center gap-2 text-sm text-gray-700">
                         <input

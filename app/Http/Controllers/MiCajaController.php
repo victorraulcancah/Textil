@@ -24,11 +24,8 @@ class MiCajaController extends Controller
             return response()->json(['caja' => null, 'apertura' => null, 'resumen' => null]);
         }
 
-        $caja = Caja::with([
-            'cuentasBancarias:id,banco_id,alias,numero_cuenta,titular',
-            'cuentasBancarias.banco:id,nombre',
-            'billeteras:id,nombre,numero_asociado,titular',
-        ])->find($cajaId);
+        // Toda caja recibe efectivo y las cuentas y billeteras activas de la empresa.
+        $caja = Caja::conMediosDePago(Caja::find($cajaId));
         $apertura = AperturaCaja::where('caja_id', $cajaId)
             ->where('estado', 'abierta')
             ->latest('fecha_apertura')

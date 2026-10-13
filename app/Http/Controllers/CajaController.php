@@ -13,9 +13,6 @@ class CajaController extends Controller
 {
     private const WITH = [
         'almacen:id,nombre,numero_serie',
-        'cuentasBancarias:id,banco_id,alias,numero_cuenta,titular',
-        'cuentasBancarias.banco:id,nombre',
-        'billeteras:id,nombre,numero_asociado,titular',
         'usuarios:id,name,email',
     ];
 
@@ -30,7 +27,8 @@ class CajaController extends Controller
             AlmacenAcceso::limitar($consulta);
         }
 
-        return response()->json($consulta->get());
+        // Los medios de pago ya no se eligen por caja: todas aceptan los de la empresa.
+        return response()->json(Caja::conMediosDePago($consulta->get()));
     }
 
     public function store(Request $request)
@@ -46,18 +44,17 @@ class CajaController extends Controller
                 'almacen_id' => $almacenId,
                 'codigo' => Caja::siguienteCodigo($almacenId),
             ]);
-            $this->syncRelaciones($caja, $data);
             $this->asignarUsuarios($caja, $data['usuarios'] ?? []);
 
             return $caja;
         });
 
-        return response()->json($caja->load(self::WITH), 201);
+        return response()->json(Caja::conMediosDePago($caja->load(self::WITH)), 201);
     }
 
     public function show(Caja $caja)
     {
-        return response()->json($caja->load(self::WITH));
+        return response()->json(Caja::conMediosDePago($caja->load(self::WITH)));
     }
 
     public function update(Request $request, Caja $caja)
@@ -79,14 +76,13 @@ class CajaController extends Controller
             }
 
             $caja->update($cambios);
-            $this->syncRelaciones($caja, $data);
             // Si no se manda la lista, los usuarios no se tocan.
             if (array_key_exists('usuarios', $data)) {
                 $this->asignarUsuarios($caja, $data['usuarios'] ?? []);
             }
         });
 
-        return response()->json($caja->fresh()->load(self::WITH));
+        return response()->json(Caja::conMediosDePago($caja->fresh()->load(self::WITH)));
     }
 
     public function destroy(Caja $caja)
@@ -104,21 +100,10 @@ class CajaController extends Controller
     {
         return [
             'nombre' => $data['nombre'],
-            'acepta_efectivo' => $data['acepta_efectivo'] ?? false,
+            // Toda caja recibe efectivo: ya no es una opción.
+            'acepta_efectivo' => true,
             'activo' => $data['activo'] ?? true,
         ];
-    }
-
-    private function syncRelaciones(Caja $caja, array $data): void
-    {
-        $ajenas = \App\Models\CuentaBancaria::whereIn('id', $data['cuentas_bancarias'] ?? [])->where('almacen_id', '!=', $caja->almacen_id)->exists()
-            || \App\Models\BilleteraDigital::whereIn('id', $data['billeteras'] ?? [])->where('almacen_id', '!=', $caja->almacen_id)->exists();
-        if ($ajenas) {
-            throw ValidationException::withMessages(['cuentas_bancarias' => 'Solo puedes asignar cuentas y billeteras del mismo almacén de la caja.']);
-        }
-
-        $caja->cuentasBancarias()->sync($data['cuentas_bancarias'] ?? []);
-        $caja->billeteras()->sync($data['billeteras'] ?? []);
     }
 
     /**
@@ -167,14 +152,9 @@ class CajaController extends Controller
         return $request->validate([
             'nombre' => 'required|string|max:255',
             'almacen_id' => 'nullable|exists:almacenes,id',
-            'acepta_efectivo' => 'boolean',
             'activo' => 'boolean',
             'usuarios' => 'nullable|array',
             'usuarios.*' => 'integer|exists:users,id',
-            'cuentas_bancarias' => 'nullable|array',
-            'cuentas_bancarias.*' => 'exists:cuentas_bancarias,id',
-            'billeteras' => 'nullable|array',
-            'billeteras.*' => 'exists:billeteras_digitales,id',
         ]);
     }
 }

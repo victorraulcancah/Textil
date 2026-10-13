@@ -59,6 +59,33 @@ class Caja extends Model
         return $this->belongsTo(Almacen::class);
     }
 
+    /**
+     * Los medios de pago de una caja: ya no se configuran caja por caja. Toda caja recibe efectivo y todas las
+     * cuentas y billeteras activas de la empresa. Deja listas las relaciones `cuentasBancarias` y `billeteras` (y
+     * `acepta_efectivo`) para quien las muestre; no guarda nada.
+     *
+     * @param  \Illuminate\Database\Eloquent\Model|iterable<Caja>|null  $cajas
+     */
+    public static function conMediosDePago($cajas)
+    {
+        if ($cajas === null) {
+            return $cajas;
+        }
+
+        $cuentas = CuentaBancaria::with('banco:id,nombre')->where('activo', true)->orderBy('id')
+            ->get(['id', 'banco_id', 'alias', 'numero_cuenta', 'titular']);
+        $billeteras = BilleteraDigital::where('activo', true)->orderBy('id')
+            ->get(['id', 'nombre', 'numero_asociado', 'titular']);
+
+        foreach (($cajas instanceof Model ? [$cajas] : $cajas) as $caja) {
+            $caja->setRelation('cuentasBancarias', $cuentas);
+            $caja->setRelation('billeteras', $billeteras);
+            $caja->setAttribute('acepta_efectivo', true);
+        }
+
+        return $cajas;
+    }
+
     public function cuentasBancarias()
     {
         return $this->belongsToMany(CuentaBancaria::class, 'caja_cuenta_bancaria', 'caja_id', 'cuenta_bancaria_id')->withTimestamps();

@@ -669,7 +669,7 @@ function AnularModal({ pedido, onClose, onAnulado }) {
  * despachar; aquí se registra la venta y cómo paga el cliente.
  */
 // moneda "" = la del pedido; "PEN" = un pedido en dólares cobrado con soles.
-const emptyPago = () => ({ tipo: 'efectivo', cuentaId: '', billeteraId: '', monto: '', moneda: '', tipoCambio: '' });
+const emptyPago = () => ({ tipo: 'efectivo', cuentaId: '', billeteraId: '', monto: '', moneda: '', tipoCambio: '', referencia: '' });
 
 const hoyIso = () => {
     const d = new Date();
@@ -838,6 +838,8 @@ function FacturarModal({ pedido, onClose, onFacturado }) {
                               forma_pago: p.tipo,
                               cuenta_bancaria_id: p.tipo === 'transferencia' ? p.cuentaId || null : null,
                               billetera_id: p.tipo === 'billetera' ? p.billeteraId || null : null,
+                              // El N.° de operación del cobro digital (transferencia o billetera).
+                              referencia: p.tipo !== 'efectivo' ? (p.referencia || '').trim() || null : null,
                               monto: Number(p.monto),
                               ...(enSoles(p) ? { moneda: 'PEN', tipo_cambio: tcDe(p) } : {}),
                               fecha: hoyIso(),
@@ -917,6 +919,8 @@ function FacturarModal({ pedido, onClose, onFacturado }) {
                             cuentaId={pagos[0].cuentaId}
                             billeteraId={pagos[0].billeteraId}
                             onChange={(metodo) => setPago(0, metodo)}
+                            referencia={pagos[0].referencia}
+                            onReferencia={(referencia) => setPago(0, { referencia })}
                         />
                         {controlesMoneda(pagos[0], 0)}
                         <div className="flex items-center justify-between rounded-lg bg-primary-50 px-3 py-2.5 text-sm">
@@ -953,6 +957,8 @@ function FacturarModal({ pedido, onClose, onFacturado }) {
                                         cuentaId={p.cuentaId}
                                         billeteraId={p.billeteraId}
                                         onChange={(metodo) => setPago(i, metodo)}
+                                        referencia={p.referencia}
+                                        onReferencia={(referencia) => setPago(i, { referencia })}
                                     />
                                     <div className="mt-2 flex items-center gap-2">
                                         <Input

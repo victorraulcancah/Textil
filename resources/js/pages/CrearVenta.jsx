@@ -90,6 +90,8 @@ const emptyPago = () => ({
     // "" = en la moneda de la venta; "PEN" = una venta en dólares cobrada con soles.
     moneda: "",
     tipoCambio: "",
+    // N.° de operación del cobro digital (transferencia o billetera).
+    referencia: "",
 });
 
 export default function CrearVenta() {
@@ -1158,7 +1160,10 @@ export default function CrearVenta() {
                       monto: Number(p.monto),
                       ...(enSoles(p) ? { moneda: "PEN", tipo_cambio: tcDe(p) } : {}),
                       fecha: form.fecha_emision,
-                      referencia: null,
+                      referencia:
+                          p.tipo !== "efectivo"
+                              ? (p.referencia || "").trim() || null
+                              : null,
                   }))
             : [
                   {
@@ -1998,6 +2003,10 @@ export default function CrearVenta() {
                                     tipo={pagos[0].tipo}
                                     cuentaId={pagos[0].cuentaId}
                                     billeteraId={pagos[0].billeteraId}
+                                    referencia={pagos[0].referencia}
+                                    onReferencia={(referencia) =>
+                                        setPago(0, { referencia })
+                                    }
                                     onChange={({
                                         tipo,
                                         cuentaId,
@@ -2036,6 +2045,10 @@ export default function CrearVenta() {
                                                 tipo={p.tipo}
                                                 cuentaId={p.cuentaId}
                                                 billeteraId={p.billeteraId}
+                                                referencia={p.referencia}
+                                                onReferencia={(referencia) =>
+                                                    setPago(i, { referencia })
+                                                }
                                                 onChange={({
                                                     tipo,
                                                     cuentaId,

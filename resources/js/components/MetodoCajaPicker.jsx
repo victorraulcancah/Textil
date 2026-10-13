@@ -1,4 +1,4 @@
-import { SearchSelect, Select } from './ui';
+import { Input, SearchSelect, Select } from './ui';
 
 const cuentaLabel = (c) => [c.banco?.nombre, c.alias, c.numero_cuenta].filter(Boolean).join(' · ');
 const billeteraLabel = (b) => [b.nombre, b.titular, b.numero_asociado].filter(Boolean).join(' · ');
@@ -10,6 +10,9 @@ const billeteraLabel = (b) => [b.nombre, b.titular, b.numero_asociado].filter(Bo
  *
  * Fuentes: pasa `cuentas` y `billeteras` (arrays) y `aceptaEfectivo`.
  * value = { tipo, cuentaId, billeteraId }
+ *
+ * Con `onReferencia`, un pago digital (transferencia o billetera) pide además el N.° de operación: el que el banco o
+ * la billetera dan al cliente para poder cuadrar el cobro. En efectivo no se pide.
  */
 export default function MetodoCajaPicker({
     cuentas = [],
@@ -21,6 +24,8 @@ export default function MetodoCajaPicker({
     onChange,
     error,
     compact = false,
+    referencia = '',
+    onReferencia = null,
 }) {
     const tipos = [{ value: '', label: 'Tipo de método' }];
     if (aceptaEfectivo) tipos.push({ value: 'efectivo', label: 'Efectivo' });
@@ -54,6 +59,15 @@ export default function MetodoCajaPicker({
                     placeholder="Selecciona la billetera"
                     emptyText="Sin coincidencias"
                     options={billeteras.map((b) => ({ value: String(b.id), label: billeteraLabel(b) }))}
+                />
+            )}
+            {onReferencia && (tipo === 'transferencia' || tipo === 'billetera') && (
+                <Input
+                    label={compact ? undefined : 'N.° de operación'}
+                    placeholder={compact ? 'N.° de operación' : 'Ej: 0045-885123 (opcional)'}
+                    value={referencia ?? ''}
+                    maxLength={100}
+                    onChange={(e) => onReferencia(e.target.value)}
                 />
             )}
         </div>

@@ -202,6 +202,8 @@ Route::middleware('auth:api')->group(function () {
     Route::apiResource('motivos-movimiento', MotivoMovimientoController::class);
     Route::get('cierres-caja', [CierreCajaController::class, 'index']);
     Route::get('cierres-caja/{cierresCaja}', [CierreCajaController::class, 'show']);
+    Route::post('cierres-caja/{cierresCaja}/aprobar', [CierreCajaController::class, 'aprobar']);
+    Route::post('cierres-caja/{cierresCaja}/anular', [CierreCajaController::class, 'anular']);
     Route::apiResource('prestamos', PrestamoController::class);
     Route::post('prestamos/{prestamo}/devoluciones', [PrestamoController::class, 'devolucion']);
 
@@ -294,7 +296,10 @@ Route::middleware('auth:api')->group(function () {
     Route::get('mi-caja/reporte/excel', [\App\Http\Controllers\MiCajaReporteController::class, 'excel']);
     Route::get('mi-caja/reporte/pdf', [\App\Http\Controllers\MiCajaReporteController::class, 'pdf']);
     Route::post('mi-caja/abrir', [MiCajaController::class, 'abrir']);
+    Route::post('mi-caja/cierre/anular', [MiCajaController::class, 'anularCierre']);
+    Route::get('mi-caja/cajas-destino', [MiCajaController::class, 'cajasDestino']);
     Route::post('mi-caja/movimientos/{movimiento}/corregir-pago', [MiCajaController::class, 'corregirPago']);
+    Route::post('mi-caja/movimientos/{movimiento}/anular', [MiCajaController::class, 'anularMovimiento']);
     Route::post('mi-caja/cerrar', [MiCajaController::class, 'cerrar']);
     Route::get('movimientos-caja/reporte/excel', [\App\Http\Controllers\MovimientoCajaReporteController::class, 'excel']);
     Route::get('movimientos-caja/reporte/pdf', [\App\Http\Controllers\MovimientoCajaReporteController::class, 'pdf']);

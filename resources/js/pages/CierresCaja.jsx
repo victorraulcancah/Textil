@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Coins, Printer } from 'lucide-react';
+import { Check, Coins, Printer, RotateCcw } from 'lucide-react';
 import api, { asList } from '../lib/api';
+import { useAuth } from '../lib/auth';
+import { useToast } from '../lib/toast';
 import { destinoDe, useCatalogoDestinos } from '../lib/destinosCaja';
 import { diaLocal } from '../lib/fechas';
 import Layout from '../components/Layout';
@@ -24,7 +26,18 @@ const metodoLabel = (m) => {
     return 'Efectivo';
 };
 
+/** El estado del cierre: pendiente de aprobación, aprobado o anulado. */
+const estadoCierre = (row) => {
+    if (row.estado === 'pendiente') return <Badge variant="amber">Pendiente</Badge>;
+    if (row.estado === 'anulado') return <Badge variant="red">Anulado</Badge>;
+    return <Badge variant="green">Aprobado</Badge>;
+};
+
 export default function CierresCaja() {
+    const { puede, user } = useAuth();
+    const toast = useToast();
+    const puedeAprobar = puede('tesoreria.cierres-caja.aprobar');
+    const [accionando, setAccionando] = useState(null);
     const [cierres, setCierres] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -71,6 +84,35 @@ export default function CierresCaja() {
     useEffect(() => {
         load();
     }, [load]);
+
+    const aprobar = async (row) => {
+        setAccionando(row.id);
+        try {
+            await api.post(`/cierres-caja/${row.id}/aprobar`);
+            toast.success('Cierre aprobado: la caja ya se puede abrir con lo que se dejó.');
+            await load();
+        } catch (err) {
+            const v = err.response?.data?.errors ?? {};
+            toast.error(Object.values(v)[0]?.[0] ?? err.response?.data?.message ?? 'No se pudo aprobar el cierre.');
+        } finally {
+            setAccionando(null);
+        }
+    };
+
+    const anular = async (row) => {
+        if (!window.confirm('¿Anular este cierre? La caja se reabre para que quien cerró lo corrija y vuelva a cerrar.')) return;
+        setAccionando(row.id);
+        try {
+            await api.post(`/cierres-caja/${row.id}/anular`, { motivo: 'Anulado por quien aprueba' });
+            toast.success('Cierre anulado: la caja quedó abierta de nuevo.');
+            await load();
+        } catch (err) {
+            const v = err.response?.data?.errors ?? {};
+            toast.error(Object.values(v)[0]?.[0] ?? err.response?.data?.message ?? 'No se pudo anular el cierre.');
+        } finally {
+            setAccionando(null);
+        }
+    };
 
     // Los movimientos se piden solo del cierre que se está viendo.
     useEffect(() => {
@@ -266,6 +308,38 @@ export default function CierresCaja() {
             render: diferenciaBadge,
         },
         {
+            // Lo que queda en el cajón para el turno siguiente y lo que salió con el movimiento de cierre.
+            key: 'monto_dejado',
+            label: 'Dejado',
+            width: '120px',
+            align: 'right',
+            searchable: false,
+            render: (row) => (
+                <span className="text-warm-900">
+                    {money(row.monto_dejado ?? row.monto_contado)}
+                    {Number(row.monto_retirado) > 0 && (
+                        <span className="block text-xs text-warm-500">
+                            retiró {money(row.monto_retirado)}
+                            {row.caja_destino ? ` → ${row.caja_destino.codigo ?? row.caja_destino.nombre}` : ''}
+                        </span>
+                    )}
+                </span>
+            ),
+        },
+        {
+            key: 'estado',
+            label: 'Estado',
+            width: '150px',
+            getSearchValue: (row) => row.estado,
+            render: (row) => (
+                <div className="leading-tight">
+                    {estadoCierre(row)}
+                    {row.estado === 'aprobado' && row.aprobador?.name && <div className="mt-0.5 text-xs text-warm-500">por {row.aprobador.name}</div>}
+                    {row.estado === 'anulado' && row.anulador?.name && <div className="mt-0.5 text-xs text-warm-500">por {row.anulador.name}</div>}
+                </div>
+            ),
+        },
+        {
             key: 'movimientos_count',
             label: 'Movs.',
             width: '80px',
@@ -277,14 +351,38 @@ export default function CierresCaja() {
             type: 'actions',
             key: 'actions',
             label: 'Acc.',
-            width: '60px',
-            actions: (row) => (
-                <button aria-label="Imprimir" title="Imprimir / PDF"
-                    onClick={(e) => { e.stopPropagation(); setPdfTarget(row); }}
-                    className="rounded-md p-1.5 text-warm-600 transition hover:bg-gray-100 hover:text-warm-900">
-                    <Printer className="h-4 w-4" />
-                </button>
-            ),
+            width: '120px',
+            actions: (row) => {
+                // Aprueba quien tiene el permiso, nunca quien cerró. Anular reabre la caja (si nadie la abrió después).
+                const esSuyo = Number(row.apertura?.usuario_id) === Number(user?.id);
+                // Solo el último cierre de cada caja se puede anular: después de otro turno la caja ya se volvió a abrir.
+                const esElUltimo = !cierres.some(
+                    (c) => c.estado !== 'anulado' && c.apertura?.caja_id === row.apertura?.caja_id && Number(c.id) > Number(row.id),
+                );
+                return (
+                    <>
+                        {puedeAprobar && row.estado === 'pendiente' && !esSuyo && (
+                            <button aria-label="Aprobar cierre" title="Aprobar cierre" disabled={accionando === row.id}
+                                onClick={(e) => { e.stopPropagation(); aprobar(row); }}
+                                className="rounded-md p-1.5 text-green-600 transition hover:bg-green-50 hover:text-green-700 disabled:opacity-50">
+                                <Check className="h-4 w-4" />
+                            </button>
+                        )}
+                        {puedeAprobar && row.estado !== 'anulado' && esElUltimo && (
+                            <button aria-label="Anular cierre" title="Anular cierre: reabre la caja para corregirlo" disabled={accionando === row.id}
+                                onClick={(e) => { e.stopPropagation(); anular(row); }}
+                                className="rounded-md p-1.5 text-red-600 transition hover:bg-red-50 hover:text-red-700 disabled:opacity-50">
+                                <RotateCcw className="h-4 w-4" />
+                            </button>
+                        )}
+                        <button aria-label="Imprimir" title="Imprimir / PDF"
+                            onClick={(e) => { e.stopPropagation(); setPdfTarget(row); }}
+                            className="rounded-md p-1.5 text-warm-600 transition hover:bg-gray-100 hover:text-warm-900">
+                            <Printer className="h-4 w-4" />
+                        </button>
+                    </>
+                );
+            },
         },
     ];
 

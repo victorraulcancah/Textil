@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowDownCircle, ArrowUpCircle, FileSignature, FileSpreadsheet, FileText, Lock, LockOpen, PiggyBank, RotateCcw, Smartphone, Trash2, Wallet } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, Ban, FileSignature, FileSpreadsheet, FileText, Lock, LockOpen, PiggyBank, RotateCcw, Smartphone, Trash2, Wallet } from 'lucide-react';
 import api from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
@@ -69,10 +69,18 @@ export default function MiCaja() {
     const [montoContado, setMontoContado] = useState('');
     // Los dólares del cajón se cuentan aparte.
     const [montoContadoUsd, setMontoContadoUsd] = useState('');
+    /** Lo que se deja en el cajón para el turno siguiente; el resto sale con el movimiento de cierre. */
+    const [montoDejado, setMontoDejado] = useState('');
+    /** La otra caja a la que se envía el efectivo retirado, y las que hay para elegir. */
+    const [cajaDestino, setCajaDestino] = useState('');
+    const [cajasDestino, setCajasDestino] = useState([]);
 
     const [regTipo, setRegTipo] = useState(null); // 'ingreso' | 'egreso'
     const [mov, setMov] = useState(emptyMov());
     const [saving, setSaving] = useState(false);
+    /** Anular un movimiento registrado a mano: el elegido y el motivo. */
+    const [anularMov, setAnularMov] = useState(null);
+    const [motivoAnulacion, setMotivoAnulacion] = useState('');
     /** Corregir un cobro: el movimiento elegido y los pagos nuevos que lo reemplazan. */
     const [corregir, setCorregir] = useState(null);
     const [pagosNuevos, setPagosNuevos] = useState([]);
@@ -135,20 +143,43 @@ export default function MiCaja() {
     };
 
     const cerrar = async () => {
+        if ((Number(montoDejado) || 0) > (Number(montoContado) || 0) + 0.001) {
+            toast.error('No puedes dejar más de lo que contaste.');
+            return;
+        }
         setSaving(true);
         try {
             const res = await api.post('/mi-caja/cerrar', {
                 monto_contado: Number(montoContado) || 0,
+                monto_dejado: Number(montoDejado) || 0,
+                ...(cajaDestino ? { caja_destino_id: Number(cajaDestino) } : {}),
                 ...(montoContadoUsd !== '' ? { monto_contado_usd: Number(montoContadoUsd) || 0 } : {}),
             });
             setData(res.data);
             setCerrarOpen(false);
             setMontoContado('');
             setMontoContadoUsd('');
-            toast.success('Caja cerrada. Arqueo registrado.');
+            setMontoDejado('');
+            setCajaDestino('');
+            toast.success('Cierre registrado: queda pendiente de aprobación.');
         } catch (err) {
             const errores = err.response?.data?.errors;
             toast.error(errores ? Object.values(errores)[0]?.[0] : err.response?.data?.message ?? 'No se pudo cerrar la caja.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    /** Quien pidió el cierre lo anula mientras está pendiente: la caja se reabre para corregirlo y cerrar otra vez. */
+    const anularCierre = async () => {
+        setSaving(true);
+        try {
+            const res = await api.post('/mi-caja/cierre/anular');
+            setData(res.data);
+            toast.success('Cierre anulado: tu caja está abierta de nuevo para corregirlo.');
+        } catch (err) {
+            const v = err.response?.data?.errors ?? {};
+            toast.error(Object.values(v)[0]?.[0] ?? err.response?.data?.message ?? 'No se pudo anular el cierre.');
         } finally {
             setSaving(false);
         }
@@ -192,6 +223,21 @@ export default function MiCaja() {
         const total = cobroOriginal(fila).reduce((acc, m) => acc + (Number(m.monto) || 0), 0);
         setCorregir(fila);
         setPagosNuevos([emptyPagoCorregir(String(Math.round(total * 100) / 100))]);
+    };
+
+    const confirmarAnulacion = async () => {
+        setSaving(true);
+        try {
+            const res = await api.post(`/mi-caja/movimientos/${anularMov.id}/anular`, { motivo: motivoAnulacion.trim() || null });
+            setData(res.data);
+            setAnularMov(null);
+            toast.success('Movimiento anulado: ya no cuenta en tu caja.');
+        } catch (err) {
+            const v = err.response?.data?.errors ?? {};
+            toast.error(Object.values(v)[0]?.[0] ?? err.response?.data?.message ?? 'No se pudo anular el movimiento.');
+        } finally {
+            setSaving(false);
+        }
     };
 
     const setPagoNuevo = (i, patch) => setPagosNuevos((prev) => prev.map((p, k) => (k === i ? { ...p, ...patch } : p)));
@@ -238,6 +284,8 @@ export default function MiCaja() {
     // no se cuentan en el arqueo del cajón.
     const otrosMedios = (resumen?.otros_ingresos ?? 0) - (resumen?.otros_egresos ?? 0);
     const diferencia = (Number(montoContado) || 0) - esperado;
+    /** Lo que sale de la caja al cerrar: lo contado menos lo que se deja para el siguiente. */
+    const retirado = (Number(montoContado) || 0) - (Number(montoDejado) || 0);
     // Los dólares (ventas o cobros en dólares) van aparte: null si no hubo.
     const dolares = resumen?.dolares ?? null;
     const diferenciaUsd = (Number(montoContadoUsd) || 0) - (dolares?.esperado ?? 0);
@@ -348,6 +396,18 @@ export default function MiCaja() {
                 </div>
             ),
         },
+        {
+            // Mis movimientos de todos mis turnos: se distingue el de ahora de los anteriores.
+            key: 'turno',
+            label: 'Turno',
+            getSearchValue: (r) => (r.apertura_caja_id === apertura?.id ? 'Actual' : fechaCorta(r.apertura?.fecha_apertura)),
+            render: (r) =>
+                r.apertura_caja_id === apertura?.id ? (
+                    <Badge variant="blue">Actual</Badge>
+                ) : (
+                    <span className="text-xs text-warm-500">{fechaCorta(r.apertura?.fecha_apertura)}</span>
+                ),
+        },
         { key: 'metodo', label: 'Método', getSearchValue: (r) => metodoLabel(r), render: (r) => metodoLabel(r) },
         { key: 'monto', label: 'Monto', align: 'right', render: (r) => <span className={r.deleted_at ? 'text-gray-400 line-through' : r.tipo === 'ingreso' ? 'text-green-600' : 'text-red-600'}>{r.tipo === 'ingreso' ? '+' : '-'} {money(r.monto, r.moneda)}</span> },
         {
@@ -370,20 +430,68 @@ export default function MiCaja() {
             type: 'actions',
             key: 'acciones',
             label: 'Acciones',
-            actions: (r) =>
-                apertura && esCobroCorregible(r) ? (
-                    <button
-                        type="button"
-                        aria-label="Corregir pago"
-                        title="Corregir pago: anula este cobro y registra los pagos nuevos"
-                        onClick={(e) => { e.stopPropagation(); abrirCorregir(r); }}
-                        className="rounded-md p-1.5 text-primary-600 transition hover:bg-primary-50 hover:text-primary-700"
-                    >
-                        <RotateCcw className="h-4 w-4" />
-                    </button>
-                ) : null,
+            actions: (r) => {
+                if (r.deleted_at) return null;
+                const delTurnoActual = Boolean(apertura) && r.apertura_caja_id === apertura.id;
+                const esDigital = Boolean(r.cuenta_bancaria || r.billetera);
+
+                // Lo que nace de una venta o cobranza se corrige con sus pagos nuevos (en la caja abierta).
+                if (delTurnoActual && esCobroCorregible(r)) {
+                    return (
+                        <button
+                            type="button"
+                            aria-label="Corregir pago"
+                            title="Corregir pago: anula este cobro y registra los pagos nuevos"
+                            onClick={(e) => { e.stopPropagation(); abrirCorregir(r); }}
+                            className="rounded-md p-1.5 text-primary-600 transition hover:bg-primary-50 hover:text-primary-700"
+                        >
+                            <RotateCcw className="h-4 w-4" />
+                        </button>
+                    );
+                }
+
+                // Un ingreso o gasto registrado a mano se anula directo. Si es digital (transferencia o Yape) también de un
+                // turno ya cerrado, porque ese dinero no está en el cajón; el efectivo, solo en la caja abierta.
+                if (!r.documento_referencia_tipo && !r.motivo?.es_sistema && (esDigital || delTurnoActual)) {
+                    return (
+                        <button
+                            type="button"
+                            aria-label="Anular movimiento"
+                            title="Anular este movimiento: deja de contar y queda en la lista como anulado"
+                            onClick={(e) => { e.stopPropagation(); setAnularMov(r); setMotivoAnulacion(''); }}
+                            className="rounded-md p-1.5 text-red-600 transition hover:bg-red-50 hover:text-red-700"
+                        >
+                            <Ban className="h-4 w-4" />
+                        </button>
+                    );
+                }
+
+                return null;
+            },
         },
     ];
+
+    /** Todos mis movimientos: con la caja abierta y también con la caja cerrada. */
+    const tablaMovimientos = (
+        <DataTable
+            columns={columns}
+            rows={movimientosFiltrados}
+            rowClassName={(r) => (r.deleted_at ? 'bg-gray-50 text-gray-400' : undefined)}
+            searchPlaceholder="Buscar movimientos..."
+            filterable
+            filters={filtros}
+            filterCount={filtrosCount}
+            onApplyFilters={aplicarFiltros}
+            onClearFilters={limpiarFiltros}
+            toggleableColumns={false}
+            emptyMessage={
+                filtrosCount > 0
+                    ? 'Ningún movimiento coincide con los filtros.'
+                    : 'Aún no hay movimientos. Registra un ingreso o gasto.'
+            }
+            maxHeight="50vh"
+        />
+    );
 
     const openReg = (tipo) => {
         setRegTipo(tipo);
@@ -434,7 +542,10 @@ export default function MiCaja() {
                                 {/* El reporte de la caja del día: resumen, lo cobrado por cada cuenta y todos los movimientos. */}
                                 <Button variant="secondary" onClick={descargarReporteExcel}><FileSpreadsheet className="h-4 w-4" /> Excel</Button>
                                 <Button variant="secondary" onClick={() => setReportePdf({ url: '/mi-caja/reporte/pdf' })}><FileText className="h-4 w-4" /> PDF</Button>
-                                <Button variant="secondary" onClick={() => { setCerrarOpen(true); setMontoContado(''); setMontoContadoUsd(''); }}><Lock className="h-4 w-4" /> Cerrar caja</Button>
+                                <Button variant="secondary" onClick={() => {
+                                    setCerrarOpen(true); setMontoContado(''); setMontoContadoUsd(''); setMontoDejado(''); setCajaDestino('');
+                                    api.get('/mi-caja/cajas-destino').then(({ data: lista }) => setCajasDestino(Array.isArray(lista) ? lista : [])).catch(() => setCajasDestino([]));
+                                }}><Lock className="h-4 w-4" /> Cerrar caja</Button>
                             </div>
 
                             <div className="mb-4 grid grid-cols-2 gap-2 lg:grid-cols-5">
@@ -453,34 +564,50 @@ export default function MiCaja() {
                                 </div>
                             )}
 
-                            <h3 className="mb-2 text-sm font-bold text-warm-900">Movimientos de esta apertura</h3>
-                            <DataTable
-                                columns={columns}
-                                rows={movimientosFiltrados}
-                                rowClassName={(r) => (r.deleted_at ? 'bg-gray-50 text-gray-400' : undefined)}
-                                searchPlaceholder="Buscar movimientos..."
-                                filterable
-                                filters={filtros}
-                                filterCount={filtrosCount}
-                                onApplyFilters={aplicarFiltros}
-                                onClearFilters={limpiarFiltros}
-                                toggleableColumns={false}
-                                emptyMessage={
-                                    filtrosCount > 0
-                                        ? 'Ningún movimiento coincide con los filtros.'
-                                        : 'Aún no hay movimientos. Registra un ingreso o gasto.'
-                                }
-                                maxHeight="50vh"
-                            />
+                            <h3 className="mb-2 text-sm font-bold text-warm-900">Mis movimientos</h3>
+                            {tablaMovimientos}
                         </>
                     ) : (
-                        <Card className="flex flex-col items-center gap-3 py-10 text-center">
-                            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gray-100 text-warm-500"><Lock className="h-7 w-7" /></div>
-                            <p className="text-warm-600">
-                                {data?.ocupada_por ? 'La caja la está usando otro usuario.' : 'Tu caja está cerrada. Ábrela para registrar movimientos.'}
-                            </p>
-                            <Button disabled={Boolean(data?.ocupada_por)} onClick={() => { setAbrirOpen(true); setMontoInicial(''); }}><LockOpen className="h-4 w-4" /> Abrir caja</Button>
-                        </Card>
+                        <>
+                            {/* El cierre espera aprobación: la caja no se abre hasta entonces (o hasta anularlo para corregirlo). */}
+                            {data?.cierre_pendiente && (
+                                <Alert variant="warning" className="mb-4">
+                                    <div className="flex flex-wrap items-center justify-between gap-3">
+                                        <div>
+                                            <strong>Cierre pendiente de aprobación.</strong>{' '}
+                                            {data.cierre_pendiente.es_mio ? 'Lo solicitaste tú' : `Lo solicitó ${data.cierre_pendiente.solicitante ?? 'otro usuario'}`}:
+                                            contado {money(data.cierre_pendiente.monto_contado)}, se deja{' '}
+                                            <strong>{money(data.cierre_pendiente.monto_dejado)}</strong> para el siguiente turno y se retira{' '}
+                                            <strong>{money(data.cierre_pendiente.monto_retirado)}</strong>
+                                            {data.cierre_pendiente.caja_destino ? <> hacia <strong>{data.cierre_pendiente.caja_destino}</strong></> : ''}.{' '}
+                                            {data.cierre_pendiente.es_mio
+                                                ? 'Si algo está mal, anúlalo: tu caja se abre de nuevo para corregirlo.'
+                                                : 'Podrás abrir la caja cuando se apruebe.'}
+                                        </div>
+                                        {data.cierre_pendiente.es_mio && (
+                                            <Button variant="danger" size="sm" loading={saving} onClick={anularCierre}>
+                                                Anular y corregir cierre
+                                            </Button>
+                                        )}
+                                    </div>
+                                </Alert>
+                            )}
+
+                            <Card className="mb-6 flex flex-col items-center gap-3 py-8 text-center">
+                                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gray-100 text-warm-500"><Lock className="h-7 w-7" /></div>
+                                <p className="text-warm-600">
+                                    {data?.ocupada_por
+                                        ? 'La caja la está usando otro usuario.'
+                                        : data?.cierre_pendiente
+                                            ? 'Tu caja está cerrada y su cierre espera aprobación.'
+                                            : 'Tu caja está cerrada. Ábrela para registrar movimientos.'}
+                                </p>
+                                <Button disabled={Boolean(data?.ocupada_por || data?.cierre_pendiente)} onClick={() => { setAbrirOpen(true); setMontoInicial(''); }}><LockOpen className="h-4 w-4" /> Abrir caja</Button>
+                            </Card>
+
+                            <h3 className="mb-2 text-sm font-bold text-warm-900">Mis movimientos</h3>
+                            {tablaMovimientos}
+                        </>
                     )}
                 </>
             )}
@@ -508,17 +635,15 @@ export default function MiCaja() {
 
             {/* Modal abrir */}
             <Modal open={abrirOpen} onClose={() => setAbrirOpen(false)} title="Abrir caja"
-                description={saldoAnterior ? 'La caja abre con el efectivo que dejó el cierre anterior.' : 'Ingresa el monto en efectivo con el que inicias.'} size="sm"
+                description={saldoAnterior ? 'La caja abre con el efectivo que se dejó en el cierre anterior.' : 'Ingresa el monto en efectivo con el que inicias.'} size="sm"
                 footer={<><Button variant="secondary" onClick={() => setAbrirOpen(false)}>Cancelar</Button><Button loading={saving} onClick={abrir}>Abrir caja</Button></>}>
                 {saldoAnterior ? (
                     <div className="space-y-3">
                         <Input label="Monto inicial (S/)" value={money(saldoAnterior.monto)} readOnly disabled className="text-right" />
                         <p className="rounded-md bg-primary-50 px-3 py-2 text-xs text-primary-700">
-                            Es lo que contó {saldoAnterior.cerro ?? 'el usuario anterior'} al cerrar
+                            Es lo que dejó {saldoAnterior.cerro ?? 'el usuario anterior'} para este turno al cerrar
                             {saldoAnterior.fecha ? ` el ${fechaHora(saldoAnterior.fecha)}` : ''}
-                            {Math.abs(Number(saldoAnterior.diferencia)) > 0.004
-                                ? ` (${Number(saldoAnterior.diferencia) > 0 ? 'sobrante' : 'faltante'} de ${money(Math.abs(saldoAnterior.diferencia))} incluido)`
-                                : ''}
+                            {Number(saldoAnterior.retirado) > 0 ? ` (retiró ${money(saldoAnterior.retirado)} en el movimiento de cierre)` : ''}
                             . No se cambia: si no coincide con lo que hay en el cajón, avisa a un administrador.
                         </p>
                     </div>
@@ -547,6 +672,32 @@ export default function MiCaja() {
                             {diferencia < 0 ? 'Faltante' : 'Sobrante'}: {money(Math.abs(diferencia))}
                         </div>
                     )}
+                    <Input label="Dejo para el siguiente turno (S/)" type="number" min="0" step="0.01" placeholder="0.00" value={montoDejado} onChange={(e) => setMontoDejado(e.target.value)} />
+                    {montoContado !== '' && (
+                        <div className={`rounded-lg px-3 py-2 text-sm ${retirado < -0.001 ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-800'}`}>
+                            {retirado < -0.001
+                                ? 'No puedes dejar más de lo que contaste.'
+                                : <>Sale de la caja con el <strong>movimiento de cierre</strong>: {money(Math.max(retirado, 0))}. El cierre queda pendiente de aprobación.</>}
+                        </div>
+                    )}
+                    {retirado > 0.001 && (
+                        <div>
+                            <Select
+                                label="Enviar el efectivo retirado a otra caja (opcional)"
+                                value={cajaDestino}
+                                onChange={(e) => setCajaDestino(e.target.value)}
+                                options={[
+                                    { value: '', label: 'No enviarlo a ninguna caja' },
+                                    ...cajasDestino.map((c) => ({ value: String(c.id), label: `${c.codigo ? `${c.codigo} · ` : ''}${c.nombre}${c.abierta ? '' : ' (cerrada)'}` })),
+                                ]}
+                            />
+                            {cajaDestino && (
+                                <p className="mt-1 text-xs text-warm-500">
+                                    Para ti es un egreso ahora. La otra caja lo recibe como ingreso cuando se apruebe el cierre, y debe estar abierta.
+                                </p>
+                            )}
+                        </div>
+                    )}
                     {dolares && (
                         <>
                             <div className="flex justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm">
@@ -561,6 +712,28 @@ export default function MiCaja() {
                             )}
                         </>
                     )}
+                </div>
+            </Modal>
+
+            {/* Anular un movimiento registrado a mano. */}
+            <Modal
+                open={Boolean(anularMov)}
+                onClose={() => setAnularMov(null)}
+                title="Anular movimiento"
+                description={anularMov ? `${anularMov.tipo === 'ingreso' ? 'Ingreso' : 'Gasto'} de ${money(anularMov.monto, anularMov.moneda)} · ${metodoLabel(anularMov)}` : ''}
+                size="sm"
+                footer={
+                    <>
+                        <Button variant="secondary" onClick={() => setAnularMov(null)}>Cancelar</Button>
+                        <Button variant="danger" loading={saving} onClick={confirmarAnulacion}>Anular movimiento</Button>
+                    </>
+                }
+            >
+                <div className="space-y-3">
+                    <Alert variant="warning">
+                        Deja de contar en los totales de tu caja, pero queda en la lista como <strong>Anulado</strong>.
+                    </Alert>
+                    <Input label="Motivo (opcional)" placeholder="Ej: se registró dos veces" value={motivoAnulacion} onChange={(e) => setMotivoAnulacion(e.target.value)} />
                 </div>
             </Modal>
 

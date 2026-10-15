@@ -35,12 +35,16 @@ class MotivosMovimientoSeeder extends Seeder
             // ── Tesorería / Caja (entradas) ──
             ['Ingreso por venta', 'entrada', true, 'caja', null],
             ['Ingreso por cobranza', 'entrada', true, 'caja', null],
+            // El efectivo que otra caja envió al cerrar (el egreso de ella es "Movimiento de cierre de caja").
+            ['Ingreso por cierre de caja', 'entrada', true, 'caja', null],
             ['Ingreso por préstamo', 'entrada', false, 'caja', null],
             ['Otro ingreso', 'entrada', false, 'caja', null],
 
             // ── Tesorería / Caja (salidas) ──
             ['Salida por pago de compra', 'salida', true, 'caja', 'compra'],
             ['Salida por pago a proveedor', 'salida', true, 'caja', 'compra'],
+            // El efectivo que sale de la caja al cerrarla (lo contado menos lo que se deja para el siguiente turno).
+            ['Movimiento de cierre de caja', 'salida', true, 'caja', null],
             ['Salida por gasto', 'salida', false, 'caja', 'operativo'],
             ['Salida por sueldo', 'salida', false, 'caja', 'operativo'],
             ['Otro egreso', 'salida', false, 'caja', 'no_operativo'],

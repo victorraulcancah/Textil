@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\CierreCaja;
 use App\Models\MovimientoCaja;
+use App\Services\CierreCajaService;
 use App\Support\AlmacenAcceso;
+use Illuminate\Http\Request;
 
 /**
  * Registro de cierres de caja: qué se esperaba, qué se contó y todos los
@@ -18,6 +20,9 @@ class CierreCajaController extends Controller
             'apertura:id,caja_id,usuario_id,monto_inicial,fecha_apertura',
             'apertura.caja:id,nombre,codigo,almacen_id',
             'apertura.usuario:id,name',
+            'aprobador:id,name',
+            'anulador:id,name',
+            'cajaDestino:id,codigo,nombre',
             // Tesorería por sucursal: cada almacén ve los cierres de sus cajas.
         ])->whereHas('apertura.caja', fn ($c) => AlmacenAcceso::limitar($c))->latest('fecha_cierre')->get();
 
@@ -61,6 +66,41 @@ class CierreCajaController extends Controller
         return response()->json($cierres);
     }
 
+    /** Aprueba un cierre pendiente: desde ese momento la caja se puede abrir con lo que se dejó. */
+    public function aprobar(CierreCaja $cierresCaja, CierreCajaService $servicio)
+    {
+        $cierresCaja->loadMissing('apertura.caja');
+        AlmacenAcceso::exigir($cierresCaja->apertura?->caja?->almacen_id);
+
+        $servicio->aprobar($cierresCaja, auth('api')->user());
+
+        return response()->json($this->conRelaciones($cierresCaja));
+    }
+
+    /** Anula un cierre (pendiente o aprobado): reabre la caja para corregirlo. Solo si no se volvió a abrir. */
+    public function anular(Request $request, CierreCaja $cierresCaja, CierreCajaService $servicio)
+    {
+        $cierresCaja->loadMissing('apertura.caja');
+        AlmacenAcceso::exigir($cierresCaja->apertura?->caja?->almacen_id);
+
+        $datos = $request->validate(['motivo' => 'nullable|string|max:255']);
+        $servicio->anular($cierresCaja, auth('api')->user(), $datos['motivo'] ?? null);
+
+        return response()->json($this->conRelaciones($cierresCaja));
+    }
+
+    private function conRelaciones(CierreCaja $cierre): CierreCaja
+    {
+        return $cierre->fresh()->load([
+            'apertura:id,caja_id,usuario_id,monto_inicial,fecha_apertura,estado',
+            'apertura.caja:id,nombre,codigo,almacen_id',
+            'apertura.usuario:id,name',
+            'aprobador:id,name',
+            'anulador:id,name',
+            'cajaDestino:id,codigo,nombre',
+        ]);
+    }
+
     /** Detalle: el cierre con todos los movimientos de su apertura. */
     public function show(CierreCaja $cierresCaja)
     {
@@ -68,10 +108,12 @@ class CierreCajaController extends Controller
             'apertura:id,caja_id,usuario_id,monto_inicial,fecha_apertura',
             'apertura.caja:id,nombre,codigo,almacen_id',
             'apertura.usuario:id,name',
+            'aprobador:id,name',
+            'anulador:id,name',
         ]);
         AlmacenAcceso::exigir($cierresCaja->apertura?->caja?->almacen_id);
 
-        $movimientos = MovimientoCaja::with([
+        $movimientos = MovimientoCaja::withTrashed()->with([
             'motivo:id,nombre,tipo',
             'cuentaBancaria:id,alias,numero_cuenta',
             'billetera:id,nombre',

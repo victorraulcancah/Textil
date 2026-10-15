@@ -263,7 +263,18 @@ return [
                 ],
                 'cajas' => ['label' => 'Cajas', 'apis' => ['cajas']],
                 'movimientos-caja' => ['label' => 'Movimientos de caja', 'apis' => ['movimientos-caja'], 'pdf' => ['movimiento-caja']],
-                'cierres-caja' => ['label' => 'Cierres de caja', 'apis' => ['cierres-caja'], 'pdf' => ['cierre-caja']],
+                'cierres-caja' => [
+                    'label' => 'Cierres de caja',
+                    'apis' => ['cierres-caja'],
+                    'pdf' => ['cierre-caja'],
+                    // El cierre queda pendiente: aprobarlo (o anularlo para que se corrija) lo decide quien tiene este
+                    // permiso, no quien cerró. Quien cerró anula el suyo desde Mi caja.
+                    'patrones' => [
+                        'cierres-caja/*/aprobar' => 'aprobar',
+                        'cierres-caja/*/anular' => 'aprobar',
+                    ],
+                    'acciones' => ['ver', 'aprobar'],
+                ],
                 'motivos-movimiento' => ['label' => 'Motivos de movimiento', 'apis' => ['motivos-movimiento']],
                 'cuentas-por-cobrar' => ['label' => 'Cuentas por cobrar', 'apis' => ['cuentas-por-cobrar']],
                 // Las letras de cambio se emiten desde una cuenta por cobrar y se consultan aquí, con su PDF.

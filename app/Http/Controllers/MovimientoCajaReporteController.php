@@ -134,13 +134,15 @@ class MovimientoCajaReporteController extends Controller
                 ? 'Transf. · '.($m->cuentaBancaria->alias ?: $m->cuentaBancaria->numero_cuenta)
                 : ($m->billetera ? $m->billetera->nombre : 'Efectivo'),
             'operacion' => (string) $m->numero_operacion,
+            'estado' => $m->trashed() ? 'Anulado'.($m->anulado_motivo ? " ({$m->anulado_motivo})" : '') : 'Vigente',
             'moneda' => $m->moneda ?: 'PEN',
             'ingreso' => $m->tipo === 'ingreso' ? (float) $m->monto : null,
             'egreso' => $m->tipo === 'egreso' ? (float) $m->monto : null,
         ])->all();
 
         $totales = [];
-        foreach ($movs as $m) {
+        // Los anulados salen en el listado pero no suman en los totales.
+        foreach ($movs->reject(fn (MovimientoCaja $m) => $m->trashed()) as $m) {
             $moneda = $m->moneda ?: 'PEN';
             $totales[$moneda] ??= ['cantidad' => 0, 'ingresos' => 0.0, 'egresos' => 0.0];
             $totales[$moneda]['cantidad']++;
@@ -160,6 +162,7 @@ class MovimientoCajaReporteController extends Controller
                 ['key' => 'descripcion', 'label' => 'Descripción', 'tipo' => 'texto', 'align' => 'left'],
                 ['key' => 'metodo', 'label' => 'Método', 'tipo' => 'texto', 'align' => 'left'],
                 ['key' => 'operacion', 'label' => 'N° operación', 'tipo' => 'texto', 'align' => 'left'],
+                ['key' => 'estado', 'label' => 'Estado', 'tipo' => 'texto', 'align' => 'left'],
                 ['key' => 'moneda', 'label' => 'Moneda', 'tipo' => 'texto', 'align' => 'center'],
                 ['key' => 'ingreso', 'label' => 'Ingreso', 'tipo' => 'dinero', 'align' => 'right'],
                 ['key' => 'egreso', 'label' => 'Egreso', 'tipo' => 'dinero', 'align' => 'right'],

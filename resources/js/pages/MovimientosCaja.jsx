@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowDownCircle, ArrowUpCircle, Printer } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
@@ -55,7 +55,6 @@ export default function MovimientosCaja() {
     const [reportePdf, setReportePdf] = useState(null);
 
     const [modalOpen, setModalOpen] = useState(false);
-    const [pdfTarget, setPdfTarget] = useState(null);
     const [form, setForm] = useState(emptyForm('ingreso'));
     const [formErrors, setFormErrors] = useState({});
     const [saving, setSaving] = useState(false);
@@ -192,23 +191,25 @@ export default function MovimientosCaja() {
             label: 'Monto',
             align: 'right',
             render: (row) => (
-                <span className={row.tipo === 'ingreso' ? 'text-green-600' : 'text-red-600'}>
+                <span className={row.deleted_at ? 'text-gray-400 line-through' : row.tipo === 'ingreso' ? 'text-green-600' : 'text-red-600'}>
                     {row.tipo === 'ingreso' ? '+' : '-'} {money(row.monto, row.moneda)}
                 </span>
             ),
         },
         {
-            type: 'actions',
-            key: 'actions',
-            label: 'Acc.',
-            width: '60px',
-            actions: (row) => (
-                <button aria-label="Imprimir" title="Imprimir comprobante"
-                    onClick={(e) => { e.stopPropagation(); setPdfTarget(row); }}
-                    className="rounded-md p-1.5 text-warm-600 transition hover:bg-gray-100 hover:text-warm-900">
-                    <Printer className="h-4 w-4" />
-                </button>
-            ),
+            // Los anulados siguen en el historial, fuera de los totales, con el motivo.
+            key: 'estado',
+            label: 'Estado',
+            getSearchValue: (row) => (row.deleted_at ? `Anulado ${row.anulado_motivo ?? ''}` : 'Vigente'),
+            render: (row) =>
+                row.deleted_at ? (
+                    <div className="leading-tight">
+                        <Badge variant="red">Anulado</Badge>
+                        {row.anulado_motivo && <div className="mt-0.5 text-xs text-warm-500">{row.anulado_motivo}</div>}
+                    </div>
+                ) : (
+                    <Badge variant="green">Vigente</Badge>
+                ),
         },
     ];
 
@@ -236,6 +237,7 @@ export default function MovimientosCaja() {
             <DataTable
                 columns={columns}
                 rows={fTipo ? rows.filter((r) => r.tipo === fTipo) : rows}
+                rowClassName={(row) => (row.deleted_at ? 'bg-gray-50 text-gray-400' : undefined)}
                 loading={loading}
                 searchPlaceholder="Buscar movimientos..."
                 emptyMessage="Aún no hay movimientos de caja registrados."
@@ -356,16 +358,6 @@ export default function MovimientosCaja() {
                 url={reportePdf?.url}
                 titulo="Movimientos de caja"
                 nombre={`Movimientos de caja ${hoyIso()}`}
-            />
-
-            <PdfViewerModal
-                open={Boolean(pdfTarget)}
-                onClose={() => setPdfTarget(null)}
-                tipo="movimiento-caja"
-                id={pdfTarget?.id}
-                nombre={pdfTarget ? `Mov. #${String(pdfTarget.id).padStart(6, '0')}` : ''}
-                titulo="Comprobante de caja"
-                formatos={['ticket']}
             />
         </Layout>
     );

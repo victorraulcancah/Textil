@@ -39,7 +39,8 @@ class MovimientoCajaController extends Controller
         $user = auth('api')->user();
         $cajaPropia = $user?->cajaActual()?->id;
 
-        return MovimientoCaja::with(self::WITH)
+        // Con los anulados: el historial muestra todo, cada movimiento con su estado.
+        return MovimientoCaja::withTrashed()->with(self::WITH)
             ->when($request->filled('caja_id'), fn ($q) => $q->whereHas('apertura', fn ($a) => $a->where('caja_id', $request->integer('caja_id'))))
             ->when($request->filled('desde'), fn ($q) => $q->whereDate('fecha', '>=', $request->input('desde')))
             ->when($request->filled('hasta'), fn ($q) => $q->whereDate('fecha', '<=', $request->input('hasta')))

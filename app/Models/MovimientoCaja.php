@@ -4,10 +4,13 @@ namespace App\Models;
 
 use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class MovimientoCaja extends Model
 {
     use Auditable;
+    // Anular no borra: el movimiento sale de los totales y de los reportes, pero Mi Caja lo sigue mostrando.
+    use SoftDeletes;
 
     /** Nombre del módulo en la bitácora de auditoría. */
     protected string $auditarModulo = 'Movimiento de caja';
@@ -31,7 +34,19 @@ class MovimientoCaja extends Model
         'documento_referencia_tipo',
         'documento_referencia_id',
         'fecha',
+        'anulado_motivo',
+        'anulado_por',
     ];
+
+    /**
+     * Anula los movimientos de la consulta dejando constancia de por qué y quién. No cuentan más en la caja, pero
+     * siguen visibles con su estado.
+     */
+    public static function anularDe($consulta, string $motivo): void
+    {
+        $consulta->update(['anulado_motivo' => $motivo, 'anulado_por' => auth()->id()]);
+        $consulta->delete();
+    }
 
     protected function casts(): array
     {

@@ -215,7 +215,7 @@ class CuentaPorCobrarController extends Controller
 
         DB::transaction(function () use ($pago, $cuenta) {
             if ($pago->movimiento_caja_id) {
-                MovimientoCaja::where('id', $pago->movimiento_caja_id)->delete();
+                MovimientoCaja::anularDe(MovimientoCaja::where('id', $pago->movimiento_caja_id), 'Cobro anulado');
             }
             $pago->delete();
             $this->recalcular($cuenta);

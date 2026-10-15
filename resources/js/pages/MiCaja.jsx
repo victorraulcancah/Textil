@@ -34,7 +34,7 @@ const emptyPagoCorregir = (monto = '') => ({ tipo: 'efectivo', cuentaId: '', bil
 
 /** Los movimientos que nacen de un cobro de venta o de cobranza: son los que se pueden corregir. */
 const esCobroCorregible = (r) =>
-    r.tipo === 'ingreso' && ['nota_venta', 'cuenta_por_cobrar'].includes(r.documento_referencia_tipo) && Boolean(r.documento_referencia_id);
+    !r.deleted_at && r.tipo === 'ingreso' && ['nota_venta', 'cuenta_por_cobrar'].includes(r.documento_referencia_tipo) && Boolean(r.documento_referencia_id);
 
 /** Tarjeta compacta de resumen. No usa Card porque su padding (p-6) es muy alto. */
 function Stat({ icon: Icon, label, value, accent = 'text-warm-900', bg = 'bg-gray-100' }) {
@@ -183,7 +183,7 @@ export default function MiCaja() {
         if (!fila) return [];
         const todos = data?.movimientos ?? [];
         if (fila.documento_referencia_tipo === 'nota_venta') {
-            return todos.filter((m) => m.tipo === 'ingreso' && m.documento_referencia_tipo === 'nota_venta' && String(m.documento_referencia_id) === String(fila.documento_referencia_id));
+            return todos.filter((m) => !m.deleted_at && m.tipo === 'ingreso' && m.documento_referencia_tipo === 'nota_venta' && String(m.documento_referencia_id) === String(fila.documento_referencia_id));
         }
         return todos.filter((m) => m.id === fila.id);
     };
@@ -349,7 +349,22 @@ export default function MiCaja() {
             ),
         },
         { key: 'metodo', label: 'Método', getSearchValue: (r) => metodoLabel(r), render: (r) => metodoLabel(r) },
-        { key: 'monto', label: 'Monto', align: 'right', render: (r) => <span className={r.tipo === 'ingreso' ? 'text-green-600' : 'text-red-600'}>{r.tipo === 'ingreso' ? '+' : '-'} {money(r.monto, r.moneda)}</span> },
+        { key: 'monto', label: 'Monto', align: 'right', render: (r) => <span className={r.deleted_at ? 'text-gray-400 line-through' : r.tipo === 'ingreso' ? 'text-green-600' : 'text-red-600'}>{r.tipo === 'ingreso' ? '+' : '-'} {money(r.monto, r.moneda)}</span> },
+        {
+            // Los anulados siguen en la lista, fuera de los totales, con el motivo.
+            key: 'estado',
+            label: 'Estado',
+            getSearchValue: (r) => (r.deleted_at ? `Anulado ${r.anulado_motivo ?? ''}` : 'Vigente'),
+            render: (r) =>
+                r.deleted_at ? (
+                    <div className="leading-tight">
+                        <Badge variant="red">Anulado</Badge>
+                        {r.anulado_motivo && <div className="mt-0.5 text-xs text-warm-500">{r.anulado_motivo}</div>}
+                    </div>
+                ) : (
+                    <Badge variant="green">Vigente</Badge>
+                ),
+        },
         {
             // Un cobro de venta o de cobranza se puede corregir mientras la caja siga abierta.
             type: 'actions',
@@ -442,6 +457,7 @@ export default function MiCaja() {
                             <DataTable
                                 columns={columns}
                                 rows={movimientosFiltrados}
+                                rowClassName={(r) => (r.deleted_at ? 'bg-gray-50 text-gray-400' : undefined)}
                                 searchPlaceholder="Buscar movimientos..."
                                 filterable
                                 filters={filtros}

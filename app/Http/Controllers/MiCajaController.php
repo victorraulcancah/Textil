@@ -59,7 +59,8 @@ class MiCajaController extends Controller
 
     private function movimientos(AperturaCaja $apertura)
     {
-        return MovimientoCaja::with([
+        // Los anulados también salen (con su estado); los totales del resumen no los cuentan.
+        return MovimientoCaja::withTrashed()->with([
             'motivo:id,nombre',
             'cuentaBancaria:id,alias,numero_cuenta',
             'billetera:id,nombre',
@@ -196,7 +197,7 @@ class MiCajaController extends Controller
 
         DB::transaction(function () use ($nota, $ingresos, $pagos, $apertura, $fecha, $motivoId) {
             // Primero se anula lo cobrado…
-            MovimientoCaja::whereIn('id', $ingresos->pluck('id'))->delete();
+            MovimientoCaja::anularDe(MovimientoCaja::whereIn('id', $ingresos->pluck('id')), 'Pago corregido');
             $nota->pagos()->delete();
 
             // …y luego se registran los pagos nuevos.

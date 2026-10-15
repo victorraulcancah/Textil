@@ -438,9 +438,10 @@ class NotaVentaService
             );
         }
 
-        MovimientoCaja::where('documento_referencia_tipo', 'nota_venta')
-            ->where('documento_referencia_id', $nota->id)
-            ->delete();
+        MovimientoCaja::anularDe(
+            MovimientoCaja::where('documento_referencia_tipo', 'nota_venta')->where('documento_referencia_id', $nota->id),
+            $origen === 'anulacion_nota_venta' ? 'Venta anulada' : 'Venta editada',
+        );
 
         CuentaPorCobrar::where('nota_venta_id', $nota->id)->delete();
     }

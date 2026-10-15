@@ -218,6 +218,7 @@ class ReporteController extends Controller
     private function gastosQuery(Carbon $desde, Carbon $hasta)
     {
         return DB::table('movimientos_caja as m')
+            ->whereNull('m.deleted_at')
             ->join('motivos_movimiento as mo', 'mo.id', '=', 'm.motivo_movimiento_id')
             ->where('m.tipo', 'egreso')
             ->where('mo.categoria_gasto', 'operativo')

@@ -178,7 +178,7 @@ class CuentaPorPagarController extends Controller
 
         DB::transaction(function () use ($pago, $cuenta) {
             if ($pago->movimiento_caja_id) {
-                MovimientoCaja::where('id', $pago->movimiento_caja_id)->delete();
+                MovimientoCaja::anularDe(MovimientoCaja::where('id', $pago->movimiento_caja_id), 'Pago anulado');
             }
             $pago->delete();
             $this->recalcular($cuenta);

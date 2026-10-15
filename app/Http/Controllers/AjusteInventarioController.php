@@ -415,6 +415,71 @@ class AjusteInventarioController extends Controller
     }
 
     /**
+     * ¿Se puede deshacer este ajuste? Solo si lo que movió sigue como lo dejó: un rollo que ingresó y luego se vendió,
+     * se trasladó, se separó o se cortó, o un stock que ya se usó, impide eliminarlo hasta anular ese último movimiento.
+     * Lanza con el detalle de qué rollos o productos lo impiden.
+     */
+    private function exigirReversible(AjusteInventario $ajuste): void
+    {
+        $ajuste->loadMissing('detalles');
+        $impiden = [];
+
+        foreach ($ajuste->detalles as $detalle) {
+            $presentacion = ProductoPresentacion::with('producto')->find($detalle->producto_presentacion_id);
+
+            // Los rollos que este ajuste creó (entrada de telas).
+            foreach (Rollo::where('ajuste_detalle_id', $detalle->id)->get() as $rollo) {
+                $motivo = null;
+                if ((int) $rollo->almacen_id !== (int) $ajuste->almacen_id) {
+                    $motivo = 'ya se trasladó a otro almacén';
+                } elseif ($rollo->estado !== Rollo::DISPONIBLE) {
+                    $motivo = "está {$rollo->estado}";
+                } elseif ((float) $rollo->metros_actual !== (float) $rollo->metros_inicial) {
+                    $motivo = 'ya se cortó o se ajustó su metraje';
+                } elseif (RolloMovimiento::where('rollo_id', $rollo->id)->where('tipo', '!=', RolloMovimiento::INGRESO)->exists()) {
+                    $motivo = 'tiene movimientos posteriores';
+                }
+                if ($motivo) {
+                    $impiden[] = "el rollo {$rollo->codigo} {$motivo}";
+                }
+            }
+
+            // Un rollo que ya existía: no debe haber tenido movimientos después de este ajuste.
+            if ($detalle->rollo_id) {
+                $rollo = Rollo::find($detalle->rollo_id);
+                $ultimoDelAjuste = RolloMovimiento::where('rollo_id', $detalle->rollo_id)
+                    ->where('documento_tipo', 'ajuste_inventario')->where('documento_id', $ajuste->id)->max('id');
+                if ($rollo && $ultimoDelAjuste
+                    && RolloMovimiento::where('rollo_id', $detalle->rollo_id)->where('id', '>', $ultimoDelAjuste)->exists()) {
+                    $impiden[] = "el rollo {$rollo->codigo} tuvo movimientos después de este ajuste (venta, traslado, corte…)";
+                }
+
+                continue;
+            }
+
+            // Un producto común que entró: para deshacerlo tiene que seguir en el almacén.
+            if ($ajuste->tipo === 'entrada' && $presentacion && ! Rollo::where('ajuste_detalle_id', $detalle->id)->exists()) {
+                $factor = (float) $presentacion->factor_conversion ?: 1;
+                $hay = (float) \App\Models\ProductoAlmacenStock::where('producto_id', $presentacion->producto_id)
+                    ->where('almacen_id', $ajuste->almacen_id)->value('stock_actual');
+                $nombre = $presentacion->producto?->nombre ?? 'El producto';
+                if (! $presentacion->producto?->esTela() && (float) $detalle->cantidad * $factor > $hay + 0.001) {
+                    $impiden[] = "de \"{$nombre}\" ya no queda en el almacén lo que este ajuste ingresó (se vendió o se trasladó)";
+                }
+            }
+        }
+
+        if ($impiden) {
+            $lista = array_slice($impiden, 0, 6);
+            $mas = count($impiden) > 6 ? ' y '.(count($impiden) - 6).' más' : '';
+            throw new \RuntimeException(
+                "No se puede eliminar el ajuste {$ajuste->serie}-{$ajuste->numero}: ".implode('; ', $lista).$mas
+                .'. Anula primero ese último movimiento y vuelve a intentarlo.'
+            );
+        }
+    }
+
+    /**
      * Eliminar revierte el stock que el ajuste movió: si no, la mercadería
      * quedaría sumada o restada sin ningún documento que lo respalde.
      */
@@ -423,6 +488,10 @@ class AjusteInventarioController extends Controller
         AlmacenAcceso::exigir($ajuste->almacen_id);
 
         try {
+            // Antes de tocar nada: si lo que el ajuste ingresó ya tuvo otros movimientos (vendido, trasladado, cortado),
+            // deshacerlo ahora descuadraría el stock. Se avisa qué hay que anular primero.
+            $this->exigirReversible($ajuste);
+
             DB::transaction(function () use ($ajuste) {
                 $ajuste->load('detalles');
                 $almacen = Almacen::findOrFail($ajuste->almacen_id);

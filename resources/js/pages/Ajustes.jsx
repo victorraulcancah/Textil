@@ -192,8 +192,10 @@ export default function Ajustes() {
             toast.success('Ajuste eliminado.');
             setDeleteTarget(null);
             await load();
-        } catch {
-            toast.error('No se pudo eliminar el ajuste.');
+        } catch (err) {
+            // El servidor dice qué lo impide (un rollo ya vendido o trasladado, stock usado…): se muestra tal cual.
+            toast.error(err.response?.data?.message ?? 'No se pudo eliminar el ajuste.');
+            if (err.response?.status === 422) setDeleteTarget(null);
         } finally {
             setDeleting(false);
         }

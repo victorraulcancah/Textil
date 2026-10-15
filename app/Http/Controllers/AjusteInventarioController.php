@@ -72,7 +72,7 @@ class AjusteInventarioController extends Controller
             // Cada línea es de uno de tres tipos:
             //  · común: una presentación y su cantidad;
             //  · tela, entrada: los rollos de un color (cuántos y de cuántos metros);
-            //  · tela, salida: los metros que se sacan de un rollo.
+            //  · tela, sobre un rollo que ya existe: los metros que se le sacan (salida) o se le suman (entrada).
             'detalles.*.producto_presentacion_id' => 'nullable|exists:producto_presentaciones,id',
             'detalles.*.cantidad' => 'nullable|numeric|min:0.01',
             'detalles.*.producto_id' => 'nullable|exists:productos,id',
@@ -87,15 +87,13 @@ class AjusteInventarioController extends Controller
         ]);
 
         foreach ($data['detalles'] as $i => $d) {
-            $esSalidaTela = ! empty($d['rollo_id']) && ! empty($d['metros']);
+            // Un rollo que ya existe: en una salida se le sacan metros; en una entrada, se le suman.
+            $esSobreRollo = ! empty($d['rollo_id']) && ! empty($d['metros']);
             $esEntradaTela = ! empty($d['producto_id']) && ! empty($d['rollos']) && ! empty($d['metros_por_rollo']);
             $esComun = ! empty($d['producto_presentacion_id']) && ! empty($d['cantidad']);
 
-            if (! $esSalidaTela && ! $esEntradaTela && ! $esComun) {
+            if (! $esSobreRollo && ! $esEntradaTela && ! $esComun) {
                 throw ValidationException::withMessages(["detalles.{$i}" => 'La línea está incompleta.']);
-            }
-            if ($esSalidaTela && $data['tipo'] !== 'salida') {
-                throw ValidationException::withMessages(["detalles.{$i}" => 'Sacar metros de un rollo es una salida.']);
             }
             if ($esEntradaTela && $data['tipo'] !== 'entrada') {
                 throw ValidationException::withMessages(["detalles.{$i}" => 'Agregar rollos es una entrada.']);
@@ -129,6 +127,7 @@ class AjusteInventarioController extends Controller
 
                 foreach ($data['detalles'] as $detalle) {
                     $total += match (true) {
+                        ! empty($detalle['rollo_id']) && $data['tipo'] === 'entrada' => $this->entradaEnRollo($ajuste, $almacen, $detalle, $stock, $rollos),
                         ! empty($detalle['rollo_id']) => $this->salidaDeRollo($ajuste, $almacen, $detalle, $stock, $rollos),
                         ! empty($detalle['producto_id']) => $this->entradaDeRollos($ajuste, $almacen, $detalle, $stock, $rollos),
                         default => $this->lineaComun($ajuste, $almacen, $data['tipo'], $detalle, $stock),
@@ -230,6 +229,54 @@ class AjusteInventarioController extends Controller
         return $subtotal;
     }
 
+    /**
+     * Entrada de tela sobre un rollo que ya existe: le suma metros (se midió de más, apareció tela). El rollo conserva
+     * su código; si queda más largo que lo registrado de fábrica, ese metraje se actualiza a lo que de verdad tiene.
+     */
+    private function entradaEnRollo(AjusteInventario $ajuste, Almacen $almacen, array $detalle, StockService $stock, RolloService $rollos): float
+    {
+        $rollo = Rollo::with('producto.presentaciones.unidadBase')->findOrFail($detalle['rollo_id']);
+
+        if ((int) $rollo->almacen_id !== (int) $almacen->id) {
+            throw new \RuntimeException("El rollo {$rollo->codigo} no está en este almacén.");
+        }
+        // Uno separado, en preparación o ya vendido tiene dueño: no se le toca el metraje desde un ajuste.
+        if (! in_array($rollo->estado, [Rollo::DISPONIBLE, Rollo::AGOTADO], true)) {
+            throw new \RuntimeException("El rollo {$rollo->codigo} no se puede ajustar (está {$rollo->estado}).");
+        }
+
+        $presentacion = $rollo->producto->presentacionMetro();
+        if (! $presentacion) {
+            throw new \RuntimeException("\"{$rollo->producto->nombre}\" no se maneja por metros.");
+        }
+
+        $metros = round((float) $detalle['metros'], 2);
+        $rollo = $rollos->devolver($rollo, $metros, RolloMovimiento::AJUSTE, 'ajuste_inventario', $ajuste->id, auth()->id());
+
+        if ((float) $rollo->metros_actual > (float) $rollo->metros_inicial) {
+            $rollo->update(['metros_inicial' => $rollo->metros_actual]);
+        }
+
+        $costoUnidad = isset($detalle['costo_por_metro'])
+            ? round((float) $detalle['costo_por_metro'] * $presentacion->aMetros(1), 4)
+            : $this->costoDe($presentacion, $almacen);
+        $cantidad = $presentacion->desdeMetros($metros);
+        $subtotal = round($cantidad * $costoUnidad, 2);
+
+        $ajuste->detalles()->create([
+            'producto_presentacion_id' => $presentacion->id,
+            'producto_color_id' => $rollo->producto_color_id,
+            'rollo_id' => $rollo->id,
+            'cantidad' => $cantidad,
+            'costo_unitario' => $costoUnidad,
+            'subtotal' => $subtotal,
+        ]);
+
+        $stock->entrada($presentacion, $almacen, $cantidad, 0, 'ajuste_manual', 'ajuste_inventario', $ajuste->id, auth()->id(), colorId: $rollo->producto_color_id);
+
+        return $subtotal;
+    }
+
     /** Salida de tela: saca metros de un rollo (todo el rollo, o un corte). */
     private function salidaDeRollo(AjusteInventario $ajuste, Almacen $almacen, array $detalle, StockService $stock, RolloService $rollos): float
     {
@@ -323,14 +370,18 @@ class AjusteInventarioController extends Controller
         if ($detalle->rollo_id) {
             $rollo = Rollo::find($detalle->rollo_id);
             if ($rollo) {
-                $rollos->devolver(
-                    $rollo,
-                    $presentacion->aMetros((float) $detalle->cantidad),
-                    RolloMovimiento::CANCELACION,
-                    'ajuste_inventario',
-                    $ajuste->id,
-                    auth()->id(),
-                );
+                $metros = $presentacion->aMetros((float) $detalle->cantidad);
+
+                if ($ajuste->tipo === 'entrada') {
+                    // Se le habían sumado metros al rollo: deshacerlo es quitárselos, y solo se puede si aún los tiene.
+                    try {
+                        $rollos->cortar($rollo, $metros, RolloMovimiento::CANCELACION, 'ajuste_inventario', $ajuste->id, auth()->id());
+                    } catch (\DomainException) {
+                        throw new \RuntimeException("No se puede eliminar el ajuste: el rollo {$rollo->codigo} ya no tiene esos {$metros} m (se usaron o se cortó).");
+                    }
+                } else {
+                    $rollos->devolver($rollo, $metros, RolloMovimiento::CANCELACION, 'ajuste_inventario', $ajuste->id, auth()->id());
+                }
             }
 
             return;

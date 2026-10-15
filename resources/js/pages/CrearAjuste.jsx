@@ -102,6 +102,10 @@ export default function CrearAjuste() {
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     const esSalida = form.tipo === 'salida';
+    /** En una entrada, sumar metros a un rollo que ya existe (en vez de crear rollos nuevos). */
+    const [aRollo, setARollo] = useState(false);
+    /** ¿La tela se elige por rollo concreto? Siempre en una salida; en una entrada, si se pidió sumar a un rollo. */
+    const usaRollo = esSalida || aRollo;
 
     /** Motivos activos de inventario que aplican al tipo elegido. */
     const motivosOptions = useMemo(
@@ -198,7 +202,7 @@ export default function CrearAjuste() {
         if (!id) return setPanel({ ...panelVacio });
         limpiarError('detalles');
 
-        if (esTela(id) && !esSalida) {
+        if (esTela(id) && !usaRollo) {
             setPanel({ ...panelVacio });
             setTelaEntrada(productoDe(id));
             return;
@@ -333,12 +337,12 @@ export default function CrearAjuste() {
         if (!panel.producto_id) return toast.error('Busca y elige un producto.');
 
         if (esTela(panel.producto_id)) {
-            // Solo llega aquí una salida: la entrada usa la tabla por color.
+            // Llega aquí una salida, o una entrada sobre un rollo que ya existe (la entrada nueva usa la tabla por color).
             if (coloresDeSalida(panel.producto_id).length > 0 && !panel.color_id) return toast.error('Elige el color.');
             if (!panel.rollo_id) return toast.error('Elige el rollo.');
             const metros = Number(panel.metros) || 0;
             if (!(metros > 0)) return toast.error('Los metros deben ser mayores a 0.');
-            if (metros > panel.rollo_max) return toast.error(`El rollo solo tiene ${num(panel.rollo_max)} m.`);
+            if (esSalida && metros > panel.rollo_max) return toast.error(`El rollo solo tiene ${num(panel.rollo_max)} m.`);
             setItems((prev) => [
                 ...prev,
                 {
@@ -502,8 +506,10 @@ export default function CrearAjuste() {
                 const nombre = productoDe(it.producto_id)?.nombre ?? 'El producto';
                 if (it.tipo === 'rollos' && !((Number(it.rollos) || 0) > 0 && (Number(it.metros) || 0) > 0)) {
                     faltan.detalles = `"${nombre}": indica los rollos y los metros de cada uno.`;
-                } else if (it.tipo === 'rollo' && !((Number(it.metros) || 0) > 0 && Number(it.metros) <= it.rollo_max)) {
-                    faltan.detalles = `"${nombre}": el rollo ${it.rollo_codigo} tiene ${num(it.rollo_max)} m.`;
+                } else if (it.tipo === 'rollo' && !((Number(it.metros) || 0) > 0 && (!esSalida || Number(it.metros) <= it.rollo_max))) {
+                    faltan.detalles = esSalida
+                        ? `"${nombre}": el rollo ${it.rollo_codigo} tiene ${num(it.rollo_max)} m.`
+                        : `"${nombre}": indica cuántos metros se le suman al rollo ${it.rollo_codigo}.`;
                 } else if (it.tipo === 'comun') {
                     const u = unidadDe(it.producto_id, it.producto_presentacion_id);
                     if (!((Number(it.cantidad) || 0) > 0)) faltan.detalles = `"${nombre}": indica la cantidad.`;
@@ -617,8 +623,24 @@ export default function CrearAjuste() {
                                         onSearch={(q) => setPicker({ open: true, query: q })}
                                     />
 
-                                    {/* Salida de tela: el color y el rollo. */}
-                                    {tela && esSalida && coloresPanel.length > 0 && (
+                                    {/* En una entrada: crear rollos nuevos o sumar metros a uno que ya existe. */}
+                                    {!esSalida && (
+                                        <label className="flex cursor-pointer items-center gap-2 text-sm text-warm-700">
+                                            <input
+                                                type="checkbox"
+                                                checked={aRollo}
+                                                onChange={(e) => {
+                                                    setARollo(e.target.checked);
+                                                    setPanel({ ...panelVacio });
+                                                }}
+                                                className="h-4 w-4 rounded border-gray-300 accent-primary-600"
+                                            />
+                                            Sumar metros a un rollo que ya existe
+                                        </label>
+                                    )}
+
+                                    {/* Tela por rollo concreto (salida, o sumar a un rollo): el color y el rollo. */}
+                                    {tela && usaRollo && coloresPanel.length > 0 && (
                                         <ColorSelect
                                             colores={coloresPanel}
                                             value={panel.color_id}
@@ -628,7 +650,7 @@ export default function CrearAjuste() {
                                         />
                                     )}
 
-                                    {tela && esSalida && panel.producto_id && (coloresPanel.length === 0 || panel.color_id) && (
+                                    {tela && usaRollo && panel.producto_id && (coloresPanel.length === 0 || panel.color_id) && (
                                         <div>
                                             <span className="mb-1 block text-sm font-medium text-gray-700">Rollo</span>
                                             <SelectorRollo
@@ -651,11 +673,11 @@ export default function CrearAjuste() {
                                         </div>
                                     )}
 
-                                    {tela && esSalida && (
+                                    {tela && usaRollo && (
                                         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                                            <Input label="Disponible en el rollo (m)" value={panel.rollo_id ? num(panel.rollo_max) : ''} readOnly disabled />
+                                            <Input label={esSalida ? 'Disponible en el rollo (m)' : 'Metros que tiene el rollo'} value={panel.rollo_id ? num(panel.rollo_max) : ''} readOnly disabled />
                                             <Input
-                                                label="Metros a restar"
+                                                label={esSalida ? 'Metros a restar' : 'Metros a sumar'}
                                                 type="number"
                                                 min="0"
                                                 step="0.01"
@@ -875,7 +897,7 @@ export default function CrearAjuste() {
                                                                                 <span />
                                                                             </div>
                                                                             {lineas.map(({ it, i }) => {
-                                                                                const excede = it.tipo === 'rollo' && Number(it.metros) > it.rollo_max;
+                                                                                const excede = esSalida && it.tipo === 'rollo' && Number(it.metros) > it.rollo_max;
                                                                                 const color = colorDe(it);
                                                                                 return (
                                                                                     <div key={i} className="grid grid-cols-[1fr_5.5rem_7rem_6rem_7rem_2.5rem] items-center gap-3 px-2 py-1.5">
@@ -907,7 +929,7 @@ export default function CrearAjuste() {
                                                                                             onChange={(e) => setItem(i, { metros: e.target.value })}
                                                                                             error={excede ? `Máx. ${num(it.rollo_max)}` : undefined}
                                                                                             className="text-right"
-                                                                                            aria-label={it.tipo === 'rollos' ? 'Metros por rollo' : 'Metros a restar'}
+                                                                                            aria-label={it.tipo === 'rollos' ? 'Metros por rollo' : esSalida ? 'Metros a restar' : 'Metros a sumar'}
                                                                                             tabIndex={abierta ? 0 : -1}
                                                                                         />
                                                                                         <span className="text-right font-medium text-warm-900">{num(cantidadDe(it))} m</span>
@@ -1036,6 +1058,7 @@ export default function CrearAjuste() {
                             onChange={(e) => {
                                 setForm((prev) => ({ ...prev, tipo: e.target.value, motivo: '' }));
                                 setItems([]);
+                                setARollo(false);
                                 setPanel({ ...panelVacio });
                             }}
                             options={[

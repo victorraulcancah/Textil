@@ -736,9 +736,6 @@ export default function CrearAjuste() {
                                                 <Plus className="h-4 w-4" /> Agregar producto
                                             </Button>
                                         )}
-                                        <Button type="button" variant="secondary" onClick={() => setPicker({ open: true, query: '' })}>
-                                            Buscar en el catálogo
-                                        </Button>
                                     </div>
                                 </div>
                             )}

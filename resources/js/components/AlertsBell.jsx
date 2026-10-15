@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { AlertOctagon, AlertTriangle, Bell, Info, RefreshCw, X } from 'lucide-react';
 import api from '../lib/api';
 import { cn } from './ui';
+import AprobarCierreModal from './AprobarCierreModal';
 
 const NIVEL = {
     danger: { dot: 'bg-danger-500', chip: 'bg-danger-100 text-danger-700', Icon: AlertOctagon },
@@ -14,6 +15,8 @@ export default function AlertsBell() {
     const [open, setOpen] = useState(false);
     const [data, setData] = useState({ total: 0, por_nivel: {}, alertas: [] });
     const [loading, setLoading] = useState(false);
+    /** El cierre de caja que se está aprobando desde una alerta (se abre en un modal, sin salir de la pantalla). */
+    const [cierreAprobar, setCierreAprobar] = useState(null);
     const ref = useRef(null);
     const navigate = useNavigate();
 
@@ -115,19 +118,22 @@ export default function AlertsBell() {
                                 {data.alertas.map((a) => {
                                     const style = NIVEL[a.nivel] ?? NIVEL.info;
                                     const Icon = style.Icon;
-                                    // Las que tienen `ruta` llevan a la pantalla donde se atienden.
-                                    const Fila = a.ruta ? 'button' : 'div';
+                                    // Las que tienen `ruta` llevan a la pantalla donde se atienden; las que tienen `accion` abren un
+                                    // modal para resolverlas ahí mismo (aprobar un cierre de caja).
+                                    const clickeable = Boolean(a.ruta || a.accion);
+                                    const Fila = clickeable ? 'button' : 'div';
                                     return (
                                         <li key={a.id}>
                                           <Fila
-                                            {...(a.ruta && {
+                                            {...(clickeable && {
                                                 type: 'button',
                                                 onClick: () => {
                                                     setOpen(false);
-                                                    navigate(a.ruta);
+                                                    if (a.accion?.tipo === 'aprobar_cierre') setCierreAprobar(a.accion.id);
+                                                    else navigate(a.ruta);
                                                 },
                                             })}
-                                            className={cn('flex w-full gap-3 px-4 py-3 text-left', a.ruta && 'cursor-pointer hover:bg-gray-50')}
+                                            className={cn('flex w-full gap-3 px-4 py-3 text-left', clickeable && 'cursor-pointer hover:bg-gray-50')}
                                           >
                                             <span className={cn('mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full', style.chip)}>
                                                 <Icon className="h-4 w-4" />
@@ -145,6 +151,13 @@ export default function AlertsBell() {
                     </div>
                 </div>
             )}
+
+            <AprobarCierreModal
+                open={cierreAprobar !== null}
+                cierreId={cierreAprobar}
+                onClose={() => setCierreAprobar(null)}
+                onDone={load}
+            />
         </div>
     );
 }

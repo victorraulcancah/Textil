@@ -110,10 +110,11 @@ class CierreCajaController extends Controller
             'apertura.usuario:id,name',
             'aprobador:id,name',
             'anulador:id,name',
+            'cajaDestino:id,codigo,nombre',
         ]);
         AlmacenAcceso::exigir($cierresCaja->apertura?->caja?->almacen_id);
 
-        $movimientos = MovimientoCaja::withTrashed()->with([
+        $movimientos = MovimientoCaja::withTrashed()->withoutGlobalScope(MovimientoCaja::FILTRO_APROBADOS)->with([
             'motivo:id,nombre,tipo',
             'cuentaBancaria:id,alias,numero_cuenta',
             'billetera:id,nombre',

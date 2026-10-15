@@ -52,7 +52,16 @@ class CierreCajaService
             }
         }
 
-        return DB::transaction(function () use ($apertura, $arqueo, $contado, $dejado, $retirado, $destino) {
+        // El efectivo le aparece a la caja destino de inmediato (por aprobar): necesita un turno abierto donde mostrarlo.
+        $aperturaDestino = null;
+        if ($destino) {
+            $aperturaDestino = AperturaCaja::where('caja_id', $destino->id)->where('estado', 'abierta')->latest('fecha_apertura')->first();
+            if (! $aperturaDestino) {
+                throw ValidationException::withMessages(['caja_destino_id' => 'La caja destino debe estar abierta para recibir el efectivo: elige otra o pídele que la abra.']);
+            }
+        }
+
+        return DB::transaction(function () use ($apertura, $arqueo, $contado, $dejado, $retirado, $destino, $aperturaDestino) {
             $cierre = CierreCaja::create([
                 'apertura_caja_id' => $apertura->id,
                 'monto_sistema' => $arqueo['sistema'],
@@ -87,6 +96,24 @@ class CierreCajaService
                 $cierre->update(['movimiento_caja_id' => $movimiento->id]);
             }
 
+            // Para la caja destino es un ingreso del sistema, visible desde ya y por aprobar.
+            if ($aperturaDestino) {
+                $origen = Caja::find($apertura->caja_id);
+                $ingreso = MovimientoCaja::create([
+                    'apertura_caja_id' => $aperturaDestino->id,
+                    'tipo' => 'ingreso',
+                    'motivo_movimiento_id' => MotivoMovimiento::where('ambito', 'caja')->where('nombre', self::MOTIVO_INGRESO)->value('id'),
+                    'monto' => $retirado,
+                    'moneda' => 'PEN',
+                    'descripcion' => 'Efectivo del cierre de '.trim(($origen?->codigo ? $origen->codigo.' · ' : '').($origen?->nombre ?? 'otra caja')).' (por aprobar)',
+                    'documento_referencia_tipo' => 'cierre_caja',
+                    'documento_referencia_id' => $cierre->id,
+                    'fecha' => now()->toDateString(),
+                    'por_aprobar' => true,
+                ]);
+                $cierre->update(['movimiento_destino_id' => $ingreso->id]);
+            }
+
             $apertura->update(['estado' => 'cerrada']);
 
             return $cierre->refresh();
@@ -105,24 +132,41 @@ class CierreCajaService
             throw ValidationException::withMessages(['cierre' => 'No puedes aprobar tu propio cierre: lo aprueba otra persona.']);
         }
 
-        // El efectivo que va a otra caja le llega como ingreso al aprobar: su turno debe estar abierto para recibirlo.
-        $destino = ($cierre->caja_destino_id && (float) $cierre->monto_retirado > 0) ? $cierre->cajaDestino : null;
-        $aperturaDestino = null;
-        if ($destino) {
-            $aperturaDestino = AperturaCaja::where('caja_id', $destino->id)->where('estado', 'abierta')->latest('fecha_apertura')->first();
-            if (! $aperturaDestino) {
+        // El ingreso que espera en la caja destino pasa a contar. Si ese turno ya se cerró, el ingreso se muda al turno que
+        // tenga abierto la caja; si no tiene ninguno, no hay dónde recibirlo y se pide que la abra.
+        $ingreso = $cierre->movimiento_destino_id
+            ? MovimientoCaja::withoutGlobalScope(MovimientoCaja::FILTRO_APROBADOS)->with('apertura:id,caja_id,estado')->find($cierre->movimiento_destino_id)
+            : null;
+        $aperturaNueva = null;
+
+        // Un cierre pedido antes de que el ingreso apareciera en la caja destino al cerrar: no tiene ingreso todavía, y
+        // se le crea al aprobar (la caja destino debe estar abierta).
+        $crearIngreso = ! $ingreso && $cierre->caja_destino_id && (float) $cierre->monto_retirado > 0;
+        if ($crearIngreso) {
+            $aperturaNueva = AperturaCaja::where('caja_id', $cierre->caja_destino_id)->where('estado', 'abierta')->latest('fecha_apertura')->first();
+            if (! $aperturaNueva) {
+                $destino = $cierre->cajaDestino;
                 throw ValidationException::withMessages([
-                    'cierre' => 'La caja destino ('.trim(($destino->codigo ? $destino->codigo.' · ' : '').$destino->nombre).') debe estar abierta para recibir el efectivo: pídele que la abra y vuelve a aprobar.',
+                    'cierre' => 'La caja destino ('.trim(($destino?->codigo ? $destino->codigo.' · ' : '').($destino?->nombre ?? '')).') debe estar abierta para recibir el efectivo: pídele que la abra y vuelve a aprobar.',
                 ]);
             }
         }
 
-        return DB::transaction(function () use ($cierre, $por, $aperturaDestino) {
-            $ingresoId = null;
-            if ($aperturaDestino) {
+        if ($ingreso && $ingreso->apertura?->estado !== 'abierta') {
+            $aperturaNueva = AperturaCaja::where('caja_id', $cierre->caja_destino_id)->where('estado', 'abierta')->latest('fecha_apertura')->first();
+            if (! $aperturaNueva) {
+                $destino = $cierre->cajaDestino;
+                throw ValidationException::withMessages([
+                    'cierre' => 'La caja destino ('.trim(($destino?->codigo ? $destino->codigo.' · ' : '').($destino?->nombre ?? '')).') debe estar abierta para recibir el efectivo: pídele que la abra y vuelve a aprobar.',
+                ]);
+            }
+        }
+
+        return DB::transaction(function () use ($cierre, $por, $ingreso, $aperturaNueva, $crearIngreso) {
+            if ($crearIngreso) {
                 $origen = $cierre->apertura?->caja;
-                $ingreso = MovimientoCaja::create([
-                    'apertura_caja_id' => $aperturaDestino->id,
+                $nuevo = MovimientoCaja::create([
+                    'apertura_caja_id' => $aperturaNueva->id,
                     'tipo' => 'ingreso',
                     'motivo_movimiento_id' => MotivoMovimiento::where('ambito', 'caja')->where('nombre', self::MOTIVO_INGRESO)->value('id'),
                     'monto' => $cierre->monto_retirado,
@@ -132,14 +176,19 @@ class CierreCajaService
                     'documento_referencia_id' => $cierre->id,
                     'fecha' => now()->toDateString(),
                 ]);
-                $ingresoId = $ingreso->id;
+                $cierre->update(['movimiento_destino_id' => $nuevo->id]);
+            } elseif ($ingreso) {
+                $ingreso->forceFill([
+                    'por_aprobar' => false,
+                    'descripcion' => preg_replace('/ \(por aprobar\)$/', '', (string) $ingreso->descripcion),
+                    ...($aperturaNueva ? ['apertura_caja_id' => $aperturaNueva->id] : []),
+                ])->save();
             }
 
             $cierre->update([
                 'estado' => CierreCaja::APROBADO,
                 'aprobado_por' => $por->id,
                 'aprobado_en' => now(),
-                'movimiento_destino_id' => $ingresoId,
             ]);
 
             return $cierre->refresh();
@@ -164,8 +213,8 @@ class CierreCajaService
 
         // Si el efectivo ya llegó a otra caja y esa caja ya cerró su turno, no se puede deshacer: ya lo contó.
         if ($cierre->movimiento_destino_id) {
-            $ingreso = MovimientoCaja::withTrashed()->with('apertura:id,estado')->find($cierre->movimiento_destino_id);
-            if ($ingreso && ! $ingreso->trashed() && $ingreso->apertura?->estado !== 'abierta') {
+            $ingreso = MovimientoCaja::withoutGlobalScope(MovimientoCaja::FILTRO_APROBADOS)->withTrashed()->with('apertura:id,estado')->find($cierre->movimiento_destino_id);
+            if ($ingreso && ! $ingreso->trashed() && ! $ingreso->por_aprobar && $ingreso->apertura?->estado !== 'abierta') {
                 throw ValidationException::withMessages(['cierre' => 'La caja destino ya cerró el turno en que recibió este efectivo: el cierre no se puede anular.']);
             }
         }
@@ -175,7 +224,10 @@ class CierreCajaService
                 MovimientoCaja::anularDe(MovimientoCaja::where('id', $cierre->movimiento_caja_id), 'Cierre anulado');
             }
             if ($cierre->movimiento_destino_id) {
-                MovimientoCaja::anularDe(MovimientoCaja::where('id', $cierre->movimiento_destino_id), 'Cierre anulado');
+                MovimientoCaja::anularDe(
+                    MovimientoCaja::withoutGlobalScope(MovimientoCaja::FILTRO_APROBADOS)->where('id', $cierre->movimiento_destino_id),
+                    'Cierre anulado',
+                );
             }
 
             $cierre->update([

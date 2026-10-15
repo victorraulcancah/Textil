@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 use App\Support\AlmacenAcceso;
 
 use App\Models\AperturaCaja;
+use App\Models\CierreCaja;
 use App\Models\CuentaPorCobrar;
 use App\Models\CuentaPorPagar;
 use App\Models\LineaCredito;
@@ -117,6 +118,31 @@ class AlertaController extends Controller
                     'detalle' => 'Abierta desde el '.$a->fecha_apertura?->format('d/m/Y').'. Considera cerrarla.',
                 ];
             });
+
+        // ── Cierres de caja por aprobar (para quien los aprueba; no el suyo) ──
+        $usuario = auth('api')->user();
+        if (Permisos::puede($usuario, 'tesoreria.cierres-caja.aprobar')) {
+            CierreCaja::with(['apertura.caja:id,nombre,codigo,almacen_id', 'apertura.usuario:id,name', 'cajaDestino:id,codigo,nombre'])
+                ->where('estado', CierreCaja::PENDIENTE)
+                ->whereHas('apertura', fn ($a) => $a->where('usuario_id', '!=', $usuario?->id))
+                ->whereHas('apertura.caja', fn ($c) => AlmacenAcceso::limitar($c))
+                ->oldest('id')
+                ->get()
+                ->each(function (CierreCaja $c) use (&$alertas) {
+                    $caja = $c->apertura?->caja;
+                    $destino = $c->cajaDestino ? ' → '.trim(($c->cajaDestino->codigo ? $c->cajaDestino->codigo.' · ' : '').$c->cajaDestino->nombre) : '';
+                    $alertas[] = [
+                        'nivel' => 'warning',
+                        'tipo' => 'cierre_pendiente',
+                        'titulo' => 'Cierre de caja por aprobar: '.trim(($caja?->codigo ? $caja->codigo.' · ' : '').($caja?->nombre ?? '')),
+                        'detalle' => ($c->apertura?->usuario?->name ?? 'Cajero').' · contado '.$this->dinero($c->monto_contado, 'PEN')
+                            .', deja '.$this->dinero($c->efectivoParaElSiguiente(), 'PEN')
+                            .', retira '.$this->dinero($c->monto_retirado, 'PEN').$destino,
+                        // Al tocarla se abre el modal para aprobar, sin salir de la pantalla.
+                        'accion' => ['tipo' => 'aprobar_cierre', 'id' => $c->id],
+                    ];
+                });
+        }
 
         // ── Solicitudes de acceso pendientes (para quien las aprueba) ──
         if (Permisos::puede(auth('api')->user(), 'gestion.accesos.editar')) {

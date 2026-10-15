@@ -92,7 +92,7 @@ class MiCajaController extends Controller
     /** Los movimientos de las aperturas de este usuario en su caja, anulados incluidos (los más recientes primero). */
     private function misMovimientos(int $userId, int $cajaId)
     {
-        return MovimientoCaja::withTrashed()->with([
+        return MovimientoCaja::withTrashed()->withoutGlobalScope(MovimientoCaja::FILTRO_APROBADOS)->with([
             'motivo:id,nombre,es_sistema',
             'cuentaBancaria:id,alias,numero_cuenta',
             'billetera:id,nombre',

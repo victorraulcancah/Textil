@@ -10,6 +10,7 @@ import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
 import PageHeader from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
 import FiltroFechas from '../components/FiltroFechas';
+import AprobarCierreModal from '../components/AprobarCierreModal';
 import { Alert, Badge, Button, DataTable, SearchSelect, Select } from '../components/ui';
 
 const money = (n, moneda = 'PEN') =>
@@ -38,6 +39,8 @@ export default function CierresCaja() {
     const toast = useToast();
     const puedeAprobar = puede('tesoreria.cierres-caja.aprobar');
     const [accionando, setAccionando] = useState(null);
+    /** El cierre que se está revisando para aprobar (modal). */
+    const [cierreAprobar, setCierreAprobar] = useState(null);
     const [cierres, setCierres] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -363,7 +366,7 @@ export default function CierresCaja() {
                     <>
                         {puedeAprobar && row.estado === 'pendiente' && !esSuyo && (
                             <button aria-label="Aprobar cierre" title="Aprobar cierre" disabled={accionando === row.id}
-                                onClick={(e) => { e.stopPropagation(); aprobar(row); }}
+                                onClick={(e) => { e.stopPropagation(); setCierreAprobar(row.id); }}
                                 className="rounded-md p-1.5 text-green-600 transition hover:bg-green-50 hover:text-green-700 disabled:opacity-50">
                                 <Check className="h-4 w-4" />
                             </button>
@@ -538,6 +541,13 @@ export default function CierresCaja() {
             />
 
             {error && <Alert variant="error" className="mb-4">{error}</Alert>}
+
+            <AprobarCierreModal
+                open={cierreAprobar !== null}
+                cierreId={cierreAprobar}
+                onClose={() => setCierreAprobar(null)}
+                onDone={load}
+            />
 
             <DataTable
                 columns={columns}

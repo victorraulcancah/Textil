@@ -36,7 +36,19 @@ class MovimientoCaja extends Model
         'fecha',
         'anulado_motivo',
         'anulado_por',
+        // Un ingreso enviado por otra caja al cerrar: se ve, pero no cuenta hasta que se apruebe el cierre.
+        'por_aprobar',
     ];
+
+    /** El nombre del filtro que deja fuera de los totales lo que aún no se aprobó. */
+    public const FILTRO_APROBADOS = 'movimientos_aprobados';
+
+    protected static function booted(): void
+    {
+        // Por defecto, todo lo que se consulta (totales, arqueos, reportes) deja fuera lo que está por aprobar. Las
+        // listas que lo muestran lo piden con withoutGlobalScope(MovimientoCaja::FILTRO_APROBADOS).
+        static::addGlobalScope(self::FILTRO_APROBADOS, fn ($q) => $q->where($q->getModel()->getTable().'.por_aprobar', false));
+    }
 
     /**
      * Anula los movimientos de la consulta dejando constancia de por qué y quién. No cuentan más en la caja, pero
@@ -53,6 +65,7 @@ class MovimientoCaja extends Model
         return [
             'monto' => 'decimal:2',
             'fecha' => 'date',
+            'por_aprobar' => 'boolean',
         ];
     }
 

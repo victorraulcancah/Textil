@@ -69,8 +69,10 @@ export default function MiCaja() {
     const [montoContado, setMontoContado] = useState('');
     // Los dólares del cajón se cuentan aparte.
     const [montoContadoUsd, setMontoContadoUsd] = useState('');
-    /** Lo que se deja en el cajón para el turno siguiente; el resto sale con el movimiento de cierre. */
+    /** Lo que se deja en el cajón para el turno siguiente. */
     const [montoDejado, setMontoDejado] = useState('');
+    /** Lo que sale de la caja al cerrar (se envía a otra caja o se retira). El efectivo contado es envío + lo que se deja. */
+    const [montoEnvio, setMontoEnvio] = useState('');
     /** La otra caja a la que se envía el efectivo retirado, y las que hay para elegir. */
     const [cajaDestino, setCajaDestino] = useState('');
     const [cajasDestino, setCajasDestino] = useState([]);
@@ -143,14 +145,15 @@ export default function MiCaja() {
     };
 
     const cerrar = async () => {
-        if ((Number(montoDejado) || 0) > (Number(montoContado) || 0) + 0.001) {
-            toast.error('No puedes dejar más de lo que contaste.');
+        if (montoEnvio === '' && montoDejado === '') {
+            toast.error('Indica cuánto efectivo envías y cuánto dejas en el cajón.');
             return;
         }
         setSaving(true);
         try {
             const res = await api.post('/mi-caja/cerrar', {
-                monto_contado: Number(montoContado) || 0,
+                // Lo contado es todo el efectivo del cajón: lo que sale más lo que se deja.
+                monto_contado: Math.round(((Number(montoEnvio) || 0) + (Number(montoDejado) || 0)) * 100) / 100,
                 monto_dejado: Number(montoDejado) || 0,
                 ...(cajaDestino ? { caja_destino_id: Number(cajaDestino) } : {}),
                 ...(montoContadoUsd !== '' ? { monto_contado_usd: Number(montoContadoUsd) || 0 } : {}),
@@ -160,6 +163,7 @@ export default function MiCaja() {
             setMontoContado('');
             setMontoContadoUsd('');
             setMontoDejado('');
+            setMontoEnvio('');
             setCajaDestino('');
             toast.success('Cierre registrado: queda pendiente de aprobación.');
         } catch (err) {
@@ -283,9 +287,11 @@ export default function MiCaja() {
     // Yape y transferencias quedan registrados, pero el dinero va al banco:
     // no se cuentan en el arqueo del cajón.
     const otrosMedios = (resumen?.otros_ingresos ?? 0) - (resumen?.otros_egresos ?? 0);
-    const diferencia = (Number(montoContado) || 0) - esperado;
-    /** Lo que sale de la caja al cerrar: lo contado menos lo que se deja para el siguiente. */
-    const retirado = (Number(montoContado) || 0) - (Number(montoDejado) || 0);
+    /** Todo el efectivo del cajón: lo que sale más lo que se deja para el siguiente turno. */
+    const contadoTotal = Math.round(((Number(montoEnvio) || 0) + (Number(montoDejado) || 0)) * 100) / 100;
+    const diferencia = contadoTotal - esperado;
+    /** Lo que sale de la caja al cerrar. */
+    const retirado = Number(montoEnvio) || 0;
     // Los dólares (ventas o cobros en dólares) van aparte: null si no hubo.
     const dolares = resumen?.dolares ?? null;
     const diferenciaUsd = (Number(montoContadoUsd) || 0) - (dolares?.esperado ?? 0);
@@ -414,9 +420,14 @@ export default function MiCaja() {
             // Los anulados siguen en la lista, fuera de los totales, con el motivo.
             key: 'estado',
             label: 'Estado',
-            getSearchValue: (r) => (r.deleted_at ? `Anulado ${r.anulado_motivo ?? ''}` : 'Vigente'),
+            getSearchValue: (r) => (r.deleted_at ? `Anulado ${r.anulado_motivo ?? ''}` : r.por_aprobar ? 'Por aprobar' : 'Vigente'),
             render: (r) =>
-                r.deleted_at ? (
+                r.por_aprobar && !r.deleted_at ? (
+                    <div className="leading-tight">
+                        <Badge variant="amber">Por aprobar</Badge>
+                        <div className="mt-0.5 text-xs text-warm-500">cuenta al aprobarse el cierre</div>
+                    </div>
+                ) : r.deleted_at ? (
                     <div className="leading-tight">
                         <Badge variant="red">Anulado</Badge>
                         {r.anulado_motivo && <div className="mt-0.5 text-xs text-warm-500">{r.anulado_motivo}</div>}
@@ -543,7 +554,7 @@ export default function MiCaja() {
                                 <Button variant="secondary" onClick={descargarReporteExcel}><FileSpreadsheet className="h-4 w-4" /> Excel</Button>
                                 <Button variant="secondary" onClick={() => setReportePdf({ url: '/mi-caja/reporte/pdf' })}><FileText className="h-4 w-4" /> PDF</Button>
                                 <Button variant="secondary" onClick={() => {
-                                    setCerrarOpen(true); setMontoContado(''); setMontoContadoUsd(''); setMontoDejado(''); setCajaDestino('');
+                                    setCerrarOpen(true); setMontoContado(''); setMontoContadoUsd(''); setMontoDejado(''); setMontoEnvio(''); setCajaDestino('');
                                     api.get('/mi-caja/cajas-destino').then(({ data: lista }) => setCajasDestino(Array.isArray(lista) ? lista : [])).catch(() => setCajasDestino([]));
                                 }}><Lock className="h-4 w-4" /> Cerrar caja</Button>
                             </div>
@@ -666,36 +677,37 @@ export default function MiCaja() {
                             o billetera. Ese dinero va al banco, no al cajón: no lo cuentes aquí.
                         </p>
                     )}
-                    <Input label="Efectivo contado (S/)" type="number" min="0" step="0.01" placeholder="0.00" value={montoContado} onChange={(e) => setMontoContado(e.target.value)} />
-                    {montoContado !== '' && Math.abs(diferencia) > 0.001 && (
-                        <div className={`rounded-lg px-3 py-2 text-sm font-medium ${diferencia < 0 ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}>
-                            {diferencia < 0 ? 'Faltante' : 'Sobrante'}: {money(Math.abs(diferencia))}
-                        </div>
-                    )}
-                    <Input label="Dejo para el siguiente turno (S/)" type="number" min="0" step="0.01" placeholder="0.00" value={montoDejado} onChange={(e) => setMontoDejado(e.target.value)} />
-                    {montoContado !== '' && (
-                        <div className={`rounded-lg px-3 py-2 text-sm ${retirado < -0.001 ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-800'}`}>
-                            {retirado < -0.001
-                                ? 'No puedes dejar más de lo que contaste.'
-                                : <>Sale de la caja con el <strong>movimiento de cierre</strong>: {money(Math.max(retirado, 0))}. El cierre queda pendiente de aprobación.</>}
-                        </div>
-                    )}
+                    <Input label="Efectivo que envío o retiro de la caja (S/)" type="number" min="0" step="0.01" placeholder="0.00" value={montoEnvio} onChange={(e) => setMontoEnvio(e.target.value)} />
                     {retirado > 0.001 && (
                         <div>
                             <Select
-                                label="Enviar el efectivo retirado a otra caja (opcional)"
+                                label="Enviarlo a otra caja (opcional)"
                                 value={cajaDestino}
                                 onChange={(e) => setCajaDestino(e.target.value)}
                                 options={[
                                     { value: '', label: 'No enviarlo a ninguna caja' },
-                                    ...cajasDestino.map((c) => ({ value: String(c.id), label: `${c.codigo ? `${c.codigo} · ` : ''}${c.nombre}${c.abierta ? '' : ' (cerrada)'}` })),
+                                    ...cajasDestino.filter((c) => c.abierta).map((c) => ({ value: String(c.id), label: `${c.codigo ? `${c.codigo} · ` : ''}${c.nombre}` })),
                                 ]}
                             />
+                            {cajasDestino.length > 0 && cajasDestino.every((c) => !c.abierta) && (
+                                <p className="mt-1 text-xs text-amber-700">Las otras cajas están cerradas: una caja destino debe estar abierta para recibirlo.</p>
+                            )}
                             {cajaDestino && (
                                 <p className="mt-1 text-xs text-warm-500">
-                                    Para ti es un egreso ahora. La otra caja lo recibe como ingreso cuando se apruebe el cierre, y debe estar abierta.
+                                    Para ti es un egreso ahora. A la otra caja le aparece enseguida como ingreso <strong>por aprobar</strong> y cuenta cuando se apruebe el cierre.
                                 </p>
                             )}
+                        </div>
+                    )}
+                    <Input label="Efectivo que dejo en el cajón para el siguiente turno (S/)" type="number" min="0" step="0.01" placeholder="0.00" value={montoDejado} onChange={(e) => setMontoDejado(e.target.value)} />
+                    {(montoEnvio !== '' || montoDejado !== '') && (
+                        <div className="rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-800">
+                            Efectivo contado en total: <strong>{money(contadoTotal)}</strong> (lo que sale + lo que dejas). El cierre queda pendiente de aprobación.
+                        </div>
+                    )}
+                    {(montoEnvio !== '' || montoDejado !== '') && Math.abs(diferencia) > 0.001 && (
+                        <div className={`rounded-lg px-3 py-2 text-sm font-medium ${diferencia < 0 ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}>
+                            {diferencia < 0 ? 'Faltante' : 'Sobrante'} frente a lo esperado: {money(Math.abs(diferencia))}
                         </div>
                     )}
                     {dolares && (

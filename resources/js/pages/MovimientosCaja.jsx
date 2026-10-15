@@ -200,9 +200,11 @@ export default function MovimientosCaja() {
             // Los anulados siguen en el historial, fuera de los totales, con el motivo.
             key: 'estado',
             label: 'Estado',
-            getSearchValue: (row) => (row.deleted_at ? `Anulado ${row.anulado_motivo ?? ''}` : 'Vigente'),
+            getSearchValue: (row) => (row.deleted_at ? `Anulado ${row.anulado_motivo ?? ''}` : row.por_aprobar ? 'Por aprobar' : 'Vigente'),
             render: (row) =>
-                row.deleted_at ? (
+                row.por_aprobar && !row.deleted_at ? (
+                    <Badge variant="amber">Por aprobar</Badge>
+                ) : row.deleted_at ? (
                     <div className="leading-tight">
                         <Badge variant="red">Anulado</Badge>
                         {row.anulado_motivo && <div className="mt-0.5 text-xs text-warm-500">{row.anulado_motivo}</div>}

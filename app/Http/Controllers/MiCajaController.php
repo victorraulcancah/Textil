@@ -77,8 +77,14 @@ class MiCajaController extends Controller
      * Solo cobros de la caja que el usuario tiene abierta: lo de una caja ya cerrada no se toca, porque su arqueo ya
      * se contó. Los nuevos pagos tienen que sumar lo mismo que se había cobrado.
      */
-    public function corregirPago(Request $request, MovimientoCaja $movimiento)
+    public function corregirPago(Request $request, int $movimiento)
     {
+        // Se busca con los anulados para poder avisar que ya lo está (el enlace por modelo diría "no existe").
+        $movimiento = MovimientoCaja::withTrashed()->findOrFail($movimiento);
+        if ($movimiento->trashed()) {
+            throw ValidationException::withMessages(['caja' => 'Este cobro ya está anulado'.($movimiento->anulado_motivo ? " ({$movimiento->anulado_motivo})" : '').'.']);
+        }
+
         $user = auth('api')->user();
         $apertura = AperturaCaja::where('caja_id', $user?->cajaActual()?->id)
             ->where('estado', 'abierta')->latest('fecha_apertura')->first();

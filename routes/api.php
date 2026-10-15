@@ -294,6 +294,7 @@ Route::middleware('auth:api')->group(function () {
     Route::get('mi-caja/reporte/excel', [\App\Http\Controllers\MiCajaReporteController::class, 'excel']);
     Route::get('mi-caja/reporte/pdf', [\App\Http\Controllers\MiCajaReporteController::class, 'pdf']);
     Route::post('mi-caja/abrir', [MiCajaController::class, 'abrir']);
+    Route::post('mi-caja/movimientos/{movimiento}/corregir-pago', [MiCajaController::class, 'corregirPago']);
     Route::post('mi-caja/cerrar', [MiCajaController::class, 'cerrar']);
     Route::get('movimientos-caja/reporte/excel', [\App\Http\Controllers\MovimientoCajaReporteController::class, 'excel']);
     Route::get('movimientos-caja/reporte/pdf', [\App\Http\Controllers\MovimientoCajaReporteController::class, 'pdf']);

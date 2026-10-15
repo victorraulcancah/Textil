@@ -5,7 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\AperturaCaja;
 use App\Models\Caja;
 use App\Models\CierreCaja;
+use App\Models\CuentaPorCobrarPago;
+use App\Models\MotivoMovimiento;
 use App\Models\MovimientoCaja;
+use App\Models\NotaVenta;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -64,6 +67,172 @@ class MiCajaController extends Controller
             ->where('apertura_caja_id', $apertura->id)
             ->latest('created_at')->latest('id')
             ->get();
+    }
+
+    /**
+     * Corregir un cobro: se anula lo cobrado y se registran los pagos nuevos, todo junto. Sirve cuando se cobró con el
+     * método equivocado (efectivo en vez de Yape) o se partió distinto (100 en efectivo y 50 por transferencia).
+     *
+     * Solo cobros de la caja que el usuario tiene abierta: lo de una caja ya cerrada no se toca, porque su arqueo ya
+     * se contó. Los nuevos pagos tienen que sumar lo mismo que se había cobrado.
+     */
+    public function corregirPago(Request $request, MovimientoCaja $movimiento)
+    {
+        $user = auth('api')->user();
+        $apertura = AperturaCaja::where('caja_id', $user?->cajaActual()?->id)
+            ->where('estado', 'abierta')->latest('fecha_apertura')->first();
+
+        if (! $apertura || (int) $apertura->usuario_id !== (int) $user->id) {
+            throw ValidationException::withMessages(['caja' => 'Abre tu caja para corregir un cobro.']);
+        }
+        if ((int) $movimiento->apertura_caja_id !== (int) $apertura->id || $movimiento->tipo !== 'ingreso') {
+            throw ValidationException::withMessages(['caja' => 'Solo se corrigen los cobros de la caja que tienes abierta.']);
+        }
+
+        $data = $request->validate([
+            'pagos' => 'required|array|min:1',
+            'pagos.*.forma_pago' => 'required|in:efectivo,transferencia,billetera',
+            'pagos.*.cuenta_bancaria_id' => 'nullable|exists:cuentas_bancarias,id',
+            'pagos.*.billetera_id' => 'nullable|exists:billeteras_digitales,id',
+            'pagos.*.monto' => 'required|numeric|min:0.01',
+            'pagos.*.referencia' => 'nullable|string|max:100',
+        ]);
+
+        foreach ($data['pagos'] as $i => $p) {
+            if ($p['forma_pago'] === 'transferencia' && empty($p['cuenta_bancaria_id'])) {
+                throw ValidationException::withMessages(["pagos.{$i}.cuenta_bancaria_id" => 'Elige la cuenta bancaria.']);
+            }
+            if ($p['forma_pago'] === 'billetera' && empty($p['billetera_id'])) {
+                throw ValidationException::withMessages(["pagos.{$i}.billetera_id" => 'Elige la billetera.']);
+            }
+        }
+
+        match ($movimiento->documento_referencia_tipo) {
+            'cuenta_por_cobrar' => $this->corregirCobranza($movimiento, $data['pagos']),
+            'nota_venta' => $this->corregirVenta($movimiento, $apertura, $data['pagos']),
+            default => throw ValidationException::withMessages(['caja' => 'Este movimiento no es un cobro que se pueda corregir.']),
+        };
+
+        return $this->show();
+    }
+
+    /** Los nuevos pagos deben sumar exactamente lo que se había cobrado. */
+    private function exigirMismoTotal(array $pagos, float $esperado, ?string $moneda): void
+    {
+        $nuevo = round((float) collect($pagos)->sum('monto'), 2);
+
+        if (abs($nuevo - round($esperado, 2)) > 0.009) {
+            throw ValidationException::withMessages([
+                'pagos' => 'Los pagos nuevos deben sumar exactamente '.number_format($esperado, 2).' '.($moneda ?: 'PEN').' (lo que se había cobrado).',
+            ]);
+        }
+    }
+
+    /** Un cobro de Cuentas por cobrar: se anula ese pago y se registran los nuevos contra la misma deuda. */
+    private function corregirCobranza(MovimientoCaja $movimiento, array $pagos): void
+    {
+        $pago = CuentaPorCobrarPago::where('movimiento_caja_id', $movimiento->id)->first();
+        if (! $pago) {
+            throw ValidationException::withMessages(['caja' => 'Este cobro ya no tiene su pago registrado.']);
+        }
+        if ($pago->monto_pen !== null) {
+            throw ValidationException::withMessages(['caja' => 'Este cobro se hizo en soles sobre una deuda en dólares: corrígelo desde Cuentas por cobrar.']);
+        }
+
+        $cuenta = $pago->cuentaPorCobrar;
+        $this->exigirMismoTotal($pagos, (float) $pago->monto, $cuenta->moneda);
+
+        DB::transaction(function () use ($pago, $cuenta, $pagos) {
+            $cobranzas = app(CuentaPorCobrarController::class);
+
+            // Primero se anula el cobro (vuelve el saldo a la deuda) y luego se cobra de nuevo.
+            $cobranzas->anularPago($pago);
+            $cuenta->refresh();
+
+            $respuesta = $cobranzas->registrarPago(
+                Request::create('/', 'POST', [
+                    'pagos' => $pagos,
+                    'glosa' => $pago->glosa,
+                    'fecha' => $pago->fecha?->toDateString(),
+                ]),
+                $cuenta,
+            );
+
+            if ($respuesta->getStatusCode() >= 400) {
+                $mensaje = json_decode($respuesta->getContent(), true)['message'] ?? 'No se pudo registrar el nuevo cobro.';
+                throw ValidationException::withMessages(['pagos' => $mensaje]);
+            }
+        });
+    }
+
+    /** Una venta de contado: se anulan sus cobros (y sus ingresos de caja) y se registran los nuevos. */
+    private function corregirVenta(MovimientoCaja $movimiento, AperturaCaja $apertura, array $pagos): void
+    {
+        $nota = NotaVenta::with('pagos')->find($movimiento->documento_referencia_id);
+
+        if (! $nota || $nota->estado !== 'emitida') {
+            throw ValidationException::withMessages(['caja' => 'La venta ya no está vigente: no se puede corregir su cobro.']);
+        }
+        if ($nota->tipo_pago !== 'contado') {
+            throw ValidationException::withMessages(['caja' => 'Esta venta es a crédito: sus cobros se corrigen en Cuentas por cobrar.']);
+        }
+        if ($nota->pagos->isEmpty()) {
+            throw ValidationException::withMessages(['caja' => 'Esta venta no tiene cobros registrados.']);
+        }
+        if ($nota->pagos->contains(fn ($p) => $p->monto_pen !== null)) {
+            throw ValidationException::withMessages(['caja' => 'Esta venta en dólares se cobró con soles: no se corrige desde aquí.']);
+        }
+
+        $ingresos = MovimientoCaja::where('documento_referencia_tipo', 'nota_venta')
+            ->where('documento_referencia_id', $nota->id)->get();
+        if ($ingresos->contains(fn ($m) => (int) $m->apertura_caja_id !== (int) $apertura->id)) {
+            throw ValidationException::withMessages(['caja' => 'Parte de este cobro está en una caja ya cerrada: no se puede corregir.']);
+        }
+
+        $this->exigirMismoTotal($pagos, (float) $nota->pagos->sum('monto'), $nota->moneda);
+
+        $fecha = $nota->pagos->first()->fecha?->toDateString() ?? now()->toDateString();
+        $motivoId = MotivoMovimiento::where('tipo', 'entrada')->where('nombre', 'Ingreso por venta')->value('id');
+
+        DB::transaction(function () use ($nota, $ingresos, $pagos, $apertura, $fecha, $motivoId) {
+            // Primero se anula lo cobrado…
+            MovimientoCaja::whereIn('id', $ingresos->pluck('id'))->delete();
+            $nota->pagos()->delete();
+
+            // …y luego se registran los pagos nuevos.
+            foreach ($pagos as $p) {
+                $cuentaId = $p['forma_pago'] === 'transferencia' ? ($p['cuenta_bancaria_id'] ?? null) : null;
+                $billeteraId = $p['forma_pago'] === 'billetera' ? ($p['billetera_id'] ?? null) : null;
+
+                $nota->pagos()->create([
+                    'metodo_pago_id' => null,
+                    'forma_pago' => $p['forma_pago'],
+                    'cuenta_bancaria_id' => $cuentaId,
+                    'billetera_id' => $billeteraId,
+                    'monto' => round((float) $p['monto'], 2),
+                    'moneda' => $nota->moneda,
+                    'monto_pen' => null,
+                    'tipo_cambio' => null,
+                    'fecha' => $fecha,
+                    'referencia' => $p['referencia'] ?? null,
+                ]);
+
+                MovimientoCaja::create([
+                    'apertura_caja_id' => $apertura->id,
+                    'tipo' => 'ingreso',
+                    'motivo_movimiento_id' => $motivoId,
+                    'descripcion' => "Venta {$nota->serie}-{$nota->numero}",
+                    'cuenta_bancaria_id' => $cuentaId,
+                    'billetera_id' => $billeteraId,
+                    'monto' => round((float) $p['monto'], 2),
+                    'moneda' => $nota->moneda,
+                    'fecha' => $fecha,
+                    'numero_operacion' => $p['referencia'] ?? null,
+                    'documento_referencia_tipo' => 'nota_venta',
+                    'documento_referencia_id' => $nota->id,
+                ]);
+            }
+        });
     }
 
     public function abrir(Request $request)

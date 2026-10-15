@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowDownCircle, ArrowUpCircle, FileSignature, FileSpreadsheet, FileText, Lock, LockOpen, PiggyBank, Smartphone, Wallet } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, FileSignature, FileSpreadsheet, FileText, Lock, LockOpen, PiggyBank, RotateCcw, Smartphone, Trash2, Wallet } from 'lucide-react';
 import api from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
@@ -28,6 +28,13 @@ const metodoLabel = (row) => {
 };
 
 const emptyMov = () => ({ motivo_movimiento_id: '', metodoTipo: '', cuentaId: '', billeteraId: '', numero_operacion: '', monto: '', descripcion: '' });
+
+/** Un pago de la corrección: lo mismo que un cobro (método, cuenta o billetera, N.° de operación y monto). */
+const emptyPagoCorregir = (monto = '') => ({ tipo: 'efectivo', cuentaId: '', billeteraId: '', referencia: '', monto });
+
+/** Los movimientos que nacen de un cobro de venta o de cobranza: son los que se pueden corregir. */
+const esCobroCorregible = (r) =>
+    r.tipo === 'ingreso' && ['nota_venta', 'cuenta_por_cobrar'].includes(r.documento_referencia_tipo) && Boolean(r.documento_referencia_id);
 
 /** Tarjeta compacta de resumen. No usa Card porque su padding (p-6) es muy alto. */
 function Stat({ icon: Icon, label, value, accent = 'text-warm-900', bg = 'bg-gray-100' }) {
@@ -66,6 +73,9 @@ export default function MiCaja() {
     const [regTipo, setRegTipo] = useState(null); // 'ingreso' | 'egreso'
     const [mov, setMov] = useState(emptyMov());
     const [saving, setSaving] = useState(false);
+    /** Corregir un cobro: el movimiento elegido y los pagos nuevos que lo reemplazan. */
+    const [corregir, setCorregir] = useState(null);
+    const [pagosNuevos, setPagosNuevos] = useState([]);
 
     // ── Filtros de la tabla de movimientos ──
     /** Tipo de movimiento: '' (todos), 'efectivo' (el cajón) o 'digital' (transferencia, Yape, billetera). */
@@ -163,6 +173,47 @@ export default function MiCaja() {
         } catch (err) {
             const v = err.response?.data?.errors ?? {};
             toast.error(Object.values(v)[0]?.[0] ?? err.response?.data?.message ?? 'No se pudo registrar.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    /** El cobro que se anula: en una venta, todos sus pagos; en una cobranza, solo ese. */
+    const cobroOriginal = (fila) => {
+        if (!fila) return [];
+        const todos = data?.movimientos ?? [];
+        if (fila.documento_referencia_tipo === 'nota_venta') {
+            return todos.filter((m) => m.tipo === 'ingreso' && m.documento_referencia_tipo === 'nota_venta' && String(m.documento_referencia_id) === String(fila.documento_referencia_id));
+        }
+        return todos.filter((m) => m.id === fila.id);
+    };
+
+    const abrirCorregir = (fila) => {
+        const total = cobroOriginal(fila).reduce((acc, m) => acc + (Number(m.monto) || 0), 0);
+        setCorregir(fila);
+        setPagosNuevos([emptyPagoCorregir(String(Math.round(total * 100) / 100))]);
+    };
+
+    const setPagoNuevo = (i, patch) => setPagosNuevos((prev) => prev.map((p, k) => (k === i ? { ...p, ...patch } : p)));
+
+    const confirmarCorreccion = async () => {
+        setSaving(true);
+        try {
+            const res = await api.post(`/mi-caja/movimientos/${corregir.id}/corregir-pago`, {
+                pagos: pagosNuevos.map((p) => ({
+                    forma_pago: p.tipo,
+                    cuenta_bancaria_id: p.tipo === 'transferencia' ? p.cuentaId || null : null,
+                    billetera_id: p.tipo === 'billetera' ? p.billeteraId || null : null,
+                    monto: Number(p.monto),
+                    referencia: p.tipo !== 'efectivo' ? (p.referencia || '').trim() || null : null,
+                })),
+            });
+            setData(res.data);
+            setCorregir(null);
+            toast.success('Cobro corregido: se anuló el anterior y se registraron los nuevos pagos.');
+        } catch (err) {
+            const v = err.response?.data?.errors ?? {};
+            toast.error(Object.values(v)[0]?.[0] ?? err.response?.data?.message ?? 'No se pudo corregir el cobro.');
         } finally {
             setSaving(false);
         }
@@ -299,6 +350,24 @@ export default function MiCaja() {
         },
         { key: 'metodo', label: 'Método', getSearchValue: (r) => metodoLabel(r), render: (r) => metodoLabel(r) },
         { key: 'monto', label: 'Monto', align: 'right', render: (r) => <span className={r.tipo === 'ingreso' ? 'text-green-600' : 'text-red-600'}>{r.tipo === 'ingreso' ? '+' : '-'} {money(r.monto, r.moneda)}</span> },
+        {
+            // Un cobro de venta o de cobranza se puede corregir mientras la caja siga abierta.
+            type: 'actions',
+            key: 'acciones',
+            label: 'Acciones',
+            actions: (r) =>
+                apertura && esCobroCorregible(r) ? (
+                    <button
+                        type="button"
+                        aria-label="Corregir pago"
+                        title="Corregir pago: anula este cobro y registra los pagos nuevos"
+                        onClick={(e) => { e.stopPropagation(); abrirCorregir(r); }}
+                        className="rounded-md p-1.5 text-primary-600 transition hover:bg-primary-50 hover:text-primary-700"
+                    >
+                        <RotateCcw className="h-4 w-4" />
+                    </button>
+                ) : null,
+        },
     ];
 
     const openReg = (tipo) => {
@@ -478,6 +547,90 @@ export default function MiCaja() {
                     )}
                 </div>
             </Modal>
+
+            {/* Corregir un cobro: se anula lo cobrado y se registran los pagos nuevos. */}
+            {(() => {
+                const originales = cobroOriginal(corregir);
+                const monedaCobro = originales[0]?.moneda || 'PEN';
+                const totalOriginal = originales.reduce((acc, m) => acc + (Number(m.monto) || 0), 0);
+                const totalNuevo = pagosNuevos.reduce((acc, p) => acc + (Number(p.monto) || 0), 0);
+                const diferencia = Math.round((totalOriginal - totalNuevo) * 100) / 100;
+                const cuadra = Math.abs(diferencia) < 0.01 && pagosNuevos.every((p) => Number(p.monto) > 0
+                    && (p.tipo !== 'transferencia' || p.cuentaId) && (p.tipo !== 'billetera' || p.billeteraId));
+
+                return (
+                    <Modal
+                        open={Boolean(corregir)}
+                        onClose={() => setCorregir(null)}
+                        title="Corregir pago"
+                        description={corregir?.descripcion ?? ''}
+                        footer={
+                            <>
+                                <Button variant="secondary" onClick={() => setCorregir(null)}>Cancelar</Button>
+                                <Button variant="danger" loading={saving} disabled={!cuadra} onClick={confirmarCorreccion}>Anular cobro y registrar nuevos pagos</Button>
+                            </>
+                        }
+                    >
+                        <div className="space-y-4">
+                            <Alert variant="warning">
+                                Primero se <strong>anula</strong> lo que cobraste y luego se registran los pagos nuevos. Deben sumar lo mismo.
+                            </Alert>
+
+                            <div>
+                                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-warm-500">Cobro registrado</p>
+                                <div className="divide-y divide-gray-100 rounded-lg border border-edge text-sm">
+                                    {originales.map((m) => (
+                                        <div key={m.id} className="flex items-center justify-between px-3 py-2">
+                                            <span className="text-warm-700">{metodoLabel(m)}{m.numero_operacion ? ` · Op. ${m.numero_operacion}` : ''}</span>
+                                            <span className="font-medium text-warm-900">{money(m.monto, m.moneda)}</span>
+                                        </div>
+                                    ))}
+                                    <div className="flex items-center justify-between bg-gray-50 px-3 py-2 font-semibold">
+                                        <span>Total cobrado</span>
+                                        <span>{money(totalOriginal, monedaCobro)}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="space-y-3">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-warm-500">Pagos nuevos</p>
+                                {pagosNuevos.map((p, i) => (
+                                    <div key={i} className="rounded-lg border border-edge p-3">
+                                        <MetodoCajaPicker
+                                            cuentas={caja?.cuentas_bancarias ?? []}
+                                            billeteras={caja?.billeteras ?? []}
+                                            tipo={p.tipo}
+                                            cuentaId={p.cuentaId}
+                                            billeteraId={p.billeteraId}
+                                            onChange={({ tipo, cuentaId, billeteraId }) => setPagoNuevo(i, { tipo, cuentaId, billeteraId })}
+                                            referencia={p.referencia}
+                                            onReferencia={(referencia) => setPagoNuevo(i, { referencia })}
+                                        />
+                                        <div className="mt-2 flex items-center gap-2">
+                                            <Input type="number" min="0.01" step="0.01" placeholder="Monto" value={p.monto}
+                                                onChange={(e) => setPagoNuevo(i, { monto: e.target.value })} className="text-right" />
+                                            <button type="button" aria-label="Quitar pago" disabled={pagosNuevos.length === 1}
+                                                onClick={() => setPagosNuevos((prev) => prev.filter((_, k) => k !== i))}
+                                                className="rounded-md p-2 text-red-600 transition hover:bg-red-50 disabled:opacity-40">
+                                                <Trash2 className="h-4 w-4" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                                <Button type="button" variant="secondary" size="sm"
+                                    onClick={() => setPagosNuevos((prev) => [...prev, emptyPagoCorregir(diferencia > 0 ? String(diferencia) : '')])}>
+                                    + Agregar otro pago
+                                </Button>
+                            </div>
+
+                            <div className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium ${Math.abs(diferencia) < 0.01 ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
+                                <span>{Math.abs(diferencia) < 0.01 ? 'Los pagos nuevos cuadran con lo cobrado' : diferencia > 0 ? 'Falta registrar' : 'Te pasaste por'}</span>
+                                {Math.abs(diferencia) >= 0.01 && <span>{money(Math.abs(diferencia), monedaCobro)}</span>}
+                            </div>
+                        </div>
+                    </Modal>
+                );
+            })()}
 
             {/* Modal registrar ingreso/gasto */}
             <Modal

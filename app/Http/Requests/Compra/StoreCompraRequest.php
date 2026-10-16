@@ -23,7 +23,7 @@ class StoreCompraRequest extends FormRequest
             'serie' => 'nullable|string|max:20',
             'numero' => 'nullable|string|max:30',
             'guia' => 'nullable|string|max:30',
-            'fecha' => 'required|date',
+            'fecha' => 'required|date|before_or_equal:today',
             'forma_pago' => 'required|in:contado,credito',
             'dias_credito' => 'nullable|integer|min:0',
             'fecha_vencimiento' => 'nullable|date',

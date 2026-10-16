@@ -15,7 +15,7 @@ class StoreNotaVentaRequest extends FormRequest
             'cliente_id' => 'nullable|exists:clientes,id',
             'almacen_id' => 'required|exists:almacenes,id',
             'vendedor_id' => 'required|exists:users,id',
-            'fecha_emision' => 'required|date',
+            'fecha_emision' => 'required|date|before_or_equal:today',
             'moneda' => 'string|max:10|in:PEN,USD',
             // En dólares; sin él se usa el SUNAT venta de la fecha.
             'tipo_cambio' => 'nullable|numeric|min:0.0001',
@@ -65,6 +65,7 @@ class StoreNotaVentaRequest extends FormRequest
             'vendedor_id.required' => 'El vendedor es obligatorio',
             'fecha_emision.required' => 'La fecha de emisión es obligatoria',
             'fecha_emision.date' => 'La fecha de emisión no es válida',
+            'fecha_emision.before_or_equal' => 'La fecha de la venta no puede ser futura.',
             'moneda.in' => 'La moneda debe ser PEN o USD',
             'tipo_pago.in' => 'El tipo de pago debe ser contado o crédito',
             'subtotal.required' => 'El subtotal es obligatorio',

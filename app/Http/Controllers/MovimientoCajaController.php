@@ -66,6 +66,9 @@ class MovimientoCajaController extends Controller
             'numero_operacion' => 'nullable|string|max:100',
             'monto' => 'required|numeric|min:0.01',
             'descripcion' => 'nullable|string|max:255',
+            // El día en que pasó de verdad: cualquiera hasta hoy, nunca uno futuro. Sin indicar, hoy. El efectivo igual
+            // entra en tu turno abierto; esta fecha es la que ven los reportes.
+            'fecha' => 'nullable|date|before_or_equal:'.now()->toDateString(),
         ]);
 
         $cajaId = $data['caja_id'] ?? $user?->cajaActual()?->id;
@@ -132,7 +135,7 @@ class MovimientoCajaController extends Controller
                 'numero_operacion' => $data['numero_operacion'] ?? null,
                 'monto' => $data['monto'],
                 'descripcion' => $data['descripcion'] ?? null,
-                'fecha' => now()->toDateString(), // siempre la fecha actual
+                'fecha' => $data['fecha'] ?? now()->toDateString(),
             ]);
         });
 

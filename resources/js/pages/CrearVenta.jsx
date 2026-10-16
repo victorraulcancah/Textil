@@ -1811,6 +1811,7 @@ export default function CrearVenta() {
                             <Input
                                 label="Fecha"
                                 type="date"
+                                max={hoy()}
                                 value={form.fecha_emision}
                                 onChange={(e) =>
                                     setField("fecha_emision", e.target.value)

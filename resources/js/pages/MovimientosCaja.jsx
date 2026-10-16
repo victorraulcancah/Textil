@@ -31,6 +31,8 @@ const emptyForm = (tipo) => ({
     numero_operacion: '',
     monto: '',
     descripcion: '',
+    // El día en que pasó (hoy por defecto; se puede elegir uno anterior).
+    fecha: hoyIso(),
 });
 
 const metodoLabel = (row) => {
@@ -145,6 +147,7 @@ export default function MovimientosCaja() {
             numero_operacion: form.numero_operacion || null,
             monto: form.monto,
             descripcion: form.descripcion || null,
+            fecha: form.fecha || hoyIso(),
         };
         try {
             await api.post('/movimientos-caja', payload);
@@ -339,6 +342,19 @@ export default function MovimientosCaja() {
                             error={formErrors.numero_operacion}
                         />
                     )}
+                    <div>
+                        <Input
+                            label="Fecha"
+                            type="date"
+                            max={hoyIso()}
+                            value={form.fecha}
+                            onChange={(e) => setForm((prev) => ({ ...prev, fecha: e.target.value }))}
+                            error={formErrors.fecha}
+                        />
+                        {form.fecha && form.fecha < hoyIso() && (
+                            <p className="mt-1 text-xs text-amber-700">Fecha anterior: el efectivo entra en el turno abierto de hoy, con esta fecha a la vista.</p>
+                        )}
+                    </div>
                     <Input
                         label="Descripción (opcional)"
                         placeholder="Ej: Recibo de luz de julio"

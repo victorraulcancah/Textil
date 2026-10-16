@@ -1402,7 +1402,7 @@ export default function CrearCompra() {
                                     error={formErrors.proveedor_id}
                                 />
                             </div>
-                            <Input label="Fecha" type="date" value={form.fecha} onChange={(e) => (form.forma_pago === 'credito' ? setCredito('fecha', e.target.value) : setField('fecha', e.target.value))} error={formErrors.fecha} />
+                            <Input label="Fecha" type="date" max={hoy()} value={form.fecha} onChange={(e) => (form.forma_pago === 'credito' ? setCredito('fecha', e.target.value) : setField('fecha', e.target.value))} error={formErrors.fecha} />
                             <Select
                                 label="Tipo documento"
                                 value={form.tipo_documento}

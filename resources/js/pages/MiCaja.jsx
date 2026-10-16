@@ -4,6 +4,7 @@ import api from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
 import { destinoDe, useCatalogoDestinos } from '../lib/destinosCaja';
+import { diaLocal, hoyIso } from '../lib/fechas';
 import PagosCuentaModal from '../components/PagosCuentaModal';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
@@ -27,7 +28,7 @@ const metodoLabel = (row) => {
     return 'Efectivo';
 };
 
-const emptyMov = () => ({ motivo_movimiento_id: '', metodoTipo: '', cuentaId: '', billeteraId: '', numero_operacion: '', monto: '', descripcion: '' });
+const emptyMov = () => ({ motivo_movimiento_id: '', metodoTipo: '', cuentaId: '', billeteraId: '', numero_operacion: '', monto: '', descripcion: '', fecha: hoyIso() });
 
 /** Un pago de la corrección: lo mismo que un cobro (método, cuenta o billetera, N.° de operación y monto). */
 const emptyPagoCorregir = (monto = '') => ({ tipo: 'efectivo', cuentaId: '', billeteraId: '', referencia: '', monto });
@@ -201,6 +202,7 @@ export default function MiCaja() {
                 numero_operacion: mov.numero_operacion || null,
                 monto: mov.monto,
                 descripcion: mov.descripcion || null,
+                fecha: mov.fecha || hoyIso(),
             });
             setRegTipo(null);
             toast.success(regTipo === 'ingreso' ? 'Ingreso registrado.' : 'Gasto registrado.');
@@ -388,7 +390,25 @@ export default function MiCaja() {
     );
 
     const columns = [
-        { key: 'fecha', label: 'Fecha', getSearchValue: (r) => fechaCorta(r.fecha), render: (r) => <>{fechaCorta(r.fecha)}<span className="block text-xs text-warm-500">{r.created_at ? new Date(r.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : ''}</span></> },
+        {
+            key: 'fecha',
+            label: 'Fecha',
+            getSearchValue: (r) => fechaCorta(r.fecha),
+            render: (r) => {
+                // Un movimiento con fecha anterior muestra además el día en que se registró de verdad.
+                const registrado = diaLocal(r.created_at);
+                const anterior = Boolean(registrado) && Boolean(r.fecha) && String(r.fecha).slice(0, 10) < registrado;
+                return (
+                    <>
+                        {fechaCorta(r.fecha)}
+                        <span className="block text-xs text-warm-500">
+                            {r.created_at ? new Date(r.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }) : ''}
+                            {anterior ? ` · registrado el ${fechaCorta(registrado)}` : ''}
+                        </span>
+                    </>
+                );
+            },
+        },
         { key: 'tipo', label: 'Tipo', getSearchValue: (r) => (r.tipo === 'ingreso' ? 'Ingreso' : 'Gasto'), render: (r) => <Badge variant={r.tipo === 'ingreso' ? 'green' : 'red'}>{r.tipo === 'ingreso' ? 'Ingreso' : 'Gasto'}</Badge> },
         {
             key: 'motivo',
@@ -856,6 +876,12 @@ export default function MiCaja() {
                         <Input label="N° de operación (opcional)" placeholder="Ej: 0045-885123" value={mov.numero_operacion} onChange={(e) => setMov((p) => ({ ...p, numero_operacion: e.target.value }))} />
                     )}
                     <Input label="Monto (S/)" type="number" min="0.01" step="0.01" placeholder="0.00" value={mov.monto} onChange={(e) => setMov((p) => ({ ...p, monto: e.target.value }))} />
+                    <div>
+                        <Input label="Fecha" type="date" max={hoyIso()} value={mov.fecha} onChange={(e) => setMov((p) => ({ ...p, fecha: e.target.value }))} />
+                        {mov.fecha && mov.fecha < hoyIso() && (
+                            <p className="mt-1 text-xs text-amber-700">Fecha anterior: el efectivo entra en tu turno de hoy, con esta fecha a la vista.</p>
+                        )}
+                    </div>
                     <Input label="Descripción (opcional)" placeholder="Ej: recibo de luz" value={mov.descripcion} onChange={(e) => setMov((p) => ({ ...p, descripcion: e.target.value }))} />
                 </div>
             </Modal>

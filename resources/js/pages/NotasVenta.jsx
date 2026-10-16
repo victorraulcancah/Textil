@@ -118,22 +118,26 @@ export default function NotasVenta() {
             ),
         },
         {
-            // Dos fechas: la de la venta (la que se elige al crearla) y el día en que se registró de verdad.
+            // Dos fechas, cada una en su columna: la de la venta (la que se elige al crearla) y el día en que se registró de verdad.
             key: 'fecha_emision',
             label: 'Fecha',
-            render: (row) => {
-                const emision = row.fecha_emision ? new Date(row.fecha_emision).toLocaleDateString('es-PE') : '—';
-                const registrada = diaLocal(row.created_at);
-                const otroDia = Boolean(registrada) && Boolean(row.fecha_emision) && String(row.fecha_emision).slice(0, 10) !== registrada;
-                return (
+            render: (row) => (row.fecha_emision ? new Date(row.fecha_emision).toLocaleDateString('es-PE') : '—'),
+        },
+        {
+            key: 'registrada',
+            label: 'Registrada',
+            getSearchValue: (row) => (row.created_at ? new Date(row.created_at).toLocaleDateString('es-PE') : ''),
+            render: (row) =>
+                row.created_at ? (
                     <>
-                        {emision}
-                        {otroDia && (
-                            <span className="block text-xs text-warm-500">registrada el {new Date(row.created_at).toLocaleDateString('es-PE')}</span>
-                        )}
+                        {new Date(row.created_at).toLocaleDateString('es-PE')}
+                        <span className="block text-xs text-warm-500">
+                            {new Date(row.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
                     </>
-                );
-            },
+                ) : (
+                    '—'
+                ),
         },
         { key: 'almacen', label: 'Almacén', render: (row) => row.almacen?.nombre ?? '—' },
         { key: 'vendedor', label: 'Vendedor', render: (row) => row.vendedor?.name ?? '—' },

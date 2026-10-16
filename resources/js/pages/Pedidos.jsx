@@ -156,6 +156,23 @@ export default function Pedidos() {
             label: 'Fecha',
             render: (row) => fecha(row.fecha_emision),
         },
+        {
+            // El día en que se registró de verdad (la «Fecha» es la que se eligió al crear el pedido).
+            key: 'registrado',
+            label: 'Registrado',
+            getSearchValue: (row) => fecha(row.created_at),
+            render: (row) =>
+                row.created_at ? (
+                    <>
+                        {fecha(row.created_at)}
+                        <span className="block text-xs text-warm-400">
+                            {new Date(row.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                    </>
+                ) : (
+                    '—'
+                ),
+        },
         { key: 'almacen', label: 'Almacén', render: (row) => row.almacen ?? '—' },
         { key: 'vendedor', label: 'Vendedor', render: (row) => row.vendedor ?? '—' },
         {

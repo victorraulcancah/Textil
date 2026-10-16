@@ -14,10 +14,12 @@ import ProductoPickerModal from '../components/ProductoPickerModal';
 import TelaCompraModal, { presentacionMetroDe } from '../components/TelaCompraModal';
 import { Button, Input, Modal, SearchSelect, Select, Spinner, cn } from '../components/ui';
 
+import { hoyIso } from '../lib/fechas';
 const money = (n, moneda = 'PEN') =>
     new Intl.NumberFormat('es-PE', { style: 'currency', currency: moneda || 'PEN' }).format(Number(n) || 0);
 
-const hoy = () => new Date().toISOString().slice(0, 10);
+// El día de hoy en la hora local (con toISOString, de noche en Perú ya marcaba mañana).
+const hoy = hoyIso;
 
 const panelVacio = {
     producto_id: '',

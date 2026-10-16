@@ -40,7 +40,8 @@ class StoreNotaVentaRequest extends FormRequest
             'pagos.*.cuenta_bancaria_id' => 'nullable|exists:cuentas_bancarias,id',
             'pagos.*.billetera_id' => 'nullable|exists:billeteras_digitales,id',
             'pagos.*.monto' => 'required|numeric|min:0.01',
-            'pagos.*.fecha' => 'required|date',
+            // El día del cobro: desde la fecha de la venta hasta hoy.
+            'pagos.*.fecha' => 'required|date|after_or_equal:fecha_emision|before_or_equal:today',
             'pagos.*.referencia' => 'nullable|string|max:100',
             // Una venta en dólares que se cobra con soles: el monto va en
             // soles y se abona su equivalente a este tipo de cambio.
@@ -86,6 +87,8 @@ class StoreNotaVentaRequest extends FormRequest
             'pagos.*.monto.required' => 'El monto del pago es obligatorio',
             'pagos.*.monto.min' => 'El monto del pago debe ser mayor a 0',
             'pagos.*.fecha.required' => 'La fecha del pago es obligatoria',
+            'pagos.*.fecha.after_or_equal' => 'El cobro no puede ser anterior a la fecha de la venta.',
+            'pagos.*.fecha.before_or_equal' => 'La fecha del cobro no puede ser futura.',
         ];
     }
 

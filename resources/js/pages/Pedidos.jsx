@@ -681,6 +681,8 @@ function FacturarModal({ pedido, onClose, onFacturado }) {
     const toast = useToast();
     const [tipoPago, setTipoPago] = useState('contado');
     const [pagos, setPagos] = useState([emptyPago()]);
+    /** El día del cobro: sin elegir, el de la proforma; se puede poner otro (hasta hoy, no antes de la venta). */
+    const [fechaCobro, setFechaCobro] = useState('');
     /** Off = un solo método que cubre el total (el caso normal). On = varios métodos. */
     const [mixto, setMixto] = useState(false);
     const [cuentas, setCuentas] = useState([]);
@@ -701,6 +703,7 @@ function FacturarModal({ pedido, onClose, onFacturado }) {
         const dia = diaLocal(pedido?.fecha_emision);
         return dia && dia <= hoyIso() ? dia : hoyIso();
     })();
+    const fechaDelCobro = fechaCobro && fechaCobro >= fechaVenta && fechaCobro <= hoyIso() ? fechaCobro : fechaVenta;
 
     useEffect(() => {
         if (!pedido) return;
@@ -848,7 +851,7 @@ function FacturarModal({ pedido, onClose, onFacturado }) {
                               referencia: p.tipo !== 'efectivo' ? (p.referencia || '').trim() || null : null,
                               monto: Number(p.monto),
                               ...(enSoles(p) ? { moneda: 'PEN', tipo_cambio: tcDe(p) } : {}),
-                              fecha: fechaVenta,
+                              fecha: fechaDelCobro,
                           }))
                     : [{ forma_pago: 'credito', monto: total, fecha: fechaVenta }],
                 ...(esContado
@@ -894,6 +897,20 @@ function FacturarModal({ pedido, onClose, onFacturado }) {
                     Fecha de la proforma: <strong className="text-warm-900">{new Date(`${fechaVenta}T00:00:00`).toLocaleDateString('es-PE')}</strong>
                     {fechaVenta === hoyIso() ? '' : ' (la del pedido)'}
                 </p>
+
+                {esContado && (
+                    <div>
+                        <Input
+                            label="Fecha del cobro"
+                            type="date"
+                            min={fechaVenta}
+                            max={hoyIso()}
+                            value={fechaDelCobro}
+                            onChange={(e) => setFechaCobro(e.target.value)}
+                        />
+                        <p className="mt-1 text-xs text-warm-500">Por defecto es la fecha de la proforma. Elige otra si se cobró otro día (hasta hoy).</p>
+                    </div>
+                )}
 
                 <div className="flex items-center justify-between gap-3">
                     <Select

@@ -42,12 +42,14 @@ import {
     cn,
 } from "../components/ui";
 
+import { hoyIso } from "../lib/fechas";
 const num = (n) =>
     new Intl.NumberFormat("es-PE", { maximumFractionDigits: 2 }).format(
         Number(n) || 0,
     );
 
-const hoy = () => new Date().toISOString().slice(0, 10);
+// El día de hoy en la hora local (con toISOString, de noche en Perú ya marcaba mañana).
+const hoy = hoyIso;
 
 /** "2026-09-29" → "29/09". */
 const diaMes = (f) => (f ? String(f).slice(5, 10).split("-").reverse().join("/") : "");
@@ -111,6 +113,8 @@ export default function CrearVenta() {
     const [billeteras, setBilleteras] = useState([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    /** El día del cobro: sin elegir, el de la proforma; se puede poner otro (hasta hoy, no antes de la venta). */
+    const [fechaCobro, setFechaCobro] = useState("");
 
     const [form, setForm] = useState({
         cliente_id: "",
@@ -235,6 +239,7 @@ export default function CrearVenta() {
                     (p) => p.forma_pago !== "credito",
                 );
                 if (cobros.length) {
+                    setFechaCobro(String(cobros[0].fecha ?? "").slice(0, 10));
                     setPagos(
                         cobros.map((p) => ({
                             tipo: p.forma_pago ?? "efectivo",
@@ -975,6 +980,8 @@ export default function CrearVenta() {
         0,
     );
     const esContado = form.tipo_pago === "contado";
+    /** El día del cobro: el elegido si es válido; si no, el de la proforma. */
+    const fechaDelCobro = fechaCobro && fechaCobro >= form.fecha_emision && fechaCobro <= hoy() ? fechaCobro : form.fecha_emision;
     /** Un monto en la moneda de la venta. */
     const m = (n) => money(n, form.moneda);
 
@@ -1159,7 +1166,7 @@ export default function CrearVenta() {
                       // En soles: el backend abona su equivalente al tipo de cambio.
                       monto: Number(p.monto),
                       ...(enSoles(p) ? { moneda: "PEN", tipo_cambio: tcDe(p) } : {}),
-                      fecha: form.fecha_emision,
+                      fecha: fechaDelCobro,
                       referencia:
                           p.tipo !== "efectivo"
                               ? (p.referencia || "").trim() || null
@@ -1950,6 +1957,11 @@ export default function CrearVenta() {
                                                       : m(total)
                                               }`}
                                     </p>
+                                    {fechaDelCobro !== form.fecha_emision && (
+                                        <p className="mt-0.5 text-xs text-warm-500">
+                                            Cobro del {new Date(`${fechaDelCobro}T00:00:00`).toLocaleDateString("es-PE")}
+                                        </p>
+                                    )}
                                     {mixto && Math.abs(saldo) > 0.001 && (
                                         <p
                                             className={`mt-0.5 text-xs font-semibold ${saldo > 0 ? "text-amber-600" : "text-red-600"}`}
@@ -1976,6 +1988,20 @@ export default function CrearVenta() {
                             </Button>
                         }
                     >
+                        <div className="mb-4">
+                            <Input
+                                label="Fecha del cobro"
+                                type="date"
+                                min={form.fecha_emision}
+                                max={hoy()}
+                                value={fechaDelCobro}
+                                onChange={(e) => setFechaCobro(e.target.value)}
+                            />
+                            <p className="mt-1 text-xs text-warm-500">
+                                Por defecto es la fecha de la proforma. Elige otra si se cobró otro día (hasta hoy).
+                            </p>
+                        </div>
+
                         <div className="mb-4 flex items-center justify-between">
                             <span className="text-sm font-medium text-warm-700">Modo de cobro</span>
                             <button

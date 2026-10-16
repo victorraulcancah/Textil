@@ -158,8 +158,10 @@ export default function Pedidos() {
         },
         {
             // El día en que se registró de verdad (la «Fecha» es la que se eligió al crear el pedido).
+            // Oculta por defecto; se puede mostrar desde "Mostrar u ocultar columnas".
             key: 'registrado',
             label: 'Registrado',
+            defaultHidden: true,
             getSearchValue: (row) => fecha(row.created_at),
             render: (row) =>
                 row.created_at ? (

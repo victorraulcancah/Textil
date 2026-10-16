@@ -229,7 +229,11 @@ export default function DataTable({
 }) {
     const [search, setSearch] = useState('');
     const debouncedSearch = useDebounce(search, 300);
-    const [hiddenColumns, setHiddenColumns] = useState({});
+    // Las columnas con `defaultHidden` arrancan ocultas, pero siguen en el menú "Mostrar u ocultar columnas":
+    // se ocultan, no se quitan.
+    const [hiddenColumns, setHiddenColumns] = useState(() =>
+        Object.fromEntries(columns.filter((c) => c.defaultHidden && c.type !== 'actions').map((c) => [c.key, true])),
+    );
     const [filterOpen, setFilterOpen] = useState(false);
     const [columnsOpen, setColumnsOpen] = useState(false);
 

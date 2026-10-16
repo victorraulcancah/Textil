@@ -124,8 +124,10 @@ export default function NotasVenta() {
             render: (row) => (row.fecha_emision ? new Date(row.fecha_emision).toLocaleDateString('es-PE') : '—'),
         },
         {
+            // Oculta por defecto; se puede mostrar desde "Mostrar u ocultar columnas".
             key: 'registrada',
             label: 'Registrada',
+            defaultHidden: true,
             getSearchValue: (row) => (row.created_at ? new Date(row.created_at).toLocaleDateString('es-PE') : ''),
             render: (row) =>
                 row.created_at ? (
@@ -451,9 +453,6 @@ export default function NotasVenta() {
                             <div>
                                 <p className="text-xs uppercase tracking-wide text-warm-500">Fecha</p>
                                 <p className="font-medium text-warm-900">{fecha(detalle.fecha_emision)}</p>
-                                {detalle.created_at && String(detalle.fecha_emision).slice(0, 10) !== diaLocal(detalle.created_at) && (
-                                    <p className="text-xs text-warm-500">registrada el {fecha(detalle.created_at)}</p>
-                                )}
                             </div>
                             <div>
                                 <p className="text-xs uppercase tracking-wide text-warm-500">Vendedor</p>

@@ -772,7 +772,12 @@ class OrdenVentaService
             );
         }
 
-        return DB::transaction(function () use ($orden, $datos) {
+        // La proforma lleva la fecha que se eligió al crear el pedido (nunca una futura); si se manda otra, esa.
+        $hoy = now()->toDateString();
+        $fechaPedido = $orden->fecha_emision?->toDateString();
+        $fechaEmision = $datos['fecha_emision'] ?? ($fechaPedido && $fechaPedido <= $hoy ? $fechaPedido : $hoy);
+
+        return DB::transaction(function () use ($orden, $datos, $fechaEmision) {
             $orden->load(['detalles.rollos.rollo', 'detalles.presentacion.unidadBase', 'detalles.presentacion.producto.presentaciones.unidadBase']);
 
             // Una fila por rollo, con sus metros reales: los totales salen de ahí.
@@ -786,11 +791,11 @@ class OrdenVentaService
                 'cliente_id' => $orden->cliente_id,
                 'almacen_id' => $orden->almacen_id,
                 'vendedor_id' => $orden->vendedor_id,
-                'fecha_emision' => $datos['fecha_emision'] ?? now()->toDateString(),
+                'fecha_emision' => $fechaEmision,
                 'moneda' => $orden->moneda,
                 // El de la fecha de la venta; si no hay, el del pedido.
                 'tipo_cambio' => $orden->moneda === 'USD'
-                    ? ($this->tiposCambio->venta($datos['fecha_emision'] ?? null) ?? (float) $orden->tipo_cambio)
+                    ? ($this->tiposCambio->venta($fechaEmision) ?? (float) $orden->tipo_cambio)
                     : null,
                 'tipo_pago' => $datos['tipo_pago'] ?? 'contado',
                 'cuotas' => $datos['cuotas'] ?? [],

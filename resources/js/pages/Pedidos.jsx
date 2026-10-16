@@ -27,6 +27,7 @@ import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
 import DetalleCard from '../components/ui/DetalleCard';
 import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select } from '../components/ui';
 import FiltroFechas from '../components/FiltroFechas';
+import { diaLocal } from '../lib/fechas';
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
 
@@ -695,6 +696,11 @@ function FacturarModal({ pedido, onClose, onFacturado }) {
     const total = Number(pedido?.total) || 0;
     const moneda = pedido?.moneda || 'PEN';
     const m = (n) => money(n, moneda);
+    /** La proforma y sus pagos llevan la fecha que se eligió al crear el pedido (nunca una futura). */
+    const fechaVenta = (() => {
+        const dia = diaLocal(pedido?.fecha_emision);
+        return dia && dia <= hoyIso() ? dia : hoyIso();
+    })();
 
     useEffect(() => {
         if (!pedido) return;
@@ -703,7 +709,7 @@ function FacturarModal({ pedido, onClose, onFacturado }) {
         setMixto(false);
         setCuotas([]);
         setExceso(null);
-        cargarTipoCambio().then(setTcDia).catch(() => setTcDia(null));
+        cargarTipoCambio(fechaVenta).then(setTcDia).catch(() => setTcDia(null));
         // Sale como compra el cliente: a crédito si su línea lo permite.
         if (pedido.cliente_id) {
             api.get(`/clientes/${pedido.cliente_id}/credito`)
@@ -842,9 +848,9 @@ function FacturarModal({ pedido, onClose, onFacturado }) {
                               referencia: p.tipo !== 'efectivo' ? (p.referencia || '').trim() || null : null,
                               monto: Number(p.monto),
                               ...(enSoles(p) ? { moneda: 'PEN', tipo_cambio: tcDe(p) } : {}),
-                              fecha: hoyIso(),
+                              fecha: fechaVenta,
                           }))
-                    : [{ forma_pago: 'credito', monto: total, fecha: hoyIso() }],
+                    : [{ forma_pago: 'credito', monto: total, fecha: fechaVenta }],
                 ...(esContado
                     ? {}
                     : { cuotas: cuotas.map((c) => ({ fecha_vencimiento: c.fecha_vencimiento, monto: Number(c.monto) || 0 })) }),
@@ -882,6 +888,12 @@ function FacturarModal({ pedido, onClose, onFacturado }) {
                     La tela ya salió del almacén al despachar. Este paso registra la venta y el
                     cobro; los rollos que salieron enteros quedan como vendidos a nombre del cliente.
                 </Alert>
+
+                {/* La proforma lleva la fecha del pedido, la que se eligió al crearlo. */}
+                <p className="text-sm text-warm-600">
+                    Fecha de la proforma: <strong className="text-warm-900">{new Date(`${fechaVenta}T00:00:00`).toLocaleDateString('es-PE')}</strong>
+                    {fechaVenta === hoyIso() ? '' : ' (la del pedido)'}
+                </p>
 
                 <div className="flex items-center justify-between gap-3">
                     <Select
@@ -939,7 +951,7 @@ function FacturarModal({ pedido, onClose, onFacturado }) {
                         total={total}
                         moneda={moneda}
                         tipoCambio={tcDia?.venta}
-                        fecha={hoyIso()}
+                        fecha={fechaVenta}
                         cuotas={cuotas}
                         onCuotas={setCuotas}
                     />

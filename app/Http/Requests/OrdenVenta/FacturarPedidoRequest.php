@@ -21,7 +21,7 @@ class FacturarPedidoRequest extends FormRequest
     {
         return [
             'serie' => 'nullable|string|max:10',
-            'fecha_emision' => 'nullable|date',
+            'fecha_emision' => 'nullable|date|before_or_equal:today',
             'tipo_pago' => 'nullable|in:contado,credito',
 
             'pagos' => 'required|array|min:1',
@@ -30,7 +30,7 @@ class FacturarPedidoRequest extends FormRequest
             'pagos.*.cuenta_bancaria_id' => 'nullable|exists:cuentas_bancarias,id',
             'pagos.*.billetera_id' => 'nullable|exists:billeteras_digitales,id',
             'pagos.*.monto' => 'required|numeric|min:0.01',
-            'pagos.*.fecha' => 'required|date',
+            'pagos.*.fecha' => 'required|date|before_or_equal:today',
             'pagos.*.referencia' => 'nullable|string|max:100',
             // Un pedido en dólares que se cobra con soles: el monto va en
             // soles y se abona su equivalente a este tipo de cambio.

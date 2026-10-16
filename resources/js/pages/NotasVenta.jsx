@@ -10,7 +10,7 @@ import PageHeader, { CreateButton } from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
 import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select, Spinner } from '../components/ui';
 import FiltroFechas from '../components/FiltroFechas';
-import { hoyIso } from '../lib/fechas';
+import { diaLocal, hoyIso } from '../lib/fechas';
 
 const fecha = (v) => (v ? new Date(v).toLocaleDateString('es-PE') : '—');
 const formaLabel = { efectivo: 'Efectivo', transferencia: 'Transferencia', tarjeta: 'Tarjeta', yape: 'Yape', plin: 'Plin', credito: 'Crédito', otro: 'Otro' };
@@ -117,7 +117,24 @@ export default function NotasVenta() {
                 </span>
             ),
         },
-        { key: 'fecha_emision', label: 'Fecha', render: (row) => (row.fecha_emision ? new Date(row.fecha_emision).toLocaleDateString('es-PE') : '—') },
+        {
+            // Dos fechas: la de la venta (la que se elige al crearla) y el día en que se registró de verdad.
+            key: 'fecha_emision',
+            label: 'Fecha',
+            render: (row) => {
+                const emision = row.fecha_emision ? new Date(row.fecha_emision).toLocaleDateString('es-PE') : '—';
+                const registrada = diaLocal(row.created_at);
+                const otroDia = Boolean(registrada) && Boolean(row.fecha_emision) && String(row.fecha_emision).slice(0, 10) !== registrada;
+                return (
+                    <>
+                        {emision}
+                        {otroDia && (
+                            <span className="block text-xs text-warm-500">registrada el {new Date(row.created_at).toLocaleDateString('es-PE')}</span>
+                        )}
+                    </>
+                );
+            },
+        },
         { key: 'almacen', label: 'Almacén', render: (row) => row.almacen?.nombre ?? '—' },
         { key: 'vendedor', label: 'Vendedor', render: (row) => row.vendedor?.name ?? '—' },
         {
@@ -254,8 +271,10 @@ export default function NotasVenta() {
                         (!fCliente || String(n.cliente?.id) === String(fCliente)) &&
                         (!fAlmacen || String(n.almacen_id) === String(fAlmacen)) &&
                         (!fVendedor || String(n.vendedor_id) === String(fVendedor)) &&
-                        (!fDesde || (n.fecha_emision && n.fecha_emision.slice(0, 10) >= fDesde)) &&
-                        (!fHasta || (n.fecha_emision && n.fecha_emision.slice(0, 10) <= fHasta)),
+                        // El rango mira la fecha de la venta y también el día en que se registró: una proforma hecha hoy con
+                        // fecha de ayer aparece al filtrar hoy (por cuándo se registró) y al filtrar ayer (por su fecha).
+                        (!fDesde || [n.fecha_emision && n.fecha_emision.slice(0, 10), diaLocal(n.created_at)].some((d) => d && d >= fDesde)) &&
+                        (!fHasta || [n.fecha_emision && n.fecha_emision.slice(0, 10), diaLocal(n.created_at)].some((d) => d && d <= fHasta)),
                 )}
                 loading={loading}
                 onRowClick={(row) => { setSeleccionada(row); sheet.abrir(); }}
@@ -428,6 +447,9 @@ export default function NotasVenta() {
                             <div>
                                 <p className="text-xs uppercase tracking-wide text-warm-500">Fecha</p>
                                 <p className="font-medium text-warm-900">{fecha(detalle.fecha_emision)}</p>
+                                {detalle.created_at && String(detalle.fecha_emision).slice(0, 10) !== diaLocal(detalle.created_at) && (
+                                    <p className="text-xs text-warm-500">registrada el {fecha(detalle.created_at)}</p>
+                                )}
                             </div>
                             <div>
                                 <p className="text-xs uppercase tracking-wide text-warm-500">Vendedor</p>

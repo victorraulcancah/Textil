@@ -300,6 +300,7 @@ Route::middleware('auth:api')->group(function () {
     Route::get('mi-caja/cajas-destino', [MiCajaController::class, 'cajasDestino']);
     Route::post('mi-caja/movimientos/{movimiento}/corregir-pago', [MiCajaController::class, 'corregirPago']);
     Route::post('mi-caja/movimientos/{movimiento}/anular', [MiCajaController::class, 'anularMovimiento']);
+    Route::post('mi-caja/movimientos/{movimiento}/editar', [MiCajaController::class, 'editarMovimiento']);
     Route::post('mi-caja/cerrar', [MiCajaController::class, 'cerrar']);
     Route::get('movimientos-caja/reporte/excel', [\App\Http\Controllers\MovimientoCajaReporteController::class, 'excel']);
     Route::get('movimientos-caja/reporte/pdf', [\App\Http\Controllers\MovimientoCajaReporteController::class, 'pdf']);

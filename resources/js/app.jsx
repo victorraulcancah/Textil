@@ -8,6 +8,24 @@ import AccesoDenegado from './components/AccesoDenegado';
 import RutaProtegida, { pantallaInicial } from './components/RutaProtegida';
 import { Spinner } from './components/ui';
 import Login from './pages/Login';
+
+/**
+ * Después de un despliegue los archivos de la versión anterior ya no existen en el servidor. Una pestaña que ya estaba
+ * abierta (o con la página en caché) pide un módulo con el nombre viejo y recibe la página de inicio en vez del JS: la
+ * pantalla queda en blanco. Al fallar la carga de un módulo se recarga una vez para traer la versión nueva.
+ */
+window.addEventListener('vite:preloadError', (event) => {
+    try {
+        const ultima = Number(sessionStorage.getItem('recarga_por_version') || 0);
+        // Si ya se recargó hace un momento y sigue fallando, no se entra en un bucle: se deja el error.
+        if (Date.now() - ultima < 15000) return;
+        sessionStorage.setItem('recarga_por_version', String(Date.now()));
+    } catch {
+        return;
+    }
+    event.preventDefault();
+    window.location.reload();
+});
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Roles = lazy(() => import('./pages/Roles'));
 const Usuarios = lazy(() => import('./pages/Usuarios'));

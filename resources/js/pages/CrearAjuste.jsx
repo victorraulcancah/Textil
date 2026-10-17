@@ -17,7 +17,7 @@ const redondear = (n) => Math.round((Number(n) || 0) * 100) / 100;
 /** Sin ceros de relleno: 4.5, no 4.5000. */
 const texto = (n) => (Number(n) > 0 ? String(+Number(n).toFixed(4)) : '');
 
-const emptyForm = { almacen_id: '', proveedor_id: '', tipo: 'entrada', motivo: '', observaciones: '' };
+const emptyForm = { almacen_id: '', proveedor_id: '', tipo: 'entrada', motivo: '', observaciones: '', fecha: hoyIso() };
 const panelVacio = {
     producto_id: '',
     producto_presentacion_id: '',
@@ -536,6 +536,7 @@ export default function CrearAjuste() {
                 tipo: form.tipo,
                 motivo: form.motivo,
                 observaciones: form.observaciones,
+                fecha: form.fecha || hoyIso(),
                 detalles: items.map((it) =>
                     it.tipo === 'rollos'
                         ? { producto_id: it.producto_id, producto_color_id: it.color_id || null, rollos: Number(it.rollos), metros_por_rollo: Number(it.metros), ...costo(it, 'costo_por_metro') }
@@ -1047,6 +1048,18 @@ export default function CrearAjuste() {
                             options={opcionesAlmacen(almacenes, form.almacen_id, propioId)}
                             error={errors.almacen_id}
                         />
+                        <div>
+                            <Input
+                                label="Fecha"
+                                type="date"
+                                max={hoyIso()}
+                                value={form.fecha}
+                                onChange={(e) => setForm((prev) => ({ ...prev, fecha: e.target.value }))}
+                            />
+                            {form.fecha && form.fecha < hoyIso() && (
+                                <p className="mt-1 text-xs text-amber-700">Fecha anterior: el kardex y el listado llevan este día.</p>
+                            )}
+                        </div>
                         <Select
                             label="Tipo"
                             name="tipo"

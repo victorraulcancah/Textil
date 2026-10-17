@@ -541,6 +541,22 @@ export default function Ajustes() {
                 ),
         },
         {
+            // El día en que se registró de verdad (la «Fecha» es la que se eligió al crear el ajuste).
+            key: 'registrado',
+            label: 'Registrado',
+            width: '120px',
+            defaultHidden: true,
+            render: (row) =>
+                row.created_at ? (
+                    <span className="text-gray-700">
+                        {new Date(row.created_at).toLocaleDateString('es-PE')}
+                        <span className="block text-xs text-gray-400">{new Date(row.created_at).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}</span>
+                    </span>
+                ) : (
+                    <span className="text-gray-400">—</span>
+                ),
+        },
+        {
             key: 'documento',
             label: 'Número',
             width: '110px',

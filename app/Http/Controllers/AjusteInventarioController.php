@@ -16,6 +16,7 @@ use App\Services\RolloService;
 use App\Services\StockService;
 use App\Support\AlmacenAcceso;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -68,6 +69,8 @@ class AjusteInventarioController extends Controller
             'tipo' => 'required|in:entrada,salida',
             'motivo' => 'required|string',
             'observaciones' => 'nullable|string',
+            // El día en que se hizo el ajuste: cualquiera hasta hoy, nunca uno futuro. Sin indicar, hoy.
+            'fecha' => 'nullable|date|before_or_equal:today',
             'detalles' => 'required|array|min:1',
             // Cada línea es de uno de tres tipos:
             //  · común: una presentación y su cantidad;
@@ -116,7 +119,10 @@ class AjusteInventarioController extends Controller
                     'estado' => 'aprobado',
                     'usuario_solicita_id' => auth()->id(),
                     'usuario_aprueba_id' => auth()->id(),
-                    'fecha' => now(),
+                    // El día elegido con la hora de ahora (así el kardex conserva el orden del día); sin elegir, ahora.
+                    'fecha' => ! empty($data['fecha']) && $data['fecha'] < now()->toDateString()
+                        ? Carbon::parse($data['fecha'])->setTimeFrom(now())
+                        : now(),
                 ]);
 
                 $almacen = Almacen::findOrFail($data['almacen_id']);
@@ -172,7 +178,7 @@ class AjusteInventarioController extends Controller
         ]);
 
         // "entrada" suma stock; "salida" lo resta.
-        $args = [$presentacion, $almacen, $cantidad, 0, 'ajuste_manual', 'ajuste_inventario', $ajuste->id, auth()->id()];
+        $args = [$presentacion, $almacen, $cantidad, 0, 'ajuste_manual', 'ajuste_inventario', $ajuste->id, auth()->id(), $ajuste->fecha->toDateTimeString()];
         $tipo === 'salida' ? $stock->salida(...$args) : $stock->entrada(...$args);
 
         return $subtotal;
@@ -224,7 +230,7 @@ class AjusteInventarioController extends Controller
         Rollo::whereIn('id', $creados->pluck('id'))->update(['ajuste_detalle_id' => $linea->id]);
 
         // El color queda en el kardex: así se sabe cuánto hay de cada color, no solo de la tela.
-        $stock->entrada($presentacion, $almacen, $cantidad, 0, 'ajuste_manual', 'ajuste_inventario', $ajuste->id, auth()->id(), colorId: $color?->id);
+        $stock->entrada($presentacion, $almacen, $cantidad, 0, 'ajuste_manual', 'ajuste_inventario', $ajuste->id, auth()->id(), $ajuste->fecha->toDateTimeString(), colorId: $color?->id);
 
         return $subtotal;
     }
@@ -272,7 +278,7 @@ class AjusteInventarioController extends Controller
             'subtotal' => $subtotal,
         ]);
 
-        $stock->entrada($presentacion, $almacen, $cantidad, 0, 'ajuste_manual', 'ajuste_inventario', $ajuste->id, auth()->id(), colorId: $rollo->producto_color_id);
+        $stock->entrada($presentacion, $almacen, $cantidad, 0, 'ajuste_manual', 'ajuste_inventario', $ajuste->id, auth()->id(), $ajuste->fecha->toDateTimeString(), colorId: $rollo->producto_color_id);
 
         return $subtotal;
     }
@@ -313,7 +319,7 @@ class AjusteInventarioController extends Controller
             'subtotal' => $subtotal,
         ]);
 
-        $stock->salida($presentacion, $almacen, $cantidad, 0, 'ajuste_manual', 'ajuste_inventario', $ajuste->id, auth()->id(), colorId: $rollo->producto_color_id);
+        $stock->salida($presentacion, $almacen, $cantidad, 0, 'ajuste_manual', 'ajuste_inventario', $ajuste->id, auth()->id(), $ajuste->fecha->toDateTimeString(), colorId: $rollo->producto_color_id);
 
         return $subtotal;
     }

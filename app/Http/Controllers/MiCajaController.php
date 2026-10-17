@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\AperturaCaja;
 use App\Models\Caja;
 use App\Models\CierreCaja;
+use App\Models\Anticipo;
 use App\Models\CuentaPorCobrarPago;
 use App\Models\CuentaPorPagarPago;
+use App\Services\AnticipoService;
 use App\Services\CierreCajaService;
 use App\Services\NotaVentaService;
 use App\Support\AlmacenAcceso;
@@ -242,6 +244,7 @@ class MiCajaController extends Controller
             'cuenta_por_cobrar' => $this->anularPagoDeCuenta($movimiento, true),
             'cuenta_por_pagar' => $this->anularPagoDeCuenta($movimiento, false),
             'nota_venta' => $this->anularVenta($movimiento, $motivo),
+            'anticipo' => $this->anularAnticipo($movimiento, $motivo),
             'compra' => throw ValidationException::withMessages(['caja' => 'Esta salida viene de una compra: se anula desde Compras.']),
             'letra_cambio' => throw ValidationException::withMessages(['caja' => 'Este cobro viene de una letra de cambio: se anula desde Letras de cambio.']),
             default => throw ValidationException::withMessages(['caja' => 'Este movimiento no se anula a mano.']),
@@ -280,6 +283,20 @@ class MiCajaController extends Controller
         $cobrar
             ? app(CuentaPorCobrarController::class)->anularPago($pago)
             : app(CuentaPorPagarController::class)->anularPago($pago);
+    }
+
+    /** Un anticipo de cliente: se anula el anticipo (el servicio revisa que no esté aplicado ni en una caja ya cerrada). */
+    private function anularAnticipo(MovimientoCaja $movimiento, string $motivo): void
+    {
+        $anticipo = Anticipo::find($movimiento->documento_referencia_id);
+        if (! $anticipo) {
+            throw ValidationException::withMessages(['caja' => 'El anticipo de este movimiento ya no existe.']);
+        }
+
+        AlmacenAcceso::exigir($anticipo->almacen_id);
+        $this->exigirPermiso('anticipos/'.$anticipo->id.'/anular', 'POST', 'No tienes permiso para anular anticipos.');
+
+        app(AnticipoService::class)->anular($anticipo, $motivo ?: 'Anulado desde Mi Caja');
     }
 
     /** El cobro de una venta: se anula la proforma completa (stock, cobros y deuda). */
@@ -342,6 +359,7 @@ class MiCajaController extends Controller
             'cuenta_por_cobrar' => $this->editarPagoDeCuenta($movimiento, $data, true),
             'cuenta_por_pagar' => $this->editarPagoDeCuenta($movimiento, $data, false),
             'nota_venta' => $this->editarFechaDeVenta($movimiento, $data),
+            'anticipo' => $this->editarAnticipo($movimiento, $data),
             'compra', 'letra_cambio' => $this->editarDescripcion($movimiento, $data),
             default => throw ValidationException::withMessages(['caja' => 'Este movimiento no se edita a mano.']),
         };
@@ -487,6 +505,23 @@ class MiCajaController extends Controller
                 ->where('documento_referencia_id', $nota->id)
                 ->update(['fecha' => $data['fecha']]);
         });
+    }
+
+    /** Un anticipo de cliente: fecha y N.° de operación; el anticipo y su ingreso en caja los siguen. */
+    private function editarAnticipo(MovimientoCaja $movimiento, array $data): void
+    {
+        $anticipo = Anticipo::find($movimiento->documento_referencia_id);
+        if (! $anticipo) {
+            throw ValidationException::withMessages(['caja' => 'El anticipo de este movimiento ya no existe.']);
+        }
+
+        AlmacenAcceso::exigir($anticipo->almacen_id);
+        $this->exigirPermiso('anticipos/'.$anticipo->id, 'PUT', 'No tienes permiso para editar anticipos.');
+
+        app(AnticipoService::class)->actualizar($anticipo, array_filter([
+            'fecha' => $data['fecha'] ?? null,
+            'referencia' => array_key_exists('numero_operacion', $data) ? ($data['numero_operacion'] ?? '') : null,
+        ], fn ($v) => $v !== null));
     }
 
     /** Una salida por compra o un cobro de letra: por ahora solo se cambia la descripción. */

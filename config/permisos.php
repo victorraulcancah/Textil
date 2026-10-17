@@ -103,6 +103,13 @@ return [
                     // Facturar un pedido es crear una venta, no crear un pedido.
                     'patrones' => ['ordenes-venta/*/facturar' => 'crear', 'notas-venta/*/fecha' => 'editar'],
                 ],
+                // Dinero que el cliente entrega antes de la venta, en soles o en dólares; anular es eliminar.
+                'anticipos' => [
+                    'label' => 'Anticipos',
+                    'apis' => ['anticipos'],
+                    'acciones' => ['ver', 'crear', 'editar', 'eliminar'],
+                    'patrones' => ['anticipos/*/anular' => 'eliminar'],
+                ],
             ],
         ],
 

@@ -42,6 +42,7 @@ const RecepcionesCompra = lazy(() => import('./pages/RecepcionesCompra'));
 const Clientes = lazy(() => import('./pages/Clientes'));
 const CatalogoComercial = lazy(() => import('./pages/CatalogosComerciales'));
 const NotasVenta = lazy(() => import('./pages/NotasVenta'));
+const Anticipos = lazy(() => import('./pages/Anticipos'));
 const Pedidos = lazy(() => import('./pages/Pedidos'));
 const CrearPedido = lazy(() => import('./pages/CrearPedido'));
 const Despacho = lazy(() => import('./pages/Despacho'));
@@ -132,6 +133,7 @@ const routes = [
     { path: '/requerimientos/atender', element: <AtenderRequerimientos /> },
     { path: '/requerimientos/nuevo', element: <CrearRequerimiento /> },
     { path: '/notas-venta', element: <NotasVenta /> },
+    { path: '/anticipos', element: <Anticipos /> },
     { path: '/notas-venta/nueva', element: <CrearVenta /> },
     { path: '/notas-venta/:id/editar', element: <CrearVenta /> },
     { path: '/metodos-de-pago', element: <MetodosDePago /> },

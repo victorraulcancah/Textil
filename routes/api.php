@@ -284,6 +284,13 @@ Route::middleware('auth:api')->group(function () {
     Route::put('notas-venta/{notaVenta}', [NotaVentaController::class, 'update']);
     Route::post('notas-venta/{notaVenta}/anular', [NotaVentaController::class, 'anular']);
     Route::post('notas-venta/{notaVenta}/fecha', [NotaVentaController::class, 'cambiarFecha']);
+
+    // Anticipos de clientes (soles y dólares).
+    Route::get('anticipos', [\App\Http\Controllers\AnticipoController::class, 'index']);
+    Route::post('anticipos', [\App\Http\Controllers\AnticipoController::class, 'store']);
+    Route::get('anticipos/{anticipo}', [\App\Http\Controllers\AnticipoController::class, 'show']);
+    Route::put('anticipos/{anticipo}', [\App\Http\Controllers\AnticipoController::class, 'update']);
+    Route::post('anticipos/{anticipo}/anular', [\App\Http\Controllers\AnticipoController::class, 'anular']);
     Route::delete('notas-venta/{notaVenta}', [NotaVentaController::class, 'destroy']);
 
     // Tesorería

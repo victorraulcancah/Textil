@@ -68,6 +68,7 @@ export const navigation = [
             { label: 'Actividades comerciales', icon: Briefcase, to: '/actividades-comerciales', permiso: 'ventas.actividades-comerciales' },
             { label: 'Pedidos', icon: ClipboardList, to: '/pedidos', permiso: 'ventas.pedidos' },
             { label: 'Proformas', icon: ReceiptText, to: '/notas-venta', permiso: 'ventas.notas-venta' },
+            { label: 'Anticipos', icon: HandCoins, to: '/anticipos', permiso: 'ventas.anticipos' },
         ],
     },
     {

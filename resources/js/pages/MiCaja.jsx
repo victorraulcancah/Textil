@@ -43,6 +43,7 @@ const claseDeEdicion = (r) => {
     if (!doc) return 'manual'; // ingreso o gasto a mano: todo
     if (doc === 'cuenta_por_cobrar' || doc === 'cuenta_por_pagar') return 'cuenta'; // fecha, descripción y N.° de operación
     if (doc === 'nota_venta') return 'venta'; // solo la fecha de los cobros
+    if (doc === 'anticipo') return 'anticipo'; // fecha y N.° de operación
     return 'descripcion'; // compra o letra: solo la descripción
 };
 
@@ -276,7 +277,9 @@ export default function MiCaja() {
                   ? { fecha: f.fecha || null, descripcion: f.descripcion, numero_operacion: f.numero_operacion || null }
                   : clase === 'venta'
                     ? { fecha: f.fecha || null }
-                    : { descripcion: f.descripcion };
+                    : clase === 'anticipo'
+                      ? { fecha: f.fecha || null, numero_operacion: f.numero_operacion || null }
+                      : { descripcion: f.descripcion };
 
         setSaving(true);
         try {
@@ -840,6 +843,10 @@ export default function MiCaja() {
                             Este cobro es de una venta: se anula <strong>la proforma completa</strong>. Vuelve el stock al almacén, se
                             anulan todos sus cobros y, si tenía deuda, desaparece. No se puede deshacer.
                         </Alert>
+                    ) : anularMov?.documento_referencia_tipo === 'anticipo' ? (
+                        <Alert variant="warning">
+                            Se anula el <strong>anticipo del cliente</strong> y este ingreso deja de contar. Uno ya aplicado a una venta no se anula.
+                        </Alert>
                     ) : anularMov?.documento_referencia_tipo ? (
                         <Alert variant="warning">
                             Se anula este {anularMov.tipo === 'ingreso' ? 'cobro' : 'pago'} y <strong>la deuda recupera su saldo</strong>.
@@ -870,7 +877,7 @@ export default function MiCaja() {
                 const digitalNuevo = f.metodoTipo === 'transferencia' || f.metodoTipo === 'billetera';
                 const hayOperacion = clase === 'manual' ? digitalNuevo : esDigitalOriginal;
                 const hayFecha = clase !== 'descripcion';
-                const hayDescripcion = clase !== 'venta';
+                const hayDescripcion = clase !== 'venta' && clase !== 'anticipo';
 
                 return (
                     <Modal
@@ -892,7 +899,13 @@ export default function MiCaja() {
                                     <strong> Corregir pago</strong>.
                                 </Alert>
                             )}
-                            {clase === 'cuenta' && (
+                            {clase === 'anticipo' && (
+                        <Alert variant="info">
+                            Este ingreso es de un anticipo de cliente: aquí cambias la fecha y el N.° de operación. El monto y el método se cambian
+                            anulando el anticipo y registrando otro.
+                        </Alert>
+                    )}
+                    {clase === 'cuenta' && (
                                 <Alert variant="info">
                                     Aquí cambias la fecha y los datos. Para cambiar el monto o el método, anula el pago y regístralo de nuevo.
                                 </Alert>

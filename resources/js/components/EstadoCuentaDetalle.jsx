@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { CalendarClock, Download, FileText, Printer, Wallet } from 'lucide-react';
+import { CalendarClock, Download, FileText, Gauge, HandCoins, Printer, Wallet } from 'lucide-react';
 import api from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { money } from '../lib/moneda';
 import { useToast } from '../lib/toast';
 import { EstadoCreditoDetalle } from './EstadoCredito';
 import PdfViewerModal from './PdfViewerModal';
-import { Alert, Badge, Button, Input, Spinner } from './ui';
+import { Alert, Badge, Button, Input, Spinner, Tabs } from './ui';
 
 /** "2026-09-29" en la fecha local, sin pasar por UTC. */
 const iso = (d) =>
@@ -33,15 +33,26 @@ const plazo = (dias) => {
     return `hace ${-dias} ${dias === -1 ? 'día' : 'días'}`;
 };
 
-function Tarjeta({ label, valor, clase = 'text-warm-900', nota }) {
+function Tarjeta({ label, valor, clase = 'text-warm-900', nota, barra }) {
     return (
         <div className="rounded-xl border border-edge bg-white px-4 py-3 shadow-sm">
             <p className="text-[11px] uppercase tracking-wide text-warm-500">{label}</p>
             <p className={`text-lg font-bold ${clase}`}>{valor}</p>
-            {nota && <p className="text-[11px] text-warm-500">{nota}</p>}
+            {barra != null && (
+                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-gray-100" aria-hidden="true">
+                    <div
+                        className={`h-full rounded-full ${barra >= 100 ? 'bg-red-500' : barra >= 80 ? 'bg-amber-500' : 'bg-primary-600'}`}
+                        style={{ width: `${Math.min(100, Math.max(0, barra))}%` }}
+                    />
+                </div>
+            )}
+            {nota && <p className="mt-0.5 text-[11px] text-warm-500">{nota}</p>}
         </div>
     );
 }
+
+/** Una cantidad con signo de moneda: S/ para soles, US$ para dólares. */
+const enMoneda = (n, moneda) => money(n, moneda);
 
 /**
  * El estado de cuenta de un cliente: su línea de crédito, sus ventas a
@@ -58,6 +69,8 @@ export default function EstadoCuentaDetalle({ clienteId }) {
     const [cargando, setCargando] = useState(false);
     const [pdf, setPdf] = useState(false);
     const [exportando, setExportando] = useState(false);
+    /** Qué se ve: el resumen, los movimientos, las cuotas pendientes o los anticipos. */
+    const [pestana, setPestana] = useState('resumen');
 
     const cargar = useCallback(async () => {
         if (!clienteId) {
@@ -100,6 +113,7 @@ export default function EstadoCuentaDetalle({ clienteId }) {
     };
 
     const r = estado?.resumen;
+    const ind = estado?.indicadores;
 
     return (
         <div className="space-y-4">
@@ -136,30 +150,123 @@ export default function EstadoCuentaDetalle({ clienteId }) {
                 <>
                     {/* Cómo está pagando: 🟢 🟡 🔴 ⚫, calculado al momento. */}
                     <EstadoCreditoDetalle estado={r?.estado} />
-                    {r?.tiene_linea ? (
+                    <Tabs
+                        value={pestana}
+                        onChange={setPestana}
+                        items={[
+                            { key: 'resumen', label: 'Resumen', icon: Gauge },
+                            { key: 'movimientos', label: 'Movimientos', icon: FileText },
+                            { key: 'cuotas', label: `Cuotas pendientes${estado.cuotas.length ? ` (${estado.cuotas.length})` : ''}`, icon: CalendarClock },
+                            { key: 'anticipos', label: `Anticipos${estado.anticipos?.length ? ` (${estado.anticipos.length})` : ''}`, icon: HandCoins },
+                        ]}
+                    />
+
+                    {pestana === 'resumen' && (
+                        <div className="space-y-4">
+                    {!r?.tiene_linea && <Alert variant="warning">El cliente no tiene línea de crédito.</Alert>}
+
+                    {ind && (
                         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                             <Tarjeta
-                                label="Línea aprobada"
-                                valor={money(r.limite_total, r.moneda)}
-                                nota={r.ampliacion > 0 ? `Incluye ampliación de ${money(r.ampliacion, r.moneda)}` : null}
+                                label="Línea de crédito"
+                                valor={r?.tiene_linea ? enMoneda(ind.linea.limite, ind.linea.moneda) : 'Sin línea'}
+                                nota={
+                                    r?.tiene_linea
+                                        ? [
+                                              r.ampliacion > 0 ? `Incluye ampliación de ${money(r.ampliacion, r.moneda)}` : null,
+                                              r.condicion_venta === 'credito' ? `Crédito a ${r.dias_credito} días` : 'Venta al contado',
+                                              r.dias_gracia > 0 ? `${r.dias_gracia} días de gracia` : null,
+                                          ]
+                                              .filter(Boolean)
+                                              .join(' · ')
+                                        : null
+                                }
                             />
-                            <Tarjeta label="Deuda pendiente" valor={money(r.deuda, r.moneda)} clase="text-red-600" />
                             <Tarjeta
-                                label="Disponible"
-                                valor={money(r.disponible, r.moneda)}
-                                clase={r.disponible < 0 ? 'text-red-600' : 'text-green-600'}
+                                label="Crédito disponible"
+                                valor={enMoneda(r?.tiene_linea ? ind.linea.disponible : 0, ind.linea.moneda)}
+                                clase={r?.tiene_linea && ind.linea.disponible >= 0 ? 'text-green-600' : r?.tiene_linea ? 'text-red-600' : 'text-warm-900'}
+                                nota={
+                                    !r?.tiene_linea
+                                        ? 'Sin línea de crédito'
+                                        : ind.linea.disponible < 0
+                                          ? `Supera su línea en ${money(-ind.linea.disponible, ind.linea.moneda)}`
+                                          : r?.impedimento
+                                }
                             />
                             <Tarjeta
-                                label="Condición"
-                                valor={r.condicion_venta === 'credito' ? `Crédito a ${r.dias_credito} días` : 'Contado'}
-                                nota={r.impedimento ?? (r.dias_gracia > 0 ? `${r.dias_gracia} días de gracia` : null)}
+                                label="Línea utilizada"
+                                valor={enMoneda(ind.linea.utilizada, ind.linea.moneda)}
+                                barra={ind.linea.porcentaje}
+                                nota={ind.linea.porcentaje != null ? `${ind.linea.porcentaje}% de la línea` : null}
+                            />
+                            <Tarjeta
+                                label="Deuda vencida"
+                                valor={
+                                    ind.vencido.PEN > 0 || ind.vencido.USD > 0
+                                        ? [ind.vencido.PEN > 0 ? enMoneda(ind.vencido.PEN, 'PEN') : null, ind.vencido.USD > 0 ? enMoneda(ind.vencido.USD, 'USD') : null]
+                                              .filter(Boolean)
+                                              .join(' + ')
+                                        : enMoneda(0, 'PEN')
+                                }
+                                clase={ind.vencido.PEN > 0 || ind.vencido.USD > 0 ? 'text-red-600' : 'text-warm-900'}
+                                nota={ind.proxima_cuota ? `Próxima cuota: ${fecha(ind.proxima_cuota.vence)} · ${money(ind.proxima_cuota.saldo, ind.proxima_cuota.moneda)}` : null}
+                            />
+                            <Tarjeta label="Deuda total en soles" valor={enMoneda(ind.deuda.PEN, 'PEN')} clase={ind.deuda.PEN > 0 ? 'text-red-600' : 'text-warm-900'} />
+                            <Tarjeta label="Deuda total en dólares" valor={enMoneda(ind.deuda.USD, 'USD')} clase={ind.deuda.USD > 0 ? 'text-red-600' : 'text-warm-900'} />
+                            <Tarjeta
+                                label="Anticipos a su favor"
+                                valor={enMoneda(ind.anticipos.PEN, 'PEN')}
+                                clase={ind.anticipos.PEN > 0 ? 'text-green-600' : 'text-warm-900'}
+                                nota={`En dólares: ${enMoneda(ind.anticipos.USD, 'USD')}`}
+                            />
+                            <Tarjeta
+                                label="Saldo neto en soles"
+                                valor={enMoneda(Math.abs(ind.deuda.PEN - ind.anticipos.PEN), 'PEN')}
+                                clase={ind.deuda.PEN - ind.anticipos.PEN > 0 ? 'text-red-600' : ind.deuda.PEN - ind.anticipos.PEN < 0 ? 'text-green-600' : 'text-warm-900'}
+                                nota={
+                                    ind.deuda.PEN - ind.anticipos.PEN > 0
+                                        ? 'Debe: su deuda menos sus anticipos'
+                                        : ind.deuda.PEN - ind.anticipos.PEN < 0
+                                          ? 'A su favor: sus anticipos superan su deuda'
+                                          : 'Al día con sus anticipos'
+                                }
                             />
                         </div>
-                    ) : (
-                        <Alert variant="warning">El cliente no tiene línea de crédito.</Alert>
                     )}
 
-                    {estado.monedas.length === 0 && <Alert variant="info">El cliente no tiene ventas al crédito.</Alert>}
+                    {ind && (
+                        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                            <Tarjeta
+                                label="Comprado a crédito"
+                                valor={enMoneda(ind.credito_historico?.PEN?.comprado ?? 0, 'PEN')}
+                                nota={`En dólares: ${enMoneda(ind.credito_historico?.USD?.comprado ?? 0, 'USD')} · de siempre`}
+                            />
+                            <Tarjeta
+                                label="Pagado a crédito"
+                                valor={enMoneda(ind.credito_historico?.PEN?.pagado ?? 0, 'PEN')}
+                                clase="text-green-600"
+                                nota={`En dólares: ${enMoneda(ind.credito_historico?.USD?.pagado ?? 0, 'USD')} · de siempre`}
+                            />
+                            <Tarjeta
+                                label="Anticipos recibidos"
+                                valor={String(estado.anticipos?.length ?? 0)}
+                                nota="Vigentes, de todos los almacenes"
+                            />
+                            <Tarjeta
+                                label="Cuotas pendientes"
+                                valor={String(estado.cuotas.length)}
+                                clase={estado.cuotas.some((c) => c.situacion === 'vencida') ? 'text-red-600' : 'text-warm-900'}
+                                nota={estado.cuotas.some((c) => c.situacion === 'vencida') ? 'Tiene cuotas vencidas' : null}
+                            />
+                        </div>
+                    )}
+                        </div>
+                    )}
+
+                    {pestana === 'movimientos' && (
+                        <div className="space-y-4">
+                    {estado.monedas.length === 0 && <Alert variant="info">El cliente no tiene ventas al crédito en este almacén.</Alert>}
 
                     {estado.monedas.map((bloque) => (
                         <section key={bloque.moneda} className="overflow-hidden rounded-xl border border-edge bg-white shadow-sm">
@@ -199,6 +306,7 @@ export default function EstadoCuentaDetalle({ clienteId }) {
                                                         {mv.tipo === 'pago' && <Wallet className="h-3.5 w-3.5 text-green-600" />}
                                                         {mv.detalle}
                                                     </span>
+                                                    {mv.extra && <span className="block text-xs text-warm-500">{mv.extra}</span>}
                                                 </td>
                                                 <td className="px-4 py-2 text-right">{mv.cargo ? money(mv.cargo, bloque.moneda) : ''}</td>
                                                 <td className="px-4 py-2 text-right text-green-600">{mv.abono ? money(mv.abono, bloque.moneda) : ''}</td>
@@ -225,8 +333,13 @@ export default function EstadoCuentaDetalle({ clienteId }) {
                             </div>
                         </section>
                     ))}
+                        </div>
+                    )}
 
-                    {estado.cuotas.length > 0 && (
+                    {pestana === 'cuotas' &&
+                        (estado.cuotas.length === 0 ? (
+                            <Alert variant="info">El cliente no tiene cuotas pendientes.</Alert>
+                        ) : (
                         <section className="overflow-hidden rounded-xl border border-edge bg-white shadow-sm">
                             <h2 className="inline-flex items-center gap-2 border-b border-edge px-4 py-3 text-sm font-semibold text-warm-900">
                                 <CalendarClock className="h-4 w-4 text-primary-600" /> Cuotas pendientes
@@ -268,7 +381,62 @@ export default function EstadoCuentaDetalle({ clienteId }) {
                                 </table>
                             </div>
                         </section>
-                    )}
+                        ))}
+
+                    {pestana === 'anticipos' &&
+                        (!estado.anticipos?.length ? (
+                            <Alert variant="info">El cliente no tiene anticipos vigentes.</Alert>
+                        ) : (
+                        <section className="overflow-hidden rounded-xl border border-edge bg-white shadow-sm">
+                            <h2 className="inline-flex items-center gap-2 border-b border-edge px-4 py-3 text-sm font-semibold text-warm-900">
+                                <HandCoins className="h-4 w-4 text-primary-600" /> Anticipos del cliente
+                                <span className="text-xs font-normal text-warm-500">de todos los almacenes</span>
+                            </h2>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                    <thead className="bg-gray-50 text-xs uppercase tracking-wide text-warm-500">
+                                        <tr>
+                                            <th className="px-4 py-2 text-left">Anticipo</th>
+                                            <th className="px-4 py-2 text-left">Fecha</th>
+                                            <th className="px-4 py-2 text-left">Almacén</th>
+                                            <th className="px-4 py-2 text-left">Método</th>
+                                            <th className="px-4 py-2 text-right">Monto</th>
+                                            <th className="px-4 py-2 text-right">Aplicado</th>
+                                            <th className="px-4 py-2 text-right">Saldo</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {estado.anticipos.map((a) => (
+                                            <tr key={a.id} className="align-top">
+                                                <td className="px-4 py-2 font-medium text-warm-900">
+                                                    {a.documento}
+                                                    {a.observaciones && <span className="block text-xs font-normal text-warm-500">{a.observaciones}</span>}
+                                                </td>
+                                                <td className="whitespace-nowrap px-4 py-2">{fecha(a.fecha)}</td>
+                                                <td className="px-4 py-2">{a.almacen ?? '—'}</td>
+                                                <td className="px-4 py-2">
+                                                    {a.metodo}
+                                                    {a.referencia && <span className="block text-xs text-warm-500">Operación {a.referencia}</span>}
+                                                </td>
+                                                <td className="px-4 py-2 text-right">{money(a.monto, a.moneda)}</td>
+                                                <td className="px-4 py-2 text-right">
+                                                    {money(a.aplicado, a.moneda)}
+                                                    {a.aplicaciones.map((u, k) => (
+                                                        <span key={k} className="block text-xs text-warm-500">
+                                                            {u.documento} · {fecha(u.fecha)} · {money(u.monto, a.moneda)}
+                                                        </span>
+                                                    ))}
+                                                </td>
+                                                <td className={`px-4 py-2 text-right font-semibold ${a.saldo > 0 ? 'text-green-600' : 'text-warm-500'}`}>
+                                                    {money(a.saldo, a.moneda)}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </section>
+                        ))}
                 </>
             )}
 

@@ -55,6 +55,21 @@
             :filas="$cuotas" />
     @endif
 
+    @if (count($anticipos ?? []))
+        <div class="strong upper" style="font-size: 9px; margin: 14px 0 4px 0;">Anticipos del cliente</div>
+        <x-pdf.items
+            :columnas="[
+                ['label' => 'Anticipo', 'key' => 'documento', 'width' => '80px'],
+                ['label' => 'Fecha', 'key' => 'fecha', 'width' => '62px'],
+                ['label' => 'Almacén', 'key' => 'almacen', 'width' => '70px'],
+                ['label' => 'Método', 'key' => 'metodo'],
+                ['label' => 'Monto', 'key' => 'monto', 'align' => 'right', 'width' => '75px'],
+                ['label' => 'Aplicado', 'key' => 'aplicado', 'align' => 'right', 'width' => '75px'],
+                ['label' => 'Saldo', 'key' => 'saldo', 'align' => 'right', 'width' => '75px'],
+            ]"
+            :filas="$anticipos" />
+    @endif
+
     <div class="muted" style="font-size: 8px; margin-top: 10px;">
         Resumen de las ventas al crédito y los pagos del cliente a la fecha de emisión.
         No es comprobante de pago.

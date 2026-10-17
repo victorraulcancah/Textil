@@ -22,7 +22,10 @@ class EstadoCuentaService
 
     private const FORMAS = ['efectivo' => 'Efectivo', 'transferencia' => 'Transferencia', 'billetera' => 'Billetera'];
 
-    public function __construct(protected CreditoService $credito) {}
+    public function __construct(
+        protected CreditoService $credito,
+        protected AnticipoService $anticipos,
+    ) {}
 
     public function armar(Cliente $cliente, ?string $desde = null, ?string $hasta = null): array
     {
@@ -34,7 +37,7 @@ class EstadoCuentaService
 
         // Tesorería por sucursal: el estado de cuenta es de lo que el cliente compró en este almacén.
         $cuentas = \App\Support\AlmacenAcceso::limitar(CuentaPorCobrar::query())
-            ->with(['notaVenta:id,serie,numero,fecha_emision', 'pagos'])
+            ->with(['notaVenta:id,serie,numero,fecha_emision,almacen_id,vendedor_id,orden_venta_id', 'notaVenta.vendedor:id,name', 'notaVenta.almacen:id,nombre', 'notaVenta.ordenVenta:id,serie,numero', 'pagos'])
             ->where('cliente_id', $cliente->id)
             ->get();
 
@@ -63,13 +66,19 @@ class EstadoCuentaService
             ];
         })->sortKeys()->values()->all();
 
+        $resumen = $this->credito->resumen($cliente);
+        $cuotas = $this->cuotasPendientes($cuentas, $diasGracia);
+        $anticipos = $this->anticipos->delCliente($cliente);
+
         return [
             'cliente' => $cliente->only(['id', 'codigo', 'nombre', 'tipo_documento', 'numero_documento', 'direccion', 'telefono']),
             'desde' => $desde,
             'hasta' => $hasta,
-            'resumen' => $this->credito->resumen($cliente),
+            'resumen' => $resumen,
+            'indicadores' => $this->indicadores($resumen, $cuotas, $movimientos, $anticipos['resumen']),
             'monedas' => $monedas,
-            'cuotas' => $this->cuotasPendientes($cuentas, $diasGracia),
+            'cuotas' => $cuotas,
+            'anticipos' => $anticipos['lista'],
         ];
     }
 
@@ -88,6 +97,13 @@ class EstadoCuentaService
                 'tipo' => 'venta',
                 'documento' => $this->documento($nota),
                 'detalle' => $n > 1 ? "Venta al crédito en {$n} cuotas" : 'Venta al crédito',
+                // Lo que identifica la venta: quién la hizo, dónde, de qué pedido y cuándo vence cada cuota.
+                'extra' => collect([
+                    $nota?->vendedor?->name ? 'Vendedor: '.$nota->vendedor->name : null,
+                    $nota?->almacen?->nombre ? 'Almacén: '.$nota->almacen->nombre : null,
+                    $nota?->ordenVenta ? 'Pedido '.$nota->ordenVenta->documento : null,
+                    'Vence '.$cuotas->sortBy('fecha_vencimiento')->map(fn ($c) => $c->fecha_vencimiento->format('d/m/Y'))->unique()->implode(', '),
+                ])->filter()->implode(' · '),
                 'moneda' => $cuotas->first()->moneda ?: 'PEN',
                 'cargo' => round($cuotas->sum(fn ($c) => (float) $c->monto_total), 2),
                 'abono' => 0.0,
@@ -99,6 +115,10 @@ class EstadoCuentaService
             'tipo' => 'pago',
             'documento' => $this->documento($c->notaVenta),
             'detalle' => $this->detallePago($c, $p),
+            'extra' => collect([
+                $p->referencia ? 'Operación '.$p->referencia : null,
+                $p->glosa ?: null,
+            ])->filter()->implode(' · '),
             'moneda' => $c->moneda ?: 'PEN',
             'cargo' => 0.0,
             'abono' => round((float) $p->monto, 2),
@@ -107,6 +127,53 @@ class EstadoCuentaService
         return $cargos->values()->concat($abonos)
             ->sortBy(fn ($m) => $m['fecha'].($m['tipo'] === 'venta' ? '0' : '1'))
             ->values();
+    }
+
+    /**
+     * Los números para ver de un vistazo cómo está el cliente: su línea, cuánto usa, lo que debe en soles y en dólares,
+     * lo vencido, lo comprado y pagado a crédito de siempre, y los anticipos que tiene a favor.
+     *
+     * @param  array  $resumen  lo que devuelve CreditoService::resumen
+     * @param  array  $cuotas  las cuotas pendientes
+     * @param  Collection  $movimientos  todos los cargos y abonos, sin recortar por fechas
+     * @param  array  $anticipos  lo que tiene a favor por moneda
+     */
+    private function indicadores(array $resumen, array $cuotas, Collection $movimientos, array $anticipos): array
+    {
+        $deudas = $resumen['deuda_por_moneda'] ?? [];
+        $vencido = collect($cuotas)->where('situacion', 'vencida')->groupBy('moneda')
+            ->map(fn ($c) => round((float) $c->sum('saldo'), 2));
+        $totales = $movimientos->groupBy('moneda')->map(fn ($m) => [
+            'comprado' => round((float) $m->sum('cargo'), 2),
+            'pagado' => round((float) $m->sum('abono'), 2),
+        ]);
+        $limite = (float) ($resumen['limite_total'] ?? 0);
+        $usada = (float) ($resumen['deuda'] ?? 0);
+
+        return [
+            'linea' => [
+                'tiene' => (bool) ($resumen['tiene_linea'] ?? false),
+                'moneda' => $resumen['moneda'] ?? 'PEN',
+                'limite' => $limite,
+                'utilizada' => round($usada, 2),
+                'disponible' => (float) ($resumen['disponible'] ?? 0),
+                'porcentaje' => $limite > 0 ? round($usada / $limite * 100, 1) : null,
+            ],
+            'deuda' => [
+                'PEN' => round((float) ($deudas['PEN'] ?? 0), 2),
+                'USD' => round((float) ($deudas['USD'] ?? 0), 2),
+            ],
+            'vencido' => [
+                'PEN' => (float) ($vencido['PEN'] ?? 0),
+                'USD' => (float) ($vencido['USD'] ?? 0),
+            ],
+            'credito_historico' => $totales->all(),
+            'anticipos' => [
+                'PEN' => (float) ($anticipos['PEN']['saldo'] ?? 0),
+                'USD' => (float) ($anticipos['USD']['saldo'] ?? 0),
+            ],
+            'proxima_cuota' => collect($cuotas)->first(fn ($c) => $c['situacion'] !== 'vencida'),
+        ];
     }
 
     private function detallePago(CuentaPorCobrar $cuenta, CuentaPorCobrarPago $pago): string

@@ -51,7 +51,7 @@ class EstadoCuentaPdf implements DocumentoPdf
             'filas' => collect($b['movimientos'])->map(fn ($m) => [
                 'fecha' => $fecha($m['fecha']),
                 'documento' => $m['documento'],
-                'detalle' => $m['detalle'],
+                'detalle' => $m['detalle'].(! empty($m['extra']) ? ' — '.$m['extra'] : ''),
                 'cargo' => $m['cargo'] ? $n($m['cargo']) : '',
                 'abono' => $m['abono'] ? $n($m['abono']) : '',
                 'saldo' => $n($m['saldo']),
@@ -68,6 +68,19 @@ class EstadoCuentaPdf implements DocumentoPdf
 
         $r = $estado['resumen'];
         $simbolo = CreditoService::SIMBOLO[$r['moneda']] ?? $r['moneda'];
+        $ind = $estado['indicadores'];
+        $sol = CreditoService::SIMBOLO['PEN'] ?? 'S/';
+        $dol = CreditoService::SIMBOLO['USD'] ?? 'US$';
+
+        $anticipos = collect($estado['anticipos'])->map(fn ($a) => [
+            'documento' => $a['documento'],
+            'fecha' => $fecha($a['fecha']),
+            'almacen' => $a['almacen'] ?? '—',
+            'metodo' => $a['metodo'].($a['referencia'] ? ' · Op. '.$a['referencia'] : ''),
+            'monto' => (CreditoService::SIMBOLO[$a['moneda']] ?? $a['moneda']).' '.$n($a['monto']),
+            'aplicado' => (CreditoService::SIMBOLO[$a['moneda']] ?? $a['moneda']).' '.$n($a['aplicado']),
+            'saldo' => (CreditoService::SIMBOLO[$a['moneda']] ?? $a['moneda']).' '.$n($a['saldo']),
+        ])->all();
 
         return [
             'cliente' => $cliente,
@@ -75,13 +88,19 @@ class EstadoCuentaPdf implements DocumentoPdf
             'desde' => $fecha($estado['desde']),
             'hasta' => $fecha($estado['hasta']),
             'linea' => ['Estado crediticio' => $r['estado']['etiqueta'] ?? null] + ($r['tiene_linea'] ? [
-                'Línea aprobada' => "{$simbolo} ".$n($r['limite_total']),
-                'Deuda pendiente' => "{$simbolo} ".$n($r['deuda']),
-                'Disponible' => "{$simbolo} ".$n(max($r['disponible'], 0)),
+                'Línea de crédito' => "{$simbolo} ".$n($r['limite_total']),
+                'Crédito disponible' => "{$simbolo} ".$n($r['disponible']),
+                'Línea utilizada' => "{$simbolo} ".$n($ind['linea']['utilizada']).($ind['linea']['porcentaje'] !== null ? " ({$ind['linea']['porcentaje']}%)" : ''),
                 'Condición' => $r['condicion_venta'] === 'credito' ? "Crédito a {$r['dias_credito']} días" : 'Contado',
-            ] : []),
+            ] : ['Línea de crédito' => 'Sin línea']) + [
+                'Deuda total soles' => "{$sol} ".$n($ind['deuda']['PEN']),
+                'Deuda total dólares' => "{$dol} ".$n($ind['deuda']['USD']),
+                'Deuda vencida' => "{$sol} ".$n($ind['vencido']['PEN']).($ind['vencido']['USD'] > 0 ? " + {$dol} ".$n($ind['vencido']['USD']) : ''),
+                'Anticipos a favor' => "{$sol} ".$n($ind['anticipos']['PEN']).($ind['anticipos']['USD'] > 0 ? " + {$dol} ".$n($ind['anticipos']['USD']) : ''),
+            ],
             'monedas' => $monedas,
             'cuotas' => $cuotas,
+            'anticipos' => $anticipos,
         ];
     }
 

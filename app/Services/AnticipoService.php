@@ -4,8 +4,10 @@ namespace App\Services;
 
 use App\Models\Anticipo;
 use App\Models\BilleteraDigital;
+use App\Models\Cliente;
 use App\Models\CuentaBancaria;
 use App\Models\MovimientoCaja;
+use App\Models\NotaVentaPago;
 use App\Models\SerieDocumento;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -141,6 +143,56 @@ class AnticipoService
 
             return $anticipo->fresh();
         });
+    }
+
+    /**
+     * Los anticipos vigentes de un cliente (de todos los almacenes) con en qué ventas se usaron, y cuánto tiene a favor
+     * por moneda: lo recibido, lo aplicado y lo que queda. Los anulados no cuentan.
+     *
+     * @return array{lista: list<array<string, mixed>>, resumen: array<string, array{recibido: float, aplicado: float, saldo: float}>}
+     */
+    public function delCliente(Cliente $cliente): array
+    {
+        $anticipos = Anticipo::with(['almacen:id,nombre', 'cuentaBancaria:id,alias,numero_cuenta', 'billetera:id,nombre'])
+            ->where('cliente_id', $cliente->id)
+            ->where('estado', Anticipo::VIGENTE)
+            ->orderBy('fecha')->orderBy('id')
+            ->get();
+
+        // Las ventas anuladas devolvieron su anticipo: no cuentan como aplicación.
+        $usos = NotaVentaPago::with('notaVenta:id,serie,numero,fecha_emision,estado')
+            ->whereIn('anticipo_id', $anticipos->pluck('id'))
+            ->get()
+            ->filter(fn ($p) => $p->notaVenta?->estado === 'emitida')
+            ->groupBy('anticipo_id');
+
+        $lista = $anticipos->map(fn (Anticipo $a) => [
+            'id' => $a->id,
+            'documento' => $a->documento,
+            'fecha' => $a->fecha?->toDateString(),
+            'registrado' => $a->created_at?->toIso8601String(),
+            'almacen' => $a->almacen?->nombre,
+            'moneda' => $a->moneda,
+            'metodo' => $a->cuentaBancaria ? 'Transferencia · '.($a->cuentaBancaria->alias ?: $a->cuentaBancaria->numero_cuenta) : ($a->billetera?->nombre ?? 'Efectivo'),
+            'referencia' => $a->referencia,
+            'observaciones' => $a->observaciones,
+            'monto' => round((float) $a->monto, 2),
+            'aplicado' => round((float) $a->monto_aplicado, 2),
+            'saldo' => round((float) $a->saldo, 2),
+            'aplicaciones' => ($usos[$a->id] ?? collect())->map(fn ($p) => [
+                'documento' => "{$p->notaVenta->serie}-{$p->notaVenta->numero}",
+                'fecha' => $p->fecha?->toDateString(),
+                'monto' => round((float) $p->monto, 2),
+            ])->values()->all(),
+        ])->values()->all();
+
+        $resumen = $anticipos->groupBy('moneda')->map(fn ($grupo) => [
+            'recibido' => round((float) $grupo->sum('monto'), 2),
+            'aplicado' => round((float) $grupo->sum('monto_aplicado'), 2),
+            'saldo' => round((float) $grupo->sum(fn (Anticipo $a) => (float) $a->saldo), 2),
+        ])->all();
+
+        return ['lista' => $lista, 'resumen' => $resumen];
     }
 
     private function exigirVigente(Anticipo $anticipo): void

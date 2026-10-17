@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     Ban,
+    CalendarDays,
     ClipboardList,
     Edit,
     FileText,
@@ -27,6 +28,7 @@ import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
 import DetalleCard from '../components/ui/DetalleCard';
 import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select } from '../components/ui';
 import FiltroFechas from '../components/FiltroFechas';
+import CambiarFechaModal from '../components/CambiarFechaModal';
 import { diaLocal } from '../lib/fechas';
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
@@ -89,6 +91,8 @@ export default function Pedidos() {
 
     const [pdf, setPdf] = useState(null);
     const [anular, setAnular] = useState(null);
+    /** Corregir la fecha de un pedido: el elegido. */
+    const [cambiarFecha, setCambiarFecha] = useState(null);
     const [facturar, setFacturar] = useState(null);
     const [procesando, setProcesando] = useState(false);
 
@@ -261,6 +265,16 @@ export default function Pedidos() {
                     >
                         <Printer className="h-4 w-4" />
                     </button>
+                    {row.estado !== 'anulado' && (
+                        <button
+                            aria-label="Cambiar fecha"
+                            title="Cambiar la fecha del pedido"
+                            onClick={() => setCambiarFecha(row)}
+                            className="rounded-md p-1.5 text-warm-600 transition hover:bg-gray-100 hover:text-warm-900"
+                        >
+                            <CalendarDays className="h-4 w-4" />
+                        </button>
+                    )}
                     {row.editable && (
                         <button
                             aria-label="Editar"
@@ -531,6 +545,20 @@ export default function Pedidos() {
                 id={pdf?.id}
                 nombre={pdf?.nombre}
                 titulo={pdf?.titulo ?? 'Documento'}
+            />
+
+            <CambiarFechaModal
+                documento={cambiarFecha?.documento ?? null}
+                titulo="Cambiar la fecha del pedido"
+                fechaActual={cambiarFecha?.fecha_emision}
+                nota="Solo cambia la fecha del pedido. El día en que se registró de verdad no cambia; la proforma, si ya existe, tiene la suya."
+                onClose={() => setCambiarFecha(null)}
+                onGuardar={async (fecha) => {
+                    await api.post(`/ordenes-venta/${cambiarFecha.id}/fecha`, { fecha });
+                    setCambiarFecha(null);
+                    toast.success('Fecha del pedido actualizada.');
+                    await load();
+                }}
             />
         </Layout>
     );

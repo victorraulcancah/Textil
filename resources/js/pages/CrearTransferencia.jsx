@@ -8,7 +8,9 @@ import Layout from '../components/Layout';
 import LineasRollos, { aDetallesTraslado } from '../components/LineasRollos';
 import { Alert, Button, Input, Modal, SearchSelect, Select, Spinner } from '../components/ui';
 
-const hoy = () => new Date().toISOString().slice(0, 10);
+// El día de hoy en la hora local (con toISOString, de noche en Perú ya marcaba mañana).
+import { hoyIso } from '../lib/fechas';
+const hoy = hoyIso;
 
 const emptyForm = {
     almacen_origen_id: '',

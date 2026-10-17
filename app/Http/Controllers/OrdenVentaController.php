@@ -210,6 +210,25 @@ class OrdenVentaController extends Controller
         );
     }
 
+    /**
+     * Corrige el día del pedido (por ejemplo, el que salió un día después por la hora). Solo cambia la fecha: el día en
+     * que se registró de verdad (created_at) queda como estaba. Cualquier día hasta hoy; nunca uno futuro.
+     */
+    public function cambiarFecha(Request $request, OrdenVenta $ordenesVenta)
+    {
+        AlmacenAcceso::exigir($ordenesVenta->almacen_id);
+
+        $data = $request->validate(['fecha' => 'required|date|before_or_equal:today']);
+
+        if ($ordenesVenta->estado === OrdenVenta::ANULADO) {
+            return response()->json(['message' => 'El pedido está anulado: su fecha no se cambia.'], 422);
+        }
+
+        $ordenesVenta->update(['fecha_emision' => $data['fecha']]);
+
+        return new OrdenVentaResource($ordenesVenta->fresh()->load(self::RELACIONES));
+    }
+
     /** Los motivos con los que se puede descontar metraje de un rollo (los de salida de Ajustes). */
     public function motivosAjuste()
     {

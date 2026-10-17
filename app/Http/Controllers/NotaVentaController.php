@@ -6,9 +6,16 @@ use App\Exceptions\ExcesoCreditoException;
 use App\Http\Requests\NotaVenta\AnularNotaVentaRequest;
 use App\Http\Requests\NotaVenta\StoreNotaVentaRequest;
 use App\Http\Resources\NotaVentaResource;
+use App\Models\CuentaPorCobrar;
+use App\Models\CuentaPorCobrarPago;
+use App\Models\MovimientoCaja;
 use App\Models\NotaVenta;
 use App\Services\NotaVentaService;
 use App\Support\AlmacenAcceso;
+use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class NotaVentaController extends Controller
 {
@@ -93,6 +100,55 @@ class NotaVentaController extends Controller
     private function excesoDeCredito(ExcesoCreditoException $e)
     {
         return response()->json(['message' => $e->getMessage(), 'exceso_credito' => $e->detalle], 422);
+    }
+
+    /**
+     * Corrige el día de la proforma. Se mueven con ella los cobros de ese mismo día (y sus ingresos en caja), para que
+     * la venta y su cobro sigan juntos; el día en que se registró de verdad (created_at) no cambia. Cualquier día hasta
+     * hoy, y nunca después de un cobro posterior ni del vencimiento de una cuota.
+     */
+    public function cambiarFecha(Request $request, NotaVenta $notaVenta)
+    {
+        AlmacenAcceso::exigir($notaVenta->almacen_id);
+
+        $data = $request->validate(['fecha' => 'required|date|before_or_equal:today']);
+        $nueva = Carbon::parse($data['fecha'])->toDateString();
+
+        if ($notaVenta->estado !== 'emitida') {
+            return response()->json(['message' => 'La proforma está anulada: su fecha no se cambia.'], 422);
+        }
+
+        $vieja = $notaVenta->fecha_emision->toDateString();
+
+        DB::transaction(function () use ($notaVenta, $nueva, $vieja) {
+            // Los cobros y movimientos del mismo día de la venta se van con ella.
+            $notaVenta->pagos()->whereDate('fecha', $vieja)->update(['fecha' => $nueva]);
+            MovimientoCaja::where('documento_referencia_tipo', 'nota_venta')
+                ->where('documento_referencia_id', $notaVenta->id)
+                ->whereDate('fecha', $vieja)
+                ->update(['fecha' => $nueva]);
+
+            // Lo que no se movió no puede quedar antes de la venta.
+            $cobro = $notaVenta->pagos()->whereDate('fecha', '<', $nueva)->orderBy('fecha')->first();
+            if ($cobro) {
+                throw ValidationException::withMessages(['fecha' => 'Hay un cobro del '.$cobro->fecha->format('d/m/Y').': la venta no puede ser después.']);
+            }
+
+            $cuenta = CuentaPorCobrar::where('nota_venta_id', $notaVenta->id)->whereDate('fecha_vencimiento', '<', $nueva)->orderBy('fecha_vencimiento')->first();
+            if ($cuenta) {
+                throw ValidationException::withMessages(['fecha' => 'Una cuota vence el '.$cuenta->fecha_vencimiento->format('d/m/Y').': la venta no puede ser después.']);
+            }
+
+            $cobranza = CuentaPorCobrarPago::whereHas('cuentaPorCobrar', fn ($q) => $q->where('nota_venta_id', $notaVenta->id))
+                ->whereDate('fecha', '<', $nueva)->orderBy('fecha')->first();
+            if ($cobranza) {
+                throw ValidationException::withMessages(['fecha' => 'Hay una cobranza del '.$cobranza->fecha->format('d/m/Y').': la venta no puede ser después.']);
+            }
+
+            $notaVenta->update(['fecha_emision' => $nueva]);
+        });
+
+        return new NotaVentaResource($notaVenta->fresh()->load(['cliente', 'almacen', 'vendedor']));
     }
 
     public function destroy(NotaVenta $notaVenta)

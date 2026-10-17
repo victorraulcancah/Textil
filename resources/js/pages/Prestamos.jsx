@@ -12,7 +12,9 @@ import ActionsMenu from '../components/ActionsMenu';
 import ProductoPickerModal from '../components/ProductoPickerModal';
 import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select, Tabs } from '../components/ui';
 
-const hoy = () => new Date().toISOString().slice(0, 10);
+// El día de hoy en la hora local (con toISOString, de noche en Perú ya marcaba mañana).
+import { hoyIso } from '../lib/fechas';
+const hoy = hoyIso;
 
 const emptyForm = {
     tipo: 'prestado',

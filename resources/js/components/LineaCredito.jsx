@@ -2,7 +2,9 @@ import { useMemo } from 'react';
 import { convertir, money, MONEDAS } from '../lib/moneda';
 import { Alert, Input, Select } from './ui';
 
-const hoy = () => new Date().toISOString().slice(0, 10);
+// El día de hoy en la hora local (con toISOString, de noche en Perú ya marcaba mañana).
+import { hoyIso } from '../lib/fechas';
+const hoy = hoyIso;
 
 /** Así arranca una línea nueva: a crédito, a 30 días. */
 export const lineaVacia = () => ({

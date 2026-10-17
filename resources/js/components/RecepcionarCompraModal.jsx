@@ -9,7 +9,9 @@ import ColorSelect from './ColorSelect';
 import EscanerCamara from './EscanerCamara';
 import { Alert, Badge, Button, Input, Modal, SearchSelect, Select, Spinner, cn } from './ui';
 
-const hoy = () => new Date().toISOString().slice(0, 10);
+// El día de hoy en la hora local (con toISOString, de noche en Perú ya marcaba mañana).
+import { hoyIso } from '../lib/fechas';
+const hoy = hoyIso;
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
 

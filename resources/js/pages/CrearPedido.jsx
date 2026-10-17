@@ -15,9 +15,11 @@ import { opcionesAlmacen, useAlmacenPropio } from '../lib/almacenes';
 import { cargarTipoCambio, convertir, money, MONEDAS } from '../lib/moneda';
 import { Alert, Button, Input, SearchSelect, Select, Spinner, cn } from '../components/ui';
 
+import { hoyIso } from '../lib/fechas';
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
 
-const hoy = () => new Date().toISOString().slice(0, 10);
+// El día de hoy en la hora local (con toISOString, de noche en Perú ya marcaba mañana).
+const hoy = hoyIso;
 
 /** Una tela se pide en rollos enteros y se cobra por metro: cuánto mide cada rollo lo define el almacén. */
 const ROLLOS = 'rollos';

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Ban, Edit, Eye, FileSpreadsheet, FileText, Printer, User } from 'lucide-react';
+import { Ban, CalendarDays, Edit, Eye, FileSpreadsheet, FileText, Printer, User } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
@@ -10,6 +10,7 @@ import PageHeader, { CreateButton } from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
 import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select, Spinner } from '../components/ui';
 import FiltroFechas from '../components/FiltroFechas';
+import CambiarFechaModal from '../components/CambiarFechaModal';
 import { diaLocal, hoyIso } from '../lib/fechas';
 
 const fecha = (v) => (v ? new Date(v).toLocaleDateString('es-PE') : '—');
@@ -44,6 +45,8 @@ export default function NotasVenta() {
     const [fHasta, setFHasta] = useState(hoyIso);
 
     const [anularTarget, setAnularTarget] = useState(null);
+    /** Corregir la fecha de una proforma: la elegida. */
+    const [cambiarFecha, setCambiarFecha] = useState(null);
     const [motivo, setMotivo] = useState('');
     const [anulando, setAnulando] = useState(false);
 
@@ -175,7 +178,7 @@ export default function NotasVenta() {
             key: 'actions',
             label: 'Acciones',
             // Cuatro botones no entran en los 120px por defecto.
-            width: '170px',
+            width: '200px',
             actions: (row) => (
                 <>
                     <button
@@ -194,6 +197,16 @@ export default function NotasVenta() {
                     >
                         <Printer className="h-4 w-4" />
                     </button>
+                    {row.estado !== 'anulada' && (
+                        <button
+                            aria-label="Cambiar fecha"
+                            title="Cambiar la fecha de la proforma"
+                            onClick={() => setCambiarFecha(row)}
+                            className="rounded-md p-1.5 text-warm-600 transition hover:bg-gray-100 hover:text-warm-900"
+                        >
+                            <CalendarDays className="h-4 w-4" />
+                        </button>
+                    )}
                     {row.estado !== 'anulada' && (
                         <button
                             aria-label="Editar"
@@ -539,6 +552,20 @@ export default function NotasVenta() {
                 nombre={pdfTarget ? docNombre(pdfTarget) : ''}
                 titulo="Proforma"
                 formatos={['a4', 'ticket']}
+            />
+
+            <CambiarFechaModal
+                documento={cambiarFecha ? `${cambiarFecha.serie}-${cambiarFecha.numero}` : null}
+                titulo="Cambiar la fecha de la proforma"
+                fechaActual={cambiarFecha?.fecha_emision}
+                nota="Los cobros de ese mismo día se mueven con la venta. El día en que se registró de verdad no cambia."
+                onClose={() => setCambiarFecha(null)}
+                onGuardar={async (fecha) => {
+                    await api.post(`/notas-venta/${cambiarFecha.id}/fecha`, { fecha });
+                    setCambiarFecha(null);
+                    toast.success('Fecha de la proforma actualizada.');
+                    await load();
+                }}
             />
         </Layout>
     );

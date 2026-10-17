@@ -92,6 +92,8 @@ return [
                     'pdf' => ['orden-venta', 'requerimiento-almacen'],
                     // Sin "ver todo", cada vendedor ve solo los pedidos que tomó.
                     'acciones' => ['ver', 'ver_todo', 'crear', 'editar', 'eliminar'],
+                    // Corregir la fecha de un pedido es editarlo, no crear otro.
+                    'patrones' => ['ordenes-venta/*/fecha' => 'editar'],
                 ],
                 'notas-venta' => [
                     'label' => 'Proformas',
@@ -99,7 +101,7 @@ return [
                     'pdf' => ['nota-venta'],
                     'acciones' => ['ver', 'crear', 'editar', 'eliminar', 'exceder_credito'],
                     // Facturar un pedido es crear una venta, no crear un pedido.
-                    'patrones' => ['ordenes-venta/*/facturar' => 'crear'],
+                    'patrones' => ['ordenes-venta/*/facturar' => 'crear', 'notas-venta/*/fecha' => 'editar'],
                 ],
             ],
         ],

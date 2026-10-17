@@ -255,6 +255,7 @@ Route::middleware('auth:api')->group(function () {
     Route::post('ordenes-venta/{ordenesVenta}/despachar', [OrdenVentaController::class, 'despachar']);
     Route::post('ordenes-venta/{ordenesVenta}/facturar', [OrdenVentaController::class, 'facturar']);
     Route::post('ordenes-venta/{ordenesVenta}/anular', [OrdenVentaController::class, 'anular']);
+    Route::post('ordenes-venta/{ordenesVenta}/fecha', [OrdenVentaController::class, 'cambiarFecha']);
 
     // Facturación
     // Antes del resource: si no, "tipos-precio" se tomaría como un {cliente}.
@@ -282,6 +283,7 @@ Route::middleware('auth:api')->group(function () {
     Route::get('notas-venta/{notaVenta}', [NotaVentaController::class, 'show']);
     Route::put('notas-venta/{notaVenta}', [NotaVentaController::class, 'update']);
     Route::post('notas-venta/{notaVenta}/anular', [NotaVentaController::class, 'anular']);
+    Route::post('notas-venta/{notaVenta}/fecha', [NotaVentaController::class, 'cambiarFecha']);
     Route::delete('notas-venta/{notaVenta}', [NotaVentaController::class, 'destroy']);
 
     // Tesorería

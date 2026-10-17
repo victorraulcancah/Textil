@@ -193,6 +193,17 @@ class MiCajaController extends Controller
         return $this->show();
     }
 
+    /** Un ingreso hecho a mano que en realidad era el anticipo de un cliente: pasa a ser ese anticipo, sin mover plata. */
+    public function convertirEnAnticipo(Request $request, MovimientoCajaService $movimientos, int $movimiento)
+    {
+        $modelo = MovimientoCaja::withTrashed()->findOrFail($movimiento);
+        $datos = $request->validate(['cliente_id' => 'required|exists:clientes,id', 'observaciones' => 'nullable|string|max:255']);
+
+        $movimientos->convertirEnAnticipo($modelo, (int) $datos['cliente_id'], $datos['observaciones'] ?? null, auth('api')->user());
+
+        return $this->show();
+    }
+
     /**
      * Edita un movimiento de tus turnos; qué se puede cambiar depende de dónde nace (ver `MovimientoCajaService`).
      * El monto o el método del efectivo de un turno ya cerrado no cambian: ya se contó en el arqueo.

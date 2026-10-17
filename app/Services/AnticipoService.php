@@ -77,6 +77,63 @@ class AnticipoService
         });
     }
 
+    /**
+     * Convierte un ingreso que se registró a mano —cuando todavía no había anticipos— en el anticipo de un cliente. No entra
+     * plata nueva: el ingreso que ya está en la caja (y en su arqueo) pasa a ser el ingreso del anticipo, con su mismo
+     * día, monto y método. El anticipo queda a nombre de quien recibió el dinero, en el almacén de su caja.
+     */
+    public function desdeMovimiento(MovimientoCaja $movimiento, int $clienteId, ?string $observaciones = null): Anticipo
+    {
+        $movimiento->loadMissing(['apertura.caja', 'motivo:id,nombre,es_sistema']);
+
+        if ($movimiento->trashed()) {
+            throw ValidationException::withMessages(['caja' => 'Este movimiento está anulado.']);
+        }
+        if ($movimiento->tipo !== 'ingreso' || $movimiento->documento_referencia_tipo || $movimiento->motivo?->es_sistema) {
+            throw ValidationException::withMessages(['caja' => 'Solo un ingreso registrado a mano se convierte en anticipo.']);
+        }
+        if ($movimiento->por_aprobar) {
+            throw ValidationException::withMessages(['caja' => 'Este ingreso espera aprobación: no se convierte todavía.']);
+        }
+
+        $almacenId = (int) $movimiento->apertura?->caja?->almacen_id;
+        $moneda = $movimiento->moneda ?: 'PEN';
+        $forma = $movimiento->cuenta_bancaria_id ? 'transferencia' : ($movimiento->billetera_id ? 'billetera' : 'efectivo');
+
+        return DB::transaction(function () use ($movimiento, $clienteId, $observaciones, $almacenId, $moneda, $forma) {
+            $serie = Anticipo::serieDeAlmacen($almacenId);
+
+            $anticipo = Anticipo::create([
+                'serie' => $serie,
+                'numero' => $this->siguienteNumero($serie, $almacenId),
+                'almacen_id' => $almacenId,
+                'cliente_id' => $clienteId,
+                // Quien recibió el dinero es el dueño del turno donde está el ingreso.
+                'usuario_id' => $movimiento->apertura->usuario_id,
+                'fecha' => $movimiento->fecha?->toDateString() ?? now()->toDateString(),
+                'moneda' => $moneda,
+                'monto' => round((float) $movimiento->monto, 2),
+                'forma_pago' => $forma,
+                'cuenta_bancaria_id' => $movimiento->cuenta_bancaria_id,
+                'billetera_id' => $movimiento->billetera_id,
+                'referencia' => $forma === 'efectivo' ? null : $movimiento->numero_operacion,
+                'movimiento_caja_id' => $movimiento->id,
+                'observaciones' => filled($observaciones) ? $observaciones : $movimiento->descripcion,
+                'estado' => Anticipo::VIGENTE,
+            ]);
+
+            $antes = trim((string) $movimiento->descripcion);
+            $movimiento->forceFill([
+                'motivo_movimiento_id' => $this->cajas->motivo('Ingreso por anticipo'),
+                'documento_referencia_tipo' => 'anticipo',
+                'documento_referencia_id' => $anticipo->id,
+                'descripcion' => "Anticipo {$anticipo->documento}".($antes !== '' ? " · {$antes}" : ''),
+            ])->save();
+
+            return $anticipo;
+        });
+    }
+
     /** Cambia lo que no mueve plata: el día, la referencia y las observaciones. El ingreso en caja los sigue. */
     public function actualizar(Anticipo $anticipo, array $datos): Anticipo
     {

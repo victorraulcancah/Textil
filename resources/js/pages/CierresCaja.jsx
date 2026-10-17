@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Ban, Check, Coins, Pencil, Printer, RotateCcw } from 'lucide-react';
+import { Ban, Check, Coins, HandCoins, Pencil, Printer, RotateCcw } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
@@ -14,6 +14,7 @@ import AprobarCierreModal from '../components/AprobarCierreModal';
 import RecerrarCierreModal from '../components/RecerrarCierreModal';
 import AnularMovimientoModal from '../components/AnularMovimientoModal';
 import EditarMovimientoModal from '../components/EditarMovimientoModal';
+import ConvertirEnAnticipoModal, { esConvertibleEnAnticipo } from '../components/ConvertirEnAnticipoModal';
 import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select } from '../components/ui';
 
 const money = (n, moneda = 'PEN') =>
@@ -62,6 +63,7 @@ export default function CierresCaja() {
     /** El movimiento que se edita o se anula desde la tabla de abajo, y lo que ofrecen los selectores del modal. */
     const [movEditar, setMovEditar] = useState(null);
     const [movAnular, setMovAnular] = useState(null);
+    const [movConvertir, setMovConvertir] = useState(null);
     const [catalogos, setCatalogos] = useState({ cuentas: [], billeteras: [], motivos: [] });
 
     // Desde y hasta, a la vista; filtran por la fecha del cierre. Vacíos muestran todos.
@@ -408,7 +410,7 @@ export default function CierresCaja() {
                                 <Check className="h-4 w-4" />
                             </button>
                         )}
-                        {puedeAprobar && row.estado !== 'anulado' && (
+                        {puedeAprobar && (row.estado !== 'anulado' || puedeVolverACerrar(row)) && (
                             <button aria-label="Recierre" title="Recierre: corrige lo contado y lo que se deja sin reabrir la caja" disabled={accionando === row.id}
                                 onClick={(e) => { e.stopPropagation(); setCierreRecerrar(row); }}
                                 className="rounded-md p-1.5 text-primary-600 transition hover:bg-primary-50 hover:text-primary-700 disabled:opacity-50">
@@ -473,6 +475,12 @@ export default function CierresCaja() {
         onApplyFilters: () => { setTipoMovActivo(filtroTipoMov); setCuentaActiva(filtroCuenta); },
         onClearFilters: () => { setFiltroTipoMov(''); setTipoMovActivo(''); setFiltroCuenta(''); setCuentaActiva(''); },
     };
+
+    /** Un cierre anulado se vuelve a cerrar si su turno quedó cerrado y no tiene otro cierre vigente. */
+    const puedeVolverACerrar = (row) =>
+        row.estado === 'anulado' &&
+        row.apertura?.estado === 'cerrada' &&
+        !cierres.some((c) => c.id !== row.id && c.apertura_caja_id === row.apertura_caja_id && c.estado !== 'anulado');
 
     const movColumns = [
         {
@@ -551,9 +559,9 @@ export default function CierresCaja() {
             type: 'actions',
             key: 'acciones',
             label: 'Acc.',
-            width: '96px',
+            width: '128px',
             actions: (row) => {
-                if (!puedeAprobar || !seleccionado || seleccionado.estado === 'anulado' || row.deleted_at) return null;
+                if (!puedeAprobar || !seleccionado || row.deleted_at) return null;
                 // Lo del cierre mismo (el retiro y el ingreso en la otra caja) se corrige con el recierre.
                 if (row.documento_referencia_tipo === 'cierre_caja') return null;
                 const doc = row.documento_referencia_tipo;
@@ -569,6 +577,17 @@ export default function CierresCaja() {
                         >
                             <Pencil className="h-4 w-4" />
                         </button>
+                        {esConvertibleEnAnticipo(row) && (
+                            <button
+                                type="button"
+                                aria-label="Convertir en anticipo"
+                                title="Convertir en anticipo de un cliente (era un ingreso que debió ser anticipo)"
+                                onClick={(e) => { e.stopPropagation(); setMovConvertir({ ...row, apertura: seleccionado.apertura }); }}
+                                className="rounded-md p-1.5 text-primary-600 transition hover:bg-primary-50 hover:text-primary-700"
+                            >
+                                <HandCoins className="h-4 w-4" />
+                            </button>
+                        )}
                         {sePuedeAnular && (
                             <button
                                 type="button"
@@ -680,6 +699,15 @@ export default function CierresCaja() {
                 onClose={() => setMovAnular(null)}
                 onDone={() => {
                     setMovAnular(null);
+                    load();
+                }}
+            />
+            <ConvertirEnAnticipoModal
+                movimiento={movConvertir}
+                url={movConvertir && seleccionado ? `/cierres-caja/${seleccionado.id}/movimientos/${movConvertir.id}/convertir-anticipo` : ''}
+                onClose={() => setMovConvertir(null)}
+                onDone={() => {
+                    setMovConvertir(null);
                     load();
                 }}
             />

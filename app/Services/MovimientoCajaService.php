@@ -67,6 +67,18 @@ class MovimientoCajaService
     }
 
     /**
+     * Convierte un ingreso hecho a mano en el anticipo de un cliente (sin mover plata: ver `AnticipoService`). En Mi Caja
+     * solo los de tus turnos; quien gestiona los cierres (`$gestor`) convierte los de cualquier turno, también cerrado.
+     */
+    public function convertirEnAnticipo(MovimientoCaja $movimiento, int $clienteId, ?string $observaciones, User $user, bool $gestor = false): Anticipo
+    {
+        $this->exigirOperable($movimiento, $user, 'convertir', $gestor);
+        $this->exigirPermiso('anticipos', 'POST', 'No tienes permiso para registrar anticipos.');
+
+        return app(AnticipoService::class)->desdeMovimiento($movimiento, $clienteId, $observaciones);
+    }
+
+    /**
      * Edita un movimiento. Qué se puede cambiar depende de dónde nace:
      *
      *  - Ingreso o gasto a mano: fecha, descripción, N.° de operación, motivo, método y monto.

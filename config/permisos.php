@@ -286,6 +286,7 @@ return [
                         // Anular o corregir los movimientos de un turno ya cerrado: lo decide quien gestiona los cierres.
                         'cierres-caja/*/movimientos/*/anular' => 'aprobar',
                         'cierres-caja/*/movimientos/*/editar' => 'aprobar',
+                        'cierres-caja/*/movimientos/*/convertir-anticipo' => 'aprobar',
                     ],
                     'acciones' => ['ver', 'aprobar'],
                 ],

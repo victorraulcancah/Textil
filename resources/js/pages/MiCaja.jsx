@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowDownCircle, ArrowUpCircle, Ban, FileSignature, FileSpreadsheet, FileText, Lock, LockOpen, Pencil, PiggyBank, RotateCcw, Smartphone, Trash2, Wallet } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, Ban, FileSignature, FileSpreadsheet, FileText, HandCoins, Lock, LockOpen, Pencil, PiggyBank, RotateCcw, Smartphone, Trash2, Wallet } from 'lucide-react';
 import api from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
@@ -11,6 +11,7 @@ import PageHeader from '../components/PageHeader';
 import MetodoCajaPicker from '../components/MetodoCajaPicker';
 import AnularMovimientoModal from '../components/AnularMovimientoModal';
 import EditarMovimientoModal from '../components/EditarMovimientoModal';
+import ConvertirEnAnticipoModal, { esConvertibleEnAnticipo } from '../components/ConvertirEnAnticipoModal';
 import PdfViewerModal from '../components/PdfViewerModal';
 import { Alert, Badge, Button, Card, DataTable, Input, Modal, SearchSelect, Select, Spinner } from '../components/ui';
 
@@ -90,6 +91,8 @@ export default function MiCaja() {
     const [pagosNuevos, setPagosNuevos] = useState([]);
     /** Editar un movimiento: el elegido y lo que se está cambiando. */
     const [editarMov, setEditarMov] = useState(null);
+    /** Un ingreso hecho a mano que en realidad era un anticipo de cliente. */
+    const [convertirMov, setConvertirMov] = useState(null);
 
     // ── Filtros de la tabla de movimientos ──
     /** Tipo de movimiento: '' (todos), 'efectivo' (el cajón) o 'digital' (transferencia, Yape, billetera). */
@@ -472,6 +475,18 @@ export default function MiCaja() {
                             <Pencil className="h-4 w-4" />
                         </button>
 
+                        {esConvertibleEnAnticipo(r) && (
+                            <button
+                                type="button"
+                                aria-label="Convertir en anticipo"
+                                title="Convertir en anticipo de un cliente (era un ingreso que debió ser anticipo)"
+                                onClick={(e) => { e.stopPropagation(); setConvertirMov(r); }}
+                                className="rounded-md p-1.5 text-primary-600 transition hover:bg-primary-50 hover:text-primary-700"
+                            >
+                                <HandCoins className="h-4 w-4" />
+                            </button>
+                        )}
+
                         {/* Lo que nace de una venta o cobranza se corrige con sus pagos nuevos (en la caja abierta). */}
                         {delTurnoActual && esCobroCorregible(r) && (
                             <button
@@ -755,6 +770,15 @@ export default function MiCaja() {
                 onDone={(d) => {
                     setData(d);
                     setAnularMov(null);
+                }}
+            />
+            <ConvertirEnAnticipoModal
+                movimiento={convertirMov}
+                url={convertirMov ? `/mi-caja/movimientos/${convertirMov.id}/convertir-anticipo` : ''}
+                onClose={() => setConvertirMov(null)}
+                onDone={(d) => {
+                    setData(d);
+                    setConvertirMov(null);
                 }}
             />
             <EditarMovimientoModal

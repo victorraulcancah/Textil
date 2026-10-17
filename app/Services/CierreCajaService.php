@@ -80,8 +80,15 @@ class CierreCajaService
         $cierre->loadMissing('apertura.caja');
         $apertura = $cierre->apertura;
 
+        // Un cierre anulado solo se vuelve a cerrar si su turno quedó cerrado sin otro cierre vigente: pasa a pendiente con lo
+        // corregido. Si la anulación reabrió la caja, ese turno se cierra de nuevo desde Mi Caja.
         if ($cierre->estado === CierreCaja::ANULADO) {
-            throw ValidationException::withMessages(['cierre' => 'Un cierre anulado no se corrige.']);
+            $otroVigente = CierreCaja::where('apertura_caja_id', $cierre->apertura_caja_id)->where('id', '!=', $cierre->id)
+                ->where('estado', '!=', CierreCaja::ANULADO)->exists();
+            if ($apertura->estado !== 'cerrada' || $otroVigente) {
+                throw ValidationException::withMessages(['cierre' => 'Este cierre anulado no se puede volver a cerrar: '
+                    .($otroVigente ? 'ese turno ya tiene otro cierre.' : 'la caja quedó abierta para cerrarla de nuevo desde Mi Caja.')]);
+            }
         }
 
         $contado = round((float) $datos['monto_contado'], 2);
@@ -134,6 +141,9 @@ class CierreCajaService
                 'estado' => CierreCaja::PENDIENTE,
                 'aprobado_por' => null,
                 'aprobado_en' => null,
+                'anulado_por' => null,
+                'anulado_en' => null,
+                'anulado_motivo' => null,
                 'recerrado_por' => $por->id,
                 'recerrado_en' => now(),
                 'recerrado_motivo' => $datos['motivo'],

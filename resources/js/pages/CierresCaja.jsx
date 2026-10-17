@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Check, Coins, Printer, RotateCcw } from 'lucide-react';
+import { Ban, Check, Coins, Pencil, Printer, RotateCcw } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
@@ -11,6 +11,9 @@ import PageHeader from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
 import FiltroFechas from '../components/FiltroFechas';
 import AprobarCierreModal from '../components/AprobarCierreModal';
+import RecerrarCierreModal from '../components/RecerrarCierreModal';
+import AnularMovimientoModal from '../components/AnularMovimientoModal';
+import EditarMovimientoModal from '../components/EditarMovimientoModal';
 import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select } from '../components/ui';
 
 const money = (n, moneda = 'PEN') =>
@@ -42,6 +45,8 @@ export default function CierresCaja() {
     /** El cierre que se está revisando para aprobar (modal). */
     const [cierreAprobar, setCierreAprobar] = useState(null);
     /** El cierre que se va a anular (se confirma en un modal) y el motivo que se escribe. */
+    /** El cierre que se corrige con un recierre (lo contado, lo que se deja, la caja destino). */
+    const [cierreRecerrar, setCierreRecerrar] = useState(null);
     const [cierreAnular, setCierreAnular] = useState(null);
     const [motivoAnulacion, setMotivoAnulacion] = useState('');
     const [cierres, setCierres] = useState([]);
@@ -54,6 +59,10 @@ export default function CierresCaja() {
     const [pdfTarget, setPdfTarget] = useState(null);
     const [movimientos, setMovimientos] = useState([]);
     const [cargandoDetalle, setCargandoDetalle] = useState(false);
+    /** El movimiento que se edita o se anula desde la tabla de abajo, y lo que ofrecen los selectores del modal. */
+    const [movEditar, setMovEditar] = useState(null);
+    const [movAnular, setMovAnular] = useState(null);
+    const [catalogos, setCatalogos] = useState({ cuentas: [], billeteras: [], motivos: [] });
 
     // Desde y hasta, a la vista; filtran por la fecha del cierre. Vacíos muestran todos.
     const [fDesde, setFDesde] = useState('');
@@ -90,6 +99,22 @@ export default function CierresCaja() {
     useEffect(() => {
         load();
     }, [load]);
+
+    useEffect(() => {
+        if (!puedeAprobar) return;
+        Promise.all([api.get('/cuentas-bancarias'), api.get('/billeteras-digitales'), api.get('/motivos-movimiento?ambito=caja')])
+            .then(([cue, bil, mot]) => setCatalogos({ cuentas: asList(cue), billeteras: asList(bil), motivos: asList(mot) }))
+            .catch(() => {});
+    }, [puedeAprobar]);
+
+    // Tras un cambio el cierre se recalcula: la fila elegida se toma de la lista nueva y sus movimientos se vuelven a pedir.
+    useEffect(() => {
+        setSeleccionado((prev) => {
+            if (!prev) return prev;
+            const nuevo = cierres.find((c) => c.id === prev.id);
+            return nuevo && nuevo !== prev ? nuevo : prev;
+        });
+    }, [cierres]);
 
     const aprobar = async (row) => {
         setAccionando(row.id);
@@ -348,6 +373,11 @@ export default function CierresCaja() {
             render: (row) => (
                 <div className="leading-tight">
                     {estadoCierre(row)}
+                    {row.veces_recerrado > 0 && (
+                        <div className="mt-0.5 text-xs text-primary-700" title={row.recerrado_motivo ?? ''}>
+                            corregido{row.veces_recerrado > 1 ? ` ${row.veces_recerrado} veces` : ''}{row.recerrador?.name ? ` por ${row.recerrador.name}` : ''}
+                        </div>
+                    )}
                     {row.estado === 'aprobado' && row.aprobador?.name && <div className="mt-0.5 text-xs text-warm-500">por {row.aprobador.name}</div>}
                     {row.estado === 'anulado' && row.anulador?.name && <div className="mt-0.5 text-xs text-warm-500">por {row.anulador.name}</div>}
                 </div>
@@ -376,6 +406,13 @@ export default function CierresCaja() {
                                 onClick={(e) => { e.stopPropagation(); setCierreAprobar(row.id); }}
                                 className="rounded-md p-1.5 text-green-600 transition hover:bg-green-50 hover:text-green-700 disabled:opacity-50">
                                 <Check className="h-4 w-4" />
+                            </button>
+                        )}
+                        {puedeAprobar && row.estado !== 'anulado' && (
+                            <button aria-label="Recierre" title="Recierre: corrige lo contado y lo que se deja sin reabrir la caja" disabled={accionando === row.id}
+                                onClick={(e) => { e.stopPropagation(); setCierreRecerrar(row); }}
+                                className="rounded-md p-1.5 text-primary-600 transition hover:bg-primary-50 hover:text-primary-700 disabled:opacity-50">
+                                <Pencil className="h-4 w-4" />
                             </button>
                         )}
                         {puedeAprobar && row.estado !== 'anulado' && (
@@ -488,10 +525,64 @@ export default function CierresCaja() {
             align: 'right',
             searchable: false,
             render: (row) => (
-                <span className={row.tipo === 'ingreso' ? 'font-semibold text-green-600' : 'font-semibold text-red-600'}>
+                <span className={row.deleted_at ? 'font-semibold text-gray-400 line-through' : row.tipo === 'ingreso' ? 'font-semibold text-green-600' : 'font-semibold text-red-600'}>
                     {row.tipo === 'ingreso' ? '+' : '-'} {money(row.monto, row.moneda)}
                 </span>
             ),
+        },
+        {
+            // Los anulados siguen en la lista, fuera de los totales, con su motivo.
+            key: 'estado',
+            label: 'Estado',
+            width: '130px',
+            getSearchValue: (row) => (row.deleted_at ? `Anulado ${row.anulado_motivo ?? ''}` : 'Vigente'),
+            render: (row) =>
+                row.deleted_at ? (
+                    <div className="leading-tight">
+                        <Badge variant="red">Anulado</Badge>
+                        {row.anulado_motivo && <div className="mt-0.5 text-xs text-warm-500">{row.anulado_motivo}</div>}
+                    </div>
+                ) : (
+                    <Badge variant="green">Vigente</Badge>
+                ),
+        },
+        {
+            // Quien gestiona los cierres edita o anula cualquier movimiento del turno; el cierre se recalcula.
+            type: 'actions',
+            key: 'acciones',
+            label: 'Acc.',
+            width: '96px',
+            actions: (row) => {
+                if (!puedeAprobar || !seleccionado || seleccionado.estado === 'anulado' || row.deleted_at) return null;
+                // Lo del cierre mismo (el retiro y el ingreso en la otra caja) se corrige con el recierre.
+                if (row.documento_referencia_tipo === 'cierre_caja') return null;
+                const doc = row.documento_referencia_tipo;
+                const sePuedeAnular = !['compra', 'letra_cambio'].includes(doc) && !(row.motivo?.es_sistema && !doc);
+                return (
+                    <>
+                        <button
+                            type="button"
+                            aria-label="Editar movimiento"
+                            title="Editar movimiento"
+                            onClick={(e) => { e.stopPropagation(); setMovEditar({ ...row, apertura: seleccionado.apertura }); }}
+                            className="rounded-md p-1.5 text-warm-600 transition hover:bg-gray-100 hover:text-warm-900"
+                        >
+                            <Pencil className="h-4 w-4" />
+                        </button>
+                        {sePuedeAnular && (
+                            <button
+                                type="button"
+                                aria-label="Anular movimiento"
+                                title={doc === 'nota_venta' ? 'Anular: anula la proforma completa' : 'Anular movimiento'}
+                                onClick={(e) => { e.stopPropagation(); setMovAnular({ ...row, apertura: seleccionado.apertura }); }}
+                                className="rounded-md p-1.5 text-red-600 transition hover:bg-red-50 hover:text-red-700"
+                            >
+                                <Ban className="h-4 w-4" />
+                            </button>
+                        )}
+                    </>
+                );
+            },
         },
     ];
 
@@ -581,6 +672,32 @@ export default function CierresCaja() {
                     />
                 </div>
             </Modal>
+
+            <AnularMovimientoModal
+                movimiento={movAnular}
+                gestor
+                url={movAnular && seleccionado ? `/cierres-caja/${seleccionado.id}/movimientos/${movAnular.id}/anular` : ''}
+                onClose={() => setMovAnular(null)}
+                onDone={() => {
+                    setMovAnular(null);
+                    load();
+                }}
+            />
+            <EditarMovimientoModal
+                movimiento={movEditar}
+                gestor
+                url={movEditar && seleccionado ? `/cierres-caja/${seleccionado.id}/movimientos/${movEditar.id}/editar` : ''}
+                cuentas={catalogos.cuentas}
+                billeteras={catalogos.billeteras}
+                motivos={catalogos.motivos}
+                onClose={() => setMovEditar(null)}
+                onDone={() => {
+                    setMovEditar(null);
+                    load();
+                }}
+            />
+
+            <RecerrarCierreModal cierre={cierreRecerrar} onClose={() => setCierreRecerrar(null)} onDone={load} />
 
             <AprobarCierreModal
                 open={cierreAprobar !== null}

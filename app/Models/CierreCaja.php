@@ -37,6 +37,11 @@ class CierreCaja extends Model
         // A qué caja va el efectivo retirado (si va a alguna) y el ingreso que se creó allí al aprobar.
         'caja_destino_id',
         'movimiento_destino_id',
+        // Recierre: quién corrigió los datos del cierre, cuándo, por qué y cuántas veces.
+        'recerrado_por',
+        'recerrado_en',
+        'recerrado_motivo',
+        'veces_recerrado',
     ];
 
     public const PENDIENTE = 'pendiente';
@@ -57,6 +62,7 @@ class CierreCaja extends Model
             'monto_retirado' => 'decimal:2',
             'aprobado_en' => 'datetime',
             'anulado_en' => 'datetime',
+            'recerrado_en' => 'datetime',
         ];
     }
 
@@ -64,6 +70,11 @@ class CierreCaja extends Model
     public function efectivoParaElSiguiente(): float
     {
         return round((float) ($this->monto_dejado ?? $this->monto_contado), 2);
+    }
+
+    public function recerrador()
+    {
+        return $this->belongsTo(User::class, 'recerrado_por');
     }
 
     public function cajaDestino()

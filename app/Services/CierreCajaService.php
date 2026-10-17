@@ -38,28 +38,7 @@ class CierreCajaService
             throw ValidationException::withMessages(['monto_dejado' => 'No puedes dejar más de lo que contaste.']);
         }
 
-        // El efectivo retirado puede enviarse a otra caja de la misma sucursal.
-        $destino = null;
-        if ($cajaDestinoId) {
-            $destino = Caja::find($cajaDestinoId);
-            $origen = Caja::find($apertura->caja_id);
-            if (! $destino || ! $destino->activo || (int) $destino->id === (int) $apertura->caja_id
-                || (int) $destino->almacen_id !== (int) $origen?->almacen_id) {
-                throw ValidationException::withMessages(['caja_destino_id' => 'Elige otra caja activa de tu sucursal.']);
-            }
-            if ($retirado <= 0) {
-                throw ValidationException::withMessages(['caja_destino_id' => 'No hay efectivo que enviar: deja menos de lo que contaste para enviarlo.']);
-            }
-        }
-
-        // El efectivo le aparece a la caja destino de inmediato (por aprobar): necesita un turno abierto donde mostrarlo.
-        $aperturaDestino = null;
-        if ($destino) {
-            $aperturaDestino = AperturaCaja::where('caja_id', $destino->id)->where('estado', 'abierta')->latest('fecha_apertura')->first();
-            if (! $aperturaDestino) {
-                throw ValidationException::withMessages(['caja_destino_id' => 'La caja destino debe estar abierta para recibir el efectivo: elige otra o pídele que la abra.']);
-            }
-        }
+        [$destino, $aperturaDestino] = $this->resolverDestino($apertura, $cajaDestinoId, $retirado);
 
         return DB::transaction(function () use ($apertura, $arqueo, $contado, $dejado, $retirado, $destino, $aperturaDestino) {
             $cierre = CierreCaja::create([
@@ -79,45 +58,160 @@ class CierreCajaService
                 'estado' => CierreCaja::PENDIENTE,
             ]);
 
-            // Lo retirado sale de la caja con un movimiento del sistema (no hay movimiento si no se retira nada).
-            if ($retirado > 0) {
-                $movimiento = MovimientoCaja::create([
-                    'apertura_caja_id' => $apertura->id,
-                    'tipo' => 'egreso',
-                    'motivo_movimiento_id' => MotivoMovimiento::where('ambito', 'caja')->where('nombre', self::MOTIVO)->value('id'),
-                    'monto' => $retirado,
-                    'moneda' => 'PEN',
-                    'descripcion' => 'Cierre de caja: efectivo '.($destino ? 'enviado a '.trim(($destino->codigo ? $destino->codigo.' · ' : '').$destino->nombre) : 'retirado')
-                        .', quedan '.number_format($dejado, 2).' para el siguiente turno',
-                    'documento_referencia_tipo' => 'cierre_caja',
-                    'documento_referencia_id' => $cierre->id,
-                    'fecha' => now()->toDateString(),
-                ]);
-                $cierre->update(['movimiento_caja_id' => $movimiento->id]);
-            }
-
-            // Para la caja destino es un ingreso del sistema, visible desde ya y por aprobar.
-            if ($aperturaDestino) {
-                $origen = Caja::find($apertura->caja_id);
-                $ingreso = MovimientoCaja::create([
-                    'apertura_caja_id' => $aperturaDestino->id,
-                    'tipo' => 'ingreso',
-                    'motivo_movimiento_id' => MotivoMovimiento::where('ambito', 'caja')->where('nombre', self::MOTIVO_INGRESO)->value('id'),
-                    'monto' => $retirado,
-                    'moneda' => 'PEN',
-                    'descripcion' => 'Efectivo del cierre de '.trim(($origen?->codigo ? $origen->codigo.' · ' : '').($origen?->nombre ?? 'otra caja')).' (por aprobar)',
-                    'documento_referencia_tipo' => 'cierre_caja',
-                    'documento_referencia_id' => $cierre->id,
-                    'fecha' => now()->toDateString(),
-                    'por_aprobar' => true,
-                ]);
-                $cierre->update(['movimiento_destino_id' => $ingreso->id]);
-            }
+            $this->registrarMovimientos($cierre, $apertura, $retirado, $dejado, $destino, $aperturaDestino);
 
             $apertura->update(['estado' => 'cerrada']);
 
             return $cierre->refresh();
         });
+    }
+
+    /**
+     * Recierre: corrige los datos de un cierre ya hecho —lo contado, lo que se deja, los dólares y la caja destino— sin
+     * reabrir la caja. El retiro y el ingreso en la caja destino se rehacen con lo nuevo y el cierre vuelve a quedar
+     * pendiente de aprobación. Lo que esperaba el sistema al cerrar no cambia.
+     *
+     * El turno siguiente, si ya se abrió, conserva el saldo con el que abrió: un recierre no lo cambia.
+     *
+     * @param  array{monto_contado: float|string, monto_dejado?: float|string|null, monto_contado_usd?: float|string|null, caja_destino_id?: int|null, motivo: string}  $datos
+     */
+    public function recerrar(CierreCaja $cierre, array $datos, User $por): CierreCaja
+    {
+        $cierre->loadMissing('apertura.caja');
+        $apertura = $cierre->apertura;
+
+        if ($cierre->estado === CierreCaja::ANULADO) {
+            throw ValidationException::withMessages(['cierre' => 'Un cierre anulado no se corrige.']);
+        }
+
+        $contado = round((float) $datos['monto_contado'], 2);
+        $dejado = round((float) ($datos['monto_dejado'] ?? 0), 2);
+        $retirado = round($contado - $dejado, 2);
+        if ($dejado < 0 || $retirado < 0) {
+            throw ValidationException::withMessages(['monto_dejado' => 'No puedes dejar más de lo que contaste.']);
+        }
+
+        // Los dólares del cajón, si el sistema esperaba dólares, también se cuentan.
+        $sistemaUsd = $cierre->monto_sistema_usd !== null ? (float) $cierre->monto_sistema_usd : null;
+        $contadoUsd = isset($datos['monto_contado_usd']) && $datos['monto_contado_usd'] !== '' ? round((float) $datos['monto_contado_usd'], 2) : null;
+        if ($sistemaUsd !== null && abs($sistemaUsd) > 0.005 && $contadoUsd === null) {
+            throw ValidationException::withMessages(['monto_contado_usd' => 'Cuenta también los dólares del cajón.']);
+        }
+
+        [$destino, $aperturaDestino] = $this->resolverDestino($apertura, isset($datos['caja_destino_id']) ? (int) $datos['caja_destino_id'] : null, $retirado);
+
+        // Si el efectivo ya contó en el turno cerrado de otra caja, ese arqueo ya está hecho: no se rehace.
+        $ingresoViejo = $cierre->movimiento_destino_id
+            ? MovimientoCaja::withoutGlobalScope(MovimientoCaja::FILTRO_APROBADOS)->withTrashed()->with('apertura:id,estado')->find($cierre->movimiento_destino_id)
+            : null;
+        if ($ingresoViejo && ! $ingresoViejo->trashed() && ! $ingresoViejo->por_aprobar && $ingresoViejo->apertura?->estado !== 'abierta') {
+            throw ValidationException::withMessages(['cierre' => 'La caja destino ya cerró el turno en que recibió este efectivo: el cierre no se puede corregir.']);
+        }
+
+        return DB::transaction(function () use ($cierre, $apertura, $por, $datos, $contado, $dejado, $retirado, $contadoUsd, $sistemaUsd, $destino, $aperturaDestino) {
+            // Lo que había (el retiro y el ingreso en la otra caja) se anula y se rehace con lo nuevo: el rastro queda.
+            foreach ([$cierre->movimiento_caja_id, $cierre->movimiento_destino_id] as $id) {
+                if ($id) {
+                    MovimientoCaja::anularDe(
+                        MovimientoCaja::withoutGlobalScope(MovimientoCaja::FILTRO_APROBADOS)->where('id', $id),
+                        'Cierre corregido (recierre)',
+                    );
+                }
+            }
+            $cierre->update(['movimiento_caja_id' => null, 'movimiento_destino_id' => null]);
+
+            $this->registrarMovimientos($cierre, $apertura, $retirado, $dejado, $destino, $aperturaDestino);
+
+            $cierre->update([
+                'monto_contado' => $contado,
+                'diferencia' => round($contado - (float) $cierre->monto_sistema, 2),
+                'monto_contado_usd' => $contadoUsd,
+                'diferencia_usd' => $sistemaUsd !== null && $contadoUsd !== null ? round($contadoUsd - $sistemaUsd, 2) : null,
+                'monto_dejado' => $dejado,
+                'monto_retirado' => $retirado,
+                'caja_destino_id' => $destino?->id,
+                // Corregido, vuelve a esperar a que alguien lo apruebe.
+                'estado' => CierreCaja::PENDIENTE,
+                'aprobado_por' => null,
+                'aprobado_en' => null,
+                'recerrado_por' => $por->id,
+                'recerrado_en' => now(),
+                'recerrado_motivo' => $datos['motivo'],
+                'veces_recerrado' => (int) $cierre->veces_recerrado + 1,
+            ]);
+
+            return $cierre->refresh();
+        });
+    }
+
+    /**
+     * La caja a la que va el efectivo retirado (opcional, de la misma sucursal) y su turno abierto. El efectivo le
+     * aparece a esa caja de inmediato (por aprobar), así que necesita un turno abierto donde mostrarlo.
+     *
+     * @return array{0: ?Caja, 1: ?AperturaCaja}
+     */
+    private function resolverDestino(AperturaCaja $apertura, ?int $cajaDestinoId, float $retirado): array
+    {
+        if (! $cajaDestinoId) {
+            return [null, null];
+        }
+
+        $destino = Caja::find($cajaDestinoId);
+        $origen = Caja::find($apertura->caja_id);
+        if (! $destino || ! $destino->activo || (int) $destino->id === (int) $apertura->caja_id
+            || (int) $destino->almacen_id !== (int) $origen?->almacen_id) {
+            throw ValidationException::withMessages(['caja_destino_id' => 'Elige otra caja activa de tu sucursal.']);
+        }
+        if ($retirado <= 0) {
+            throw ValidationException::withMessages(['caja_destino_id' => 'No hay efectivo que enviar: deja menos de lo que contaste para enviarlo.']);
+        }
+
+        $aperturaDestino = AperturaCaja::where('caja_id', $destino->id)->where('estado', 'abierta')->latest('fecha_apertura')->first();
+        if (! $aperturaDestino) {
+            throw ValidationException::withMessages(['caja_destino_id' => 'La caja destino debe estar abierta para recibir el efectivo: elige otra o pídele que la abra.']);
+        }
+
+        return [$destino, $aperturaDestino];
+    }
+
+    /**
+     * Lo que deja un cierre en las cajas: el retiro sale de la caja que cierra (no hay movimiento si no se retira nada)
+     * y, si va a otra caja, allí entra como un ingreso del sistema, visible desde ya y por aprobar.
+     */
+    private function registrarMovimientos(CierreCaja $cierre, AperturaCaja $apertura, float $retirado, float $dejado, ?Caja $destino, ?AperturaCaja $aperturaDestino): void
+    {
+        if ($retirado > 0) {
+            $movimiento = MovimientoCaja::create([
+                'apertura_caja_id' => $apertura->id,
+                'tipo' => 'egreso',
+                'motivo_movimiento_id' => MotivoMovimiento::where('ambito', 'caja')->where('nombre', self::MOTIVO)->value('id'),
+                'monto' => $retirado,
+                'moneda' => 'PEN',
+                'descripcion' => 'Cierre de caja: efectivo '.($destino ? 'enviado a '.trim(($destino->codigo ? $destino->codigo.' · ' : '').$destino->nombre) : 'retirado')
+                    .', quedan '.number_format($dejado, 2).' para el siguiente turno',
+                'documento_referencia_tipo' => 'cierre_caja',
+                'documento_referencia_id' => $cierre->id,
+                'fecha' => now()->toDateString(),
+            ]);
+            $cierre->update(['movimiento_caja_id' => $movimiento->id]);
+        }
+
+        if ($aperturaDestino) {
+            $origen = Caja::find($apertura->caja_id);
+            $ingreso = MovimientoCaja::create([
+                'apertura_caja_id' => $aperturaDestino->id,
+                'tipo' => 'ingreso',
+                'motivo_movimiento_id' => MotivoMovimiento::where('ambito', 'caja')->where('nombre', self::MOTIVO_INGRESO)->value('id'),
+                'monto' => $retirado,
+                'moneda' => 'PEN',
+                'descripcion' => 'Efectivo del cierre de '.trim(($origen?->codigo ? $origen->codigo.' · ' : '').($origen?->nombre ?? 'otra caja')).' (por aprobar)',
+                'documento_referencia_tipo' => 'cierre_caja',
+                'documento_referencia_id' => $cierre->id,
+                'fecha' => now()->toDateString(),
+                'por_aprobar' => true,
+            ]);
+            $cierre->update(['movimiento_destino_id' => $ingreso->id]);
+        }
     }
 
     /** Aprueba un cierre pendiente. Quien lo solicitó no aprueba el suyo. */
@@ -193,6 +287,39 @@ class CierreCajaService
 
             return $cierre->refresh();
         });
+    }
+
+    /**
+     * Pone al día lo que el sistema esperaba al cerrar cuando cambian los movimientos del turno ya cerrado (se anuló o
+     * se corrigió uno): vuelve a calcular el esperado —sin contar el retiro del propio cierre— y la diferencia con lo
+     * que se contó. Lo contado, lo que se dejó y el retiro no cambian: eso se corrige con un recierre.
+     */
+    public function recalcularEsperado(CierreCaja $cierre): CierreCaja
+    {
+        $cierre->loadMissing('apertura');
+        if ($cierre->estado === CierreCaja::ANULADO) {
+            return $cierre;
+        }
+
+        $resumen = app(CajaResumenService::class)->deApertura($cierre->apertura);
+
+        // El retiro del propio cierre ya figura como un egreso del turno: el esperado de antes de cerrar lo suma de vuelta.
+        $retiro = $cierre->movimiento_caja_id
+            ? MovimientoCaja::where('id', $cierre->movimiento_caja_id)->value('monto')
+            : null;
+        $sistema = round((float) $resumen['esperado'] + (float) ($retiro ?? 0), 2);
+        $sistemaUsd = $resumen['dolares']['esperado'] ?? null;
+
+        $cierre->update([
+            'monto_sistema' => $sistema,
+            'diferencia' => round((float) $cierre->monto_contado - $sistema, 2),
+            'monto_sistema_usd' => $sistemaUsd,
+            'diferencia_usd' => $sistemaUsd !== null && $cierre->monto_contado_usd !== null
+                ? round((float) $cierre->monto_contado_usd - (float) $sistemaUsd, 2)
+                : null,
+        ]);
+
+        return $cierre->refresh();
     }
 
     /** ¿La caja ya se abrió con otro turno después de este cierre? */

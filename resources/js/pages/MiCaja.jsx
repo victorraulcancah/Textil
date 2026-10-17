@@ -9,6 +9,8 @@ import PagosCuentaModal from '../components/PagosCuentaModal';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import MetodoCajaPicker from '../components/MetodoCajaPicker';
+import AnularMovimientoModal from '../components/AnularMovimientoModal';
+import EditarMovimientoModal from '../components/EditarMovimientoModal';
 import PdfViewerModal from '../components/PdfViewerModal';
 import { Alert, Badge, Button, Card, DataTable, Input, Modal, SearchSelect, Select, Spinner } from '../components/ui';
 
@@ -36,16 +38,6 @@ const emptyPagoCorregir = (monto = '') => ({ tipo: 'efectivo', cuentaId: '', bil
 /** Los movimientos que nacen de un cobro de venta o de cobranza: son los que se pueden corregir. */
 const esCobroCorregible = (r) =>
     !r.deleted_at && r.tipo === 'ingreso' && ['nota_venta', 'cuenta_por_cobrar'].includes(r.documento_referencia_tipo) && Boolean(r.documento_referencia_id);
-
-/** De dónde nace el movimiento decide qué se puede cambiar al editarlo. */
-const claseDeEdicion = (r) => {
-    const doc = r.documento_referencia_tipo;
-    if (!doc) return 'manual'; // ingreso o gasto a mano: todo
-    if (doc === 'cuenta_por_cobrar' || doc === 'cuenta_por_pagar') return 'cuenta'; // fecha, descripción y N.° de operación
-    if (doc === 'nota_venta') return 'venta'; // solo la fecha de los cobros
-    if (doc === 'anticipo') return 'anticipo'; // fecha y N.° de operación
-    return 'descripcion'; // compra o letra: solo la descripción
-};
 
 /** Tarjeta compacta de resumen. No usa Card porque su padding (p-6) es muy alto. */
 function Stat({ icon: Icon, label, value, accent = 'text-warm-900', bg = 'bg-gray-100' }) {
@@ -93,13 +85,11 @@ export default function MiCaja() {
     const [saving, setSaving] = useState(false);
     /** Anular un movimiento registrado a mano: el elegido y el motivo. */
     const [anularMov, setAnularMov] = useState(null);
-    const [motivoAnulacion, setMotivoAnulacion] = useState('');
     /** Corregir un cobro: el movimiento elegido y los pagos nuevos que lo reemplazan. */
     const [corregir, setCorregir] = useState(null);
     const [pagosNuevos, setPagosNuevos] = useState([]);
     /** Editar un movimiento: el elegido y lo que se está cambiando. */
     const [editarMov, setEditarMov] = useState(null);
-    const [formEdit, setFormEdit] = useState({});
 
     // ── Filtros de la tabla de movimientos ──
     /** Tipo de movimiento: '' (todos), 'efectivo' (el cajón) o 'digital' (transferencia, Yape, billetera). */
@@ -242,72 +232,6 @@ export default function MiCaja() {
         const total = cobroOriginal(fila).reduce((acc, m) => acc + (Number(m.monto) || 0), 0);
         setCorregir(fila);
         setPagosNuevos([emptyPagoCorregir(String(Math.round(total * 100) / 100))]);
-    };
-
-    const abrirEditar = (fila) => {
-        setEditarMov(fila);
-        setFormEdit({
-            fecha: String(fila.fecha ?? '').slice(0, 10),
-            descripcion: fila.descripcion ?? '',
-            numero_operacion: fila.numero_operacion ?? '',
-            motivo_movimiento_id: fila.motivo_movimiento_id ? String(fila.motivo_movimiento_id) : '',
-            metodoTipo: fila.cuenta_bancaria_id ? 'transferencia' : fila.billetera_id ? 'billetera' : 'efectivo',
-            cuentaId: fila.cuenta_bancaria_id ? String(fila.cuenta_bancaria_id) : '',
-            billeteraId: fila.billetera_id ? String(fila.billetera_id) : '',
-            monto: String(fila.monto ?? ''),
-        });
-    };
-
-    const confirmarEdicion = async () => {
-        const clase = claseDeEdicion(editarMov);
-        const f = formEdit;
-        const cuerpo =
-            clase === 'manual'
-                ? {
-                      fecha: f.fecha || null,
-                      descripcion: f.descripcion,
-                      numero_operacion: f.numero_operacion || null,
-                      motivo_movimiento_id: f.motivo_movimiento_id || null,
-                      forma: f.metodoTipo,
-                      cuenta_bancaria_id: f.metodoTipo === 'transferencia' ? f.cuentaId || null : null,
-                      billetera_id: f.metodoTipo === 'billetera' ? f.billeteraId || null : null,
-                      monto: Number(f.monto),
-                  }
-                : clase === 'cuenta'
-                  ? { fecha: f.fecha || null, descripcion: f.descripcion, numero_operacion: f.numero_operacion || null }
-                  : clase === 'venta'
-                    ? { fecha: f.fecha || null }
-                    : clase === 'anticipo'
-                      ? { fecha: f.fecha || null, numero_operacion: f.numero_operacion || null }
-                      : { descripcion: f.descripcion };
-
-        setSaving(true);
-        try {
-            const res = await api.post(`/mi-caja/movimientos/${editarMov.id}/editar`, cuerpo);
-            setData(res.data);
-            setEditarMov(null);
-            toast.success('Movimiento actualizado.');
-        } catch (err) {
-            const v = err.response?.data?.errors ?? {};
-            toast.error(Object.values(v)[0]?.[0] ?? err.response?.data?.message ?? 'No se pudo editar el movimiento.');
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    const confirmarAnulacion = async () => {
-        setSaving(true);
-        try {
-            const res = await api.post(`/mi-caja/movimientos/${anularMov.id}/anular`, { motivo: motivoAnulacion.trim() || null });
-            setData(res.data);
-            setAnularMov(null);
-            toast.success(anularMov.documento_referencia_tipo === 'nota_venta' ? 'Venta anulada: volvió el stock y dejó de contar en tu caja.' : 'Movimiento anulado: ya no cuenta en tu caja.');
-        } catch (err) {
-            const v = err.response?.data?.errors ?? {};
-            toast.error(Object.values(v)[0]?.[0] ?? err.response?.data?.message ?? 'No se pudo anular el movimiento.');
-        } finally {
-            setSaving(false);
-        }
     };
 
     const setPagoNuevo = (i, patch) => setPagosNuevos((prev) => prev.map((p, k) => (k === i ? { ...p, ...patch } : p)));
@@ -542,7 +466,7 @@ export default function MiCaja() {
                             type="button"
                             aria-label="Editar movimiento"
                             title="Editar: cambia la fecha y los datos de este movimiento"
-                            onClick={(e) => { e.stopPropagation(); abrirEditar(r); }}
+                            onClick={(e) => { e.stopPropagation(); setEditarMov(r); }}
                             className="rounded-md p-1.5 text-warm-600 transition hover:bg-gray-100 hover:text-warm-900"
                         >
                             <Pencil className="h-4 w-4" />
@@ -566,7 +490,7 @@ export default function MiCaja() {
                                 type="button"
                                 aria-label="Anular movimiento"
                                 title={doc === 'nota_venta' ? 'Anular: anula la proforma completa' : 'Anular este movimiento: deja de contar y queda en la lista como anulado'}
-                                onClick={(e) => { e.stopPropagation(); setAnularMov(r); setMotivoAnulacion(''); }}
+                                onClick={(e) => { e.stopPropagation(); setAnularMov(r); }}
                                 className="rounded-md p-1.5 text-red-600 transition hover:bg-red-50 hover:text-red-700"
                             >
                                 <Ban className="h-4 w-4" />
@@ -823,147 +747,29 @@ export default function MiCaja() {
                 </div>
             </Modal>
 
-            {/* Anular un movimiento registrado a mano. */}
-            <Modal
-                open={Boolean(anularMov)}
+            {/* Anular y editar un movimiento: los mismos modales que usa Cierres de caja. */}
+            <AnularMovimientoModal
+                movimiento={anularMov}
+                url={anularMov ? `/mi-caja/movimientos/${anularMov.id}/anular` : ''}
                 onClose={() => setAnularMov(null)}
-                title={anularMov?.documento_referencia_tipo === 'nota_venta' ? 'Anular venta' : 'Anular movimiento'}
-                description={anularMov ? `${anularMov.tipo === 'ingreso' ? 'Ingreso' : 'Gasto'} de ${money(anularMov.monto, anularMov.moneda)} · ${metodoLabel(anularMov)}` : ''}
-                size="sm"
-                footer={
-                    <>
-                        <Button variant="secondary" onClick={() => setAnularMov(null)}>Cancelar</Button>
-                        <Button variant="danger" loading={saving} onClick={confirmarAnulacion}>{anularMov?.documento_referencia_tipo === 'nota_venta' ? 'Anular la venta' : 'Anular movimiento'}</Button>
-                    </>
-                }
-            >
-                <div className="space-y-3">
-                    {anularMov?.documento_referencia_tipo === 'nota_venta' ? (
-                        <Alert variant="error">
-                            Este cobro es de una venta: se anula <strong>la proforma completa</strong>. Vuelve el stock al almacén, se
-                            anulan todos sus cobros y, si tenía deuda, desaparece. No se puede deshacer.
-                        </Alert>
-                    ) : anularMov?.documento_referencia_tipo === 'anticipo' ? (
-                        <Alert variant="warning">
-                            Se anula el <strong>anticipo del cliente</strong> y este ingreso deja de contar. Uno ya aplicado a una venta no se anula.
-                        </Alert>
-                    ) : anularMov?.documento_referencia_tipo ? (
-                        <Alert variant="warning">
-                            Se anula este {anularMov.tipo === 'ingreso' ? 'cobro' : 'pago'} y <strong>la deuda recupera su saldo</strong>.
-                            Queda en la lista como <strong>Anulado</strong>.
-                        </Alert>
-                    ) : (
-                        <Alert variant="warning">
-                            Deja de contar en los totales de tu caja, pero queda en la lista como <strong>Anulado</strong>.
-                        </Alert>
-                    )}
-                    <Input label="Motivo (opcional)" placeholder="Ej: se registró dos veces" value={motivoAnulacion} onChange={(e) => setMotivoAnulacion(e.target.value)} />
-                </div>
-            </Modal>
-
-            {/* Editar un movimiento: lo que se puede cambiar depende de dónde nace. */}
-            {(() => {
-                if (!editarMov) return null;
-                const clase = claseDeEdicion(editarMov);
-                const f = formEdit;
-                const set = (patch) => setFormEdit((prev) => ({ ...prev, ...patch }));
-                const esDigitalOriginal = Boolean(editarMov.cuenta_bancaria || editarMov.billetera);
-                const turnoCerrado = editarMov.apertura?.estado !== 'abierta';
-                // Un movimiento en efectivo de una caja ya cerrada: el monto y el método ya se contaron en el arqueo.
-                const bloqueaDinero = turnoCerrado && !esDigitalOriginal;
-                const motivosDelTipo = motivos.filter((m) => !m.es_sistema && (editarMov.tipo === 'ingreso' ? m.tipo === 'entrada' : m.tipo === 'salida'));
-                // El motivo que ya tiene siempre se ve, aunque la lista de la caja no lo traiga.
-                if (editarMov.motivo && !motivosDelTipo.some((m) => m.id === editarMov.motivo.id)) motivosDelTipo.unshift(editarMov.motivo);
-                const digitalNuevo = f.metodoTipo === 'transferencia' || f.metodoTipo === 'billetera';
-                const hayOperacion = clase === 'manual' ? digitalNuevo : esDigitalOriginal;
-                const hayFecha = clase !== 'descripcion';
-                const hayDescripcion = clase !== 'venta' && clase !== 'anticipo';
-
-                return (
-                    <Modal
-                        open
-                        onClose={() => setEditarMov(null)}
-                        title="Editar movimiento"
-                        description={`${editarMov.tipo === 'ingreso' ? 'Ingreso' : 'Gasto'} de ${money(editarMov.monto, editarMov.moneda)} · ${metodoLabel(editarMov)}`}
-                        footer={
-                            <>
-                                <Button variant="secondary" onClick={() => setEditarMov(null)}>Cancelar</Button>
-                                <Button loading={saving} onClick={confirmarEdicion}>Guardar cambios</Button>
-                            </>
-                        }
-                    >
-                        <div className="space-y-4">
-                            {clase === 'venta' && (
-                                <Alert variant="info">
-                                    Este cobro es de una venta: la fecha se cambia en todos sus cobros a la vez. El monto y el método se cambian con
-                                    <strong> Corregir pago</strong>.
-                                </Alert>
-                            )}
-                            {clase === 'anticipo' && (
-                        <Alert variant="info">
-                            Este ingreso es de un anticipo de cliente: aquí cambias la fecha y el N.° de operación. El monto y el método se cambian
-                            anulando el anticipo y registrando otro.
-                        </Alert>
-                    )}
-                    {clase === 'cuenta' && (
-                                <Alert variant="info">
-                                    Aquí cambias la fecha y los datos. Para cambiar el monto o el método, anula el pago y regístralo de nuevo.
-                                </Alert>
-                            )}
-                            {clase === 'descripcion' && (
-                                <Alert variant="info">
-                                    Este movimiento nace de una {editarMov.documento_referencia_tipo === 'compra' ? 'compra' : 'letra de cambio'}: aquí solo se cambia
-                                    la descripción; el resto, desde su documento.
-                                </Alert>
-                            )}
-                            {bloqueaDinero && clase === 'manual' && (
-                                <Alert variant="warning">
-                                    Es efectivo de una caja ya cerrada: el monto y el método ya se contaron en el arqueo y no cambian. Puedes cambiar la
-                                    fecha y la descripción.
-                                </Alert>
-                            )}
-
-                            {clase === 'manual' && (
-                                <SearchSelect
-                                    label="Motivo"
-                                    value={f.motivo_movimiento_id}
-                                    onChange={(v) => set({ motivo_movimiento_id: v ?? '' })}
-                                    placeholder="Selecciona un motivo"
-                                    emptyText="Sin coincidencias"
-                                    options={motivosDelTipo.map((m) => ({ value: String(m.id), label: m.nombre }))}
-                                />
-                            )}
-
-                            {clase === 'manual' && !bloqueaDinero && (
-                                <>
-                                    <MetodoCajaPicker
-                                        cuentas={caja?.cuentas_bancarias ?? []}
-                                        billeteras={caja?.billeteras ?? []}
-                                        aceptaEfectivo={caja?.acepta_efectivo && !(turnoCerrado)}
-                                        tipo={f.metodoTipo}
-                                        cuentaId={f.cuentaId}
-                                        billeteraId={f.billeteraId}
-                                        onChange={({ tipo, cuentaId, billeteraId }) => set({ metodoTipo: tipo, cuentaId, billeteraId })}
-                                    />
-                                    <Input label="Monto" type="number" min="0.01" step="0.01" value={f.monto} onChange={(e) => set({ monto: e.target.value })} />
-                                </>
-                            )}
-
-                            {hayOperacion && clase !== 'venta' && (
-                                <Input label="N° de operación (opcional)" value={f.numero_operacion} onChange={(e) => set({ numero_operacion: e.target.value })} />
-                            )}
-
-                            {hayFecha && (
-                                <Input label="Fecha" type="date" max={hoyIso()} value={f.fecha} onChange={(e) => set({ fecha: e.target.value })} />
-                            )}
-
-                            {hayDescripcion && (
-                                <Input label="Descripción" placeholder="Ej: recibo de luz" value={f.descripcion} onChange={(e) => set({ descripcion: e.target.value })} />
-                            )}
-                        </div>
-                    </Modal>
-                );
-            })()}
+                onDone={(d) => {
+                    setData(d);
+                    setAnularMov(null);
+                }}
+            />
+            <EditarMovimientoModal
+                movimiento={editarMov}
+                url={editarMov ? `/mi-caja/movimientos/${editarMov.id}/editar` : ''}
+                cuentas={caja?.cuentas_bancarias ?? []}
+                billeteras={caja?.billeteras ?? []}
+                aceptaEfectivo={Boolean(caja?.acepta_efectivo)}
+                motivos={motivos}
+                onClose={() => setEditarMov(null)}
+                onDone={(d) => {
+                    setData(d);
+                    setEditarMov(null);
+                }}
+            />
 
             {/* Corregir un cobro: se anula lo cobrado y se registran los pagos nuevos. */}
             {(() => {

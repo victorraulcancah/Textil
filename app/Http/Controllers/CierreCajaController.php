@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AperturaCaja;
+use App\Models\Caja;
 use App\Models\CierreCaja;
 use App\Models\MovimientoCaja;
 use App\Services\CierreCajaService;
+use App\Services\MovimientoCajaService;
 use App\Support\AlmacenAcceso;
 use Illuminate\Http\Request;
 
@@ -17,11 +20,12 @@ class CierreCajaController extends Controller
     public function index(CierreCajaService $servicio)
     {
         $cierres = CierreCaja::with([
-            'apertura:id,caja_id,usuario_id,monto_inicial,fecha_apertura',
+            'apertura:id,caja_id,usuario_id,monto_inicial,fecha_apertura,estado',
             'apertura.caja:id,nombre,codigo,almacen_id',
             'apertura.usuario:id,name',
             'aprobador:id,name',
             'anulador:id,name',
+            'recerrador:id,name',
             'cajaDestino:id,codigo,nombre',
             // Tesorería por sucursal: cada almacén ve los cierres de sus cajas.
         ])->whereHas('apertura.caja', fn ($c) => AlmacenAcceso::limitar($c))->latest('fecha_cierre')->get();
@@ -92,6 +96,81 @@ class CierreCajaController extends Controller
         return response()->json($this->conRelaciones($cierresCaja));
     }
 
+    /**
+     * Anula un movimiento del turno de este cierre. Quien gestiona los cierres puede con cualquier movimiento, también
+     * el efectivo de un turno ya cerrado; el cierre se recalcula (lo esperado y la diferencia) y, si hace falta, se
+     * corrige con un recierre.
+     */
+    public function anularMovimiento(Request $request, CierreCaja $cierresCaja, int $movimiento, MovimientoCajaService $movimientos, CierreCajaService $servicio)
+    {
+        $modelo = $this->movimientoDelCierre($cierresCaja, $movimiento);
+        $datos = $request->validate(['motivo' => 'nullable|string|max:200']);
+
+        $movimientos->anular($modelo, trim((string) ($datos['motivo'] ?? '')), auth('api')->user(), gestor: true);
+        $servicio->recalcularEsperado($cierresCaja);
+
+        return response()->json($this->conRelaciones($cierresCaja));
+    }
+
+    /** Edita un movimiento del turno de este cierre (ver `MovimientoCajaService::editar`) y recalcula el cierre. */
+    public function editarMovimiento(Request $request, CierreCaja $cierresCaja, int $movimiento, MovimientoCajaService $movimientos, CierreCajaService $servicio)
+    {
+        $modelo = $this->movimientoDelCierre($cierresCaja, $movimiento);
+        $data = $request->validate(MovimientoCajaService::REGLAS_EDICION);
+
+        $movimientos->editar($modelo, $data, auth('api')->user(), gestor: true);
+        $servicio->recalcularEsperado($cierresCaja);
+
+        return response()->json($this->conRelaciones($cierresCaja));
+    }
+
+    /** El movimiento tiene que ser del turno de este cierre, y la sucursal accesible. */
+    private function movimientoDelCierre(CierreCaja $cierre, int $id): MovimientoCaja
+    {
+        $cierre->loadMissing('apertura.caja');
+        AlmacenAcceso::exigir($cierre->apertura?->caja?->almacen_id);
+
+        $movimiento = MovimientoCaja::withTrashed()->withoutGlobalScope(MovimientoCaja::FILTRO_APROBADOS)->findOrFail($id);
+        abort_unless((int) $movimiento->apertura_caja_id === (int) $cierre->apertura_caja_id, 404, 'Ese movimiento no es de este cierre.');
+
+        return $movimiento;
+    }
+
+    /** Recierre: corrige lo contado, lo que se deja, los dólares y la caja destino; el cierre vuelve a quedar pendiente. */
+    public function recerrar(Request $request, CierreCaja $cierresCaja, CierreCajaService $servicio)
+    {
+        $cierresCaja->loadMissing('apertura.caja');
+        AlmacenAcceso::exigir($cierresCaja->apertura?->caja?->almacen_id);
+
+        $datos = $request->validate([
+            'monto_contado' => 'required|numeric|min:0',
+            'monto_dejado' => 'nullable|numeric|min:0',
+            'monto_contado_usd' => 'nullable|numeric|min:0',
+            'caja_destino_id' => 'nullable|integer|exists:cajas,id',
+            'motivo' => 'required|string|min:3|max:255',
+        ], ['motivo.required' => 'Escribe por qué se corrige el cierre.']);
+
+        $servicio->recerrar($cierresCaja, $datos, auth('api')->user());
+
+        return response()->json($this->conRelaciones($cierresCaja));
+    }
+
+    /** Las otras cajas activas de la sucursal del cierre, a las que se puede enviar el efectivo, y si están abiertas. */
+    public function cajasDestino(CierreCaja $cierresCaja)
+    {
+        $cierresCaja->loadMissing('apertura.caja');
+        $origen = $cierresCaja->apertura?->caja;
+        AlmacenAcceso::exigir($origen?->almacen_id);
+
+        $abiertas = AperturaCaja::where('estado', 'abierta')->pluck('caja_id')->all();
+
+        return response()->json(
+            Caja::where('almacen_id', $origen?->almacen_id)->where('activo', true)->where('id', '!=', $origen?->id)
+                ->orderBy('codigo')->get(['id', 'codigo', 'nombre'])
+                ->map(fn ($c) => ['id' => $c->id, 'codigo' => $c->codigo, 'nombre' => $c->nombre, 'abierta' => in_array($c->id, $abiertas, true)])
+        );
+    }
+
     private function conRelaciones(CierreCaja $cierre): CierreCaja
     {
         return $cierre->fresh()->load([
@@ -100,6 +179,7 @@ class CierreCajaController extends Controller
             'apertura.usuario:id,name',
             'aprobador:id,name',
             'anulador:id,name',
+            'recerrador:id,name',
             'cajaDestino:id,codigo,nombre',
         ]);
     }
@@ -108,7 +188,7 @@ class CierreCajaController extends Controller
     public function show(CierreCaja $cierresCaja)
     {
         $cierresCaja->load([
-            'apertura:id,caja_id,usuario_id,monto_inicial,fecha_apertura',
+            'apertura:id,caja_id,usuario_id,monto_inicial,fecha_apertura,estado',
             'apertura.caja:id,nombre,codigo,almacen_id',
             'apertura.usuario:id,name',
             'aprobador:id,name',
@@ -118,7 +198,7 @@ class CierreCajaController extends Controller
         AlmacenAcceso::exigir($cierresCaja->apertura?->caja?->almacen_id);
 
         $movimientos = MovimientoCaja::withTrashed()->withoutGlobalScope(MovimientoCaja::FILTRO_APROBADOS)->with([
-            'motivo:id,nombre,tipo',
+            'motivo:id,nombre,tipo,es_sistema',
             'cuentaBancaria:id,alias,numero_cuenta',
             'billetera:id,nombre',
         ])

@@ -348,23 +348,34 @@ class MiCajaController extends Controller
             throw ValidationException::withMessages(['caja' => 'No tienes una caja asignada en este almacén.']);
         }
 
-        // Mientras el cierre anterior espera aprobación, la caja no se abre: no se sabe aún con qué efectivo.
+        // La caja es compartida y se entrega de un turno al siguiente: quien abre APRUEBA el cierre de quien la dejó, y recibe
+        // lo que se dejó. Mientras ese cierre espera, la caja no se abre sin esa aprobación; no aprueba su propio cierre.
         $pendiente = $this->cierrePendiente($cajaId, $user->id);
-        if ($pendiente) {
-            throw ValidationException::withMessages(['caja' => 'El cierre de caja de '.($pendiente['solicitante'] ?? 'el turno anterior').' está pendiente de aprobación: podrás abrir cuando se apruebe.']);
+        if ($pendiente && $pendiente['es_mio']) {
+            throw ValidationException::withMessages(['caja' => 'Tu cierre está pendiente: lo aprueba quien abra la caja después (o un encargado). Si algo está mal, anúlalo y vuelve a cerrar.']);
+        }
+        if ($pendiente && ! $request->boolean('aprobar_cierre')) {
+            throw ValidationException::withMessages(['caja' => 'Para abrir la caja tienes que aprobar el cierre de '.($pendiente['solicitante'] ?? 'el turno anterior').': confirmas que recibes lo que dejó.']);
         }
 
-        // La caja abre con el efectivo que dejó el último cierre aprobado: lo que se escriba no cuenta. Solo la primera
-        // vez que se abre, sin cierre previo, se indica el monto inicial.
-        $anterior = $this->saldoAnterior($cajaId);
-        $data = $request->validate(['monto_inicial' => ($anterior ? 'nullable' : 'required').'|numeric|min:0']);
-        if ($anterior) {
-            $data['monto_inicial'] = $anterior['monto'];
-        }
+        $data = $request->validate(['monto_inicial' => 'nullable|numeric|min:0', 'aprobar_cierre' => 'nullable|boolean']);
 
         // Entra uno a la vez: el bloqueo evita que dos usuarios de la misma caja la abran en el mismo instante.
-        DB::transaction(function () use ($cajaId, $user, $data) {
+        DB::transaction(function () use ($cajaId, $user, $data, $pendiente) {
             Caja::whereKey($cajaId)->lockForUpdate()->first();
+
+            // Abrir es aprobar el cierre anterior (si lo hay): el efectivo que dejó pasa a ser el inicial de este turno.
+            if ($pendiente) {
+                app(CierreCajaService::class)->aprobar(CierreCaja::findOrFail($pendiente['id']), $user);
+            }
+
+            // La caja abre con el efectivo que dejó el último cierre aprobado: lo que se escriba no cuenta. Solo la primera
+            // vez que se abre, sin cierre previo, se indica el monto inicial.
+            $anterior = $this->saldoAnterior($cajaId);
+            if (! $anterior && ! isset($data['monto_inicial'])) {
+                throw ValidationException::withMessages(['monto_inicial' => 'Indica con cuánto efectivo inicias.']);
+            }
+            $data['monto_inicial'] = $anterior ? $anterior['monto'] : $data['monto_inicial'];
 
             $abierta = AperturaCaja::where('caja_id', $cajaId)->where('estado', 'abierta')->with('usuario:id,name')->first();
             if ($abierta) {

@@ -135,15 +135,22 @@ export default function MiCaja() {
         }
     };
 
+    /** El cierre pendiente que dejó otro turno: quien abre la caja lo aprueba. */
+    const cierreDeOtro = data?.cierre_pendiente && !data.cierre_pendiente.es_mio ? data.cierre_pendiente : null;
+
     const abrir = async () => {
         setSaving(true);
         try {
             // Con un cierre previo el servidor abre con lo que quedó en la caja; aquí solo cuenta la primera vez.
-            const res = await api.post('/mi-caja/abrir', { monto_inicial: saldoAnterior ? saldoAnterior.monto : Number(montoInicial) || 0 });
+            const aprueba = Boolean(cierreDeOtro);
+            const res = await api.post('/mi-caja/abrir', {
+                monto_inicial: saldoAnterior ? saldoAnterior.monto : Number(montoInicial) || 0,
+                ...(aprueba ? { aprobar_cierre: true } : {}),
+            });
             setData(res.data);
             setAbrirOpen(false);
             setMontoInicial('');
-            toast.success('Caja abierta.');
+            toast.success(aprueba ? `Cierre de ${cierreDeOtro.solicitante ?? 'el turno anterior'} aprobado: caja abierta.` : 'Caja abierta.');
         } catch (err) {
             toast.error(err.response?.data?.message ?? 'No se pudo abrir la caja.');
         } finally {
@@ -615,7 +622,7 @@ export default function MiCaja() {
                         </>
                     ) : (
                         <>
-                            {/* El cierre espera aprobación: la caja no se abre hasta entonces (o hasta anularlo para corregirlo). */}
+                            {/* La caja se entrega de un turno al siguiente: quien abre aprueba el cierre de quien la dejó. */}
                             {data?.cierre_pendiente && (
                                 <Alert variant="warning" className="mb-4">
                                     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -627,8 +634,8 @@ export default function MiCaja() {
                                             <strong>{money(data.cierre_pendiente.monto_retirado)}</strong>
                                             {data.cierre_pendiente.caja_destino ? <> hacia <strong>{data.cierre_pendiente.caja_destino}</strong></> : ''}.{' '}
                                             {data.cierre_pendiente.es_mio
-                                                ? 'Si algo está mal, anúlalo: tu caja se abre de nuevo para corregirlo.'
-                                                : 'Podrás abrir la caja cuando se apruebe.'}
+                                                ? 'Lo aprueba quien abra la caja después (o un encargado). Si algo está mal, anúlalo: tu caja se abre de nuevo para corregirlo.'
+                                                : 'Al abrir la caja tú lo apruebas: confirmas que recibes lo que dejó.'}
                                         </div>
                                         {data.cierre_pendiente.es_mio && (
                                             <Button variant="danger" size="sm" loading={saving} onClick={anularCierre}>
@@ -644,11 +651,15 @@ export default function MiCaja() {
                                 <p className="text-warm-600">
                                     {data?.ocupada_por
                                         ? 'La caja la está usando otro usuario.'
-                                        : data?.cierre_pendiente
-                                            ? 'Tu caja está cerrada y su cierre espera aprobación.'
-                                            : 'Tu caja está cerrada. Ábrela para registrar movimientos.'}
+                                        : data?.cierre_pendiente?.es_mio
+                                            ? 'Tu caja está cerrada y su cierre espera a quien la abra después.'
+                                            : cierreDeOtro
+                                                ? `Tu caja está cerrada. Al abrirla apruebas el cierre de ${cierreDeOtro.solicitante ?? 'quien la dejó'}.`
+                                                : 'Tu caja está cerrada. Ábrela para registrar movimientos.'}
                                 </p>
-                                <Button disabled={Boolean(data?.ocupada_por || data?.cierre_pendiente)} onClick={() => { setAbrirOpen(true); setMontoInicial(''); }}><LockOpen className="h-4 w-4" /> Abrir caja</Button>
+                                <Button disabled={Boolean(data?.ocupada_por || data?.cierre_pendiente?.es_mio)} onClick={() => { setAbrirOpen(true); setMontoInicial(''); }}>
+                                    <LockOpen className="h-4 w-4" /> {cierreDeOtro ? 'Aprobar cierre y abrir caja' : 'Abrir caja'}
+                                </Button>
                             </Card>
 
                             <h3 className="mb-2 text-sm font-bold text-warm-900">Mis movimientos</h3>
@@ -680,10 +691,19 @@ export default function MiCaja() {
             />
 
             {/* Modal abrir */}
-            <Modal open={abrirOpen} onClose={() => setAbrirOpen(false)} title="Abrir caja"
-                description={saldoAnterior ? 'La caja abre con el efectivo que se dejó en el cierre anterior.' : 'Ingresa el monto en efectivo con el que inicias.'} size="sm"
-                footer={<><Button variant="secondary" onClick={() => setAbrirOpen(false)}>Cancelar</Button><Button loading={saving} onClick={abrir}>Abrir caja</Button></>}>
-                {saldoAnterior ? (
+            <Modal open={abrirOpen} onClose={() => setAbrirOpen(false)} title={cierreDeOtro ? 'Aprobar cierre y abrir caja' : 'Abrir caja'}
+                description={cierreDeOtro ? 'Quien abre la caja aprueba el cierre de quien la dejó.' : saldoAnterior ? 'La caja abre con el efectivo que se dejó en el cierre anterior.' : 'Ingresa el monto en efectivo con el que inicias.'} size="sm"
+                footer={<><Button variant="secondary" onClick={() => setAbrirOpen(false)}>Cancelar</Button><Button loading={saving} onClick={abrir}>{cierreDeOtro ? 'Aprobar y abrir' : 'Abrir caja'}</Button></>}>
+                {cierreDeOtro ? (
+                    <div className="space-y-3">
+                        <Input label="Efectivo que recibes en el cajón (S/)" value={money(cierreDeOtro.monto_dejado)} readOnly disabled className="text-right" />
+                        <p className="rounded-md bg-primary-50 px-3 py-2 text-xs text-primary-700">
+                            {cierreDeOtro.solicitante ?? 'El turno anterior'} cerró la caja y dejó <strong>{money(cierreDeOtro.monto_dejado)}</strong>
+                            {Number(cierreDeOtro.monto_retirado) > 0 ? <> (retiró {money(cierreDeOtro.monto_retirado)}{cierreDeOtro.caja_destino ? ` hacia ${cierreDeOtro.caja_destino}` : ''})</> : ''}.
+                            Al abrir apruebas ese cierre y tu turno empieza con ese efectivo. Si en el cajón hay otra cantidad, avisa a un encargado antes de abrir.
+                        </p>
+                    </div>
+                ) : saldoAnterior ? (
                     <div className="space-y-3">
                         <Input label="Monto inicial (S/)" value={money(saldoAnterior.monto)} readOnly disabled className="text-right" />
                         <p className="rounded-md bg-primary-50 px-3 py-2 text-xs text-primary-700">

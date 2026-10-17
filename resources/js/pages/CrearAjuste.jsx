@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ChevronRight, Download, Plus, Scale, Trash2, Upload } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { opcionesAlmacen, useAlmacenPropio } from '../lib/almacenes';
+import { hoyIso } from '../lib/fechas';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
 import ColorSelect from '../components/ColorSelect';

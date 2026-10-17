@@ -156,16 +156,16 @@ export default function Pedidos() {
         },
         { key: 'cliente', label: 'Cliente', render: (row) => row.cliente ?? 'Cliente varios' },
         {
+            // La fecha que se eligió al crear el pedido: oculta por defecto (se ve en "Mostrar u ocultar columnas").
             key: 'fecha_emision',
             label: 'Fecha',
+            defaultHidden: true,
             render: (row) => fecha(row.fecha_emision),
         },
         {
-            // El día en que se registró de verdad (la «Fecha» es la que se eligió al crear el pedido).
-            // Oculta por defecto; se puede mostrar desde "Mostrar u ocultar columnas".
+            // El día y la hora en que se registró de verdad: es la fecha que se ve por defecto.
             key: 'registrado',
             label: 'Registrado',
-            defaultHidden: true,
             getSearchValue: (row) => fecha(row.created_at),
             render: (row) =>
                 row.created_at ? (

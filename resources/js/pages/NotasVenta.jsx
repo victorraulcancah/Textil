@@ -121,16 +121,16 @@ export default function NotasVenta() {
             ),
         },
         {
-            // Dos fechas, cada una en su columna: la de la venta (la que se elige al crearla) y el día en que se registró de verdad.
+            // La fecha de la venta (la que se elige al crearla): oculta por defecto (se ve en "Mostrar u ocultar columnas").
             key: 'fecha_emision',
             label: 'Fecha',
+            defaultHidden: true,
             render: (row) => (row.fecha_emision ? new Date(row.fecha_emision).toLocaleDateString('es-PE') : '—'),
         },
         {
-            // Oculta por defecto; se puede mostrar desde "Mostrar u ocultar columnas".
+            // El día y la hora en que se registró de verdad: es la fecha que se ve por defecto.
             key: 'registrada',
             label: 'Registrada',
-            defaultHidden: true,
             getSearchValue: (row) => (row.created_at ? new Date(row.created_at).toLocaleDateString('es-PE') : ''),
             render: (row) =>
                 row.created_at ? (

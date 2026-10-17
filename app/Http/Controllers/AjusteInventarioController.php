@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AjusteDetalle;
 use App\Models\AjusteInventario;
 use App\Models\Almacen;
+use App\Models\MovimientoInventario;
 use App\Models\Producto;
 use App\Models\ProductoAlmacenStock;
 use App\Models\ProductoColor;
@@ -339,9 +340,27 @@ class AjusteInventarioController extends Controller
         $data = $request->validate([
             'estado' => 'nullable|in:pendiente,aprobado,rechazado',
             'observaciones' => 'nullable|string',
+            // El día en que se hizo el ajuste: cualquiera hasta hoy, nunca uno futuro.
+            'fecha' => 'nullable|date|before_or_equal:today',
         ]);
-        $ajuste->update($data);
-        return response()->json($ajuste);
+
+        DB::transaction(function () use ($ajuste, $data) {
+            $fecha = $data['fecha'] ?? null;
+            unset($data['fecha']);
+            $ajuste->update($data);
+
+            // La fecha mueve el día del ajuste y de lo que dejó en el kardex; la hora de cada uno se conserva.
+            if ($fecha && $fecha !== $ajuste->fecha->toDateString()) {
+                $ajuste->update(['fecha' => Carbon::parse($fecha)->setTimeFrom($ajuste->fecha)]);
+
+                MovimientoInventario::where('documento_referencia_tipo', 'ajuste_inventario')
+                    ->where('documento_referencia_id', $ajuste->id)
+                    ->get()
+                    ->each(fn ($m) => $m->update(['fecha' => Carbon::parse($fecha)->setTimeFrom($m->fecha)]));
+            }
+        });
+
+        return response()->json($ajuste->fresh());
     }
 
     /**

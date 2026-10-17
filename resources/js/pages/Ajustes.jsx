@@ -153,6 +153,7 @@ export default function Ajustes() {
         setForm({
             estado: ajuste.estado ?? 'pendiente',
             observaciones: ajuste.observaciones ?? '',
+            fecha: diaLocal(ajuste.fecha),
         });
         setFormErrors({});
         setModalOpen(true);
@@ -167,6 +168,7 @@ export default function Ajustes() {
             await api.put(`/ajustes/${editing.id}`, {
                 estado: form.estado,
                 observaciones: form.observaciones,
+                fecha: form.fecha || undefined,
             });
             toast.success('Ajuste actualizado correctamente.');
             setModalOpen(false);
@@ -923,7 +925,7 @@ export default function Ajustes() {
                 open={modalOpen}
                 onClose={() => setModalOpen(false)}
                 title="Editar ajuste"
-                description={editing ? `Actualiza el estado del ajuste #${editing.id}` : ''}
+                description={editing ? `Actualiza la fecha, el estado y las observaciones del ajuste ${editing.serie ? `${editing.serie}-${editing.numero}` : `#${editing.id}`}` : ''}
                 size="md"
                 footer={
                     <>
@@ -937,6 +939,18 @@ export default function Ajustes() {
                 }
             >
                 <form id="ajuste-form" onSubmit={handleSubmit} className="space-y-4" noValidate>
+                    <div>
+                        <Input
+                            label="Fecha"
+                            name="fecha"
+                            type="date"
+                            max={hoyIso()}
+                            value={form.fecha ?? ''}
+                            onChange={(e) => setForm((prev) => ({ ...prev, fecha: e.target.value }))}
+                            error={formErrors.fecha}
+                        />
+                        <p className="mt-1 text-xs text-warm-500">Mueve también el día del ajuste en el kardex. La cantidad y el almacén no cambian.</p>
+                    </div>
                     <Select
                         label="Estado"
                         name="estado"

@@ -195,9 +195,21 @@ class CierreCajaService
         });
     }
 
+    /** ¿La caja ya se abrió con otro turno después de este cierre? */
+    public function cajaReabierta(CierreCaja $cierre): bool
+    {
+        $cierre->loadMissing('apertura');
+
+        return AperturaCaja::where('caja_id', $cierre->apertura->caja_id)->where('id', '>', $cierre->apertura->id)->exists();
+    }
+
     /**
-     * Anula un cierre: su movimiento queda anulado (no cuenta) y la caja se reabre para contar de nuevo y cerrar otra
-     * vez. No se puede si la caja ya volvió a abrirse con otro turno.
+     * Anula un cierre: sus movimientos (el retiro y, si lo hubo, el ingreso en la caja destino) quedan anulados y
+     * dejan de contar.
+     *
+     *  - Si la caja sigue como la dejó, se reabre para contar de nuevo y cerrar otra vez.
+     *  - Si la caja ya se abrió con otro turno, el turno de este cierre se queda cerrado (no se reabre) y los turnos
+     *    posteriores no se tocan: solo se anula el cierre y su retiro.
      */
     public function anular(CierreCaja $cierre, User $por, ?string $motivo = null): CierreCaja
     {
@@ -207,9 +219,7 @@ class CierreCajaService
         if ($cierre->estado === CierreCaja::ANULADO) {
             throw ValidationException::withMessages(['cierre' => 'Este cierre ya está anulado.']);
         }
-        if (AperturaCaja::where('caja_id', $apertura->caja_id)->where('id', '>', $apertura->id)->exists()) {
-            throw ValidationException::withMessages(['cierre' => 'La caja ya se volvió a abrir con otro turno: este cierre no se puede anular.']);
-        }
+        $reabierta = $this->cajaReabierta($cierre);
 
         // Si el efectivo ya llegó a otra caja y esa caja ya cerró su turno, no se puede deshacer: ya lo contó.
         if ($cierre->movimiento_destino_id) {
@@ -219,7 +229,7 @@ class CierreCajaService
             }
         }
 
-        return DB::transaction(function () use ($cierre, $apertura, $por, $motivo) {
+        return DB::transaction(function () use ($cierre, $apertura, $por, $motivo, $reabierta) {
             if ($cierre->movimiento_caja_id) {
                 MovimientoCaja::anularDe(MovimientoCaja::where('id', $cierre->movimiento_caja_id), 'Cierre anulado');
             }
@@ -237,8 +247,11 @@ class CierreCajaService
                 'anulado_motivo' => $motivo ?: 'Anulado para corregirlo',
             ]);
 
-            // La caja vuelve a quedar abierta: se cuenta de nuevo y se cierra con lo correcto.
-            $apertura->update(['estado' => 'abierta']);
+            // La caja vuelve a quedar abierta: se cuenta de nuevo y se cierra con lo correcto. Si ya se abrió otro turno, el
+            // de este cierre sigue cerrado.
+            if (! $reabierta) {
+                $apertura->update(['estado' => 'abierta']);
+            }
 
             return $cierre->refresh();
         });

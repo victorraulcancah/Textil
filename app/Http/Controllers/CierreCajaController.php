@@ -14,7 +14,7 @@ use Illuminate\Http\Request;
  */
 class CierreCajaController extends Controller
 {
-    public function index()
+    public function index(CierreCajaService $servicio)
     {
         $cierres = CierreCaja::with([
             'apertura:id,caja_id,usuario_id,monto_inicial,fecha_apertura',
@@ -33,7 +33,10 @@ class CierreCajaController extends Controller
             ->get(['apertura_caja_id', 'tipo', 'monto', 'moneda', 'cuenta_bancaria_id', 'billetera_id'])
             ->groupBy('apertura_caja_id');
 
-        $cierres->each(function (CierreCaja $cierre) use ($movimientos) {
+        $cierres->each(function (CierreCaja $cierre) use ($movimientos, $servicio) {
+            // Si la caja ya se abrió con otro turno, anular el cierre no la reabre: la pantalla lo avisa.
+            $cierre->caja_reabierta = $servicio->cajaReabierta($cierre);
+
             $todas = $movimientos->get($cierre->apertura_caja_id, collect());
             // Los totales son en soles; los dólares van aparte.
             $lineas = $todas->filter(fn ($m) => ($m->moneda ?: 'PEN') === 'PEN');
@@ -77,7 +80,7 @@ class CierreCajaController extends Controller
         return response()->json($this->conRelaciones($cierresCaja));
     }
 
-    /** Anula un cierre (pendiente o aprobado): reabre la caja para corregirlo. Solo si no se volvió a abrir. */
+    /** Anula un cierre (pendiente o aprobado). Reabre la caja si nadie la abrió después; si no, solo anula el cierre y su retiro. */
     public function anular(Request $request, CierreCaja $cierresCaja, CierreCajaService $servicio)
     {
         $cierresCaja->loadMissing('apertura.caja');

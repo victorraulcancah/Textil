@@ -103,11 +103,14 @@ export default function CierresCaja() {
     };
 
     const anular = async (row) => {
-        if (!window.confirm('¿Anular este cierre? La caja se reabre para que quien cerró lo corrija y vuelva a cerrar.')) return;
+        const aviso = row.caja_reabierta
+            ? '¿Anular este cierre? La caja ya se abrió con otro turno: se anulan el cierre y su retiro (y el ingreso en la caja destino), pero ese turno se queda cerrado.'
+            : '¿Anular este cierre? La caja se reabre para que quien cerró lo corrija y vuelva a cerrar.';
+        if (!window.confirm(aviso)) return;
         setAccionando(row.id);
         try {
             await api.post(`/cierres-caja/${row.id}/anular`, { motivo: 'Anulado por quien aprueba' });
-            toast.success('Cierre anulado: la caja quedó abierta de nuevo.');
+            toast.success(row.caja_reabierta ? 'Cierre anulado: su retiro dejó de contar.' : 'Cierre anulado: la caja quedó abierta de nuevo.');
             await load();
         } catch (err) {
             const v = err.response?.data?.errors ?? {};
@@ -358,10 +361,6 @@ export default function CierresCaja() {
             actions: (row) => {
                 // Aprueba quien tiene el permiso, nunca quien cerró. Anular reabre la caja (si nadie la abrió después).
                 const esSuyo = Number(row.apertura?.usuario_id) === Number(user?.id);
-                // Solo el último cierre de cada caja se puede anular: después de otro turno la caja ya se volvió a abrir.
-                const esElUltimo = !cierres.some(
-                    (c) => c.estado !== 'anulado' && c.apertura?.caja_id === row.apertura?.caja_id && Number(c.id) > Number(row.id),
-                );
                 return (
                     <>
                         {puedeAprobar && row.estado === 'pendiente' && !esSuyo && (
@@ -371,8 +370,8 @@ export default function CierresCaja() {
                                 <Check className="h-4 w-4" />
                             </button>
                         )}
-                        {puedeAprobar && row.estado !== 'anulado' && esElUltimo && (
-                            <button aria-label="Anular cierre" title="Anular cierre: reabre la caja para corregirlo" disabled={accionando === row.id}
+                        {puedeAprobar && row.estado !== 'anulado' && (
+                            <button aria-label="Anular cierre" title={row.caja_reabierta ? 'Anular cierre: anula el cierre y su retiro (la caja ya se abrió con otro turno)' : 'Anular cierre: reabre la caja para corregirlo'} disabled={accionando === row.id}
                                 onClick={(e) => { e.stopPropagation(); anular(row); }}
                                 className="rounded-md p-1.5 text-red-600 transition hover:bg-red-50 hover:text-red-700 disabled:opacity-50">
                                 <RotateCcw className="h-4 w-4" />

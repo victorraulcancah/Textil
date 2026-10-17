@@ -58,7 +58,7 @@ class OrdenVentaDetalle extends Model
             'cantidad' => 'decimal:2',
             'metros' => 'decimal:2',
             'cantidad_reservada' => 'decimal:2',
-            'precio_unitario' => 'decimal:2',
+            'precio_unitario' => 'decimal:6',
             'descuento' => 'decimal:2',
             'subtotal' => 'decimal:2',
             'precio_oculto' => 'boolean',

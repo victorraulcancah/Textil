@@ -410,14 +410,14 @@ export default function CierresCaja() {
                                 <Check className="h-4 w-4" />
                             </button>
                         )}
-                        {puedeAprobar && (row.estado !== 'anulado' || puedeVolverACerrar(row)) && (
+                        {puede('tesoreria.cierres-caja.recerrar') && (row.estado !== 'anulado' || puedeVolverACerrar(row)) && (
                             <button aria-label="Recierre" title="Recierre: corrige lo contado y lo que se deja sin reabrir la caja" disabled={accionando === row.id}
                                 onClick={(e) => { e.stopPropagation(); setCierreRecerrar(row); }}
                                 className="rounded-md p-1.5 text-primary-600 transition hover:bg-primary-50 hover:text-primary-700 disabled:opacity-50">
                                 <Pencil className="h-4 w-4" />
                             </button>
                         )}
-                        {puedeAprobar && row.estado !== 'anulado' && (
+                        {puede('tesoreria.cierres-caja.anular_cierre') && row.estado !== 'anulado' && (
                             <button aria-label="Anular cierre" title={row.caja_reabierta ? 'Anular cierre: anula el cierre y su retiro (la caja ya se abrió con otro turno)' : 'Anular cierre: reabre la caja para corregirlo'} disabled={accionando === row.id}
                                 onClick={(e) => { e.stopPropagation(); pedirAnulacion(row); }}
                                 className="rounded-md p-1.5 text-red-600 transition hover:bg-red-50 hover:text-red-700 disabled:opacity-50">
@@ -561,13 +561,14 @@ export default function CierresCaja() {
             label: 'Acc.',
             width: '128px',
             actions: (row) => {
-                if (!puedeAprobar || !seleccionado || row.deleted_at) return null;
+                if (!seleccionado || row.deleted_at) return null;
                 // Lo del cierre mismo (el retiro y el ingreso en la otra caja) se corrige con el recierre.
                 if (row.documento_referencia_tipo === 'cierre_caja') return null;
                 const doc = row.documento_referencia_tipo;
                 const sePuedeAnular = !['compra', 'letra_cambio'].includes(doc) && !(row.motivo?.es_sistema && !doc);
                 return (
                     <>
+                        {puede('tesoreria.cierres-caja.modificar_cerrado') && (
                         <button
                             type="button"
                             aria-label="Editar movimiento"
@@ -577,7 +578,8 @@ export default function CierresCaja() {
                         >
                             <Pencil className="h-4 w-4" />
                         </button>
-                        {esConvertibleEnAnticipo(row) && (
+                        )}
+                        {esConvertibleEnAnticipo(row) && puede('tesoreria.cierres-caja.modificar_cerrado') && (
                             <button
                                 type="button"
                                 aria-label="Convertir en anticipo"
@@ -588,11 +590,11 @@ export default function CierresCaja() {
                                 <HandCoins className="h-4 w-4" />
                             </button>
                         )}
-                        {sePuedeAnular && (
+                        {sePuedeAnular && puede('tesoreria.cierres-caja.anular_movimiento') && (
                             <button
                                 type="button"
                                 aria-label="Anular movimiento"
-                                title={doc === 'nota_venta' ? 'Anular: anula la proforma completa' : 'Anular movimiento'}
+                                title={doc === 'nota_venta' ? 'Anular el cobro: la proforma pasa a crédito' : 'Anular movimiento'}
                                 onClick={(e) => { e.stopPropagation(); setMovAnular({ ...row, apertura: seleccionado.apertura }); }}
                                 className="rounded-md p-1.5 text-red-600 transition hover:bg-red-50 hover:text-red-700"
                             >

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { totalesDe } from '../lib/planilla';
+import { precioUnitario } from '../lib/moneda';
 import { cn } from './ui';
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
@@ -141,7 +142,7 @@ export default function PlanillaTela({ grupos = [], moneda = 'PEN', pendiente = 
                                                     <td className={`${td} text-center`}>{cifra(f.metros)}</td>
                                                     {precios && (
                                                         <>
-                                                            <td className={`${td} text-center`}>{f.precio == null ? 'Por confirmar' : money(f.precio, moneda)}</td>
+                                                            <td className={`${td} text-center`}>{f.precio == null ? 'Por confirmar' : precioUnitario(f.precio, moneda)}</td>
                                                             <td className={`${td} text-center font-medium`}>{importe(f.total)}</td>
                                                         </>
                                                     )}

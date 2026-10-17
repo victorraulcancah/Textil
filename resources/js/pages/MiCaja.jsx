@@ -472,6 +472,7 @@ export default function MiCaja() {
 
                 return (
                     <div className="flex items-center justify-end gap-0.5">
+                        {puede('tesoreria.mi-caja.editar_movimiento') && (
                         <button
                             type="button"
                             aria-label="Editar movimiento"
@@ -481,8 +482,9 @@ export default function MiCaja() {
                         >
                             <Pencil className="h-4 w-4" />
                         </button>
+                        )}
 
-                        {esConvertibleEnAnticipo(r) && (
+                        {esConvertibleEnAnticipo(r) && puede('tesoreria.mi-caja.convertir_anticipo') && (
                             <button
                                 type="button"
                                 aria-label="Convertir en anticipo"
@@ -495,7 +497,7 @@ export default function MiCaja() {
                         )}
 
                         {/* Lo que nace de una venta o cobranza se corrige con sus pagos nuevos (en la caja abierta). */}
-                        {delTurnoActual && esCobroCorregible(r) && (
+                        {delTurnoActual && esCobroCorregible(r) && puede('tesoreria.mi-caja.corregir_pago') && (
                             <button
                                 type="button"
                                 aria-label="Corregir pago"
@@ -507,11 +509,11 @@ export default function MiCaja() {
                             </button>
                         )}
 
-                        {sePuedeAnular && (
+                        {sePuedeAnular && puede('tesoreria.mi-caja.anular_movimiento') && (
                             <button
                                 type="button"
                                 aria-label="Anular movimiento"
-                                title={doc === 'nota_venta' ? 'Anular: anula la proforma completa' : 'Anular este movimiento: deja de contar y queda en la lista como anulado'}
+                                title={doc === 'nota_venta' ? 'Anular el cobro: la proforma pasa a crédito' : 'Anular este movimiento: deja de contar y queda en la lista como anulado'}
                                 onClick={(e) => { e.stopPropagation(); setAnularMov(r); }}
                                 className="rounded-md p-1.5 text-red-600 transition hover:bg-red-50 hover:text-red-700"
                             >

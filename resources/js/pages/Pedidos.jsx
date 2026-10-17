@@ -26,7 +26,7 @@ import PdfViewerModal from '../components/PdfViewerModal';
 import MetodoCajaPicker from '../components/MetodoCajaPicker';
 import CreditoVenta from '../components/CreditoVenta';
 import ExcesoCreditoModal from '../components/ExcesoCreditoModal';
-import { cargarTipoCambio, NOMBRE_MONEDA, redondear } from '../lib/moneda';
+import { cargarTipoCambio, NOMBRE_MONEDA, precioUnitario, redondear } from '../lib/moneda';
 import BottomSheet, { useSheet } from '../components/ui/BottomSheet';
 import DetalleCard from '../components/ui/DetalleCard';
 import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select } from '../components/ui';
@@ -517,7 +517,7 @@ export default function Pedidos() {
                                     d.modo === 'rollos'
                                         ? { label: 'Cubierto', value: `${num(d.rollos_asignados)}/${num(d.rollos_pedidos)} rollos · ${num(d.metros_asignados)} m` }
                                         : { label: 'Cubierto', value: `${num(d.metros_asignados)} m` },
-                                    { label: 'P. unit.', value: d.precio_oculto ? 'Por confirmar' : `${money(d.precio_unitario, detalle.moneda)}${d.modo === 'rollos' ? ' por metro' : ''}` },
+                                    { label: 'P. unit.', value: d.precio_oculto ? 'Por confirmar' : `${precioUnitario(d.precio_unitario, detalle.moneda)}${d.modo === 'rollos' ? ' por metro' : ''}` },
                                     {
                                         label: 'Importe',
                                         value: d.precio_oculto

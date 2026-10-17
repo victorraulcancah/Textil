@@ -38,7 +38,7 @@ export default function AnularMovimientoModal({ movimiento, url, gestor = false,
         setSaving(true);
         try {
             const res = await api.post(url, { motivo: motivo.trim() || null });
-            toast.success(esVenta ? 'Venta anulada: volvió el stock y dejó de contar en la caja.' : 'Movimiento anulado: ya no cuenta en la caja.');
+            toast.success(esVenta ? 'Cobro anulado: la proforma pasó a crédito y la deuda está en Cuentas por cobrar.' : 'Movimiento anulado: ya no cuenta en la caja.');
             onDone(res.data);
         } catch (err) {
             const v = err.response?.data?.errors ?? {};
@@ -52,21 +52,21 @@ export default function AnularMovimientoModal({ movimiento, url, gestor = false,
         <Modal
             open
             onClose={onClose}
-            title={esVenta ? 'Anular venta' : 'Anular movimiento'}
+            title={esVenta ? 'Anular cobro de la venta' : 'Anular movimiento'}
             description={`${movimiento.tipo === 'ingreso' ? 'Ingreso' : 'Gasto'} de ${money(movimiento.monto, movimiento.moneda)} · ${metodoLabel(movimiento)}`}
             size="sm"
             footer={
                 <>
                     <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-                    <Button variant="danger" loading={saving} onClick={confirmar}>{esVenta ? 'Anular la venta' : 'Anular movimiento'}</Button>
+                    <Button variant="danger" loading={saving} onClick={confirmar}>{esVenta ? 'Anular el cobro' : 'Anular movimiento'}</Button>
                 </>
             }
         >
             <div className="space-y-3">
                 {esVenta ? (
-                    <Alert variant="error">
-                        Este cobro es de una venta: se anula <strong>la proforma completa</strong>. Vuelve el stock al almacén, se anulan todos sus cobros y,
-                        si tenía deuda, desaparece. No se puede deshacer.
+                    <Alert variant="warning">
+                        Este cobro es de una venta: se anula el cobro y <strong>la proforma sigue vigente, pasando a crédito</strong> por{' '}
+                        {money(movimiento.monto, movimiento.moneda)}. Queda como deuda del cliente en Cuentas por cobrar, para cobrarla después.
                     </Alert>
                 ) : doc === 'anticipo' ? (
                     <Alert variant="warning">

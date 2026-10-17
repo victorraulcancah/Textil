@@ -52,7 +52,7 @@ class NotaVentaPdf implements DocumentoPdf
                             'color' => $f['color'] ?: '—',
                             'cantidad' => $q($f['cantidad']),
                             'u' => $f['u'],
-                            'precio' => $n($f['precio']),
+                            'precio' => \App\Support\Moneda::precio($f['precio']),
                             'subtotal' => $n($d->subtotal),
                         ];
                     })->all(),

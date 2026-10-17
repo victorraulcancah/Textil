@@ -49,7 +49,7 @@ class OrdenVentaPdf implements DocumentoPdf
                     'metros' => $porDefinir ? 'Por definir' : number_format($d->metrosTotales(), 2),
                     // No se sabe el metraje real del rollo: no se imprime un
                     // precio que todavía es una estimación.
-                    'precio' => $d->precio_oculto ? 'Por confirmar' : number_format((float) $d->precio_unitario, 2),
+                    'precio' => $d->precio_oculto ? 'Por confirmar' : \App\Support\Moneda::precio($d->precio_unitario),
                     'importe' => $d->precio_oculto ? '—' : ($porDefinir ? 'Por definir' : number_format((float) $d->subtotal, 2)),
                 ];
             })->all(),

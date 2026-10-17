@@ -27,7 +27,7 @@ class NotaVentaDetalle extends Model
             'cantidad' => 'decimal:2',
             'metros_rollo' => 'decimal:2',
             'rollo_entero' => 'boolean',
-            'precio_unitario' => 'decimal:2',
+            'precio_unitario' => 'decimal:6',
             'descuento' => 'decimal:2',
             'subtotal' => 'decimal:2',
         ];

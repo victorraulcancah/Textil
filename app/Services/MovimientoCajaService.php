@@ -5,6 +5,8 @@ namespace App\Services;
 use App\Http\Controllers\CuentaPorCobrarController;
 use App\Http\Controllers\CuentaPorPagarController;
 use App\Models\Anticipo;
+use App\Models\Cliente;
+use App\Models\CuentaPorCobrar;
 use App\Models\CuentaPorCobrarPago;
 use App\Models\CuentaPorPagarPago;
 use App\Models\MotivoMovimiento;
@@ -43,8 +45,9 @@ class MovimientoCajaService
      *    no en el cajón, así que no mueve el arqueo del efectivo.
      *  - Lo que está en EFECTIVO solo mientras su caja siga abierta: después ya se contó. Quien gestiona los cierres
      *    (`$gestor`) sí puede, y después corrige el cierre.
-     *  - Un cobro o un pago de una cuenta se anula en su cuenta (la deuda recupera el saldo); un cobro de venta anula la
-     *    proforma completa; un anticipo se anula como anticipo; una compra o una letra se anulan desde su documento.
+     *  - Un cobro o un pago de una cuenta se anula en su cuenta (la deuda recupera el saldo); el cobro de una venta se anula
+     *    y la proforma sigue vigente, pasando a crédito por ese monto; un anticipo se anula como anticipo; una compra o una
+     *    letra se anulan desde su documento.
      */
     public function anular(MovimientoCaja $movimiento, string $motivo, User $user, bool $gestor = false): void
     {
@@ -194,29 +197,82 @@ class MovimientoCajaService
     /** El cobro de una venta: se anula la proforma completa (stock, cobros y deuda). */
     private function anularVenta(MovimientoCaja $movimiento, string $motivo, bool $gestor = false): void
     {
-        $nota = NotaVenta::find($movimiento->documento_referencia_id);
+        $nota = NotaVenta::with('pagos')->find($movimiento->documento_referencia_id);
         if (! $nota) {
             throw ValidationException::withMessages(['caja' => 'La venta de este cobro ya no existe.']);
         }
 
         AlmacenAcceso::exigir($nota->almacen_id);
-        $this->exigirPermiso('notas-venta/'.$nota->id.'/anular', 'POST', 'No tienes permiso para anular proformas.');
 
-        // El efectivo de un turno ya cerrado no se toca: su arqueo ya se contó y se aprobó.
-        $enCajaCerrada = MovimientoCaja::where('documento_referencia_tipo', 'nota_venta')
-            ->where('documento_referencia_id', $nota->id)
-            ->whereNull('cuenta_bancaria_id')->whereNull('billetera_id')
-            ->whereHas('apertura', fn ($a) => $a->where('estado', '!=', 'abierta'))
-            ->exists();
-        if ($enCajaCerrada && ! $gestor) {
-            throw ValidationException::withMessages(['caja' => 'Parte de este cobro es efectivo de una caja ya cerrada: la venta no se puede anular desde aquí.']);
+        if ($nota->estado !== 'emitida') {
+            throw ValidationException::withMessages(['caja' => 'La proforma de este cobro está anulada.']);
+        }
+        // Lo anulado queda como deuda del cliente: sin cliente no hay a quién dejársela.
+        if (! $nota->cliente_id) {
+            throw ValidationException::withMessages(['caja' => 'Esta venta no tiene cliente: no se puede dejar la deuda a nadie. Ponle un cliente a la proforma, o anúlala completa desde Proformas.']);
         }
 
-        try {
-            app(NotaVentaService::class)->anular($nota, $motivo ?: 'Anulada desde Mi Caja');
-        } catch (\DomainException|\RuntimeException|\InvalidArgumentException $e) {
-            throw ValidationException::withMessages(['caja' => $e->getMessage()]);
+        $pago = $this->pagoDelMovimiento($nota, $movimiento);
+        if (! $pago) {
+            throw ValidationException::withMessages(['caja' => 'No se encontró el cobro de la venta que corresponde a este movimiento.']);
         }
+
+        DB::transaction(function () use ($nota, $movimiento, $pago, $motivo) {
+            MovimientoCaja::anularDe(MovimientoCaja::where('id', $movimiento->id), $motivo ?: 'Cobro anulado: la venta pasó a crédito');
+            $monto = round((float) $pago->monto, 2);
+            $pago->delete();
+            $this->dejarEnCredito($nota, $monto);
+        });
+    }
+
+    /** El cobro de la venta que dio origen a este ingreso de caja: mismo método, cuenta y monto (lo que entró). */
+    private function pagoDelMovimiento(NotaVenta $nota, MovimientoCaja $movimiento): ?\App\Models\NotaVentaPago
+    {
+        $forma = $movimiento->cuenta_bancaria_id ? 'transferencia' : ($movimiento->billetera_id ? 'billetera' : 'efectivo');
+
+        return $nota->pagos->first(function ($p) use ($forma, $movimiento) {
+            $entro = $p->monto_pen !== null ? (float) $p->monto_pen : (float) $p->monto;
+
+            return $p->forma_pago === $forma
+                && (int) $p->cuenta_bancaria_id === (int) $movimiento->cuenta_bancaria_id
+                && (int) $p->billetera_id === (int) $movimiento->billetera_id
+                && abs($entro - (float) $movimiento->monto) < 0.005;
+        });
+    }
+
+    /**
+     * Lo que se dejó de cobrar pasa a ser deuda: la proforma sigue vigente, con su stock, y queda a crédito. El monto es
+     * una cuota nueva en Cuentas por cobrar, que vence hoy o con los días de crédito del cliente, y se cobra desde allí.
+     */
+    private function dejarEnCredito(NotaVenta $nota, float $monto): void
+    {
+        $cliente = Cliente::with('lineaCredito')->find($nota->cliente_id);
+        $dias = (int) ($cliente?->lineaCredito?->dias_credito ?? 0);
+        $cuotas = CuentaPorCobrar::where('nota_venta_id', $nota->id)->count() + 1;
+
+        CuentaPorCobrar::create([
+            'almacen_id' => $nota->almacen_id,
+            'nota_venta_id' => $nota->id,
+            'cliente_id' => $nota->cliente_id,
+            'numero_cuota' => $cuotas,
+            'total_cuotas' => $cuotas,
+            'monto_total' => $monto,
+            'moneda' => $nota->moneda,
+            'monto_pagado' => 0,
+            'saldo' => $monto,
+            'fecha_vencimiento' => now()->addDays($dias)->toDateString(),
+            'estado' => 'pendiente',
+        ]);
+        CuentaPorCobrar::where('nota_venta_id', $nota->id)->update(['total_cuotas' => $cuotas]);
+
+        // Como toda venta a crédito, la parte que queda a deber figura con su pago «Crédito».
+        $nota->pagos()->create([
+            'forma_pago' => 'credito',
+            'monto' => $monto,
+            'moneda' => $nota->moneda,
+            'fecha' => now()->toDateString(),
+        ]);
+        $nota->update(['tipo_pago' => 'credito']);
     }
 
     /** Un ingreso o gasto registrado a mano. */

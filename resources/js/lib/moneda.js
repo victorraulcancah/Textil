@@ -13,6 +13,10 @@ export const NOMBRE_MONEDA = { PEN: 'Soles', USD: 'Dólares' };
 export const money = (n, moneda = 'PEN') =>
     new Intl.NumberFormat('es-PE', { style: 'currency', currency: moneda || 'PEN' }).format(Number(n) || 0);
 
+/** Un precio unitario con los decimales que tiene (2 como mínimo, hasta 6): 6.22, 6.216935. Los importes van con `money`. */
+export const precioUnitario = (n, moneda = 'PEN') =>
+    new Intl.NumberFormat('es-PE', { style: 'currency', currency: moneda || 'PEN', minimumFractionDigits: 2, maximumFractionDigits: 6 }).format(Number(n) || 0);
+
 export const redondear = (n, decimales = 2) => {
     const f = 10 ** decimales;
     return Math.round((Number(n) || 0) * f) / f;

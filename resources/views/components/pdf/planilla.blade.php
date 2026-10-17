@@ -16,6 +16,8 @@
     $n = fn ($v) => rtrim(rtrim(number_format((float) $v, 2, '.', ''), '0'), '.');
     $celda = fn ($v) => is_numeric($v) ? $n($v) : ($v ?? '');
     $dinero = fn ($v) => is_numeric($v) ? $moneda.' '.number_format((float) $v, 2) : ($v ?? '');
+    // El precio unitario con los decimales que tiene (hasta 6); los importes, con 2.
+    $precioUnit = fn ($v) => is_numeric($v) ? $moneda.' '.\App\Support\Moneda::precio($v) : ($v ?? '');
     $borde = 'border: 1px solid #999; padding: 3px 5px; text-align: center;';
 
     // Columnas: Ítem, [Color code], Color, Rollo, Factor, Metros, [Precio unitario, Precio total].
@@ -69,7 +71,7 @@
                     @endif
                     <td style="{{ $borde }}">{{ $celda($f['metros']) }}</td>
                     @if ($precios)
-                        <td style="{{ $borde }}">{{ $f['precio'] === null ? 'Por confirmar' : $dinero($f['precio']) }}</td>
+                        <td style="{{ $borde }}">{{ $f['precio'] === null ? 'Por confirmar' : $precioUnit($f['precio']) }}</td>
                         <td style="{{ $borde }}">{{ $dinero($f['total']) }}</td>
                     @endif
                 </tr>

@@ -884,7 +884,7 @@ class OrdenVentaService
                     'metros_rollo' => $asignado->metros_rollo !== null ? (float) $asignado->metros_rollo : $metros,
                     'rollo_entero' => (bool) $asignado->entero,
                     'cantidad' => $metro->desdeMetros($metros),
-                    'precio_unitario' => round($porMetro, 2),
+                    'precio_unitario' => round($porMetro, 6),
                     'descuento' => $descuento,
                     'subtotal' => round($importe - $descuento, 2),
                 ];
@@ -1339,7 +1339,8 @@ class OrdenVentaService
             }
 
             $cantidad = round((float) $linea['cantidad'], 2);
-            $precio = round((float) ($linea['precio_unitario'] ?? 0), 2);
+            // El precio conserva los decimales escritos (hasta 6): solo el importe de la línea se redondea a céntimos.
+            $precio = round((float) ($linea['precio_unitario'] ?? 0), 6);
             $descuento = round((float) ($linea['descuento'] ?? 0), 2);
             $importe = round($cantidad * $precio - $descuento, 2);
             // Con un rollo no se sabe el metraje real hasta pesarlo: el

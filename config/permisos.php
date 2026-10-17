@@ -41,6 +41,15 @@ return [
         // Cuánto se le fía a un cliente lo decide quien aprueba el crédito,
         // no cualquiera que edite sus datos.
         'linea_credito' => 'Aprobar línea de crédito',
+        // Tesorería: lo que se hace sobre movimientos y cierres ya registrados. Anular un movimiento es libre por
+        // defecto; lo demás lo hace solo quien tenga el permiso.
+        'anular_movimiento' => 'Anular movimientos',
+        'editar_movimiento' => 'Editar movimientos',
+        'corregir_pago' => 'Corregir pagos',
+        'convertir_anticipo' => 'Convertir un ingreso en anticipo',
+        'anular_cierre' => 'Anular cierres',
+        'recerrar' => 'Hacer el recierre (corregir un cierre)',
+        'modificar_cerrado' => 'Modificar una caja ya cerrada',
         // Vender a crédito por encima de lo disponible de la línea.
         'exceder_credito' => 'Autorizar exceso de crédito',
     ],
@@ -265,7 +274,19 @@ return [
         'tesoreria' => [
             'label' => 'Tesorería',
             'submodulos' => [
-                'mi-caja' => ['label' => 'Mi caja', 'apis' => ['mi-caja']],
+                'mi-caja' => [
+                    'label' => 'Mi caja',
+                    'apis' => ['mi-caja'],
+                    // Lo que se hace sobre los movimientos de tus turnos: cada acción tiene su permiso (anular es libre por
+                    // defecto). Abrir, cerrar y registrar siguen con "crear".
+                    'patrones' => [
+                        'mi-caja/movimientos/*/anular' => 'anular_movimiento',
+                        'mi-caja/movimientos/*/editar' => 'editar_movimiento',
+                        'mi-caja/movimientos/*/corregir-pago' => 'corregir_pago',
+                        'mi-caja/movimientos/*/convertir-anticipo' => 'convertir_anticipo',
+                    ],
+                    'acciones' => ['ver', 'crear', 'editar', 'eliminar', 'anular_movimiento', 'editar_movimiento', 'corregir_pago', 'convertir_anticipo'],
+                ],
                 'metodos-pago' => [
                     'label' => 'Cuentas y medios de pago',
                     'apis' => ['metodos-pago', 'bancos', 'cuentas-bancarias', 'billeteras-digitales', 'tarjetas-bancarias'],
@@ -276,19 +297,18 @@ return [
                     'label' => 'Cierres de caja',
                     'apis' => ['cierres-caja'],
                     'pdf' => ['cierre-caja'],
-                    // El cierre queda pendiente: aprobarlo (o anularlo para que se corrija) lo decide quien tiene este
-                    // permiso, no quien cerró. Quien cerró anula el suyo desde Mi caja.
+                    // Al cerrar, el turno queda bloqueado: cada cosa que se pueda hacer sobre un cierre o sobre lo ya
+                    // cerrado la hace solo quien tiene su permiso. Anular un movimiento es libre por defecto.
                     'patrones' => [
+                        // Los de movimientos van primero: el "*" también cubre las barras y "…/*/anular" los tragaría.
+                        'cierres-caja/*/movimientos/*/anular' => 'anular_movimiento',
+                        'cierres-caja/*/movimientos/*/editar' => 'modificar_cerrado',
+                        'cierres-caja/*/movimientos/*/convertir-anticipo' => 'modificar_cerrado',
                         'cierres-caja/*/aprobar' => 'aprobar',
-                        'cierres-caja/*/anular' => 'aprobar',
-                        // Corregir lo contado de un cierre ya hecho también lo decide quien aprueba.
-                        'cierres-caja/*/recerrar' => 'aprobar',
-                        // Anular o corregir los movimientos de un turno ya cerrado: lo decide quien gestiona los cierres.
-                        'cierres-caja/*/movimientos/*/anular' => 'aprobar',
-                        'cierres-caja/*/movimientos/*/editar' => 'aprobar',
-                        'cierres-caja/*/movimientos/*/convertir-anticipo' => 'aprobar',
+                        'cierres-caja/*/anular' => 'anular_cierre',
+                        'cierres-caja/*/recerrar' => 'recerrar',
                     ],
-                    'acciones' => ['ver', 'aprobar'],
+                    'acciones' => ['ver', 'aprobar', 'anular_cierre', 'recerrar', 'anular_movimiento', 'modificar_cerrado'],
                 ],
                 'motivos-movimiento' => ['label' => 'Motivos de movimiento', 'apis' => ['motivos-movimiento']],
                 'cuentas-por-cobrar' => ['label' => 'Cuentas por cobrar', 'apis' => ['cuentas-por-cobrar']],

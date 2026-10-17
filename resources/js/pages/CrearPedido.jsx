@@ -918,7 +918,7 @@ export default function CrearPedido() {
                             <Input
                                 label={esTelaNueva ? 'Precio por metro' : 'Precio de venta'}
                                 type="number"
-                                step="0.01"
+                                step="any"
                                 min="0"
                                 placeholder="0.00"
                                 value={nueva.precio_unitario}
@@ -1161,7 +1161,7 @@ export default function CrearPedido() {
                                                                             />
                                                                             <Input
                                                                                 type="number"
-                                                                                step="0.01"
+                                                                                step="any"
                                                                                 min="0"
                                                                                 value={l.precio_unitario}
                                                                                 onChange={(e) => cambiar(i, 'precio_unitario', e.target.value)}
@@ -1274,7 +1274,7 @@ export default function CrearPedido() {
                                                 ) : (
                                                     <Input
                                                         type="number"
-                                                        step="0.01"
+                                                        step="any"
                                                         min="0"
                                                         value={l.precio_unitario}
                                                         onChange={(e) => cambiar(i, 'precio_unitario', e.target.value)}

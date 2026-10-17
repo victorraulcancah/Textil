@@ -276,6 +276,8 @@ export default function Clientes() {
     const [editing, setEditing] = useState(null);
     const [form, setForm] = useState(emptyForm);
     const [formErrors, setFormErrors] = useState({});
+    /** El cliente que ya tiene el documento que se intenta registrar. */
+    const [clienteExistente, setClienteExistente] = useState(null);
     const [saving, setSaving] = useState(false);
     const [tab, setTab] = useState('general');
 
@@ -337,6 +339,7 @@ export default function Clientes() {
         setEditing(null);
         setForm({ ...emptyForm, direcciones: [nuevaDireccion('fiscal', true)] });
         setFormErrors({});
+        setClienteExistente(null);
         setResumenCredito(null);
         setLineaQuitada(false);
         setTab('general');
@@ -377,6 +380,7 @@ export default function Clientes() {
             linea_credito: lineaDesdeApi(c.linea_credito),
         });
         setFormErrors({});
+        setClienteExistente(null);
         setLineaQuitada(false);
         setResumenCredito(null);
         // Lo que debe hoy, para que la pestaña muestre lo disponible.
@@ -400,6 +404,7 @@ export default function Clientes() {
         setForm((prev) => ({ ...prev, direcciones }));
         setSaving(true);
         setFormErrors({});
+        setClienteExistente(null);
         const { linea_credito: linea, ...resto } = form;
         // La línea viaja con el cliente, solo si quien guarda puede aprobar crédito.
         const lineaPayload = !puede('ventas.clientes.linea_credito')
@@ -431,6 +436,7 @@ export default function Clientes() {
             if (err.response?.status === 422) {
                 const errores = Object.fromEntries(Object.entries(err.response.data?.errors ?? {}).map(([k, v]) => [k, v[0]]));
                 setFormErrors(errores);
+                setClienteExistente(err.response.data?.cliente_existente ?? null);
                 const primero = Object.keys(errores)[0];
                 if (primero) setTab(pestanaDe(primero));
             } else {
@@ -869,6 +875,26 @@ export default function Clientes() {
                                         )}
                                     </div>
                                 </div>
+                                {clienteExistente && (
+                                    <Alert variant="warning">
+                                        <p className="font-semibold">Este documento ya está registrado</p>
+                                        <p>
+                                            {clienteExistente.nombre}
+                                            {clienteExistente.codigo ? ` · ${clienteExistente.codigo}` : ''}
+                                            {!clienteExistente.activo ? ' · desactivado' : ''}
+                                        </p>
+                                        <p className="text-xs">
+                                            {[
+                                                `${clienteExistente.tipo_documento} ${clienteExistente.numero_documento}`,
+                                                clienteExistente.telefono && `Tel. ${clienteExistente.telefono}`,
+                                                clienteExistente.email,
+                                                clienteExistente.direccion,
+                                            ]
+                                                .filter(Boolean)
+                                                .join(' · ')}
+                                        </p>
+                                    </Alert>
+                                )}
                                 {/* Debajo del documento: se llena solo al consultar DNI o RUC. */}
                                 <Input label="Nombre / razón social" value={form.nombre} onChange={(e) => field('nombre', e.target.value)} error={formErrors.nombre} />
                                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

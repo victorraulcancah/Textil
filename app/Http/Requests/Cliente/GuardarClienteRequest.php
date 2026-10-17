@@ -8,6 +8,7 @@ use App\Models\LineaCredito;
 use App\Support\Permisos;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -98,6 +99,8 @@ class GuardarClienteRequest extends FormRequest
                     abort(403, 'No tienes permiso para aprobar líneas de crédito.');
                 }
 
+                $this->rechazarDocumentoRepetido();
+
                 $direcciones = collect($this->input('direcciones', []));
                 if ($direcciones->where('tipo', ClienteDireccion::FISCAL)->count() > 1) {
                     throw ValidationException::withMessages(['direcciones' => 'Solo puede haber una dirección fiscal.']);
@@ -107,5 +110,36 @@ class GuardarClienteRequest extends FormRequest
                 }
             },
         ];
+    }
+
+    /**
+     * Un documento (tipo + número) es de un solo cliente, esté activo o no. Si ya está registrado se responde con los datos de
+     * ese cliente para que quien registra vea de quién se trata y no lo cree dos veces.
+     */
+    private function rechazarDocumentoRepetido(): void
+    {
+        $tipo = trim((string) $this->input('tipo_documento'));
+        $numero = trim((string) $this->input('numero_documento'));
+        if ($tipo === '' || $numero === '') {
+            return;
+        }
+
+        $campos = ['id', 'codigo', 'nombre', 'tipo_documento', 'numero_documento', 'telefono', 'email', 'direccion', 'activo'];
+        $existente = Cliente::query()
+            ->where('tipo_documento', $tipo)
+            ->where('numero_documento', $numero)
+            ->when($this->route('cliente'), fn ($q, $cliente) => $q->whereKeyNot($cliente->id))
+            ->first($campos);
+        if (! $existente) {
+            return;
+        }
+
+        $mensaje = "Ya existe un cliente con el {$tipo} {$numero}: {$existente->nombre}.";
+
+        throw new HttpResponseException(response()->json([
+            'message' => $mensaje,
+            'errors' => ['numero_documento' => [$mensaje]],
+            'cliente_existente' => $existente->only($campos),
+        ], 422));
     }
 }

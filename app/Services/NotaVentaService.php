@@ -3,6 +3,7 @@ namespace App\Services;
 
 use App\Models\AperturaCaja;
 use App\Models\Cliente;
+use App\Models\Anticipo;
 use App\Models\CuentaPorCobrar;
 use App\Models\LineaCredito;
 use App\Models\MotivoMovimiento;
@@ -169,8 +170,13 @@ class NotaVentaService
     {
         $nota->detalles()->createMany($data['detalles']);
 
-        $cobros = array_map(fn ($pago) => $this->cobroDe($pago, $nota->moneda), $data['pagos']);
+        // Lo que se paga con un anticipo no pasa por la caja: ese dinero ya entró cuando el cliente lo entregó.
+        $conAnticipo = array_values(array_filter($data['pagos'], fn ($p) => ($p['forma_pago'] ?? null) === 'anticipo'));
+        $normales = array_values(array_filter($data['pagos'], fn ($p) => ($p['forma_pago'] ?? null) !== 'anticipo'));
+
+        $cobros = array_map(fn ($pago) => $this->cobroDe($pago, $nota->moneda), $normales);
         $nota->pagos()->createMany($cobros);
+        $this->aplicarAnticipos($nota, $conAnticipo, (float) $data['total']);
 
         // Cobrada con soles: ese tipo de cambio queda como el comercial del día.
         foreach ($cobros as $cobro) {
@@ -351,6 +357,63 @@ class NotaVentaService
     }
 
     /**
+     * Paga la venta (en parte o del todo) con anticipos del cliente: cada uno aporta lo que se indique, hasta su saldo.
+     * Tienen que ser del mismo cliente y de la misma moneda que la venta, y no pasar de su total.
+     *
+     * @param  list<array{anticipo_id: int, monto: float|string, fecha?: string}>  $pagos
+     */
+    private function aplicarAnticipos(NotaVenta $nota, array $pagos, float $total): void
+    {
+        if (! $pagos) {
+            return;
+        }
+        if (! $nota->cliente_id) {
+            throw new \DomainException('Los anticipos son de un cliente: elige al cliente de la venta.');
+        }
+
+        $usado = [];
+        $suma = 0.0;
+        foreach ($pagos as $pago) {
+            $anticipo = Anticipo::lockForUpdate()->find((int) ($pago['anticipo_id'] ?? 0));
+            if (! $anticipo || $anticipo->estado !== Anticipo::VIGENTE) {
+                throw new \DomainException('Un anticipo elegido ya no está vigente.');
+            }
+            if ((int) $anticipo->cliente_id !== (int) $nota->cliente_id) {
+                throw new \DomainException("El anticipo {$anticipo->documento} es de otro cliente.");
+            }
+            if ($anticipo->moneda !== $nota->moneda) {
+                throw new \DomainException("El anticipo {$anticipo->documento} es en {$anticipo->moneda} y la venta es en {$nota->moneda}.");
+            }
+
+            $monto = round((float) $pago['monto'], 2);
+            $usado[$anticipo->id] = ($usado[$anticipo->id] ?? 0) + $monto;
+            if ($usado[$anticipo->id] > (float) $anticipo->saldo + 0.001) {
+                throw new \DomainException("El anticipo {$anticipo->documento} solo tiene saldo de ".number_format((float) $anticipo->saldo, 2).'.');
+            }
+            $suma += $monto;
+        }
+
+        if ($suma > round($total, 2) + 0.001) {
+            throw new \DomainException('Los anticipos superan el total de la venta.');
+        }
+
+        foreach ($pagos as $pago) {
+            $anticipo = Anticipo::find((int) $pago['anticipo_id']);
+            $monto = round((float) $pago['monto'], 2);
+
+            $anticipo->increment('monto_aplicado', $monto);
+            $nota->pagos()->create([
+                'forma_pago' => 'anticipo',
+                'anticipo_id' => $anticipo->id,
+                'monto' => $monto,
+                'moneda' => $nota->moneda,
+                'fecha' => $pago['fecha'] ?? $nota->fecha_emision,
+                'referencia' => $anticipo->documento,
+            ]);
+        }
+    }
+
+    /**
      * Las cuotas de una venta a crédito, por vencimiento. Sin cuotas, una sola
      * a los días de crédito del cliente. Deben sumar el total de la venta: la
      * última se queda con los céntimos del redondeo.
@@ -397,6 +460,12 @@ class NotaVentaService
     /** Deshace el efecto de la venta: devuelve stock, borra caja y deuda. */
     private function revertir(NotaVenta $nota, string $origen = 'edicion_nota_venta'): void
     {
+        // Lo que se pagó con anticipos vuelve a su saldo: el cliente lo puede usar en otra venta.
+        foreach ($nota->pagos()->whereNotNull('anticipo_id')->get() as $pagoAnticipo) {
+            Anticipo::where('id', $pagoAnticipo->anticipo_id)
+                ->update(['monto_aplicado' => DB::raw('GREATEST(monto_aplicado - '.(float) $pagoAnticipo->monto.', 0)')]);
+        }
+
         $nota->load(['detalles.presentacion.producto', 'detalles.rollo', 'almacen']);
 
         $deMostrador = ! $nota->orden_venta_id;

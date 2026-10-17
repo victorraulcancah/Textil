@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Ban, CalendarDays, Edit, Eye, FileSpreadsheet, FileText, Printer, User } from 'lucide-react';
+import { Ban, BarChart3, CalendarDays, Edit, Eye, FileSearch, FileSpreadsheet, FileText, Printer, User } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import Layout from '../components/Layout';
@@ -11,10 +11,14 @@ import PdfViewerModal from '../components/PdfViewerModal';
 import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select, Spinner } from '../components/ui';
 import FiltroFechas from '../components/FiltroFechas';
 import CambiarFechaModal from '../components/CambiarFechaModal';
+import MenuContextual from '../components/MenuContextual';
+import EstadoCuentaDetalle from '../components/EstadoCuentaDetalle';
+import EstadisticaClienteModal from '../components/EstadisticaClienteModal';
+import { useAuth } from '../lib/auth';
 import { diaLocal, hoyIso } from '../lib/fechas';
 
 const fecha = (v) => (v ? new Date(v).toLocaleDateString('es-PE') : '—');
-const formaLabel = { efectivo: 'Efectivo', transferencia: 'Transferencia', tarjeta: 'Tarjeta', yape: 'Yape', plin: 'Plin', credito: 'Crédito', otro: 'Otro' };
+const formaLabel = { efectivo: 'Efectivo', transferencia: 'Transferencia', tarjeta: 'Tarjeta', yape: 'Yape', plin: 'Plin', credito: 'Crédito', anticipo: 'Anticipo', otro: 'Otro' };
 
 /** Cada venta en su moneda: soles o dólares. */
 const money = (n, moneda = 'PEN') =>
@@ -23,6 +27,7 @@ const money = (n, moneda = 'PEN') =>
 
 export default function NotasVenta() {
     const toast = useToast();
+    const { puede } = useAuth();
     const navigate = useNavigate();
     /** Venta cuyo detalle se muestra en la segunda tabla. */
     const [seleccionada, setSeleccionada] = useState(null);
@@ -47,6 +52,11 @@ export default function NotasVenta() {
     const [anularTarget, setAnularTarget] = useState(null);
     /** Corregir la fecha de una proforma: la elegida. */
     const [cambiarFecha, setCambiarFecha] = useState(null);
+    /** El menú del clic derecho sobre una proforma. */
+    const [menu, setMenu] = useState(null);
+    const cerrarMenu = useCallback(() => setMenu(null), []);
+    /** Lo que se consulta del cliente de la proforma: su estado de cuenta o su estadística de ventas. */
+    const [consulta, setConsulta] = useState(null);
     const [motivo, setMotivo] = useState('');
     const [anulando, setAnulando] = useState(false);
 
@@ -262,7 +272,7 @@ export default function NotasVenta() {
         <Layout>
             <PageHeader
                 title="Proformas"
-                description="Proformas emitidas a clientes"
+                description="Proformas emitidas a clientes. Clic derecho sobre una para ver sus opciones."
                 actions={
                     <>
                         <FiltroFechas desde={fDesde} hasta={fHasta} onDesde={setFDesde} onHasta={setFHasta} />
@@ -283,6 +293,10 @@ export default function NotasVenta() {
 
             <DataTable
                 columns={columns}
+                onRowContextMenu={(row, e) => {
+                    e.preventDefault();
+                    setMenu({ x: e.clientX, y: e.clientY, nota: row });
+                }}
                 rows={notas.filter(
                     (n) =>
                         (!fEstado || n.estado === fEstado) &&
@@ -553,6 +567,43 @@ export default function NotasVenta() {
                 titulo="Proforma"
                 formatos={['a4', 'ticket']}
             />
+
+            <MenuContextual
+                menu={menu}
+                onClose={cerrarMenu}
+                titulo={menu?.nota ? `${menu.nota.serie}-${menu.nota.numero}` : undefined}
+                items={[
+                    { label: 'Ver detalle', icon: Eye, onClick: () => verDetalle(menu.nota) },
+                    { label: 'Imprimir / PDF', icon: Printer, onClick: () => setPdfTarget(menu.nota) },
+                    '-',
+                    {
+                        label: 'Estado de cuenta',
+                        icon: FileSearch,
+                        hidden: !menu?.nota?.cliente?.id || !puede('tesoreria.estado-cuenta'),
+                        onClick: () => setConsulta({ tipo: 'estado', cliente: menu.nota.cliente }),
+                    },
+                    {
+                        label: 'Estadística de ventas',
+                        icon: BarChart3,
+                        hidden: !menu?.nota?.cliente?.id,
+                        onClick: () => setConsulta({ tipo: 'estadistica', cliente: menu.nota.cliente }),
+                    },
+                    '-',
+                    { label: 'Cambiar fecha', icon: CalendarDays, hidden: menu?.nota?.estado === 'anulada', onClick: () => setCambiarFecha(menu.nota) },
+                    { label: 'Editar proforma', icon: Edit, hidden: menu?.nota?.estado === 'anulada', onClick: () => navigate(`/notas-venta/${menu.nota.id}/editar`) },
+                    '-',
+                    { label: 'Anular proforma', icon: Ban, hidden: menu?.nota?.estado === 'anulada', onClick: () => { setAnularTarget(menu.nota); setMotivo(''); } },
+                ]}
+            />
+
+            {consulta?.tipo === 'estado' && (
+                <Modal open onClose={() => setConsulta(null)} title="Estado de cuenta" description={consulta.cliente.nombre} size="3xl">
+                    <EstadoCuentaDetalle clienteId={consulta.cliente.id} />
+                </Modal>
+            )}
+            {consulta?.tipo === 'estadistica' && (
+                <EstadisticaClienteModal cliente={consulta.cliente} onClose={() => setConsulta(null)} />
+            )}
 
             <CambiarFechaModal
                 documento={cambiarFecha ? `${cambiarFecha.serie}-${cambiarFecha.numero}` : null}

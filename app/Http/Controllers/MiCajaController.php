@@ -597,6 +597,9 @@ class MiCajaController extends Controller
         if ($nota->pagos->isEmpty()) {
             throw ValidationException::withMessages(['caja' => 'Esta venta no tiene cobros registrados.']);
         }
+        if ($nota->pagos->contains(fn ($p) => $p->forma_pago === 'anticipo')) {
+            throw ValidationException::withMessages(['caja' => 'Esta venta se pagó con un anticipo: su cobro no se corrige desde aquí. Anula la venta y emítela de nuevo.']);
+        }
         if ($nota->pagos->contains(fn ($p) => $p->monto_pen !== null)) {
             throw ValidationException::withMessages(['caja' => 'Esta venta en dólares se cobró con soles: no se corrige desde aquí.']);
         }

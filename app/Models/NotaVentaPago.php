@@ -14,6 +14,8 @@ class NotaVentaPago extends Model
         'forma_pago',
         'cuenta_bancaria_id',
         'billetera_id',
+        // Si se pagó con un anticipo del cliente: cuál.
+        'anticipo_id',
         // Lo que abona a la venta, en la moneda de la venta.
         'monto',
         'moneda',
@@ -37,6 +39,11 @@ class NotaVentaPago extends Model
     public function notaVenta()
     {
         return $this->belongsTo(NotaVenta::class);
+    }
+
+    public function anticipo()
+    {
+        return $this->belongsTo(Anticipo::class);
     }
 
     public function metodoPago()

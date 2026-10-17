@@ -4,9 +4,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     Ban,
+    BarChart3,
     CalendarDays,
     ClipboardList,
     Edit,
+    Eye,
+    FileSearch,
     FileText,
     PackageCheck,
     Plus,
@@ -29,6 +32,11 @@ import DetalleCard from '../components/ui/DetalleCard';
 import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select } from '../components/ui';
 import FiltroFechas from '../components/FiltroFechas';
 import CambiarFechaModal from '../components/CambiarFechaModal';
+import AnticiposAplicar from '../components/AnticiposAplicar';
+import MenuContextual from '../components/MenuContextual';
+import EstadoCuentaDetalle from '../components/EstadoCuentaDetalle';
+import EstadisticaClienteModal from '../components/EstadisticaClienteModal';
+import { useAuth } from '../lib/auth';
 import { diaLocal } from '../lib/fechas';
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
@@ -70,6 +78,7 @@ const ESTADOS = [
  */
 export default function Pedidos() {
     const toast = useToast();
+    const { puede: tienePermiso } = useAuth();
     const navigate = useNavigate();
 
     const [pedidos, setPedidos] = useState([]);
@@ -93,6 +102,10 @@ export default function Pedidos() {
     const [anular, setAnular] = useState(null);
     /** Corregir la fecha de un pedido: el elegido. */
     const [cambiarFecha, setCambiarFecha] = useState(null);
+    /** El menú del clic derecho sobre un pedido, y lo que se consulta del cliente (estado de cuenta o estadística). */
+    const [menu, setMenu] = useState(null);
+    const cerrarMenu = useCallback(() => setMenu(null), []);
+    const [consulta, setConsulta] = useState(null);
     const [facturar, setFacturar] = useState(null);
     const [procesando, setProcesando] = useState(false);
 
@@ -411,6 +424,10 @@ export default function Pedidos() {
 
             <DataTable
                 columns={columnas}
+                onRowContextMenu={(row, e) => {
+                    e.preventDefault();
+                    setMenu({ x: e.clientX, y: e.clientY, pedido: row });
+                }}
                 rows={pedidosFiltrados}
                 loading={loading}
                 searchPlaceholder="Buscar pedido o cliente..."
@@ -546,6 +563,56 @@ export default function Pedidos() {
                 nombre={pdf?.nombre}
                 titulo={pdf?.titulo ?? 'Documento'}
             />
+
+            <MenuContextual
+                menu={menu}
+                onClose={cerrarMenu}
+                titulo={menu?.pedido?.documento}
+                items={[
+                    {
+                        label: 'Ver detalle',
+                        icon: Eye,
+                        onClick: () => {
+                            setSeleccionado(menu.pedido);
+                            sheet.abrir();
+                        },
+                    },
+                    { label: 'Imprimir', icon: Printer, onClick: () => setPdf({ tipo: 'orden-venta', id: menu.pedido.id, nombre: menu.pedido.documento, titulo: 'Pedido' }) },
+                    {
+                        label: 'Emitir proforma',
+                        icon: Receipt,
+                        hidden: !(menu?.pedido?.estado === 'despachado' && menu?.pedido?.transiciones?.includes('facturado')),
+                        onClick: () => setFacturar(menu.pedido),
+                    },
+                    '-',
+                    {
+                        label: 'Estado de cuenta',
+                        icon: FileSearch,
+                        hidden: !menu?.pedido?.cliente_id || !tienePermiso('tesoreria.estado-cuenta'),
+                        onClick: () => setConsulta({ tipo: 'estado', cliente: { id: menu.pedido.cliente_id, nombre: menu.pedido.cliente } }),
+                    },
+                    {
+                        label: 'Estadística de ventas',
+                        icon: BarChart3,
+                        hidden: !menu?.pedido?.cliente_id,
+                        onClick: () => setConsulta({ tipo: 'estadistica', cliente: { id: menu.pedido.cliente_id, nombre: menu.pedido.cliente } }),
+                    },
+                    '-',
+                    { label: 'Cambiar fecha', icon: CalendarDays, hidden: menu?.pedido?.estado === 'anulado', onClick: () => setCambiarFecha(menu.pedido) },
+                    { label: 'Editar pedido', icon: Edit, hidden: !menu?.pedido?.editable, onClick: () => navigate(`/pedidos/${menu.pedido.id}/editar`) },
+                    '-',
+                    { label: 'Anular pedido', icon: Ban, hidden: !menu?.pedido?.transiciones?.includes('anulado'), onClick: () => setAnular(menu.pedido) },
+                ]}
+            />
+
+            {consulta?.tipo === 'estado' && (
+                <Modal open onClose={() => setConsulta(null)} title="Estado de cuenta" description={consulta.cliente.nombre} size="3xl">
+                    <EstadoCuentaDetalle clienteId={consulta.cliente.id} />
+                </Modal>
+            )}
+            {consulta?.tipo === 'estadistica' && (
+                <EstadisticaClienteModal cliente={consulta.cliente} onClose={() => setConsulta(null)} />
+            )}
 
             <CambiarFechaModal
                 documento={cambiarFecha?.documento ?? null}
@@ -732,6 +799,8 @@ function FacturarModal({ pedido, onClose, onFacturado }) {
     const [fechaCobro, setFechaCobro] = useState('');
     /** Off = un solo método que cubre el total (el caso normal). On = varios métodos. */
     const [mixto, setMixto] = useState(false);
+    /** Los anticipos del cliente que se usan para pagar: [{ id, monto }]. Lo que falte se paga con los métodos de abajo. */
+    const [anticipos, setAnticipos] = useState([]);
     const [cuentas, setCuentas] = useState([]);
     const [billeteras, setBilleteras] = useState([]);
     const [guardando, setGuardando] = useState(false);
@@ -745,6 +814,9 @@ function FacturarModal({ pedido, onClose, onFacturado }) {
     const total = Number(pedido?.total) || 0;
     const moneda = pedido?.moneda || 'PEN';
     const m = (n) => money(n, moneda);
+    /** Lo que se paga con anticipos y lo que queda por cobrar con los métodos normales. */
+    const totalAnticipos = redondear(anticipos.reduce((acc, a) => acc + (Number(a.monto) || 0), 0));
+    const aCobrar = Math.max(0, redondear(total - totalAnticipos));
     /** La proforma y sus pagos llevan la fecha que se eligió al crear el pedido (nunca una futura). */
     const fechaVenta = (() => {
         const dia = diaLocal(pedido?.fecha_emision);
@@ -757,6 +829,7 @@ function FacturarModal({ pedido, onClose, onFacturado }) {
         setTipoPago('contado');
         setPagos([emptyPago()]);
         setMixto(false);
+        setAnticipos([]);
         setCuotas([]);
         setExceso(null);
         cargarTipoCambio(fechaVenta).then(setTcDia).catch(() => setTcDia(null));
@@ -807,12 +880,12 @@ function FacturarModal({ pedido, onClose, onFacturado }) {
     const tcDe = (p) => Number(p.tipoCambio) || tcComercial;
     const abonoDe = (p) =>
         enSoles(p) ? (tcDe(p) > 0 ? redondear((Number(p.monto) || 0) / tcDe(p)) : 0) : Number(p.monto) || 0;
-    const totalEn = (p) => (enSoles(p) ? redondear(total * tcDe(p)) : total);
+    const totalEn = (p) => (enSoles(p) ? redondear(aCobrar * tcDe(p)) : aCobrar);
 
     /** En modo simple hay un solo pago que cubre el total. */
     const pagosEfectivos = mixto ? pagos : [{ ...pagos[0], monto: String(totalEn(pagos[0])) }];
     const pagado = pagosEfectivos.reduce((acc, p) => acc + abonoDe(p), 0);
-    const saldo = total - pagado;
+    const saldo = aCobrar - pagado;
     const esContado = tipoPago === 'contado';
 
     const cambiarMonedaPago = (i, nueva) =>
@@ -872,7 +945,7 @@ function FacturarModal({ pedido, onClose, onFacturado }) {
     /** Con `autorizarExceso`, quien tiene permiso emite la venta aunque pase la línea. */
     const emitir = async (autorizarExceso = false) => {
         if (esContado && mixto && Math.abs(saldo) > 0.001) {
-            return toast.error('Los pagos deben sumar exactamente el total.');
+            return toast.error(totalAnticipos > 0 ? 'Los anticipos y los pagos deben sumar exactamente el total.' : 'Los pagos deben sumar exactamente el total.');
         }
         if (esContado && pagosEfectivos.some((p) => enSoles(p) && Number(p.monto) > 0 && !(tcDe(p) > 0))) {
             return toast.error('Para cobrar en soles, pon el tipo de cambio comercial.');
@@ -888,7 +961,12 @@ function FacturarModal({ pedido, onClose, onFacturado }) {
             const { data } = await api.post(`/ordenes-venta/${pedido.id}/facturar`, {
                 tipo_pago: tipoPago,
                 pagos: esContado
-                    ? pagosEfectivos
+                    ? [
+                          // Primero lo que se paga con anticipos (ese dinero ya está en caja) y luego los métodos normales.
+                          ...anticipos
+                              .filter((a) => Number(a.monto) > 0)
+                              .map((a) => ({ forma_pago: 'anticipo', anticipo_id: a.id, monto: Number(a.monto), fecha: fechaDelCobro })),
+                          ...pagosEfectivos
                           .filter((p) => p.tipo && Number(p.monto) > 0)
                           .map((p) => ({
                               forma_pago: p.tipo,
@@ -899,7 +977,8 @@ function FacturarModal({ pedido, onClose, onFacturado }) {
                               monto: Number(p.monto),
                               ...(enSoles(p) ? { moneda: 'PEN', tipo_cambio: tcDe(p) } : {}),
                               fecha: fechaDelCobro,
-                          }))
+                          })),
+                      ]
                     : [{ forma_pago: 'credito', monto: total, fecha: fechaVenta }],
                 ...(esContado
                     ? {}
@@ -986,7 +1065,19 @@ function FacturarModal({ pedido, onClose, onFacturado }) {
                     )}
                 </div>
 
-                {esContado && !mixto && (
+                {/* Los anticipos del cliente (de cualquier almacén): se usan todos o una parte, y lo que falte se paga abajo. */}
+                {esContado && pedido?.cliente_id && (
+                    <AnticiposAplicar clienteId={pedido.cliente_id} moneda={moneda} value={anticipos} onChange={setAnticipos} total={total} />
+                )}
+
+                {esContado && !mixto && aCobrar <= 0 && (
+                    <div className="flex items-center justify-between rounded-lg bg-green-50 px-3 py-2.5 text-sm">
+                        <span className="text-warm-600">El anticipo cubre todo el total</span>
+                        <span className="font-bold text-green-700">{m(total)}</span>
+                    </div>
+                )}
+
+                {esContado && !mixto && aCobrar > 0 && (
                     <div className="space-y-3">
                         <MetodoCajaPicker
                             cuentas={cuentas}
@@ -1000,9 +1091,9 @@ function FacturarModal({ pedido, onClose, onFacturado }) {
                         />
                         {controlesMoneda(pagos[0], 0)}
                         <div className="flex items-center justify-between rounded-lg bg-primary-50 px-3 py-2.5 text-sm">
-                            <span className="text-warm-500">Se cobra el total</span>
+                            <span className="text-warm-500">{totalAnticipos > 0 ? 'Se cobra el resto' : 'Se cobra el total'}</span>
                             <span className="font-bold text-primary-700">
-                                {enSoles(pagos[0]) ? `${money(totalEn(pagos[0]), 'PEN')} (= ${m(total)})` : m(total)}
+                                {enSoles(pagos[0]) ? `${money(totalEn(pagos[0]), 'PEN')} (= ${m(aCobrar)})` : m(aCobrar)}
                             </span>
                         </div>
                     </div>

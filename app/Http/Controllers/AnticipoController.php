@@ -28,7 +28,10 @@ class AnticipoController extends Controller
             'moneda' => 'nullable|in:PEN,USD',
             // Solo los que tienen saldo por aplicar.
             'con_saldo' => 'nullable|boolean',
+            // Con `con_saldo`: además estos (separados por coma), aunque ya no tengan saldo: los que una venta en edición usa.
+            'incluir' => 'nullable|string|max:200',
         ]);
+        $incluir = array_filter(array_map('intval', explode(',', (string) ($filtros['incluir'] ?? ''))));
 
         // Compartidos: el anticipo es del cliente y se ve (y se aplica) desde cualquier almacén; el almacén es donde
         // entró el dinero en caja. Anularlo o corregirlo sí exige acceso a ese almacén.
@@ -37,7 +40,10 @@ class AnticipoController extends Controller
             ->when($filtros['cliente_id'] ?? null, fn ($q, $v) => $q->where('cliente_id', $v))
             ->when($filtros['estado'] ?? null, fn ($q, $v) => $q->where('estado', $v))
             ->when($filtros['moneda'] ?? null, fn ($q, $v) => $q->where('moneda', $v))
-            ->when(! empty($filtros['con_saldo']), fn ($q) => $q->where('estado', Anticipo::VIGENTE)->whereColumn('monto_aplicado', '<', 'monto'));
+            ->when(! empty($filtros['con_saldo']), fn ($q) => $q->where(
+                fn ($w) => $w->where(fn ($v) => $v->where('estado', Anticipo::VIGENTE)->whereColumn('monto_aplicado', '<', 'monto'))
+                    ->orWhereIn('id', $incluir),
+            ));
 
         return response()->json($consulta->latest('id')->limit(1000)->get());
     }

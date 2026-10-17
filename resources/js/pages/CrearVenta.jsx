@@ -43,6 +43,7 @@ import {
 } from "../components/ui";
 
 import { hoyIso } from "../lib/fechas";
+import AnticiposAplicar from "../components/AnticiposAplicar";
 const num = (n) =>
     new Intl.NumberFormat("es-PE", { maximumFractionDigits: 2 }).format(
         Number(n) || 0,
@@ -146,6 +147,10 @@ export default function CrearVenta() {
     const [pagos, setPagos] = useState([emptyPago()]);
     /** Off = un solo método de pago (el caso normal). On = varios métodos. */
     const [mixto, setMixto] = useState(false);
+    /** Anticipos del cliente con los que se paga: [{ id, monto }]; lo que falte se cobra con los métodos normales. */
+    const [anticipos, setAnticipos] = useState([]);
+    /** Al editar: lo que esta misma venta ya tenía aplicado de cada anticipo (vuelve a estar disponible). */
+    const [anticiposPrevios, setAnticiposPrevios] = useState({});
     /** El cobro son varios campos: se edita en un modal aparte. */
     const [modalCobro, setModalCobro] = useState(false);
 
@@ -235,8 +240,20 @@ export default function CrearVenta() {
                 );
 
                 // Al crédito el pago es un apunte automático, no un cobro real.
+                const conAnticipo = (venta.pagos ?? []).filter(
+                    (p) => p.forma_pago === "anticipo" && p.anticipo_id,
+                );
+                if (conAnticipo.length) {
+                    setAnticipos(
+                        conAnticipo.map((p) => ({ id: p.anticipo_id, monto: String(Number(p.monto) || 0) })),
+                    );
+                    setAnticiposPrevios(
+                        Object.fromEntries(conAnticipo.map((p) => [p.anticipo_id, Number(p.monto) || 0])),
+                    );
+                    setFechaCobro(String(conAnticipo[0].fecha ?? "").slice(0, 10));
+                }
                 const cobros = (venta.pagos ?? []).filter(
-                    (p) => p.forma_pago !== "credito",
+                    (p) => p.forma_pago !== "credito" && p.forma_pago !== "anticipo",
                 );
                 if (cobros.length) {
                     setFechaCobro(String(cobros[0].fecha ?? "").slice(0, 10));
@@ -984,6 +1001,9 @@ export default function CrearVenta() {
     const fechaDelCobro = fechaCobro && fechaCobro >= form.fecha_emision && fechaCobro <= hoy() ? fechaCobro : form.fecha_emision;
     /** Un monto en la moneda de la venta. */
     const m = (n) => money(n, form.moneda);
+    /** Lo que se paga con anticipos y lo que queda por cobrar con los métodos normales. */
+    const totalAnticipos = redondear(anticipos.reduce((acc, a) => acc + (Number(a.monto) || 0), 0));
+    const aCobrar = Math.max(0, redondear(total - totalAnticipos));
 
     /**
      * Una venta en dólares se puede cobrar con soles: cada cobro dice en qué
@@ -1002,14 +1022,14 @@ export default function CrearVenta() {
                 : 0
             : Number(p.monto) || 0;
     /** El total de la venta en la moneda en que entra ese cobro. */
-    const totalEn = (p) => (enSoles(p) ? redondear(total * tcDe(p)) : total);
+    const totalEn = (p) => (enSoles(p) ? redondear(aCobrar * tcDe(p)) : aCobrar);
 
     /** En modo simple hay un solo pago que cubre el total. */
     const pagosEfectivos = mixto
         ? pagos
         : [{ ...pagos[0], monto: String(totalEn(pagos[0])) }];
     const pagado = pagosEfectivos.reduce((acc, p) => acc + abonoDe(p), 0);
-    const saldo = total - pagado;
+    const saldo = aCobrar - pagado;
 
     /** Cambia la moneda de un cobro, llevando lo ya escrito a la otra moneda. */
     const cambiarMonedaPago = (i, moneda) =>
@@ -1152,7 +1172,17 @@ export default function CrearVenta() {
         });
 
         const pagosPayload = esContado
-            ? pagosEfectivos
+            ? [
+                  // Primero lo que se paga con anticipos (ese dinero ya está en caja) y luego los métodos normales.
+                  ...anticipos
+                      .filter((a) => Number(a.monto) > 0)
+                      .map((a) => ({
+                          forma_pago: "anticipo",
+                          anticipo_id: a.id,
+                          monto: Number(a.monto),
+                          fecha: fechaDelCobro,
+                      })),
+                  ...pagosEfectivos
                   .filter((p) => p.tipo && Number(p.monto) > 0)
                   .map((p) => ({
                       metodo_pago_id: null,
@@ -1171,7 +1201,8 @@ export default function CrearVenta() {
                           p.tipo !== "efectivo"
                               ? (p.referencia || "").trim() || null
                               : null,
-                  }))
+                  })),
+              ]
             : [
                   {
                       metodo_pago_id: null,
@@ -1948,13 +1979,18 @@ export default function CrearVenta() {
                                     <h2 className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-warm-500">
                                         <Wallet className="h-4 w-4" /> Cobro
                                     </h2>
+                                    {totalAnticipos > 0 && (
+                                        <p className="mt-1 text-sm font-medium text-green-700">
+                                            Anticipos: {m(totalAnticipos)}{aCobrar > 0 ? ` · resta ${m(aCobrar)}` : " · cubre todo"}
+                                        </p>
+                                    )}
                                     <p className="mt-1 text-sm text-warm-900">
                                         {mixto
                                             ? `${pagos.length} métodos · Cobrado ${m(pagado)}`
                                             : `${pagos[0].tipo === "efectivo" ? "Efectivo" : pagos[0].tipo === "transferencia" ? "Transferencia" : "Billetera"} · ${
                                                   enSoles(pagos[0])
-                                                      ? `${money(totalEn(pagos[0]), "PEN")} (= ${m(total)})`
-                                                      : m(total)
+                                                      ? `${money(totalEn(pagos[0]), "PEN")} (= ${m(aCobrar)})`
+                                                      : m(aCobrar)
                                               }`}
                                     </p>
                                     {fechaDelCobro !== form.fecha_emision && (
@@ -2001,6 +2037,20 @@ export default function CrearVenta() {
                                 Por defecto es la fecha de la proforma. Elige otra si se cobró otro día (hasta hoy).
                             </p>
                         </div>
+
+                        {/* Los anticipos del cliente (de cualquier almacén): se usan todos o una parte. */}
+                        {form.cliente_id && (
+                            <div className="mb-4">
+                                <AnticiposAplicar
+                                    clienteId={form.cliente_id}
+                                    moneda={form.moneda}
+                                    value={anticipos}
+                                    onChange={setAnticipos}
+                                    total={total}
+                                    devuelto={anticiposPrevios}
+                                />
+                            </div>
+                        )}
 
                         <div className="mb-4 flex items-center justify-between">
                             <span className="text-sm font-medium text-warm-700">Modo de cobro</span>
@@ -2049,12 +2099,12 @@ export default function CrearVenta() {
                                 {controlesMoneda(pagos[0], 0)}
                                 <div className="flex items-center justify-between rounded-lg bg-primary-50 px-3 py-2.5 text-sm">
                                     <span className="text-warm-500">
-                                        Se cobra el total
+                                        {totalAnticipos > 0 ? "Se cobra el resto" : "Se cobra el total"}
                                     </span>
                                     <span className="font-bold text-primary-700">
                                         {enSoles(pagos[0])
-                                            ? `${money(totalEn(pagos[0]), "PEN")} (= ${m(total)})`
-                                            : m(total)}
+                                            ? `${money(totalEn(pagos[0]), "PEN")} (= ${m(aCobrar)})`
+                                            : m(aCobrar)}
                                     </span>
                                 </div>
                             </div>

@@ -36,7 +36,9 @@ class StoreNotaVentaRequest extends FormRequest
             'detalles.*.subtotal' => 'required|numeric|min:0',
             'pagos' => 'required|array|min:1',
             'pagos.*.metodo_pago_id' => 'nullable|exists:metodos_pago,id',
-            'pagos.*.forma_pago' => 'required|in:efectivo,transferencia,billetera,credito',
+            'pagos.*.forma_pago' => 'required|in:efectivo,transferencia,billetera,credito,anticipo',
+            // Pagar con un anticipo del cliente: cuál (el monto no puede pasar de su saldo).
+            'pagos.*.anticipo_id' => 'nullable|exists:anticipos,id',
             'pagos.*.cuenta_bancaria_id' => 'nullable|exists:cuentas_bancarias,id',
             'pagos.*.billetera_id' => 'nullable|exists:billeteras_digitales,id',
             'pagos.*.monto' => 'required|numeric|min:0.01',

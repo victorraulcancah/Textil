@@ -297,6 +297,8 @@ Route::middleware('auth:api')->group(function () {
     Route::get('anticipos/{anticipo}', [\App\Http\Controllers\AnticipoController::class, 'show']);
     Route::put('anticipos/{anticipo}', [\App\Http\Controllers\AnticipoController::class, 'update']);
     Route::post('anticipos/{anticipo}/anular', [\App\Http\Controllers\AnticipoController::class, 'anular']);
+    Route::post('anticipos/{anticipo}/devolver', [\App\Http\Controllers\AnticipoController::class, 'devolver']);
+    Route::post('anticipos/devoluciones/{devolucion}/anular', [\App\Http\Controllers\AnticipoController::class, 'anularDevolucion']);
     Route::delete('notas-venta/{notaVenta}', [NotaVentaController::class, 'destroy']);
 
     // Tesorería

@@ -1030,6 +1030,8 @@ export default function CrearVenta() {
         : [{ ...pagos[0], monto: String(totalEn(pagos[0])) }];
     const pagado = pagosEfectivos.reduce((acc, p) => acc + abonoDe(p), 0);
     const saldo = aCobrar - pagado;
+    /** Si falta menos de S/ 1 (en soles), ya no se cobra: se perdona como «ajuste por redondeo» y la venta queda pagada. */
+    const perdona = esContado && mixto && form.moneda === "PEN" && saldo > 0.005 && saldo < 1;
 
     /** Cambia la moneda de un cobro, llevando lo ya escrito a la otra moneda. */
     const cambiarMonedaPago = (i, moneda) =>
@@ -1202,6 +1204,8 @@ export default function CrearVenta() {
                               ? (p.referencia || "").trim() || null
                               : null,
                   })),
+                  // Lo que falta, si es menos de S/ 1, no se cobra: queda como ajuste por redondeo.
+                  ...(perdona ? [{ forma_pago: "ajuste", monto: redondear(saldo), fecha: fechaDelCobro }] : []),
               ]
             : [
                   {
@@ -1998,7 +2002,12 @@ export default function CrearVenta() {
                                             Cobro del {new Date(`${fechaDelCobro}T00:00:00`).toLocaleDateString("es-PE")}
                                         </p>
                                     )}
-                                    {mixto && Math.abs(saldo) > 0.001 && (
+                                    {perdona && (
+                                        <p className="mt-0.5 text-xs font-semibold text-green-700">
+                                            Ajuste por redondeo: {m(saldo)} no se cobra
+                                        </p>
+                                    )}
+                                    {mixto && Math.abs(saldo) > 0.001 && !perdona && (
                                         <p
                                             className={`mt-0.5 text-xs font-semibold ${saldo > 0 ? "text-amber-600" : "text-red-600"}`}
                                         >
@@ -2190,7 +2199,13 @@ export default function CrearVenta() {
                                         {m(pagado)}
                                     </span>
                                 </div>
-                                {Math.abs(saldo) > 0.001 && (
+                                {perdona && (
+                                    <div className="flex justify-between text-sm">
+                                        <span className="text-warm-500">Ajuste por redondeo</span>
+                                        <span className="font-semibold text-green-700">{m(saldo)} · no se cobra</span>
+                                    </div>
+                                )}
+                                {Math.abs(saldo) > 0.001 && !perdona && (
                                     <div className="flex justify-between text-sm">
                                         <span className="text-warm-500">
                                             {saldo > 0

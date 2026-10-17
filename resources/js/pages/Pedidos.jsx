@@ -887,6 +887,8 @@ function FacturarModal({ pedido, onClose, onFacturado }) {
     const pagado = pagosEfectivos.reduce((acc, p) => acc + abonoDe(p), 0);
     const saldo = aCobrar - pagado;
     const esContado = tipoPago === 'contado';
+    /** Si falta menos de S/ 1 (en soles), ya no se cobra: se perdona como «ajuste por redondeo» y la venta queda pagada. */
+    const perdona = esContado && mixto && moneda === 'PEN' && saldo > 0.005 && saldo < 1;
 
     const cambiarMonedaPago = (i, nueva) =>
         setPagos((prev) =>
@@ -944,7 +946,7 @@ function FacturarModal({ pedido, onClose, onFacturado }) {
 
     /** Con `autorizarExceso`, quien tiene permiso emite la venta aunque pase la línea. */
     const emitir = async (autorizarExceso = false) => {
-        if (esContado && mixto && Math.abs(saldo) > 0.001) {
+        if (esContado && mixto && Math.abs(saldo) > 0.001 && !perdona) {
             return toast.error(totalAnticipos > 0 ? 'Los anticipos y los pagos deben sumar exactamente el total.' : 'Los pagos deben sumar exactamente el total.');
         }
         if (esContado && pagosEfectivos.some((p) => enSoles(p) && Number(p.monto) > 0 && !(tcDe(p) > 0))) {
@@ -978,6 +980,8 @@ function FacturarModal({ pedido, onClose, onFacturado }) {
                               ...(enSoles(p) ? { moneda: 'PEN', tipo_cambio: tcDe(p) } : {}),
                               fecha: fechaDelCobro,
                           })),
+                          // Lo que falta, si es menos de S/ 1, no se cobra: queda como ajuste por redondeo.
+                          ...(perdona ? [{ forma_pago: 'ajuste', monto: redondear(saldo), fecha: fechaDelCobro }] : []),
                       ]
                     : [{ forma_pago: 'credito', monto: total, fecha: fechaVenta }],
                 ...(esContado
@@ -1160,7 +1164,13 @@ function FacturarModal({ pedido, onClose, onFacturado }) {
                             <span className="text-warm-500">Cobrado</span>
                             <span className="font-semibold text-green-600">{m(pagado)}</span>
                         </div>
-                        {Math.abs(saldo) > 0.001 && (
+                        {perdona && (
+                            <div className="flex justify-between text-sm">
+                                <span className="text-warm-500">Ajuste por redondeo</span>
+                                <span className="font-semibold text-green-700">{m(saldo)} · no se cobra</span>
+                            </div>
+                        )}
+                        {Math.abs(saldo) > 0.001 && !perdona && (
                             <div className="flex justify-between text-sm">
                                 <span className="text-warm-500">{saldo > 0 ? 'Falta cobrar' : 'Sobra'}</span>
                                 <span className={saldo > 0 ? 'font-semibold text-amber-600' : 'font-semibold text-red-600'}>

@@ -124,7 +124,18 @@ class EstadoCuentaService
             'abono' => round((float) $p->monto, 2),
         ]));
 
-        return $cargos->values()->concat($abonos)
+        // Lo que quedó por menos de S/ 1 y se perdonó: figura como un abono, para que el saldo cuadre.
+        $ajustes = $cuentas->filter(fn (CuentaPorCobrar $c) => (float) $c->ajuste_redondeo > 0)->map(fn (CuentaPorCobrar $c) => [
+            'fecha' => ($c->pagos->max('fecha') ?? $c->updated_at)->toDateString(),
+            'tipo' => 'ajuste',
+            'documento' => $this->documento($c->notaVenta),
+            'detalle' => 'Ajuste por redondeo (menos de S/ 1 no se cobra)',
+            'moneda' => $c->moneda ?: 'PEN',
+            'cargo' => 0.0,
+            'abono' => round((float) $c->ajuste_redondeo, 2),
+        ]);
+
+        return $cargos->values()->concat($abonos)->concat($ajustes)
             ->sortBy(fn ($m) => $m['fecha'].($m['tipo'] === 'venta' ? '0' : '1'))
             ->values();
     }

@@ -294,7 +294,7 @@ class MiCajaController extends Controller
             throw ValidationException::withMessages(['caja' => 'Parte de este cobro está en una caja ya cerrada: no se puede corregir.']);
         }
 
-        $this->exigirMismoTotal($pagos, (float) $nota->pagos->sum('monto'), $nota->moneda);
+        $this->exigirMismoTotal($pagos, (float) $nota->pagos->where('forma_pago', '!=', 'ajuste')->sum('monto'), $nota->moneda);
 
         $fecha = $nota->pagos->first()->fecha?->toDateString() ?? now()->toDateString();
         $motivoId = MotivoMovimiento::where('tipo', 'entrada')->where('nombre', 'Ingreso por venta')->value('id');
@@ -302,7 +302,8 @@ class MiCajaController extends Controller
         DB::transaction(function () use ($nota, $ingresos, $pagos, $apertura, $fecha, $motivoId) {
             // Primero se anula lo cobrado…
             MovimientoCaja::anularDe(MovimientoCaja::whereIn('id', $ingresos->pluck('id')), 'Pago corregido');
-            $nota->pagos()->delete();
+            // El ajuste por redondeo no es un cobro: se queda como está.
+            $nota->pagos()->where('forma_pago', '!=', 'ajuste')->delete();
 
             // …y luego se registran los pagos nuevos.
             foreach ($pagos as $p) {

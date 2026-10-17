@@ -228,13 +228,15 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo: tipoProp
     const activas = multiple ? lineas : [lineas[0]];
     const nuevoTotal = activas.reduce((acc, l) => acc + abonoDe(l), 0);
     const pendienteTras = Math.max(saldo - nuevoTotal, 0);
+    // En soles, si tras este cobro queda menos de S/ 1, ya no se cobra: se perdona como ajuste por redondeo y la cuenta se cancela.
+    const perdonaSaldo = monedaDeuda === 'PEN' && nuevoTotal > 0 && pendienteTras > 0.005 && pendienteTras < 1;
     const faltaTipoCambio = (l) => enSoles(l) && Number(l.monto) > 0 && !(Number(l.tipoCambio) > 0);
 
     // La glosa se arma sola ("CANC D: PF002-001, CLIENTE") mientras nadie la escriba a mano.
     const glosaAuto = useMemo(() => {
-        const cancela = nuevoTotal >= saldo - 0.01 && nuevoTotal > 0;
+        const cancela = (nuevoTotal >= saldo - 0.01 || perdonaSaldo) && nuevoTotal > 0;
         return `${cancela ? 'CANC' : 'AMORT'} D: ${documento}${nombre ? `, ${nombre}` : ''}`.slice(0, 255);
-    }, [nuevoTotal, saldo, documento, nombre]);
+    }, [nuevoTotal, saldo, documento, nombre, perdonaSaldo]);
     useEffect(() => {
         if (!glosaEditada) setGlosa(glosaAuto);
     }, [glosaAuto, glosaEditada]);
@@ -576,6 +578,11 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo: tipoProp
                                         {money(pendienteTras, monedaDeuda)}
                                     </p>
                                     {nuevoTotal > saldo + 0.01 && <p className="mt-1 text-xs text-red-600">El abono excede el saldo.</p>}
+                                    {perdonaSaldo && (
+                                        <p className="mt-1 text-xs font-semibold text-green-700">
+                                            Quedan {money(pendienteTras, monedaDeuda)}: se perdona por redondeo y la cuenta queda cancelada.
+                                        </p>
+                                    )}
                                 </div>
                             </div>
                         </Bloque>

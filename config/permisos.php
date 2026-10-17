@@ -50,6 +50,8 @@ return [
         'anular_cierre' => 'Anular cierres',
         'recerrar' => 'Hacer el recierre (corregir un cierre)',
         'modificar_cerrado' => 'Modificar una caja ya cerrada',
+        // Anticipos: devolverle al cliente lo que sobra.
+        'devolver' => 'Devolver anticipos',
         // Vender a crédito por encima de lo disponible de la línea.
         'exceder_credito' => 'Autorizar exceso de crédito',
     ],
@@ -116,8 +118,14 @@ return [
                 'anticipos' => [
                     'label' => 'Anticipos',
                     'apis' => ['anticipos'],
-                    'acciones' => ['ver', 'crear', 'editar', 'eliminar'],
-                    'patrones' => ['anticipos/*/anular' => 'eliminar'],
+                    'acciones' => ['ver', 'crear', 'editar', 'eliminar', 'devolver'],
+                    // Devolver dinero al cliente lo decide quien gestiona: tiene su propio permiso. Primero la de las
+                    // devoluciones: el "*" también cubre las barras y "anticipos/*/anular" la tragaría.
+                    'patrones' => [
+                        'anticipos/devoluciones/*/anular' => 'devolver',
+                        'anticipos/*/devolver' => 'devolver',
+                        'anticipos/*/anular' => 'eliminar',
+                    ],
                 ],
             ],
         ],

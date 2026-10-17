@@ -467,7 +467,7 @@ export default function MiCaja() {
                 // El efectivo de un turno ya cerrado no se anula (ya se contó); lo digital, en cualquier turno.
                 const sePuedeAnular =
                     (esDigital || delTurnoActual) &&
-                    !['compra', 'letra_cambio'].includes(doc) &&
+                    !['compra', 'letra_cambio', 'anticipo_devolucion'].includes(doc) &&
                     !(r.motivo?.es_sistema && !doc);
 
                 return (

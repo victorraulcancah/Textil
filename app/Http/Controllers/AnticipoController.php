@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Anticipo;
+use App\Models\AnticipoDevolucion;
 use App\Services\AnticipoService;
 use App\Support\AlmacenAcceso;
 use Illuminate\Http\Request;
@@ -16,6 +17,9 @@ class AnticipoController extends Controller
         'almacen:id,nombre',
         'cuentaBancaria:id,alias,numero_cuenta',
         'billetera:id,nombre',
+        'devoluciones.pagos.cuentaBancaria:id,alias,numero_cuenta',
+        'devoluciones.pagos.billetera:id,nombre',
+        'devoluciones.usuario:id,name',
     ];
 
     public function __construct(private readonly AnticipoService $anticipos) {}
@@ -41,7 +45,7 @@ class AnticipoController extends Controller
             ->when($filtros['estado'] ?? null, fn ($q, $v) => $q->where('estado', $v))
             ->when($filtros['moneda'] ?? null, fn ($q, $v) => $q->where('moneda', $v))
             ->when(! empty($filtros['con_saldo']), fn ($q) => $q->where(
-                fn ($w) => $w->where(fn ($v) => $v->where('estado', Anticipo::VIGENTE)->whereColumn('monto_aplicado', '<', 'monto'))
+                fn ($w) => $w->where(fn ($v) => $v->where('estado', Anticipo::VIGENTE)->whereRaw('monto_aplicado + monto_devuelto < monto'))
                     ->orWhereIn('id', $incluir),
             ));
 
@@ -85,6 +89,39 @@ class AnticipoController extends Controller
         ]);
 
         return response()->json($this->anticipos->actualizar($anticipo, $datos)->load(self::RELACIONES));
+    }
+
+    /** Devuelve al cliente lo que sobra del anticipo, en uno o varios métodos. */
+    public function devolver(Request $request, Anticipo $anticipo)
+    {
+        AlmacenAcceso::exigir($anticipo->almacen_id);
+
+        $datos = $request->validate([
+            'fecha' => 'nullable|date|before_or_equal:today',
+            'observaciones' => 'nullable|string|max:255',
+            'pagos' => 'required|array|min:1',
+            'pagos.*.forma_pago' => 'required|in:efectivo,transferencia,billetera',
+            'pagos.*.monto' => 'required|numeric|min:0.01',
+            'pagos.*.cuenta_bancaria_id' => 'nullable|exists:cuentas_bancarias,id',
+            'pagos.*.billetera_id' => 'nullable|exists:billeteras_digitales,id',
+            'pagos.*.referencia' => 'nullable|string|max:100',
+        ]);
+
+        $this->anticipos->devolver($anticipo, $datos);
+
+        return response()->json($anticipo->fresh()->load(self::RELACIONES));
+    }
+
+    /** Anula una devolución: el saldo vuelve al anticipo. */
+    public function anularDevolucion(Request $request, AnticipoDevolucion $devolucion)
+    {
+        $anticipo = $devolucion->anticipo;
+        AlmacenAcceso::exigir($anticipo->almacen_id);
+
+        $datos = $request->validate(['motivo' => 'nullable|string|max:200']);
+        $this->anticipos->anularDevolucion($devolucion, $datos['motivo'] ?? null);
+
+        return response()->json($anticipo->fresh()->load(self::RELACIONES));
     }
 
     public function anular(Request $request, Anticipo $anticipo)

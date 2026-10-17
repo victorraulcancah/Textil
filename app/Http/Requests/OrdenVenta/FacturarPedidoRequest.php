@@ -26,7 +26,7 @@ class FacturarPedidoRequest extends FormRequest
 
             'pagos' => 'required|array|min:1',
             'pagos.*.metodo_pago_id' => 'nullable|exists:metodos_pago,id',
-            'pagos.*.forma_pago' => 'required|in:efectivo,transferencia,billetera,credito,anticipo',
+            'pagos.*.forma_pago' => 'required|in:efectivo,transferencia,billetera,credito,anticipo,ajuste',
             // Pagar con un anticipo del cliente: cuál (el monto no puede pasar de su saldo).
             'pagos.*.anticipo_id' => 'nullable|exists:anticipos,id',
             'pagos.*.cuenta_bancaria_id' => 'nullable|exists:cuentas_bancarias,id',

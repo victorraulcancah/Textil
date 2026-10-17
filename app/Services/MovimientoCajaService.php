@@ -63,6 +63,7 @@ class MovimientoCajaService
             'cuenta_por_pagar' => $this->anularPagoDeCuenta($movimiento, false),
             'nota_venta' => $this->anularVenta($movimiento, $motivo, $gestor),
             'anticipo' => $this->anularAnticipo($movimiento, $motivo),
+            'anticipo_devolucion' => throw ValidationException::withMessages(['caja' => 'Esta salida es la devolución de un anticipo: se anula desde Anticipos.']),
             'compra' => throw ValidationException::withMessages(['caja' => 'Esta salida viene de una compra: se anula desde Compras.']),
             'letra_cambio' => throw ValidationException::withMessages(['caja' => 'Este cobro viene de una letra de cambio: se anula desde Letras de cambio.']),
             default => throw ValidationException::withMessages(['caja' => 'Este movimiento no se anula a mano.']),
@@ -179,7 +180,7 @@ class MovimientoCajaService
             'cuenta_por_pagar' => $this->editarPagoDeCuenta($movimiento, $data, false),
             'nota_venta' => $this->editarFechaDeVenta($movimiento, $data),
             'anticipo' => $this->editarAnticipo($movimiento, $data),
-            'compra', 'letra_cambio' => $this->editarDescripcion($movimiento, $data),
+            'compra', 'letra_cambio', 'anticipo_devolucion' => $this->editarDescripcion($movimiento, $data),
             default => throw ValidationException::withMessages(['caja' => 'Este movimiento no se edita a mano.']),
         };
     }

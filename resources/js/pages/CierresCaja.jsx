@@ -567,7 +567,7 @@ export default function CierresCaja() {
                 // Lo del cierre mismo (el retiro y el ingreso en la otra caja) se corrige con el recierre.
                 if (row.documento_referencia_tipo === 'cierre_caja') return null;
                 const doc = row.documento_referencia_tipo;
-                const sePuedeAnular = !['compra', 'letra_cambio'].includes(doc) && !(row.motivo?.es_sistema && !doc);
+                const sePuedeAnular = !['compra', 'letra_cambio', 'anticipo_devolucion'].includes(doc) && !(row.motivo?.es_sistema && !doc);
                 return (
                     <>
                         {puede('tesoreria.cierres-caja.modificar_cerrado') && (

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Anticipo;
+use App\Models\AnticipoDevolucion;
 use App\Models\BilleteraDigital;
 use App\Models\Cliente;
 use App\Models\CuentaBancaria;
@@ -180,6 +181,9 @@ class AnticipoService
         if ((float) $anticipo->monto_aplicado > 0) {
             throw ValidationException::withMessages(['anticipo' => 'Este anticipo ya se aplicó a una venta: no se puede anular.']);
         }
+        if ((float) $anticipo->monto_devuelto > 0) {
+            throw ValidationException::withMessages(['anticipo' => 'Este anticipo ya tiene devoluciones: anúlalas primero.']);
+        }
 
         $movimiento = $anticipo->movimiento_caja_id ? MovimientoCaja::with('apertura:id,estado')->find($anticipo->movimiento_caja_id) : null;
         if ($movimiento && $anticipo->forma_pago === 'efectivo' && $movimiento->apertura?->estado !== 'abierta') {
@@ -235,6 +239,7 @@ class AnticipoService
             'observaciones' => $a->observaciones,
             'monto' => round((float) $a->monto, 2),
             'aplicado' => round((float) $a->monto_aplicado, 2),
+            'devuelto' => round((float) $a->monto_devuelto, 2),
             'saldo' => round((float) $a->saldo, 2),
             'aplicaciones' => ($usos[$a->id] ?? collect())->map(fn ($p) => [
                 'documento' => "{$p->notaVenta->serie}-{$p->notaVenta->numero}",
@@ -246,10 +251,127 @@ class AnticipoService
         $resumen = $anticipos->groupBy('moneda')->map(fn ($grupo) => [
             'recibido' => round((float) $grupo->sum('monto'), 2),
             'aplicado' => round((float) $grupo->sum('monto_aplicado'), 2),
+            'devuelto' => round((float) $grupo->sum('monto_devuelto'), 2),
             'saldo' => round((float) $grupo->sum(fn (Anticipo $a) => (float) $a->saldo), 2),
         ])->all();
 
         return ['lista' => $lista, 'resumen' => $resumen];
+    }
+
+    /**
+     * Devuelve al cliente lo que sobra de un anticipo, en uno o varios métodos (pago mixto). Cada método sale como un egreso
+     * de la caja abierta de quien devuelve, y el saldo del anticipo baja por el total devuelto. Solo se devuelve el saldo:
+     * lo que ya se aplicó a ventas no.
+     *
+     * @param  array{fecha?: ?string, observaciones?: ?string, pagos: list<array{forma_pago: string, monto: float|string, cuenta_bancaria_id?: ?int, billetera_id?: ?int, referencia?: ?string}>}  $datos
+     */
+    public function devolver(Anticipo $anticipo, array $datos, ?User $usuario = null): AnticipoDevolucion
+    {
+        $usuario ??= auth('api')->user() ?? auth()->user();
+        $this->exigirVigente($anticipo);
+
+        $pagos = collect($datos['pagos'])->map(fn ($p) => $p + ['monto' => 0])->filter(fn ($p) => (float) $p['monto'] > 0)->values();
+        $total = round((float) $pagos->sum(fn ($p) => (float) $p['monto']), 2);
+        if ($pagos->isEmpty() || $total <= 0) {
+            throw ValidationException::withMessages(['pagos' => 'Indica cuánto se devuelve y con qué método.']);
+        }
+        if ($total > round((float) $anticipo->saldo, 2) + 0.001) {
+            throw ValidationException::withMessages(['pagos' => 'Solo se puede devolver el saldo del anticipo: '.number_format((float) $anticipo->saldo, 2).'.']);
+        }
+        foreach ($pagos as $p) {
+            $this->metodo(['forma_pago' => $p['forma_pago'], 'cuenta_bancaria_id' => $p['cuenta_bancaria_id'] ?? null, 'billetera_id' => $p['billetera_id'] ?? null]);
+        }
+
+        // La devolución sale de la caja abierta de quien la hace.
+        $apertura = $this->cajas->exigirApertura($usuario);
+
+        return DB::transaction(function () use ($anticipo, $datos, $usuario, $apertura, $pagos, $total) {
+            $fecha = ! empty($datos['fecha']) ? $datos['fecha'] : now()->toDateString();
+
+            $devolucion = AnticipoDevolucion::create([
+                'anticipo_id' => $anticipo->id,
+                'usuario_id' => $usuario->id,
+                'fecha' => $fecha,
+                'moneda' => $anticipo->moneda,
+                'monto' => $total,
+                'observaciones' => $datos['observaciones'] ?? null,
+                'estado' => AnticipoDevolucion::VIGENTE,
+            ]);
+
+            $cliente = $anticipo->cliente()->value('nombre');
+            foreach ($pagos as $p) {
+                $cuentaId = $p['forma_pago'] === 'transferencia' ? ($p['cuenta_bancaria_id'] ?? null) : null;
+                $billeteraId = $p['forma_pago'] === 'billetera' ? ($p['billetera_id'] ?? null) : null;
+                $referencia = $p['forma_pago'] === 'efectivo' ? null : ($p['referencia'] ?? null);
+
+                $movimiento = MovimientoCaja::create([
+                    'apertura_caja_id' => $apertura->id,
+                    'tipo' => 'egreso',
+                    'motivo_movimiento_id' => $this->cajas->motivo('Devolución de anticipo'),
+                    'descripcion' => "Devolución del anticipo {$anticipo->documento}".($cliente ? " a {$cliente}" : ''),
+                    'cuenta_bancaria_id' => $cuentaId,
+                    'billetera_id' => $billeteraId,
+                    'monto' => round((float) $p['monto'], 2),
+                    'moneda' => $anticipo->moneda,
+                    'fecha' => $fecha,
+                    'numero_operacion' => $referencia,
+                    'documento_referencia_tipo' => 'anticipo_devolucion',
+                    'documento_referencia_id' => $devolucion->id,
+                ]);
+
+                $devolucion->pagos()->create([
+                    'forma_pago' => $p['forma_pago'],
+                    'cuenta_bancaria_id' => $cuentaId,
+                    'billetera_id' => $billeteraId,
+                    'monto' => round((float) $p['monto'], 2),
+                    'referencia' => $referencia,
+                    'movimiento_caja_id' => $movimiento->id,
+                ]);
+            }
+
+            $anticipo->increment('monto_devuelto', $total);
+
+            return $devolucion->load('pagos');
+        });
+    }
+
+    /**
+     * Anula una devolución: sus egresos de caja dejan de contar y el saldo vuelve al anticipo. El efectivo de un turno ya
+     * cerrado no se toca (su arqueo ya se contó): se anula el digital o el de la caja abierta.
+     */
+    public function anularDevolucion(AnticipoDevolucion $devolucion, ?string $motivo = null): AnticipoDevolucion
+    {
+        if ($devolucion->estado === AnticipoDevolucion::ANULADA) {
+            throw ValidationException::withMessages(['devolucion' => 'Esta devolución ya está anulada.']);
+        }
+
+        $devolucion->load('pagos.movimientoCaja.apertura:id,estado');
+        foreach ($devolucion->pagos as $pago) {
+            $m = $pago->movimientoCaja;
+            if ($m && $pago->forma_pago === 'efectivo' && $m->apertura?->estado !== 'abierta') {
+                throw ValidationException::withMessages(['devolucion' => 'Parte de esta devolución fue en efectivo de una caja ya cerrada: no se anula, ya se contó en el arqueo.']);
+            }
+        }
+
+        return DB::transaction(function () use ($devolucion, $motivo) {
+            foreach ($devolucion->pagos as $pago) {
+                if ($pago->movimiento_caja_id) {
+                    MovimientoCaja::anularDe(MovimientoCaja::where('id', $pago->movimiento_caja_id), 'Devolución anulada');
+                }
+            }
+
+            Anticipo::where('id', $devolucion->anticipo_id)
+                ->update(['monto_devuelto' => DB::raw('GREATEST(monto_devuelto - '.(float) $devolucion->monto.', 0)')]);
+
+            $devolucion->update([
+                'estado' => AnticipoDevolucion::ANULADA,
+                'anulada_por' => auth('api')->id() ?? auth()->id(),
+                'anulada_en' => now(),
+                'motivo_anulacion' => filled($motivo) ? $motivo : 'Anulada',
+            ]);
+
+            return $devolucion->fresh('pagos');
+        });
     }
 
     private function exigirVigente(Anticipo $anticipo): void

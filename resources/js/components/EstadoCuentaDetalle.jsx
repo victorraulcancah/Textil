@@ -421,6 +421,7 @@ export default function EstadoCuentaDetalle({ clienteId }) {
                                                 <td className="px-4 py-2 text-right">{money(a.monto, a.moneda)}</td>
                                                 <td className="px-4 py-2 text-right">
                                                     {money(a.aplicado, a.moneda)}
+                                                    {a.devuelto > 0 && <span className="block text-xs text-warm-500">Devuelto {money(a.devuelto, a.moneda)}</span>}
                                                     {a.aplicaciones.map((u, k) => (
                                                         <span key={k} className="block text-xs text-warm-500">
                                                             {u.documento} · {fecha(u.fecha)} · {money(u.monto, a.moneda)}

@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Ban, CalendarDays } from 'lucide-react';
+import { Ban, CalendarDays, Undo2 } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
+import { useAuth } from '../lib/auth';
 import { diaLocal, hoyIso } from '../lib/fechas';
 import Layout from '../components/Layout';
 import PageHeader, { CreateButton } from '../components/PageHeader';
 import MetodoCajaPicker from '../components/MetodoCajaPicker';
 import CambiarFechaModal from '../components/CambiarFechaModal';
+import DevolverAnticipoModal from '../components/DevolverAnticipoModal';
 import FiltroFechas from '../components/FiltroFechas';
 import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select } from '../components/ui';
 
@@ -36,9 +38,21 @@ const vacio = () => ({
     observaciones: '',
 });
 
+/** Cómo está un anticipo: vigente con saldo, o sin saldo porque se aplicó a ventas, se devolvió o ambas cosas. */
+const estadoDe = (a) => {
+    if (a.estado === 'anulado') return { label: 'Anulado', variante: 'red' };
+    if ((Number(a.saldo) || 0) > 0) return { label: 'Vigente', variante: 'green' };
+    const aplicado = Number(a.monto_aplicado) > 0;
+    const devuelto = Number(a.monto_devuelto) > 0;
+    if (aplicado && devuelto) return { label: 'Aplicado y devuelto', variante: 'gray' };
+    if (devuelto) return { label: 'Devuelto', variante: 'gray' };
+    return { label: 'Aplicado', variante: 'gray' };
+};
+
 /** Anticipos de clientes: dinero entregado antes de la venta, en soles o en dólares. */
 export default function Anticipos() {
     const toast = useToast();
+    const { puede } = useAuth();
     const [anticipos, setAnticipos] = useState([]);
     const [loading, setLoading] = useState(true);
     const [clientes, setClientes] = useState([]);
@@ -52,6 +66,8 @@ export default function Anticipos() {
 
     const [cambiarFecha, setCambiarFecha] = useState(null);
     const [anular, setAnular] = useState(null);
+    /** El anticipo del que se devuelve lo que sobra. */
+    const [devolver, setDevolver] = useState(null);
     const [motivo, setMotivo] = useState('');
 
     // Filtros de la tabla (el panel del embudo) y el rango de fechas de la cabecera.
@@ -188,6 +204,7 @@ export default function Anticipos() {
         { key: 'moneda', label: 'Moneda', render: (a) => <Badge variant={a.moneda === 'USD' ? 'blue' : 'gray'}>{a.moneda === 'USD' ? 'Dólares' : 'Soles'}</Badge> },
         { key: 'monto', label: 'Monto', align: 'right', searchable: false, render: (a) => money(a.monto, a.moneda) },
         { key: 'monto_aplicado', label: 'Aplicado', align: 'right', searchable: false, render: (a) => money(a.monto_aplicado, a.moneda) },
+        { key: 'monto_devuelto', label: 'Devuelto', align: 'right', searchable: false, render: (a) => money(a.monto_devuelto, a.moneda) },
         {
             key: 'saldo',
             label: 'Saldo',
@@ -198,7 +215,7 @@ export default function Anticipos() {
         {
             key: 'estado',
             label: 'Estado',
-            getSearchValue: (a) => (a.estado === 'anulado' ? 'Anulado' : 'Vigente'),
+            getSearchValue: (a) => estadoDe(a).label,
             render: (a) =>
                 a.estado === 'anulado' ? (
                     <div className="leading-tight">
@@ -206,7 +223,7 @@ export default function Anticipos() {
                         {a.motivo_anulacion && <div className="mt-0.5 text-xs text-warm-500">{a.motivo_anulacion}</div>}
                     </div>
                 ) : (
-                    <Badge variant="green">Vigente</Badge>
+                    <Badge variant={estadoDe(a).variante}>{estadoDe(a).label}</Badge>
                 ),
         },
         {
@@ -224,6 +241,16 @@ export default function Anticipos() {
                         >
                             <CalendarDays className="h-4 w-4" />
                         </button>
+                        {puede('ventas.anticipos.devolver') && (Number(a.saldo) > 0 || (a.devoluciones ?? []).some((d) => d.estado === 'vigente')) && (
+                            <button
+                                aria-label="Devolver anticipo"
+                                title="Devolver al cliente lo que sobra del anticipo"
+                                onClick={() => setDevolver(a)}
+                                className="rounded-md p-1.5 text-primary-600 transition hover:bg-primary-50 hover:text-primary-700"
+                            >
+                                <Undo2 className="h-4 w-4" />
+                            </button>
+                        )}
                         <button
                             aria-label="Anular"
                             title="Anular el anticipo"
@@ -421,6 +448,18 @@ export default function Anticipos() {
                     <Input label="Motivo (opcional)" placeholder="Ej: se registró dos veces" value={motivo} onChange={(e) => setMotivo(e.target.value)} />
                 </div>
             </Modal>
+
+            <DevolverAnticipoModal
+                anticipo={devolver}
+                cuentas={cuentas}
+                billeteras={billeteras}
+                onClose={() => setDevolver(null)}
+                onDone={async (actualizado, cerrar = true) => {
+                    if (cerrar) setDevolver(null);
+                    else setDevolver(actualizado);
+                    await load();
+                }}
+            />
 
             <CambiarFechaModal
                 documento={cambiarFecha?.documento ?? null}

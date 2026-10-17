@@ -63,7 +63,7 @@ class NotaVentaPdf implements DocumentoPdf
 
         $formaPago = [
             'efectivo' => 'Efectivo', 'transferencia' => 'Transferencia',
-            'billetera' => 'Billetera', 'tarjeta' => 'Tarjeta', 'credito' => 'Crédito', 'anticipo' => 'Anticipo',
+            'billetera' => 'Billetera', 'tarjeta' => 'Tarjeta', 'credito' => 'Crédito', 'anticipo' => 'Anticipo', 'ajuste' => 'Ajuste por redondeo',
         ];
         $pagos = $venta->pagos->map(fn ($p) => [
             'metodo' => $formaPago[$p->forma_pago] ?? ucfirst((string) $p->forma_pago),

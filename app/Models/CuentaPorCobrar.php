@@ -25,6 +25,8 @@ class CuentaPorCobrar extends Model
         'moneda',
         'monto_pagado',
         'saldo',
+        // Lo que faltaba por menos de S/ 1 y se perdonó (ajuste por redondeo).
+        'ajuste_redondeo',
         'fecha_vencimiento',
         'estado',
     ];
@@ -35,6 +37,7 @@ class CuentaPorCobrar extends Model
             'monto_total' => 'decimal:2',
             'monto_pagado' => 'decimal:2',
             'saldo' => 'decimal:2',
+            'ajuste_redondeo' => 'decimal:2',
             'fecha_vencimiento' => 'date',
             'numero_cuota' => 'integer',
             'total_cuotas' => 'integer',

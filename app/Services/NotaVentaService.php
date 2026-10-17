@@ -172,11 +172,14 @@ class NotaVentaService
 
         // Lo que se paga con un anticipo no pasa por la caja: ese dinero ya entró cuando el cliente lo entregó.
         $conAnticipo = array_values(array_filter($data['pagos'], fn ($p) => ($p['forma_pago'] ?? null) === 'anticipo'));
-        $normales = array_values(array_filter($data['pagos'], fn ($p) => ($p['forma_pago'] ?? null) !== 'anticipo'));
+        // Lo que falta por cobrar, si es menos de S/ 1, no se cobra: queda como «ajuste por redondeo», sin pasar por la caja.
+        $ajustes = array_values(array_filter($data['pagos'], fn ($p) => ($p['forma_pago'] ?? null) === 'ajuste'));
+        $normales = array_values(array_filter($data['pagos'], fn ($p) => ! in_array($p['forma_pago'] ?? null, ['anticipo', 'ajuste'], true)));
 
         $cobros = array_map(fn ($pago) => $this->cobroDe($pago, $nota->moneda), $normales);
         $nota->pagos()->createMany($cobros);
         $this->aplicarAnticipos($nota, $conAnticipo, (float) $data['total']);
+        $this->aplicarAjuste($nota, $ajustes, (float) $data['total'], $cobros, $conAnticipo);
 
         // Cobrada con soles: ese tipo de cambio queda como el comercial del día.
         foreach ($cobros as $cobro) {
@@ -354,6 +357,42 @@ class NotaVentaService
         $soles = round((float) $pago['monto'], 2);
 
         return ['monto' => round($soles / $tipoCambio, 2), 'monto_pen' => $soles, 'tipo_cambio' => $tipoCambio] + $cobro;
+    }
+
+    /**
+     * El ajuste por redondeo: lo que falta por cobrar, si es menos de S/ 1, se perdona y la venta se da por pagada. Solo en
+     * soles y nunca por más de lo que falta. No entra a la caja; queda registrado como un pago «ajuste».
+     *
+     * @param  list<array{monto: float|string, fecha?: string}>  $ajustes
+     * @param  array  $cobros  los cobros normales ya llevados a la moneda de la venta
+     * @param  array  $conAnticipo  lo pagado con anticipos
+     */
+    private function aplicarAjuste(NotaVenta $nota, array $ajustes, float $total, array $cobros, array $conAnticipo): void
+    {
+        if (! $ajustes) {
+            return;
+        }
+        if (($nota->moneda ?: 'PEN') !== 'PEN') {
+            throw new \DomainException('El ajuste por redondeo solo se usa en ventas en soles.');
+        }
+
+        $monto = round(array_sum(array_map(fn ($a) => (float) $a['monto'], $ajustes)), 2);
+        if ($monto <= 0 || $monto >= 1) {
+            throw new \DomainException('El ajuste por redondeo tiene que ser menos de S/ 1.');
+        }
+
+        $pagado = array_sum(array_map(fn ($c) => (float) $c['monto'], $cobros)) + array_sum(array_map(fn ($a) => (float) $a['monto'], $conAnticipo));
+        if ($monto > round($total - $pagado, 2) + 0.01) {
+            throw new \DomainException('El ajuste por redondeo no puede ser mayor a lo que falta por cobrar.');
+        }
+
+        $nota->pagos()->create([
+            'forma_pago' => 'ajuste',
+            'monto' => $monto,
+            'moneda' => 'PEN',
+            'fecha' => $ajustes[0]['fecha'] ?? $nota->fecha_emision,
+            'referencia' => 'Ajuste por redondeo',
+        ]);
     }
 
     /**

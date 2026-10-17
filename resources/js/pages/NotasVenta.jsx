@@ -18,7 +18,7 @@ import { useAuth } from '../lib/auth';
 import { diaLocal, hoyIso } from '../lib/fechas';
 
 const fecha = (v) => (v ? new Date(v).toLocaleDateString('es-PE') : '—');
-const formaLabel = { efectivo: 'Efectivo', transferencia: 'Transferencia', tarjeta: 'Tarjeta', yape: 'Yape', plin: 'Plin', credito: 'Crédito', anticipo: 'Anticipo', otro: 'Otro' };
+const formaLabel = { efectivo: 'Efectivo', transferencia: 'Transferencia', tarjeta: 'Tarjeta', yape: 'Yape', plin: 'Plin', credito: 'Crédito', anticipo: 'Anticipo', ajuste: 'Ajuste por redondeo', otro: 'Otro' };
 
 /** Cada venta en su moneda: soles o dólares. */
 const money = (n, moneda = 'PEN') =>

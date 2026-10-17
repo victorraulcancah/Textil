@@ -272,12 +272,18 @@ class CuentaPorCobrarController extends Controller
     {
         $pagado = (float) $cuenta->pagos()->sum('monto');
         $total = (float) $cuenta->monto_total;
-        $saldo = round($total - $pagado, 2);
+        $resto = round($total - $pagado, 2);
+
+        // En soles, lo que falta si es menos de S/ 1 ya no se cobra: se perdona como ajuste por redondeo y la cuenta queda
+        // cancelada. Solo después de haber cobrado algo (una cuota de menos de S/ 1 sí se cobra).
+        $ajuste = ($cuenta->moneda ?: 'PEN') === 'PEN' && $pagado > 0 && $resto > 0.005 && $resto < 1 ? $resto : 0.0;
+        $saldo = round($resto - $ajuste, 2);
         $estado = $saldo <= 0.005 ? 'pagado' : ($pagado > 0 ? 'parcial' : 'pendiente');
 
         $cuenta->update([
             'monto_pagado' => $pagado,
             'saldo' => max($saldo, 0),
+            'ajuste_redondeo' => $ajuste,
             'estado' => $estado,
         ]);
     }

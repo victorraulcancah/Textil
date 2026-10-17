@@ -27,6 +27,8 @@ class Anticipo extends Model
         'moneda',
         'monto',
         'monto_aplicado',
+        // Lo devuelto al cliente (ver AnticipoDevolucion).
+        'monto_devuelto',
         'forma_pago',
         'cuenta_bancaria_id',
         'billetera_id',
@@ -47,6 +49,7 @@ class Anticipo extends Model
             'fecha' => 'date',
             'monto' => 'decimal:2',
             'monto_aplicado' => 'decimal:2',
+            'monto_devuelto' => 'decimal:2',
             'fecha_anulacion' => 'datetime',
         ];
     }
@@ -71,7 +74,12 @@ class Anticipo extends Model
             return '0.00';
         }
 
-        return number_format(max(0, (float) $this->monto - (float) $this->monto_aplicado), 2, '.', '');
+        return number_format(max(0, (float) $this->monto - (float) $this->monto_aplicado - (float) $this->monto_devuelto), 2, '.', '');
+    }
+
+    public function devoluciones()
+    {
+        return $this->hasMany(AnticipoDevolucion::class)->orderBy('id');
     }
 
     public function cliente()

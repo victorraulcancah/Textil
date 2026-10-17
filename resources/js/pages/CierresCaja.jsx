@@ -11,7 +11,7 @@ import PageHeader from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
 import FiltroFechas from '../components/FiltroFechas';
 import AprobarCierreModal from '../components/AprobarCierreModal';
-import { Alert, Badge, Button, DataTable, SearchSelect, Select } from '../components/ui';
+import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select } from '../components/ui';
 
 const money = (n, moneda = 'PEN') =>
     new Intl.NumberFormat('es-PE', { style: 'currency', currency: moneda || 'PEN' }).format(Number(n) || 0);
@@ -41,6 +41,9 @@ export default function CierresCaja() {
     const [accionando, setAccionando] = useState(null);
     /** El cierre que se está revisando para aprobar (modal). */
     const [cierreAprobar, setCierreAprobar] = useState(null);
+    /** El cierre que se va a anular (se confirma en un modal) y el motivo que se escribe. */
+    const [cierreAnular, setCierreAnular] = useState(null);
+    const [motivoAnulacion, setMotivoAnulacion] = useState('');
     const [cierres, setCierres] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -102,14 +105,19 @@ export default function CierresCaja() {
         }
     };
 
-    const anular = async (row) => {
-        const aviso = row.caja_reabierta
-            ? '¿Anular este cierre? La caja ya se abrió con otro turno: se anulan el cierre y su retiro (y el ingreso en la caja destino), pero ese turno se queda cerrado.'
-            : '¿Anular este cierre? La caja se reabre para que quien cerró lo corrija y vuelva a cerrar.';
-        if (!window.confirm(aviso)) return;
+    /** Abre el modal de confirmación: anular un cierre no se hace de un clic. */
+    const pedirAnulacion = (row) => {
+        setMotivoAnulacion('');
+        setCierreAnular(row);
+    };
+
+    const anular = async () => {
+        const row = cierreAnular;
+        if (!row) return;
         setAccionando(row.id);
         try {
-            await api.post(`/cierres-caja/${row.id}/anular`, { motivo: 'Anulado por quien aprueba' });
+            await api.post(`/cierres-caja/${row.id}/anular`, { motivo: motivoAnulacion.trim() || 'Anulado por quien aprueba' });
+            setCierreAnular(null);
             toast.success(row.caja_reabierta ? 'Cierre anulado: su retiro dejó de contar.' : 'Cierre anulado: la caja quedó abierta de nuevo.');
             await load();
         } catch (err) {
@@ -372,7 +380,7 @@ export default function CierresCaja() {
                         )}
                         {puedeAprobar && row.estado !== 'anulado' && (
                             <button aria-label="Anular cierre" title={row.caja_reabierta ? 'Anular cierre: anula el cierre y su retiro (la caja ya se abrió con otro turno)' : 'Anular cierre: reabre la caja para corregirlo'} disabled={accionando === row.id}
-                                onClick={(e) => { e.stopPropagation(); anular(row); }}
+                                onClick={(e) => { e.stopPropagation(); pedirAnulacion(row); }}
                                 className="rounded-md p-1.5 text-red-600 transition hover:bg-red-50 hover:text-red-700 disabled:opacity-50">
                                 <RotateCcw className="h-4 w-4" />
                             </button>
@@ -540,6 +548,39 @@ export default function CierresCaja() {
             />
 
             {error && <Alert variant="error" className="mb-4">{error}</Alert>}
+
+            <Modal
+                open={cierreAnular !== null}
+                onClose={() => setCierreAnular(null)}
+                title="Anular cierre de caja"
+                description={cierreAnular ? `${cierreAnular.apertura?.caja?.codigo ? `${cierreAnular.apertura.caja.codigo} · ` : ''}${cierreAnular.apertura?.caja?.nombre ?? ''} · ${cierreAnular.apertura?.usuario?.name ?? ''}` : ''}
+                size="sm"
+                footer={
+                    <>
+                        <Button variant="secondary" onClick={() => setCierreAnular(null)}>Cancelar</Button>
+                        <Button variant="danger" loading={accionando === cierreAnular?.id} onClick={anular}>Anular cierre</Button>
+                    </>
+                }
+            >
+                <div className="space-y-3">
+                    {cierreAnular?.caja_reabierta ? (
+                        <Alert variant="warning">
+                            La caja ya se abrió con otro turno. Se anulan <strong>el cierre y su retiro</strong> (y el ingreso en la caja destino, si lo
+                            hubo), pero el turno de este cierre <strong>se queda cerrado</strong>.
+                        </Alert>
+                    ) : (
+                        <Alert variant="warning">
+                            La caja se <strong>reabre</strong> para que quien cerró cuente de nuevo y vuelva a cerrar. El retiro de este cierre deja de contar.
+                        </Alert>
+                    )}
+                    <Input
+                        label="Motivo (opcional)"
+                        placeholder="Ej: se contó mal el efectivo"
+                        value={motivoAnulacion}
+                        onChange={(e) => setMotivoAnulacion(e.target.value)}
+                    />
+                </div>
+            </Modal>
 
             <AprobarCierreModal
                 open={cierreAprobar !== null}

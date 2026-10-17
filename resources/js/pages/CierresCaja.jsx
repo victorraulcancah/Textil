@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Ban, Check, Coins, HandCoins, Pencil, Printer, RotateCcw } from 'lucide-react';
+import { ArrowLeftRight, Ban, Check, Coins, HandCoins, Pencil, Printer, RotateCcw } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
@@ -15,6 +15,7 @@ import RecerrarCierreModal from '../components/RecerrarCierreModal';
 import AnularMovimientoModal from '../components/AnularMovimientoModal';
 import EditarMovimientoModal from '../components/EditarMovimientoModal';
 import ConvertirEnAnticipoModal, { esConvertibleEnAnticipo } from '../components/ConvertirEnAnticipoModal';
+import CambiarMetodoModal, { esCambiableDeMetodo } from '../components/CambiarMetodoModal';
 import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select } from '../components/ui';
 
 const money = (n, moneda = 'PEN') =>
@@ -64,6 +65,7 @@ export default function CierresCaja() {
     const [movEditar, setMovEditar] = useState(null);
     const [movAnular, setMovAnular] = useState(null);
     const [movConvertir, setMovConvertir] = useState(null);
+    const [movMetodo, setMovMetodo] = useState(null);
     const [catalogos, setCatalogos] = useState({ cuentas: [], billeteras: [], motivos: [] });
 
     // Desde y hasta, a la vista; filtran por la fecha del cierre. Vacíos muestran todos.
@@ -559,7 +561,7 @@ export default function CierresCaja() {
             type: 'actions',
             key: 'acciones',
             label: 'Acc.',
-            width: '128px',
+            width: '160px',
             actions: (row) => {
                 if (!seleccionado || row.deleted_at) return null;
                 // Lo del cierre mismo (el retiro y el ingreso en la otra caja) se corrige con el recierre.
@@ -578,6 +580,17 @@ export default function CierresCaja() {
                         >
                             <Pencil className="h-4 w-4" />
                         </button>
+                        )}
+                        {esCambiableDeMetodo(row) && puede('tesoreria.cierres-caja.modificar_cerrado') && (
+                            <button
+                                type="button"
+                                aria-label="Cambiar método de pago"
+                                title="Cambiar el método de pago (se anotó efectivo y fue transferencia, por ejemplo)"
+                                onClick={(e) => { e.stopPropagation(); setMovMetodo({ ...row, apertura: seleccionado.apertura }); }}
+                                className="rounded-md p-1.5 text-primary-600 transition hover:bg-primary-50 hover:text-primary-700"
+                            >
+                                <ArrowLeftRight className="h-4 w-4" />
+                            </button>
                         )}
                         {esConvertibleEnAnticipo(row) && puede('tesoreria.cierres-caja.modificar_cerrado') && (
                             <button
@@ -701,6 +714,17 @@ export default function CierresCaja() {
                 onClose={() => setMovAnular(null)}
                 onDone={() => {
                     setMovAnular(null);
+                    load();
+                }}
+            />
+            <CambiarMetodoModal
+                movimiento={movMetodo}
+                url={movMetodo && seleccionado ? `/cierres-caja/${seleccionado.id}/movimientos/${movMetodo.id}/cambiar-metodo` : ''}
+                cuentas={catalogos.cuentas}
+                billeteras={catalogos.billeteras}
+                onClose={() => setMovMetodo(null)}
+                onDone={() => {
+                    setMovMetodo(null);
                     load();
                 }}
             />

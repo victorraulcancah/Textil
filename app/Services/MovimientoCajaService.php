@@ -82,6 +82,83 @@ class MovimientoCajaService
     }
 
     /**
+     * Cambia el MÉTODO de un cobro o pago ya registrado (se anotó efectivo y fue una transferencia): el monto, el
+     * documento y el día no cambian, solo si entró por el cajón o por el banco, y a qué cuenta. Sirve para cobros de
+     * ventas y de cuentas por cobrar o pagar.
+     *
+     * Si el cambio toca el efectivo (sale del cajón o entra a él) en un turno ya cerrado, cambia el arqueo de ese turno:
+     * solo lo hace quien gestiona los cierres (`$gestor`), y el cierre se recalcula.
+     *
+     * @param  array{forma: string, cuenta_bancaria_id?: ?int, billetera_id?: ?int, numero_operacion?: ?string}  $data
+     */
+    public function cambiarMetodo(MovimientoCaja $movimiento, array $data, User $user, bool $gestor = false): void
+    {
+        $this->exigirOperable($movimiento, $user, 'cambiar el método de', $gestor);
+
+        if (! in_array($movimiento->documento_referencia_tipo, ['nota_venta', 'cuenta_por_cobrar', 'cuenta_por_pagar'], true)) {
+            throw ValidationException::withMessages(['caja' => 'El método se cambia en cobros de ventas y de cuentas por cobrar o pagar. Un movimiento hecho a mano se edita.']);
+        }
+
+        $forma = $data['forma'];
+        $cuentaId = $forma === 'transferencia' ? ($data['cuenta_bancaria_id'] ?? null) : null;
+        $billeteraId = $forma === 'billetera' ? ($data['billetera_id'] ?? null) : null;
+        if ($forma === 'transferencia' && (! $cuentaId || ! \App\Models\CuentaBancaria::whereKey($cuentaId)->where('activo', true)->exists())) {
+            throw ValidationException::withMessages(['cuenta_bancaria_id' => 'Selecciona una cuenta bancaria activa.']);
+        }
+        if ($forma === 'billetera' && (! $billeteraId || ! \App\Models\BilleteraDigital::whereKey($billeteraId)->where('activo', true)->exists())) {
+            throw ValidationException::withMessages(['billetera_id' => 'Selecciona una billetera activa.']);
+        }
+
+        $formaActual = $movimiento->cuenta_bancaria_id ? 'transferencia' : ($movimiento->billetera_id ? 'billetera' : 'efectivo');
+        if ($forma === $formaActual && (int) $cuentaId === (int) $movimiento->cuenta_bancaria_id && (int) $billeteraId === (int) $movimiento->billetera_id) {
+            throw ValidationException::withMessages(['forma' => 'Ya está registrado con ese método.']);
+        }
+        if (! $gestor && ($forma === 'efectivo' || $formaActual === 'efectivo') && ! $this->turnoAbierto($movimiento)) {
+            throw ValidationException::withMessages(['caja' => 'Cambiar de o a efectivo en una caja ya cerrada cambia su arqueo: lo hace quien gestiona los cierres.']);
+        }
+
+        $metodo = ['forma' => $forma, 'cuenta_bancaria_id' => $cuentaId, 'billetera_id' => $billeteraId];
+
+        match ($movimiento->documento_referencia_tipo) {
+            'nota_venta' => $this->cambiarMetodoDeVenta($movimiento, $metodo, $data['numero_operacion'] ?? null),
+            'cuenta_por_cobrar' => $this->editarPagoDeCuenta($movimiento, array_key_exists('numero_operacion', $data) ? ['numero_operacion' => $data['numero_operacion']] : [], true, $metodo),
+            'cuenta_por_pagar' => $this->editarPagoDeCuenta($movimiento, array_key_exists('numero_operacion', $data) ? ['numero_operacion' => $data['numero_operacion']] : [], false, $metodo),
+        };
+    }
+
+    /** El cobro de una venta: se cambia el método del cobro y del ingreso de caja que dejó. */
+    private function cambiarMetodoDeVenta(MovimientoCaja $movimiento, array $metodo, ?string $referencia): void
+    {
+        $nota = NotaVenta::with('pagos')->find($movimiento->documento_referencia_id);
+        if (! $nota) {
+            throw ValidationException::withMessages(['caja' => 'La venta de este cobro ya no existe.']);
+        }
+
+        AlmacenAcceso::exigir($nota->almacen_id);
+
+        $pago = $this->pagoDelMovimiento($nota, $movimiento);
+        if (! $pago) {
+            throw ValidationException::withMessages(['caja' => 'No se encontró el cobro de la venta que corresponde a este movimiento.']);
+        }
+
+        $referencia = $metodo['forma'] === 'efectivo' ? null : (filled($referencia) ? $referencia : $movimiento->numero_operacion);
+
+        DB::transaction(function () use ($pago, $movimiento, $metodo, $referencia) {
+            $pago->update([
+                'forma_pago' => $metodo['forma'],
+                'cuenta_bancaria_id' => $metodo['cuenta_bancaria_id'],
+                'billetera_id' => $metodo['billetera_id'],
+                'referencia' => $referencia,
+            ]);
+            $movimiento->forceFill([
+                'cuenta_bancaria_id' => $metodo['cuenta_bancaria_id'],
+                'billetera_id' => $metodo['billetera_id'],
+                'numero_operacion' => $referencia,
+            ])->save();
+        });
+    }
+
+    /**
      * Edita un movimiento. Qué se puede cambiar depende de dónde nace:
      *
      *  - Ingreso o gasto a mano: fecha, descripción, N.° de operación, motivo, método y monto.
@@ -337,7 +414,7 @@ class MovimientoCajaService
     }
 
     /** El cobro (o pago) de una cuenta: fecha, descripción y N.° de operación, con el mismo ajuste que su pantalla. */
-    private function editarPagoDeCuenta(MovimientoCaja $movimiento, array $data, bool $cobrar): void
+    private function editarPagoDeCuenta(MovimientoCaja $movimiento, array $data, bool $cobrar, ?array $metodo = null): void
     {
         $pago = $cobrar
             ? CuentaPorCobrarPago::where('movimiento_caja_id', $movimiento->id)->first()
@@ -358,9 +435,9 @@ class MovimientoCajaService
 
         // Se vuelve a mandar lo mismo (monto, método) con lo que cambia: así el ajuste de la deuda y de la caja es el de siempre.
         $payload = [
-            'forma_pago' => $pago->forma_pago,
-            'cuenta_bancaria_id' => $pago->cuenta_bancaria_id,
-            'billetera_id' => $pago->billetera_id,
+            'forma_pago' => $metodo['forma'] ?? $pago->forma_pago,
+            'cuenta_bancaria_id' => $metodo ? $metodo['cuenta_bancaria_id'] : $pago->cuenta_bancaria_id,
+            'billetera_id' => $metodo ? $metodo['billetera_id'] : $pago->billetera_id,
             'monto' => $enSoles ? (float) $pago->monto_pen : (float) $pago->monto,
             'referencia' => array_key_exists('numero_operacion', $data) ? (filled($data['numero_operacion']) ? $data['numero_operacion'] : null) : $pago->referencia,
             'fecha' => $data['fecha'] ?? $pago->fecha?->toDateString(),

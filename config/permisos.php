@@ -304,6 +304,7 @@ return [
                         'cierres-caja/*/movimientos/*/anular' => 'anular_movimiento',
                         'cierres-caja/*/movimientos/*/editar' => 'modificar_cerrado',
                         'cierres-caja/*/movimientos/*/convertir-anticipo' => 'modificar_cerrado',
+                        'cierres-caja/*/movimientos/*/cambiar-metodo' => 'modificar_cerrado',
                         'cierres-caja/*/aprobar' => 'aprobar',
                         'cierres-caja/*/anular' => 'anular_cierre',
                         'cierres-caja/*/recerrar' => 'recerrar',

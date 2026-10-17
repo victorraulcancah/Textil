@@ -208,6 +208,7 @@ Route::middleware('auth:api')->group(function () {
     Route::post('cierres-caja/{cierresCaja}/movimientos/{movimiento}/anular', [CierreCajaController::class, 'anularMovimiento']);
     Route::post('cierres-caja/{cierresCaja}/movimientos/{movimiento}/editar', [CierreCajaController::class, 'editarMovimiento']);
     Route::post('cierres-caja/{cierresCaja}/movimientos/{movimiento}/convertir-anticipo', [CierreCajaController::class, 'convertirEnAnticipo']);
+    Route::post('cierres-caja/{cierresCaja}/movimientos/{movimiento}/cambiar-metodo', [CierreCajaController::class, 'cambiarMetodo']);
     Route::get('cierres-caja/{cierresCaja}/cajas-destino', [CierreCajaController::class, 'cajasDestino']);
     Route::apiResource('prestamos', PrestamoController::class);
     Route::post('prestamos/{prestamo}/devoluciones', [PrestamoController::class, 'devolucion']);

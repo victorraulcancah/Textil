@@ -112,6 +112,23 @@ class CierreCajaController extends Controller
         return response()->json($this->conRelaciones($cierresCaja));
     }
 
+    /** Cambia el método de un cobro del turno de este cierre (se anotó efectivo y fue transferencia) y recalcula el cierre. */
+    public function cambiarMetodo(Request $request, CierreCaja $cierresCaja, int $movimiento, MovimientoCajaService $movimientos, CierreCajaService $servicio)
+    {
+        $modelo = $this->movimientoDelCierre($cierresCaja, $movimiento);
+        $data = $request->validate([
+            'forma' => 'required|in:efectivo,transferencia,billetera',
+            'cuenta_bancaria_id' => 'nullable|exists:cuentas_bancarias,id',
+            'billetera_id' => 'nullable|exists:billeteras_digitales,id',
+            'numero_operacion' => 'nullable|string|max:100',
+        ]);
+
+        $movimientos->cambiarMetodo($modelo, $data, auth('api')->user(), gestor: true);
+        $servicio->recalcularEsperado($cierresCaja);
+
+        return response()->json($this->conRelaciones($cierresCaja));
+    }
+
     /** Convierte un ingreso hecho a mano del turno de este cierre en el anticipo de un cliente (sin mover plata). */
     public function convertirEnAnticipo(Request $request, CierreCaja $cierresCaja, int $movimiento, MovimientoCajaService $movimientos, CierreCajaService $servicio)
     {

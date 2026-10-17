@@ -382,8 +382,9 @@ class NotaVentaService
         }
 
         $pagado = array_sum(array_map(fn ($c) => (float) $c['monto'], $cobros)) + array_sum(array_map(fn ($a) => (float) $a['monto'], $conAnticipo));
-        if ($monto > round($total - $pagado, 2) + 0.01) {
-            throw new \DomainException('El ajuste por redondeo no puede ser mayor a lo que falta por cobrar.');
+        // El ajuste es justo lo que falta: con otra cosa sin cobrar, la venta no está pagada.
+        if (abs(round($total - $pagado, 2) - $monto) > 0.011) {
+            throw new \DomainException('El ajuste por redondeo tiene que ser justo lo que falta por cobrar.');
         }
 
         $nota->pagos()->create([

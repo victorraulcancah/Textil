@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AperturaCaja;
 use App\Models\Empresa;
 use App\Models\MovimientoCaja;
+use App\Models\TipoCambio;
 use App\Pdf\PdfService;
 use App\Services\ContraparteMovimientoCaja;
 use Illuminate\Http\Request;
@@ -92,7 +93,7 @@ class MiCajaReporteController extends Controller
 
         // Con los anulados: salen marcados, sin importe y sin sumar.
         $movs = MovimientoCaja::withTrashed()
-            ->with(['motivo:id,nombre', 'cuentaBancaria:id,alias,numero_cuenta', 'billetera:id,nombre'])
+            ->with(['motivo:id,nombre', 'cuentaBancaria:id,alias,numero_cuenta', 'billetera:id,nombre', 'apertura.usuario:id,name'])
             ->whereIn('apertura_caja_id', $aperturas->pluck('id'))
             ->orderBy('created_at')->orderBy('id')
             ->get();
@@ -106,26 +107,44 @@ class MiCajaReporteController extends Controller
             default => 'efectivo',
         };
 
-        $detalleMedio = fn (MovimientoCaja $m): string => match ($medioDe($m)) {
-            'tarjeta' => 'Tarjeta',
-            'billetera' => 'Billetera · '.($m->billetera?->nombre ?? ''),
-            'banco' => 'Cuenta · '.($m->cuentaBancaria ? ($m->cuentaBancaria->alias ?: $m->cuentaBancaria->numero_cuenta) : ''),
-            default => 'Efectivo',
+        // T = letra del tipo de pago (E efectivo, B cuenta bancaria, W billetera, T tarjeta); BCO = cuenta o billetera.
+        $letraMedio = ['efectivo' => 'E', 'banco' => 'B', 'billetera' => 'W', 'tarjeta' => 'T'];
+        $nombreMedio = fn (MovimientoCaja $m): string => match ($medioDe($m)) {
+            'billetera' => (string) ($m->billetera?->nombre ?? ''),
+            'banco' => (string) ($m->cuentaBancaria ? ($m->cuentaBancaria->alias ?: $m->cuentaBancaria->numero_cuenta) : ''),
+            default => '',
         };
 
-        $filas = $movs->values()->map(function (MovimientoCaja $m, int $i) use ($detalleMedio) {
+        // Código corto del documento de origen (como el COD de la planilla de cobranza).
+        $codigos = [
+            'nota_venta' => 'NV', 'cuenta_por_cobrar' => 'CXC', 'cuenta_por_pagar' => 'CXP', 'letra_cambio' => 'LET',
+            'anticipo' => 'ANT', 'anticipo_devolucion' => 'DEV', 'compra' => 'COM', 'cierre_caja' => 'CIE',
+        ];
+
+        // El tipo de cambio de cada día (el comercial si la empresa lo puso; si no, el de venta).
+        $tipos = TipoCambio::query()
+            ->whereIn('fecha', $movs->map(fn (MovimientoCaja $m) => $m->fecha?->toDateString())->filter()->unique()->values())
+            ->get()->mapWithKeys(fn (TipoCambio $t) => [$t->fecha->toDateString() => (float) ($t->comercial ?: $t->venta)]);
+
+        $filas = $movs->values()->map(function (MovimientoCaja $m, int $i) use ($medioDe, $nombreMedio, $letraMedio, $codigos, $tipos) {
             $anulado = $m->trashed();
             $moneda = $m->moneda ?: 'PEN';
 
             return [
                 'n' => $i + 1,
                 'hora' => $m->created_at?->timezone(config('app.timezone'))->format('H:i') ?? '',
-                'documento' => $m->documento ?: 'MC-'.str_pad((string) $m->id, 6, '0', STR_PAD_LEFT),
+                'recibo' => 'MC-'.str_pad((string) $m->id, 6, '0', STR_PAD_LEFT),
+                'documento' => (string) $m->documento,
+                'cod' => $m->documento_referencia_tipo ? ($codigos[$m->documento_referencia_tipo] ?? '') : 'MAN',
+                'cobrador' => mb_strtoupper(mb_substr(explode(' ', trim((string) $m->apertura?->usuario?->name))[0] ?? '', 0, 8)),
+                'planilla' => 'PL-'.str_pad((string) $m->apertura_caja_id, 5, '0', STR_PAD_LEFT),
+                'tc' => $tipos[$m->fecha?->toDateString()] ?? null,
+                'tipo_pago' => $letraMedio[$medioDe($m)],
+                'banco' => $nombreMedio($m),
                 // Cliente o proveedor; en un movimiento a mano, lo que se escribió.
                 'nombre' => $anulado ? '***ANULADO***' : ($m->contraparte ?: ((string) $m->descripcion ?: ($m->motivo?->nombre ?? ''))),
                 'rol' => $anulado ? null : $m->contraparte_tipo,
                 'referencia' => $m->motivo?->nombre ?? '',
-                'medio' => $detalleMedio($m),
                 'operacion' => (string) $m->numero_operacion,
                 'moneda' => $moneda === 'USD' ? 'US$' : 'S/',
                 'ingreso' => ! $anulado && $m->tipo === 'ingreso' ? (float) $m->monto : null,

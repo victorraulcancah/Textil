@@ -7,70 +7,61 @@
         $n = fn ($v) => number_format((float) $v, 2);
         $a = $r['apertura'];
         $cuadro = $r['cuadro'];
+        // Los importes en dólares llevan su símbolo; los soles van solos, como en la planilla de referencia.
+        $importe = fn ($monto, $moneda) => $monto === null ? '' : ($moneda === 'US$' ? 'US$ ' : '').$n($monto);
+
+        // La planilla: una fila por movimiento, con las columnas de la planilla de cobranza.
+        $columnas = [
+            ['label' => 'Nro. recibo', 'key' => 'recibo', 'width' => '8%'],
+            ['label' => 'Cliente / Proveedor', 'key' => 'nombre'],
+            ['label' => 'Cobrador', 'key' => 'cobrador', 'width' => '7%'],
+            ['label' => 'Cod', 'key' => 'cod', 'width' => '4%'],
+            ['label' => 'Número', 'key' => 'documento', 'width' => '9%'],
+            ['label' => 'T', 'key' => 'tipo_pago', 'width' => '2%'],
+            ['label' => 'Banco', 'key' => 'banco', 'width' => '11%'],
+            ['label' => 'N° operación', 'key' => 'operacion', 'width' => '8%'],
+            ['label' => 'T/C', 'key' => 'tc', 'align' => 'right', 'width' => '5%'],
+            ['label' => 'Planilla', 'key' => 'planilla', 'width' => '7%'],
+            ['label' => 'Ingreso', 'key' => 'ingreso', 'align' => 'right', 'width' => '8%'],
+            ['label' => 'Egreso', 'key' => 'egreso', 'align' => 'right', 'width' => '8%'],
+        ];
+
+        $filas = collect($r['movimientos'])->map(fn ($m) => [
+            'recibo' => $m['recibo'],
+            'nombre' => $m['nombre'].($m['rol'] ? ' ('.$m['rol'].')' : ''),
+            'cobrador' => $m['cobrador'],
+            'cod' => $m['cod'],
+            'documento' => $m['documento'],
+            'tipo_pago' => $m['tipo_pago'],
+            'banco' => mb_substr($m['banco'], 0, 14),
+            'operacion' => $m['operacion'],
+            'tc' => $m['tc'] ? number_format($m['tc'], 4) : '',
+            'planilla' => $m['planilla'],
+            'ingreso' => $importe($m['ingreso'], $m['moneda']),
+            'egreso' => $importe($m['egreso'], $m['moneda']),
+        ])->all();
     @endphp
 
-    <x-pdf.encabezado :empresa="$empresa" titulo="PLANILLA DE CAJA DEL DÍA" :numero="$r['dia']" />
+    <x-pdf.encabezado :empresa="$empresa" titulo="PLANILLA DE CAJA" rotuloNumero="Día" :numero="$r['dia']" />
 
-    <table class="marco" style="margin-bottom: 8px;">
-        <tr>
-            <td style="width: 10%;" class="strong upper">Caja</td>
-            <td style="width: 30%;">: {{ ($a->caja?->codigo ? $a->caja->codigo.' · ' : '').$a->caja?->nombre }}</td>
-            <td style="width: 12%;" class="strong upper">Almacén</td>
-            <td style="width: 22%;">: {{ $a->caja?->almacen?->nombre ?? '—' }}</td>
-            <td style="width: 12%;" class="strong upper">Responsable</td>
-            <td>: {{ $a->usuario?->name ?? '—' }}</td>
-        </tr>
-        <tr>
-            <td class="strong upper">Día</td>
-            <td>: {{ $r['dia'] }}</td>
-            <td class="strong upper">Turnos</td>
-            <td>: {{ $r['turnos'] }}</td>
-            <td class="strong upper">Movimientos</td>
-            <td>: {{ count($r['movimientos']) }}</td>
-        </tr>
-    </table>
+    <x-pdf.meta
+        :items="[
+            'Caja' => ($a->caja?->codigo ? $a->caja->codigo.' · ' : '').$a->caja?->nombre,
+            'Almacén' => $a->caja?->almacen?->nombre,
+            'Responsable' => $a->usuario?->name,
+            'Turnos' => $r['turnos'],
+            'Movimientos' => count($filas),
+            'Impreso' => $generadoEn?->format('d/m/Y H:i'),
+        ]" />
 
-    {{-- La planilla: un renglón por movimiento. --}}
-    <table class="items" style="margin-bottom: 10px;">
-        <thead>
-            <tr>
-                <th style="width: 4%; text-align: center;">#</th>
-                <th style="width: 6%;">Hora</th>
-                <th style="width: 11%;">Nro. documento</th>
-                <th style="width: 27%;">Cliente / Proveedor</th>
-                <th style="width: 14%;">Referencia</th>
-                <th style="width: 15%;">Tipo de pago</th>
-                <th style="width: 9%;">N° operación</th>
-                <th style="width: 5%; text-align: center;">Mon.</th>
-                <th style="width: 9%; text-align: right;">Ingreso</th>
-                <th style="width: 9%; text-align: right;">Egreso</th>
-            </tr>
-        </thead>
-        <tbody>
-            @forelse ($r['movimientos'] as $m)
-                <tr @if ($m['anulado']) style="color: #9ca3af;" @endif>
-                    <td style="text-align: center;">{{ $m['n'] }}</td>
-                    <td>{{ $m['hora'] }}</td>
-                    <td>{{ $m['documento'] }}</td>
-                    <td>
-                        {{ $m['nombre'] }}
-                        @if ($m['rol'])<span style="color: #6b7280; font-size: 8px;"> · {{ $m['rol'] }}</span>@endif
-                    </td>
-                    <td>{{ $m['referencia'] }}</td>
-                    <td>{{ $m['medio'] }}</td>
-                    <td>{{ $m['operacion'] }}</td>
-                    <td style="text-align: center;">{{ $m['moneda'] }}</td>
-                    <td style="text-align: right;">@if ($m['ingreso'] !== null){{ $n($m['ingreso']) }}@endif</td>
-                    <td style="text-align: right;">@if ($m['egreso'] !== null){{ $n($m['egreso']) }}@endif</td>
-                </tr>
-            @empty
-                <tr><td colspan="10" class="center muted" style="padding: 18px;">No hay movimientos ese día.</td></tr>
-            @endforelse
-        </tbody>
-    </table>
+    @if (count($filas))
+        <x-pdf.items :columnas="$columnas" :filas="$filas" />
+    @else
+        <table class="marco"><tr><td class="center muted" style="padding: 18px;">No hay movimientos ese día.</td></tr></table>
+    @endif
 
-    {{-- El cuadro del día por medio de pago: efectivo, cuenta, billetera, tarjeta y total, en soles y en dólares. --}}
-    <table class="items">
+    {{-- El cuadro del día por medio de pago, con el saldo anterior y el saldo en caja. --}}
+    <table class="items" style="margin-top: 8px;">
         <thead>
             <tr>
                 <th rowspan="2" style="width: 16%;"></th>
@@ -99,4 +90,6 @@
             @endforeach
         </tbody>
     </table>
+
+    <x-pdf.firmas :firmas="['Responsable de caja', 'Revisado por']" />
 @endsection

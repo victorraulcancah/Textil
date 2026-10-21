@@ -581,12 +581,14 @@ export default function MiCaja() {
                                 {apertura && <p className="text-sm text-warm-500">Abierta desde {fechaHora(apertura.fecha_apertura)}</p>}
                             </div>
                         </div>
-                        {/* Reporte de la caja por día (el único filtro es la fecha), todo en una fila junto al estado. */}
-                        <div className="flex flex-wrap items-end gap-2 sm:flex-nowrap">
-                            <div className="w-44 shrink-0">
+                        {/* Reporte de la caja por día (el único filtro es la fecha), todo en una fila junto al estado: nunca se parte. */}
+                        <div className="flex flex-nowrap items-end gap-2">
+                            <div className="w-36 min-w-0 shrink sm:w-44">
                                 <Input label="Reporte del día" type="date" max={hoyIso()} value={diaReporte} onChange={(e) => setDiaReporte(e.target.value || hoyIso())} />
                             </div>
-                            <Button className="shrink-0 whitespace-nowrap" variant="secondary" onClick={abrirReportePdf}><FileText className="h-4 w-4" /> Planilla PDF</Button>
+                            <Button className="shrink-0 whitespace-nowrap" variant="secondary" onClick={abrirReportePdf}>
+                                <FileText className="h-4 w-4" /> <span><span className="hidden sm:inline">Planilla </span>PDF</span>
+                            </Button>
                             <span className="mb-2 shrink-0">{apertura ? <Badge variant="green">Abierta</Badge> : <Badge variant="gray">Cerrada</Badge>}</span>
                         </div>
                     </Card>

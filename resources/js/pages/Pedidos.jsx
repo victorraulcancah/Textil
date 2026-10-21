@@ -268,6 +268,7 @@ export default function Pedidos() {
             type: 'actions',
             key: 'actions',
             label: 'Acciones',
+            width: '200px',
             actions: (row) => (
                 <>
                     <button
@@ -278,16 +279,22 @@ export default function Pedidos() {
                     >
                         <Printer className="h-4 w-4" />
                     </button>
-                    {row.estado === 'despachado' && row.transiciones?.includes('facturado') && (
-                        <button
-                            aria-label="Emitir proforma"
-                            title="Emitir la proforma del pedido"
-                            onClick={() => setFacturar(row)}
-                            className="rounded-md p-1.5 text-primary-600 transition hover:bg-primary-50 hover:text-primary-700"
-                        >
-                            <Receipt className="h-4 w-4" />
-                        </button>
-                    )}
+                    {/* Siempre a la vista; se habilita cuando el pedido ya salió despachado. */}
+                    {(() => {
+                        const lista = row.estado === 'despachado' && row.transiciones?.includes('facturado');
+
+                        return (
+                            <button
+                                aria-label="Emitir proforma"
+                                title={lista ? 'Emitir la proforma del pedido' : 'Disponible cuando el pedido esté despachado'}
+                                disabled={!lista}
+                                onClick={() => setFacturar(row)}
+                                className="rounded-md p-1.5 text-primary-600 transition hover:bg-primary-50 hover:text-primary-700 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
+                            >
+                                <Receipt className="h-4 w-4" />
+                            </button>
+                        );
+                    })()}
                     {row.estado !== 'anulado' && (
                         <button
                             aria-label="Cambiar fecha"

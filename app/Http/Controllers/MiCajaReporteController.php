@@ -8,6 +8,7 @@ use App\Models\MovimientoCaja;
 use App\Models\TipoCambio;
 use App\Pdf\PdfService;
 use App\Services\ContraparteMovimientoCaja;
+use App\Support\AlmacenAcceso;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
@@ -50,29 +51,35 @@ class MiCajaReporteController extends Controller
     }
 
     /**
-     * Sin día: la apertura abierta de quien consulta. Con día: todos los turnos que abrió en su caja ese día, aunque ya
-     * estén cerrados (puede haber más de uno).
+     * Sin día: la apertura abierta de quien consulta. Con día: todos los turnos de la caja ese día, de quien los haya
+     * abierto, aunque ya estén cerrados (puede haber más de uno). El reporte es del día de la caja, no de un usuario.
      *
      * @return Collection<int, AperturaCaja>
      */
     private function aperturasDelReporte(?string $fecha): Collection
     {
         $user = auth('api')->user();
-        $consulta = AperturaCaja::with(['caja:id,nombre,codigo,almacen_id', 'caja.almacen:id,nombre', 'usuario:id,name'])
-            ->where('caja_id', $user?->cajaActual()?->id)
-            ->where('usuario_id', $user?->id);
+        $consulta = AperturaCaja::with(['caja:id,nombre,codigo,almacen_id', 'caja.almacen:id,nombre', 'usuario:id,name']);
 
         if ($fecha) {
+            // La caja del almacén donde se trabaja: la del usuario o, si no tiene una asignada, las de su almacén.
+            $cajaId = $user?->cajaActual()?->id;
+            $almacenId = AlmacenAcceso::propio();
+            $consulta->when($cajaId, fn ($q) => $q->where('caja_id', $cajaId))
+                ->when(! $cajaId && $almacenId, fn ($q) => $q->whereHas('caja', fn ($c) => $c->where('almacen_id', $almacenId)));
+
             $aperturas = $consulta->whereDate('fecha_apertura', $fecha)->orderBy('fecha_apertura')->get();
 
             if ($aperturas->isEmpty()) {
-                throw ValidationException::withMessages(['fecha' => 'No abriste tu caja el '.date('d/m/Y', strtotime($fecha)).'.']);
+                throw ValidationException::withMessages(['fecha' => 'No hubo caja abierta el '.date('d/m/Y', strtotime($fecha)).'.']);
             }
 
             return $aperturas;
         }
 
-        $apertura = $consulta->where('estado', 'abierta')->latest('fecha_apertura')->first();
+        $apertura = $consulta->where('caja_id', $user?->cajaActual()?->id)
+            ->where('usuario_id', $user?->id)
+            ->where('estado', 'abierta')->latest('fecha_apertura')->first();
 
         if (! $apertura) {
             throw ValidationException::withMessages(['caja' => 'No tienes una caja abierta.']);
@@ -158,6 +165,7 @@ class MiCajaReporteController extends Controller
             'fecha' => $fecha,
             'dia' => date('d/m/Y', strtotime($fecha ?? $apertura->fecha_apertura?->toDateString() ?? 'now')),
             'turnos' => $aperturas->count(),
+            'responsables' => $aperturas->map(fn (AperturaCaja $a) => $a->usuario?->name)->filter()->unique()->values()->all(),
             'movimientos' => $filas,
             'cuadro' => $this->cuadro($movs->reject->trashed(), (float) $apertura->monto_inicial, $medioDe),
         ];

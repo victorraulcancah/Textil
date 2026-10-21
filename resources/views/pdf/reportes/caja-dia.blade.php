@@ -48,7 +48,7 @@
         :items="[
             'Caja' => ($a->caja?->codigo ? $a->caja->codigo.' · ' : '').$a->caja?->nombre,
             'Almacén' => $a->caja?->almacen?->nombre,
-            'Responsable' => $a->usuario?->name,
+            'Responsable' => count($r['responsables']) > 1 ? implode(', ', $r['responsables']) : $a->usuario?->name,
             'Turnos' => $r['turnos'],
             'Movimientos' => count($filas),
             'Impreso' => $generadoEn?->format('d/m/Y H:i'),

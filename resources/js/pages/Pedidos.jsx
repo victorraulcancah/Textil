@@ -278,6 +278,16 @@ export default function Pedidos() {
                     >
                         <Printer className="h-4 w-4" />
                     </button>
+                    {row.estado === 'despachado' && row.transiciones?.includes('facturado') && (
+                        <button
+                            aria-label="Emitir proforma"
+                            title="Emitir la proforma del pedido"
+                            onClick={() => setFacturar(row)}
+                            className="rounded-md p-1.5 text-primary-600 transition hover:bg-primary-50 hover:text-primary-700"
+                        >
+                            <Receipt className="h-4 w-4" />
+                        </button>
+                    )}
                     {row.estado !== 'anulado' && (
                         <button
                             aria-label="Cambiar fecha"

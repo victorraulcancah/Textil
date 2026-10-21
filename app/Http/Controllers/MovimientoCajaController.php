@@ -6,6 +6,7 @@ use App\Models\AperturaCaja;
 use App\Models\Caja;
 use App\Models\MovimientoCaja;
 use App\Models\MotivoMovimiento;
+use App\Services\ContraparteMovimientoCaja;
 use App\Support\AlmacenAcceso;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -25,8 +26,11 @@ class MovimientoCajaController extends Controller
 
     public function index(Request $request)
     {
+        // Cada movimiento lleva con quién fue (cliente o proveedor) para la columna del listado.
         return response()->json(
-            $this->consulta($request)->latest('created_at')->latest('id')->limit(500)->get()
+            app(ContraparteMovimientoCaja::class)->adjuntar(
+                $this->consulta($request)->latest('created_at')->latest('id')->limit(500)->get()
+            )
         );
     }
 

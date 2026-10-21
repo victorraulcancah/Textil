@@ -310,7 +310,7 @@ Route::middleware('auth:api')->group(function () {
     Route::apiResource('cajas', CajaController::class);
     Route::get('mi-caja', [MiCajaController::class, 'show']);
     // El reporte de la caja del día (la apertura de quien la tiene abierta), en Excel y en PDF.
-    Route::get('mi-caja/reporte/excel', [\App\Http\Controllers\MiCajaReporteController::class, 'excel']);
+    Route::get('mi-caja/reporte/dia', [\App\Http\Controllers\MiCajaReporteController::class, 'disponible']);
     Route::get('mi-caja/reporte/pdf', [\App\Http\Controllers\MiCajaReporteController::class, 'pdf']);
     Route::post('mi-caja/abrir', [MiCajaController::class, 'abrir']);
     Route::post('mi-caja/cierre/anular', [MiCajaController::class, 'anularCierre']);

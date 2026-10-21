@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowDownCircle, ArrowUpCircle, Ban, FileSignature, FileSpreadsheet, FileText, HandCoins, Lock, LockOpen, Pencil, PiggyBank, RotateCcw, Smartphone, Trash2, Wallet } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, Ban, FileSignature, FileText, HandCoins, Lock, LockOpen, Pencil, PiggyBank, RotateCcw, Smartphone, Trash2, Wallet } from 'lucide-react';
 import api from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
@@ -63,6 +63,8 @@ export default function MiCaja() {
     const [amortizar, setAmortizar] = useState(null);
     /** El reporte de la caja del día en PDF: { url } mientras se ve. */
     const [reportePdf, setReportePdf] = useState(null);
+    /** El día del reporte de caja (el filtro es solo por día): hoy por defecto. */
+    const [diaReporte, setDiaReporte] = useState(hoyIso());
     const [data, setData] = useState(null);
     const [motivos, setMotivos] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -120,18 +122,26 @@ export default function MiCaja() {
         load();
     }, [load]);
 
-    /** El Excel de la caja del día (el servidor lo arma con la apertura de quien consulta). */
-    const descargarReporteExcel = async () => {
+    /** El mensaje que devolvió el servidor (también cuando la respuesta esperada era un archivo). */
+    const mensajeDe = async (e, defecto) => {
         try {
-            const { data } = await api.get('/mi-caja/reporte/excel', { responseType: 'blob' });
-            const url = URL.createObjectURL(data);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `caja-${new Date().toLocaleDateString('en-CA')}.xlsx`;
-            a.click();
-            setTimeout(() => URL.revokeObjectURL(url), 4000);
+            const crudo = e.response?.data;
+            const json = typeof crudo?.text === 'function' ? JSON.parse(await crudo.text()) : crudo;
+            const primero = json?.errors ? Object.values(json.errors)[0]?.[0] : null;
+
+            return primero || json?.message || defecto;
         } catch {
-            toast.error('No se pudo generar el reporte de caja.');
+            return defecto;
+        }
+    };
+
+    /** El PDF del día elegido: primero se confirma que ese día hubo caja, para no abrir el visor con un error. */
+    const abrirReportePdf = async () => {
+        try {
+            await api.get('/mi-caja/reporte/dia', { params: { fecha: diaReporte } });
+            setReportePdf({ url: `/mi-caja/reporte/pdf?fecha=${diaReporte}` });
+        } catch (e) {
+            toast.error(await mensajeDe(e, 'No se pudo generar el reporte de caja.'));
         }
     };
 
@@ -571,7 +581,14 @@ export default function MiCaja() {
                                 {apertura && <p className="text-sm text-warm-500">Abierta desde {fechaHora(apertura.fecha_apertura)}</p>}
                             </div>
                         </div>
-                        {apertura ? <Badge variant="green">Abierta</Badge> : <Badge variant="gray">Cerrada</Badge>}
+                        {/* Reporte de la caja por día (el único filtro es la fecha), todo en una fila junto al estado. */}
+                        <div className="flex flex-wrap items-end gap-2 sm:flex-nowrap">
+                            <div className="w-44 shrink-0">
+                                <Input label="Reporte del día" type="date" max={hoyIso()} value={diaReporte} onChange={(e) => setDiaReporte(e.target.value || hoyIso())} />
+                            </div>
+                            <Button className="shrink-0 whitespace-nowrap" variant="secondary" onClick={abrirReportePdf}><FileText className="h-4 w-4" /> Planilla PDF</Button>
+                            <span className="mb-2 shrink-0">{apertura ? <Badge variant="green">Abierta</Badge> : <Badge variant="gray">Cerrada</Badge>}</span>
+                        </div>
                     </Card>
 
                     {/* Una caja compartida la tiene abierta otro usuario: se ve cuál y desde cuándo, y no se opera. */}
@@ -594,9 +611,6 @@ export default function MiCaja() {
                                 {puede('tesoreria.cuentas-por-pagar.crear') && (
                                     <Button variant="secondary" onClick={() => setAmortizar('pagar')}><FileSignature className="h-4 w-4" /> Pagar documento</Button>
                                 )}
-                                {/* El reporte de la caja del día: resumen, lo cobrado por cada cuenta y todos los movimientos. */}
-                                <Button variant="secondary" onClick={descargarReporteExcel}><FileSpreadsheet className="h-4 w-4" /> Excel</Button>
-                                <Button variant="secondary" onClick={() => setReportePdf({ url: '/mi-caja/reporte/pdf' })}><FileText className="h-4 w-4" /> PDF</Button>
                                 <Button variant="secondary" onClick={() => {
                                     setCerrarOpen(true); setMontoContado(''); setMontoContadoUsd(''); setMontoDejado(''); setMontoEnvio(''); setCajaDestino('');
                                     api.get('/mi-caja/cajas-destino').then(({ data: lista }) => setCajasDestino(Array.isArray(lista) ? lista : [])).catch(() => setCajasDestino([]));
@@ -677,7 +691,7 @@ export default function MiCaja() {
                 onClose={() => setReportePdf(null)}
                 url={reportePdf?.url}
                 titulo="Reporte de caja"
-                nombre={`Caja ${new Date().toLocaleDateString('es-PE')}`}
+                nombre={`Caja ${diaReporte.split('-').reverse().join('/')}`}
             />
 
             {/* Amortización de documentos: elige el documento y abona; el movimiento queda en esta caja. */}

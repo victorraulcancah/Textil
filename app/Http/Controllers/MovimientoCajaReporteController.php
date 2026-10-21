@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Empresa;
 use App\Models\MovimientoCaja;
+use App\Services\ContraparteMovimientoCaja;
 use App\Pdf\PdfService;
 use Illuminate\Http\Request;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
@@ -118,9 +119,9 @@ class MovimientoCajaReporteController extends Controller
         // La misma consulta de la pantalla (cajas visibles para quien pide), sin el tope de filas.
         $movs = app(MovimientoCajaController::class)->consulta($request)
             ->when(! empty($f['tipo']), fn ($q) => $q->where('tipo', $f['tipo']))
-            ->get()
-            ->sortBy([['fecha', 'asc'], ['id', 'asc']])
-            ->values();
+            ->get();
+        app(ContraparteMovimientoCaja::class)->adjuntar($movs);
+        $movs = $movs->sortBy([['fecha', 'asc'], ['id', 'asc']])->values();
 
         $filas = $movs->map(fn (MovimientoCaja $m, $i) => [
             'n' => $i + 1,
@@ -129,6 +130,7 @@ class MovimientoCajaReporteController extends Controller
             'caja' => $m->apertura?->caja ? trim(($m->apertura->caja->codigo ? $m->apertura->caja->codigo.' · ' : '').$m->apertura->caja->nombre) : '',
             'tipo' => $m->tipo === 'ingreso' ? 'Ingreso' : 'Egreso',
             'motivo' => $m->motivo?->nombre ?? '',
+            'contraparte' => (string) $m->contraparte,
             'descripcion' => (string) $m->descripcion,
             'metodo' => $m->cuentaBancaria
                 ? 'Transf. · '.($m->cuentaBancaria->alias ?: $m->cuentaBancaria->numero_cuenta)
@@ -159,6 +161,7 @@ class MovimientoCajaReporteController extends Controller
                 ['key' => 'caja', 'label' => 'Caja', 'tipo' => 'texto', 'align' => 'left'],
                 ['key' => 'tipo', 'label' => 'Tipo', 'tipo' => 'texto', 'align' => 'left'],
                 ['key' => 'motivo', 'label' => 'Motivo', 'tipo' => 'texto', 'align' => 'left'],
+                ['key' => 'contraparte', 'label' => 'Cliente / Proveedor', 'tipo' => 'texto', 'align' => 'left'],
                 ['key' => 'descripcion', 'label' => 'Descripción', 'tipo' => 'texto', 'align' => 'left'],
                 ['key' => 'metodo', 'label' => 'Método', 'tipo' => 'texto', 'align' => 'left'],
                 ['key' => 'operacion', 'label' => 'N° operación', 'tipo' => 'texto', 'align' => 'left'],

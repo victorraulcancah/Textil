@@ -187,6 +187,20 @@ export default function MovimientosCaja() {
                 </span>
             ),
         },
+        {
+            key: 'contraparte',
+            label: 'Cliente / Proveedor',
+            getSearchValue: (row) => row.contraparte ?? '',
+            render: (row) =>
+                row.contraparte ? (
+                    <span className="text-sm">
+                        {row.contraparte}
+                        <span className="block text-xs text-gray-400">{row.contraparte_tipo}</span>
+                    </span>
+                ) : (
+                    <span className="text-gray-400">—</span>
+                ),
+        },
         { key: 'metodo', label: 'Método', render: (row) => metodoLabel(row) },
         { key: 'numero_operacion', label: 'N° Operación', render: (row) => row.numero_operacion || <span className="text-gray-400">—</span> },
         {

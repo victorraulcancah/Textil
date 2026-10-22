@@ -531,7 +531,7 @@ export default function ListaPrecios() {
                                             <th className={`${TH} w-28`}>Margen %</th>
                                             <th className={`${TH} w-28 text-right`}>Costo por {refNombre}</th>
                                             <th className={`${TH} w-32`}>Precio por {refNombre}</th>
-                                            <th className={`${TH} w-20 text-center`}>Acciones</th>
+                                            <th className={`${TH} sticky right-0 z-10 w-20 bg-primary-700 text-center`}>Acciones</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100">
@@ -590,7 +590,7 @@ export default function ListaPrecios() {
                                                             onChange={(e) => ponerPrecioRef(f.clave, e.target.value)}
                                                             className={INPUT} aria-label={`Precio por ${calc.ref.nombre}`} />
                                                     </td>
-                                                    <td className="px-3 py-2 text-center">
+                                                    <td className={`sticky right-0 z-10 px-3 py-2 text-center shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.18)] ${primera ? 'bg-white' : 'bg-gray-50'}`}>
                                                         {puedeEditar && (primera ? (
                                                             <button type="button" onClick={() => agregarFila(f.presentacionId)}
                                                                 title="Otro precio desde una cantidad mayor"

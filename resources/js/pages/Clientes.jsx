@@ -610,6 +610,7 @@ export default function Clientes() {
         {
             key: 'codigo',
             label: 'Código',
+            width: '100px',
             render: (row) =>
                 row.codigo ? (
                     <span className="font-mono text-xs text-gray-600">{row.codigo}</span>
@@ -620,10 +621,11 @@ export default function Clientes() {
         {
             key: 'nombre',
             label: 'Cliente',
+            width: '280px',
             render: (row) => (
-                <span className="inline-flex items-center gap-2 font-medium text-warm-900">
-                    <User className="h-4 w-4 text-primary-600" />
-                    {row.nombre}
+                <span className="flex items-center gap-2 font-medium leading-tight text-warm-900">
+                    <User className="h-4 w-4 shrink-0 text-primary-600" />
+                    <span className="min-w-0">{row.nombre}</span>
                 </span>
             ),
         },

@@ -371,32 +371,6 @@ export default function DataTable({
 
     const isActionsColumn = (col) => col.type === 'actions';
 
-    // Ancho real de la barra de scroll (para reservar el hueco en el encabezado y que
-    // el encabezado fijo quede alineado con el cuerpo desplazable).
-    const [scrollbarW, setScrollbarW] = useState(0);
-    useEffect(() => {
-        const el = document.createElement('div');
-        el.style.cssText = 'overflow:scroll;position:absolute;top:-9999px;width:100px;height:100px';
-        document.body.appendChild(el);
-        setScrollbarW(el.offsetWidth - el.clientWidth);
-        document.body.removeChild(el);
-    }, []);
-
-    // Solo se reserva el hueco de la barra cuando el cuerpo realmente tiene
-    // scroll; si no, quedaba una franja blanca a la derecha.
-    const bodyRef = useRef(null);
-    const [hasScroll, setHasScroll] = useState(false);
-    useEffect(() => {
-        const el = bodyRef.current;
-        if (!el) return undefined;
-        const check = () => setHasScroll(el.scrollHeight > el.clientHeight + 1);
-        check();
-        const ro = new ResizeObserver(check);
-        ro.observe(el);
-        return () => ro.disconnect();
-    });
-    const gutter = hasScroll ? scrollbarW : 0;
-
     // Ancho por columna (para alinear encabezado y cuerpo con table-fixed). Los
     // anchos arrastrados por el usuario mandan sobre el ancho por defecto.
     const colWidth = (col) => {
@@ -421,11 +395,7 @@ export default function DataTable({
             if (typeof w === 'string' && w.endsWith('px')) return acc + (parseFloat(w) || 170);
             // Porcentaje (columna automática): reserva un mínimo razonable.
             return acc + 170;
-        }, 0) +
-        // Sumar el hueco de la barra vertical: así el contenedor es exactamente
-        // "columnas + barra", y el encabezado (que reserva ese hueco con padding)
-        // y el cuerpo (que lo ocupa con la barra) terminan con el mismo ancho.
-        gutter;
+        }, 0);
 
     return (
         <div className="relative">
@@ -617,12 +587,13 @@ export default function DataTable({
                     </div>
                 ) : (
                     <>
-                        {/* Scroll horizontal común: encabezado y cuerpo se desplazan juntos. */}
-                        <div className="hidden overflow-x-auto md:block">
+                        {/* Un solo contenedor con scroll: encabezado y cuerpo se desplazan juntos de lado, y el
+                            encabezado queda fijo arriba (sticky). Así la columna Acciones puede quedar fija a la
+                            derecha (sticky) con el mismo contenedor como referencia. */}
+                        <div className="hidden overflow-auto md:block" style={{ height: height ?? undefined, maxHeight: height ?? maxHeight }}>
                           <div style={{ minWidth: minTableWidth }}>
-                            {/* Encabezado fijo (fuera del scroll vertical). Reserva el hueco de la
-                                barra y lo pinta del mismo color para que no quede un espacio en blanco. */}
-                            <div className="bg-gradient-to-br from-primary-600 to-primary-700" style={{ paddingRight: gutter }}>
+                            {/* Encabezado fijo arriba. */}
+                            <div className="sticky top-0 z-20 bg-gradient-to-br from-primary-600 to-primary-700">
                                 <table className="w-full table-fixed text-left text-sm">
                                     <colgroup>
                                         {allColumns.map((col) => (
@@ -738,7 +709,8 @@ export default function DataTable({
                                                 <th
                                                     scope="col"
                                                     className={cn(
-                                                        'px-4 text-xs font-semibold uppercase tracking-wide',
+                                                        // Fija a la derecha: siempre a la vista aunque la tabla se desplace de lado.
+                                                        'sticky right-0 z-10 bg-primary-700 px-4 text-xs font-semibold uppercase tracking-wide',
                                                         dense ? 'py-1' : 'py-1.5',
                                                     )}
                                                 >
@@ -749,19 +721,7 @@ export default function DataTable({
                                     </thead>
                                 </table>
                             </div>
-                            {/* Cuerpo desplazable: la barra de scroll aparece solo aquí. */}
-                            <div
-                                ref={bodyRef}
-                                className="overflow-y-auto"
-                                style={{
-                                    height: height ?? undefined,
-                                    maxHeight: height ?? maxHeight,
-                                    // 'clip' (a diferencia de 'hidden') no crea un contexto de scroll propio
-                                    // en este eje: el scroll horizontal queda solo en el contenedor de afuera,
-                                    // así el encabezado y el cuerpo nunca se desalinean entre sí.
-                                    overflowX: 'clip',
-                                }}
-                            >
+                            <div>
                                 <table className="w-full table-fixed text-left text-sm">
                                     <colgroup>
                                         {allColumns.map((col) => (
@@ -783,7 +743,7 @@ export default function DataTable({
                                                 onDoubleClick={onRowDoubleClick ? () => onRowDoubleClick(row) : undefined}
                                                 onContextMenu={onRowContextMenu ? (e) => onRowContextMenu(row, e) : undefined}
                                                 className={cn(
-                                                    'transition',
+                                                    'group transition',
                                                     onRowClick || onRowDoubleClick ? 'cursor-pointer hover:bg-primary-50/50' : 'hover:bg-gray-50',
                                                     rowClassName?.(row),
                                                 )}
@@ -804,7 +764,14 @@ export default function DataTable({
                                                 ))}
 
                                                 {actionsCol && (
-                                                    <td className={cn('overflow-hidden px-4 align-middle', dense ? 'py-2' : 'py-3')}>
+                                                    <td
+                                                        className={cn(
+                                                            // Fija a la derecha, con fondo y una sombra al borde para separarla de lo que pasa por debajo.
+                                                            'sticky right-0 z-10 overflow-hidden bg-white px-4 align-middle shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.18)]',
+                                                            onRowClick || onRowDoubleClick ? 'group-hover:bg-primary-50' : 'group-hover:bg-gray-50',
+                                                            dense ? 'py-2' : 'py-3',
+                                                        )}
+                                                    >
                                                         {isActionsColumn(actionsCol) && actionsCol.render ? (
                                                             actionsCol.render(row)
                                                         ) : (

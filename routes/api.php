@@ -221,6 +221,8 @@ Route::middleware('auth:api')->group(function () {
     Route::get('rollos/reporte/excel', [\App\Http\Controllers\RolloReporteController::class, 'excel']);
     Route::get('rollos/reporte/pdf', [\App\Http\Controllers\RolloReporteController::class, 'pdf']);
     Route::get('rollos/reporte', [\App\Http\Controllers\RolloReporteController::class, 'datos']);
+    Route::get('rollos/etiquetas/opciones', [RolloController::class, 'etiquetasOpciones']);
+    Route::get('rollos/etiquetas/conteo', [RolloController::class, 'etiquetasConteo']);
     Route::get('rollos/etiquetas', [RolloController::class, 'etiquetas']);
     // Antes que {rollo} para que "codigo" no se confunda con un id.
     Route::get('rollos/codigo/{codigo}', [RolloController::class, 'porCodigo']);

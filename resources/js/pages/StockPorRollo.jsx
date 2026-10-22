@@ -8,6 +8,7 @@ import {
     MapPin,
     Package,
     Printer,
+    QrCode,
     Ruler,
     Ship,
     Tag,
@@ -15,6 +16,7 @@ import {
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import { useAlmacenPropio } from '../lib/almacenes';
+import ImprimirEtiquetasModal from '../components/ImprimirEtiquetasModal';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
@@ -90,6 +92,8 @@ export default function StockPorRollo() {
     const [metrosHasta, setMetrosHasta] = useState('');
 
     const [pdf, setPdf] = useState(null);
+    /** La ventana para imprimir los QR por tipo de tela, color, orden de compra y metraje. */
+    const [imprimirQr, setImprimirQr] = useState(false);
 
     const cambiarAlmacen = (valor) => {
         setAlmacenSel(valor);
@@ -487,6 +491,10 @@ export default function StockPorRollo() {
                                     <Printer className="h-4 w-4" />
                                     Etiquetas del color
                                 </Button>
+                                <Button variant="secondary" onClick={() => setImprimirQr(true)}>
+                                    <QrCode className="h-4 w-4" />
+                                    Imprimir QR
+                                </Button>
                             </>
                         }
                     />
@@ -508,10 +516,16 @@ export default function StockPorRollo() {
                         title={tipoActual.nombre}
                         description={tipoActual.familia ?? undefined}
                         actions={
-                            <Button variant="secondary" onClick={irATipos}>
-                                <ArrowLeft className="h-4 w-4" />
-                                Volver a los tipos de tela
-                            </Button>
+                            <>
+                                <Button variant="secondary" onClick={irATipos}>
+                                    <ArrowLeft className="h-4 w-4" />
+                                    Volver a los tipos de tela
+                                </Button>
+                                <Button variant="secondary" onClick={() => setImprimirQr(true)}>
+                                    <QrCode className="h-4 w-4" />
+                                    Imprimir QR
+                                </Button>
+                            </>
                         }
                     />
                     {filtroAlmacen}
@@ -553,10 +567,16 @@ export default function StockPorRollo() {
                         title="Stock por rollo"
                         description="Cada rollo con su metraje, su estado y dónde está"
                         actions={
-                            <Button variant="secondary" onClick={() => navigate('/stock-rollos/reporte')}>
-                                <FileSpreadsheet className="h-4 w-4" />
-                                Reporte
-                            </Button>
+                            <>
+                                <Button variant="secondary" onClick={() => setImprimirQr(true)}>
+                                    <QrCode className="h-4 w-4" />
+                                    Imprimir QR
+                                </Button>
+                                <Button variant="secondary" onClick={() => navigate('/stock-rollos/reporte')}>
+                                    <FileSpreadsheet className="h-4 w-4" />
+                                    Reporte
+                                </Button>
+                            </>
                         }
                     />
 
@@ -576,6 +596,14 @@ export default function StockPorRollo() {
                     <p className="mt-2 text-xs text-warm-400">Doble clic en un tipo de tela para ver sus colores y rollos.</p>
                 </>
             )}
+
+            <ImprimirEtiquetasModal
+                open={imprimirQr}
+                onClose={() => setImprimirQr(false)}
+                almacenId={almacenId}
+                tipoInicial={tipoSel ?? ''}
+                onImprimir={setPdf}
+            />
 
             <PdfViewerModal
                 open={Boolean(pdf)}

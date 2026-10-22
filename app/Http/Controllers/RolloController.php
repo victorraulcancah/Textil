@@ -196,11 +196,75 @@ class RolloController extends Controller
      */
     public function etiquetas(Request $request)
     {
-        $rollos = Rollo::with(['producto:id,codigo,nombre', 'color', 'almacen:id,nombre'])
+        $rollos = $this->rollosParaEtiquetas($request)->get();
+
+        if ($rollos->isEmpty()) {
+            return response()->json(['message' => 'No hay rollos que etiquetar con ese filtro.'], 404);
+        }
+
+        return $this->pdfDeEtiquetas($request, $rollos);
+    }
+
+    /** Cuántos rollos y metros salen con ese filtro, antes de imprimir (la pantalla de "Imprimir QR" lo muestra en vivo). */
+    public function etiquetasConteo(Request $request): JsonResponse
+    {
+        $rollos = $this->rollosParaEtiquetas($request)->get(['id', 'metros_actual']);
+
+        return response()->json([
+            'rollos' => $rollos->count(),
+            'metros' => round((float) $rollos->sum('metros_actual'), 2),
+        ]);
+    }
+
+    /** Lo que se puede elegir para filtrar las etiquetas: tipos de tela, telas, colores, almacenes y órdenes de compra. */
+    public function etiquetasOpciones(): JsonResponse
+    {
+        $base = app(RolloReporteController::class)->opciones()->getData(true);
+
+        $recepciones = Rollo::query()->whereNotNull('recepcion_compra_id')->distinct()->select('recepcion_compra_id');
+        $ordenes = \App\Models\OrdenCompra::query()
+            ->where(fn ($q) => $q
+                ->whereIn('id', RecepcionCompra::whereIn('id', $recepciones)->whereNotNull('orden_compra_id')->select('orden_compra_id'))
+                ->orWhereIn('id', \App\Models\Compra::whereIn('id', RecepcionCompra::whereIn('id', $recepciones)->select('compra_id'))->select('orden_compra_id')))
+            ->orderByDesc('id')
+            ->get(['id', 'codigo']);
+
+        return response()->json([
+            'tipos' => $base['tipos'],
+            'telas' => $base['telas'],
+            'colores' => $base['colores'],
+            'almacenes' => $base['almacenes'],
+            'estados' => $base['estados'],
+            'ordenes' => $ordenes,
+        ]);
+    }
+
+    /**
+     * Los rollos a etiquetar según el filtro: por ids, por tela/color, por recepción o ajuste y, desde "Imprimir QR",
+     * por tipo de tela, color, orden de compra, almacén, estado y metraje (exacto o en un rango).
+     */
+    private function rollosParaEtiquetas(Request $request)
+    {
+        return Rollo::with(['producto:id,codigo,nombre', 'color', 'almacen:id,nombre'])
             ->when($request->filled('ids'), fn ($q) => $q->whereIn('id', array_filter(explode(',', (string) $request->input('ids')))))
             ->when($request->filled('producto_id'), fn ($q) => $q->where('producto_id', $request->producto_id))
             ->when($request->filled('producto_color_id'), fn ($q) => $q->where('producto_color_id', $request->producto_color_id))
             ->when($request->filled('recepcion_compra_id'), fn ($q) => $q->where('recepcion_compra_id', $request->recepcion_compra_id))
+            ->when($request->filled('tipo_tela_id'), fn ($q) => $q->whereHas('producto', fn ($p) => $p->where('tipo_tela_id', $request->integer('tipo_tela_id'))))
+            // El color de la tabla de colores (el mismo "NEGRO" en todas las telas), no el de una tela en concreto.
+            ->when($request->filled('color_id'), fn ($q) => $q->whereHas('color', fn ($c) => $c->where('color_id', $request->integer('color_id'))))
+            ->when($request->filled('almacen_id'), fn ($q) => $q->where('almacen_id', $request->integer('almacen_id')))
+            ->when($request->filled('estado') && $request->input('estado') !== 'todos', fn ($q) => $q->where('estado', $request->input('estado')))
+            // La orden de compra del rollo: la de su recepción o, si no, la de la compra recibida.
+            ->when($request->filled('orden_compra_id'), function ($q) use ($request) {
+                $orden = $request->integer('orden_compra_id');
+                $q->whereHas('recepcion', fn ($r) => $r
+                    ->where('orden_compra_id', $orden)
+                    ->orWhereHas('compra', fn ($c) => $c->where('orden_compra_id', $orden)));
+            })
+            // Metraje exacto (con tolerancia de un centésimo) o un rango; el metraje es lo que hay hoy en el rollo.
+            ->when($request->filled('metros'), fn ($q) => $q->whereBetween('metros_actual', [$request->float('metros') - 0.005, $request->float('metros') + 0.005]))
+            ->entreMetros($request->filled('metros_desde') ? $request->float('metros_desde') : null, $request->filled('metros_hasta') ? $request->float('metros_hasta') : null)
             // Los rollos que creó un ajuste de entrada.
             ->when($request->filled('ajuste_id'), fn ($q) => $q->whereIn(
                 'ajuste_detalle_id',
@@ -210,13 +274,12 @@ class RolloController extends Controller
             // los del otro color. Solo por número salían mezcladas (el 1 de cada color, luego el 2 de cada color…).
             ->orderBy('producto_id')
             ->orderBy('producto_color_id')
-            ->orderBy('numero')
-            ->get();
+            ->orderBy('numero');
+    }
 
-        if ($rollos->isEmpty()) {
-            return response()->json(['message' => 'No hay rollos que etiquetar con ese filtro.'], 404);
-        }
-
+    /** El PDF con una etiqueta por rollo (guardado y reutilizado si el mismo lote ya se imprimió igual). */
+    private function pdfDeEtiquetas(Request $request, $rollos)
+    {
         // Cada etiqueta es una página con su QR: un lote grande (cientos de rollos de una importación) pesa y tarda
         // más de lo que permite el PHP por defecto (128 MB y 30 s), y terminaba en un 500. Se sube el límite según
         // el tamaño del lote: ~0.5 MB y ~0.1 s por etiqueta, con piso en lo que ya tuviera el servidor.

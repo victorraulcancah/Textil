@@ -14,7 +14,7 @@ import PageHeader, { CreateButton } from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
 import { Alert, Badge, DataTable, SearchSelect, Select } from '../components/ui';
 import FiltroFechas from '../components/FiltroFechas';
-import { hoyIso } from '../lib/fechas';
+import { diaLocal, hoyIso } from '../lib/fechas';
 
 const money = (n, moneda = 'PEN') =>
     new Intl.NumberFormat(moneda === 'USD' ? 'en-US' : 'es-PE', {
@@ -147,8 +147,11 @@ export default function OrdenesCompra() {
         if (activeFilters.compra === 'si' && !(o.compras_count > 0)) return false;
         if (activeFilters.compra === 'no' && o.compras_count > 0) return false;
         if (activeFilters.proveedor && String(o.proveedor_id) !== activeFilters.proveedor) return false;
-        if (activeFilters.desde && (!o.fecha_emision || o.fecha_emision.slice(0, 10) < activeFilters.desde)) return false;
-        if (activeFilters.hasta && (!o.fecha_emision || o.fecha_emision.slice(0, 10) > activeFilters.hasta)) return false;
+        // El día de emisión en hora local (el mismo que se ve en la columna), no el de la marca de tiempo en UTC: de
+        // noche la UTC ya marca el día siguiente y la orden de hoy quedaba fuera del filtro de hoy.
+        const dia = diaLocal(o.fecha_emision);
+        if (activeFilters.desde && (!dia || dia < activeFilters.desde)) return false;
+        if (activeFilters.hasta && (!dia || dia > activeFilters.hasta)) return false;
         return true;
     });
     const filterCount = Object.keys(activeFilters).length;

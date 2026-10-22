@@ -15,7 +15,7 @@ import RecepcionarCompraModal from '../components/RecepcionarCompraModal';
 import PlanillaTela from '../components/PlanillaTela';
 import { gruposDeCompra } from '../lib/planilla';
 import { Alert, Badge, Button, DataTable, Input, Modal, SearchSelect, Select } from '../components/ui';
-import { hoyIso } from '../lib/fechas';
+import { diaLocal, hoyIso } from '../lib/fechas';
 
 const estadoCompra = {
     registrada: { label: 'Registrada', variant: 'green' },
@@ -302,8 +302,10 @@ export default function Compras() {
                     if (fPago && c.forma_pago !== fPago) return false;
                     if (fProveedor && String(c.proveedor_id) !== String(fProveedor)) return false;
                     if (fTipoProv && (c.proveedor?.tipo ?? 'nacional') !== fTipoProv) return false;
-                    if (fDesde && (!c.fecha || c.fecha.slice(0, 10) < fDesde)) return false;
-                    if (fHasta && (!c.fecha || c.fecha.slice(0, 10) > fHasta)) return false;
+                    // El día en hora local (el que se ve en la columna), no el de la marca de tiempo en UTC.
+                    const dia = diaLocal(c.fecha);
+                    if (fDesde && (!dia || dia < fDesde)) return false;
+                    if (fHasta && (!dia || dia > fHasta)) return false;
                     return true;
                 })}
                 loading={loading}

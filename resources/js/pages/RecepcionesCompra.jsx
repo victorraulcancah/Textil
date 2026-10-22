@@ -12,7 +12,7 @@ import PdfViewerModal from '../components/PdfViewerModal';
 import ActionsMenu from '../components/ActionsMenu';
 import { Alert, Badge, Button, DataTable, Modal, SearchSelect, Select } from '../components/ui';
 import FiltroFechas from '../components/FiltroFechas';
-import { hoyIso } from '../lib/fechas';
+import { diaLocal, hoyIso } from '../lib/fechas';
 
 const num = (n) => new Intl.NumberFormat('es-PE', { maximumFractionDigits: 2 }).format(Number(n) || 0);
 
@@ -203,8 +203,9 @@ export default function RecepcionesCompra() {
                     if (fEstado && fEstado !== 'inactiva' && (r.estado !== fEstado || !r.activo)) return false;
                     if (fProveedor && String(r.proveedor_id) !== String(fProveedor)) return false;
                     if (fAlmacen && String(r.almacen_id) !== String(fAlmacen)) return false;
-                    if (fDesde && (!r.fecha_recepcion || r.fecha_recepcion.slice(0, 10) < fDesde)) return false;
-                    if (fHasta && (!r.fecha_recepcion || r.fecha_recepcion.slice(0, 10) > fHasta)) return false;
+                    const dia = diaLocal(r.fecha_recepcion);
+                    if (fDesde && (!dia || dia < fDesde)) return false;
+                    if (fHasta && (!dia || dia > fHasta)) return false;
                     return true;
                 })}
                 loading={loading}

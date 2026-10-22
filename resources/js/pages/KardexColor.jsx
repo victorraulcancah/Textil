@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import api, { asList } from '../lib/api';
+import { diaLocal } from '../lib/fechas';
 import { ORIGEN_LABEL } from '../lib/movimientos';
 import { NOMBRE_DOCUMENTO, cantAbs, claveColor, entero, esEntrada, fmtFecha, juntarPorDocumento, num, precio, texto, vacio } from '../lib/kardex';
 import Layout from '../components/Layout';
@@ -82,8 +83,9 @@ export default function KardexColor() {
         ).filter((m) => {
             if (a.tipo && m.tipo_movimiento !== a.tipo) return false;
             if (a.origen && m.origen !== a.origen) return false;
-            if (a.desde && (!m.fecha || m.fecha.slice(0, 10) < a.desde)) return false;
-            if (a.hasta && (!m.fecha || m.fecha.slice(0, 10) > a.hasta)) return false;
+            const dia = diaLocal(m.fecha);
+            if (a.desde && (!dia || dia < a.desde)) return false;
+            if (a.hasta && (!dia || dia > a.hasta)) return false;
             return true;
         });
         const ordenada = [...lista].sort(

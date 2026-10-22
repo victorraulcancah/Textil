@@ -7,6 +7,7 @@ import { money } from '../lib/moneda';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import LetraCambioModal from '../components/LetraCambioModal';
+import CobroVariosModal from '../components/CobroVariosModal';
 import PagosCuentaModal from '../components/PagosCuentaModal';
 import PdfViewerModal from '../components/PdfViewerModal';
 import FiltroFechas from '../components/FiltroFechas';
@@ -48,6 +49,8 @@ export default function CuentasPorCobrar() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [pagoCuenta, setPagoCuenta] = useState(null);
+    /** Cobrar varios documentos de un cliente con un solo pago. */
+    const [cobroVarios, setCobroVarios] = useState(false);
     /** La cuenta de la que se emite una letra, y la letra recién emitida (para abrir su PDF). */
     const [letraCuenta, setLetraCuenta] = useState(null);
     const [letraEmitida, setLetraEmitida] = useState(null);
@@ -225,7 +228,16 @@ export default function CuentasPorCobrar() {
             <PageHeader
                 title="Cuentas por Cobrar"
                 description="Deudas pendientes de tus clientes (ventas al crédito)"
-                actions={<FiltroFechas desde={fDesde} hasta={fHasta} onDesde={setFDesde} onHasta={setFHasta} />}
+                actions={
+                    <>
+                        <FiltroFechas desde={fDesde} hasta={fHasta} onDesde={setFDesde} onHasta={setFHasta} />
+                        {puede('tesoreria.cuentas-por-cobrar.crear') && (
+                            <Button variant="secondary" onClick={() => setCobroVarios(true)}>
+                                <FileSignature className="h-4 w-4" /> Cobrar varios documentos
+                            </Button>
+                        )}
+                    </>
+                }
             />
 
             {error && <Alert variant="error" className="mb-4">{error}</Alert>}
@@ -292,6 +304,8 @@ export default function CuentasPorCobrar() {
                 titulo="Letra de cambio"
                 formatos={['a4']}
             />
+
+            <CobroVariosModal open={cobroVarios} onClose={() => setCobroVarios(false)} onSaved={() => load()} />
 
             <PagosCuentaModal
                 open={!!pagoCuenta}

@@ -339,6 +339,8 @@ Route::post('movimientos-caja', [MovimientoCajaController::class, 'store']);
     Route::post('letras-cambio/{letras_cambio}/sub-estado', [\App\Http\Controllers\LetraCambioController::class, 'cambiarSubEstado']);
     Route::get('cuentas-por-cobrar', [CuentaPorCobrarController::class, 'index']);
     Route::get('cuentas-por-cobrar/{cuenta}', [CuentaPorCobrarController::class, 'show']);
+    // Un mismo pago que cubre varios documentos del cliente.
+    Route::post('cuentas-por-cobrar/pagos-varios', [CuentaPorCobrarController::class, 'registrarPagoVarios']);
     Route::post('cuentas-por-cobrar/{cuenta}/pagos', [CuentaPorCobrarController::class, 'registrarPago']);
     Route::put('cuentas-por-cobrar/pagos/{pago}', [CuentaPorCobrarController::class, 'actualizarPago']);
     Route::delete('cuentas-por-cobrar/pagos/{pago}', [CuentaPorCobrarController::class, 'anularPago']);

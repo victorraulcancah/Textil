@@ -5,6 +5,7 @@ import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
 import { destinoDe, useCatalogoDestinos } from '../lib/destinosCaja';
 import { diaLocal, hoyIso } from '../lib/fechas';
+import CobroVariosModal from '../components/CobroVariosModal';
 import PagosCuentaModal from '../components/PagosCuentaModal';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
@@ -61,6 +62,8 @@ export default function MiCaja() {
     const opcionesDestino = useCatalogoDestinos();
     /** Amortización de documentos desde la caja, separada: 'cobrar' (ingreso) o 'pagar' (egreso). */
     const [amortizar, setAmortizar] = useState(null);
+    /** Cobrar varios documentos de un cliente con un solo pago. */
+    const [cobroVarios, setCobroVarios] = useState(null);
     /** El reporte de la caja del día en PDF: { url } mientras se ve. */
     const [reportePdf, setReportePdf] = useState(null);
     /** El día del reporte de caja (el filtro es solo por día): hoy por defecto. */
@@ -706,6 +709,16 @@ export default function MiCaja() {
                 elegir
                 cerrarAlGuardar
                 onSaved={() => load()}
+                onVarios={(inicial) => { setAmortizar(null); setCobroVarios(inicial); }}
+            />
+
+            {/* La misma ventana de amortización, en modo "varios documentos". */}
+            <CobroVariosModal
+                open={Boolean(cobroVarios)}
+                inicial={cobroVarios}
+                onClose={() => setCobroVarios(null)}
+                onSaved={() => load()}
+                onUnDocumento={() => { setCobroVarios(null); setAmortizar('cobrar'); }}
             />
 
             {/* Modal abrir */}

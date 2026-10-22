@@ -7,7 +7,7 @@ use App\Models\CuentaPorCobrar;
 use App\Support\AlmacenAcceso;
 use App\Models\CuentaPorCobrarPago;
 use App\Models\MovimientoCaja;
-use App\Services\TipoCambioService;
+use App\Services\CobranzaService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -15,6 +15,8 @@ class CuentaPorCobrarController extends Controller
 {
     /** Tipos de método admitidos. */
     private const FORMAS = 'efectivo,transferencia,billetera';
+
+    public function __construct(private CobranzaService $cobranza) {}
 
     public function index()
     {
@@ -65,7 +67,7 @@ class CuentaPorCobrarController extends Controller
             'pagos.*.tipo_cambio' => 'nullable|numeric|min:0.0001',
         ]);
 
-        $abonos = array_map(fn ($p) => $this->abono($cuenta, $p), $data['pagos']);
+        $abonos = array_map(fn ($p) => $this->cobranza->abono($cuenta, $p), $data['pagos']);
         if (in_array(null, $abonos, true)) {
             return response()->json(['message' => 'Para cobrar en soles, pon el tipo de cambio.'], 422);
         }
@@ -86,60 +88,75 @@ class CuentaPorCobrarController extends Controller
 
         $fecha = $data['fecha'] ?? now()->toDateString();
 
-        DB::transaction(function () use ($cuenta, $data, $abonos, $fecha) {
-            $apertura = $this->aperturaAbierta();
-            foreach ($data['pagos'] as $i => $p) {
-                $abono = $abonos[$i];
-                $ingreso = $this->ingreso($cuenta, $abono);
-                $cuentaBancariaId = $p['forma_pago'] === 'transferencia' ? ($p['cuenta_bancaria_id'] ?? null) : null;
-                $billeteraId = $p['forma_pago'] === 'billetera' ? ($p['billetera_id'] ?? null) : null;
-
-                $mov = $apertura
-                    ? MovimientoCaja::create([
-                        'apertura_caja_id' => $apertura->id,
-                        'tipo' => 'ingreso',
-                        'motivo_movimiento_id' => app(\App\Services\CajaService::class)->motivo('Ingreso por cobranza'),
-                        'descripcion' => filled($data['glosa'] ?? null)
-                            ? $data['glosa']
-                            : 'Cobranza'.($cuenta->notaVenta ? " de la venta {$cuenta->notaVenta->serie}-{$cuenta->notaVenta->numero}" : '')
-                                .($cuenta->total_cuotas > 1 ? " (cuota {$cuenta->numero_cuota}/{$cuenta->total_cuotas})" : ''),
-                        'cuenta_bancaria_id' => $cuentaBancariaId,
-                        'billetera_id' => $billeteraId,
-                        'monto' => $ingreso['monto'],
-                        'moneda' => $ingreso['moneda'],
-                        'fecha' => $fecha,
-                        'numero_operacion' => $p['referencia'] ?? null,
-                        'documento_referencia_tipo' => 'cuenta_por_cobrar',
-                        'documento_referencia_id' => $cuenta->id,
-                    ])
-                    : null;
-
-                $cuenta->pagos()->create([
-                    'forma_pago' => $p['forma_pago'],
-                    'cuenta_bancaria_id' => $cuentaBancariaId,
-                    'billetera_id' => $billeteraId,
-                    'monto' => $abono['monto'],
-                    'moneda' => $cuenta->moneda ?: 'PEN',
-                    'monto_pen' => $abono['monto_pen'],
-                    'tipo_cambio' => $abono['tipo_cambio'],
-                    'referencia' => $p['referencia'] ?? null,
-                    'glosa' => $data['glosa'] ?? null,
-                    'movimiento_caja_id' => $mov?->id,
-                    'fecha' => $fecha,
-                ]);
-
-                // Cobrado con soles: ese tipo de cambio queda como el comercial del día.
-                if ($abono['monto_pen'] !== null) {
-                    app(TipoCambioService::class)->recordarComercial($abono['tipo_cambio'], $fecha);
-                }
-            }
-            $this->recalcular($cuenta);
-        });
+        DB::transaction(fn () => $this->cobranza->registrar($cuenta, $data['pagos'], $fecha, $data['glosa'] ?? null));
 
         return response()->json($cuenta->fresh()->cargarEnLetras()->load(['cliente:id,nombre', 'notaVenta:id,serie,numero,fecha_emision,tipo_pago,vendedor_id', 'notaVenta.vendedor:id,name', 'pagos.cuentaBancaria:id,alias,numero_cuenta', 'pagos.billetera:id,nombre']));
     }
 
     /** Edita un pago existente y ajusta su movimiento de caja. */
+    /**
+     * Cobra varios documentos de un mismo cliente con un solo pago: una transferencia de 300 que paga una guía de 100 y
+     * otra de 200. El pago se reparte entre los documentos y cada uno queda con su abono y su movimiento de caja.
+     */
+    public function registrarPagoVarios(Request $request)
+    {
+        $data = $request->validate([
+            'fecha' => 'nullable|date|before_or_equal:'.now()->toDateString(),
+            'glosa' => 'nullable|string|max:255',
+            'documentos' => 'required|array|min:1',
+            'documentos.*.cuenta_id' => 'required|integer|distinct|exists:cuentas_por_cobrar,id',
+            'documentos.*.monto' => 'required|numeric|min:0.01',
+            'pagos' => 'required|array|min:1',
+            'pagos.*.forma_pago' => 'required|in:'.self::FORMAS,
+            'pagos.*.cuenta_bancaria_id' => 'nullable|exists:cuentas_bancarias,id',
+            'pagos.*.billetera_id' => 'nullable|exists:billeteras_digitales,id',
+            'pagos.*.monto' => 'required|numeric|min:0.01',
+            'pagos.*.referencia' => 'nullable|string|max:100',
+        ]);
+
+        $cuentas = CuentaPorCobrar::with('notaVenta:id,serie,numero')->findMany(collect($data['documentos'])->pluck('cuenta_id'))->keyBy('id');
+        $documentos = [];
+        foreach ($data['documentos'] as $d) {
+            $cuenta = $cuentas[$d['cuenta_id']];
+            AlmacenAcceso::exigir($cuenta->almacen_id);
+            $nombre = $cuenta->notaVenta ? "{$cuenta->notaVenta->serie}-{$cuenta->notaVenta->numero}" : "#{$cuenta->id}";
+
+            if (in_array($cuenta->estado, ['anulado', 'pagado'], true)) {
+                return response()->json(['message' => "El documento {$nombre} ya no admite pagos."], 422);
+            }
+            $monto = round((float) $d['monto'], 2);
+            if ($monto > $cuenta->saldoCobrable() + 0.01) {
+                return response()->json(['message' => "El abono al documento {$nombre} excede su saldo cobrable (".number_format($cuenta->saldoCobrable(), 2).').'], 422);
+            }
+            $documentos[] = ['cuenta' => $cuenta, 'monto' => $monto];
+        }
+
+        // Un solo pago es de un solo cliente y en una sola moneda.
+        if ($cuentas->pluck('cliente_id')->unique()->count() !== 1 || ! $cuentas->first()->cliente_id) {
+            return response()->json(['message' => 'Los documentos de un mismo pago deben ser del mismo cliente.'], 422);
+        }
+        if ($cuentas->map(fn ($c) => $c->moneda ?: 'PEN')->unique()->count() !== 1) {
+            return response()->json(['message' => 'Los documentos de un mismo pago deben estar en la misma moneda.'], 422);
+        }
+
+        $aplicado = round(collect($documentos)->sum('monto'), 2);
+        $recibido = round(collect($data['pagos'])->sum(fn ($p) => (float) $p['monto']), 2);
+        if (abs($aplicado - $recibido) > 0.005) {
+            return response()->json(['message' => 'Lo recibido ('.number_format($recibido, 2).') no coincide con lo que se aplica a los documentos ('.number_format($aplicado, 2).').'], 422);
+        }
+
+        // Cobrar mueve dinero: hace falta tener caja y que esté abierta.
+        app(\App\Services\CajaService::class)->exigirApertura();
+
+        $fecha = $data['fecha'] ?? now()->toDateString();
+        DB::transaction(fn () => $this->cobranza->registrarVarios($documentos, $data['pagos'], $fecha, $data['glosa'] ?? null));
+
+        return response()->json([
+            'cuentas' => CuentaPorCobrar::with(['cliente:id,nombre', 'notaVenta:id,serie,numero,fecha_emision,tipo_pago,vendedor_id', 'pagos.cuentaBancaria:id,alias,numero_cuenta', 'pagos.billetera:id,nombre'])
+                ->findMany($cuentas->keys())->map->cargarEnLetras()->values(),
+        ]);
+    }
+
     public function actualizarPago(Request $request, CuentaPorCobrarPago $pago)
     {
         AlmacenAcceso::exigir($pago->cuentaPorCobrar?->almacen_id);
@@ -157,7 +174,7 @@ class CuentaPorCobrarController extends Controller
         ]);
 
         $cuenta = $pago->cuentaPorCobrar;
-        $abono = $this->abono($cuenta, $data);
+        $abono = $this->cobranza->abono($cuenta, $data);
         if (! $abono) {
             return response()->json(['message' => 'Para cobrar en soles, pon el tipo de cambio.'], 422);
         }
@@ -171,7 +188,7 @@ class CuentaPorCobrarController extends Controller
         $billeteraId = $data['forma_pago'] === 'billetera' ? ($data['billetera_id'] ?? null) : null;
 
         DB::transaction(function () use ($pago, $cuenta, $data, $abono, $cuentaBancariaId, $billeteraId) {
-            $ingreso = $this->ingreso($cuenta, $abono);
+            $ingreso = $this->cobranza->ingreso($cuenta, $abono);
 
             $pago->update([
                 'forma_pago' => $data['forma_pago'],
@@ -198,10 +215,10 @@ class CuentaPorCobrarController extends Controller
             }
 
             if ($abono['monto_pen'] !== null) {
-                app(TipoCambioService::class)->recordarComercial($abono['tipo_cambio'], $data['fecha'] ?? $pago->fecha?->toDateString());
+                app(\App\Services\TipoCambioService::class)->recordarComercial($abono['tipo_cambio'], $data['fecha'] ?? $pago->fecha?->toDateString());
             }
 
-            $this->recalcular($cuenta);
+            $this->cobranza->recalcular($cuenta);
         });
 
         return response()->json($cuenta->fresh()->cargarEnLetras()->load(['cliente:id,nombre', 'notaVenta:id,serie,numero,fecha_emision,tipo_pago,vendedor_id', 'notaVenta.vendedor:id,name', 'pagos.cuentaBancaria:id,alias,numero_cuenta', 'pagos.billetera:id,nombre']));
@@ -218,73 +235,9 @@ class CuentaPorCobrarController extends Controller
                 MovimientoCaja::anularDe(MovimientoCaja::where('id', $pago->movimiento_caja_id), 'Cobro anulado');
             }
             $pago->delete();
-            $this->recalcular($cuenta);
+            $this->cobranza->recalcular($cuenta);
         });
 
         return response()->json($cuenta->fresh()->cargarEnLetras()->load(['cliente:id,nombre', 'notaVenta:id,serie,numero,fecha_emision,tipo_pago,vendedor_id', 'notaVenta.vendedor:id,name', 'pagos.cuentaBancaria:id,alias,numero_cuenta', 'pagos.billetera:id,nombre']));
-    }
-
-    private function aperturaAbierta(): ?AperturaCaja
-    {
-        return app(\App\Services\CajaService::class)->aperturaPara();
-    }
-
-    /**
-     * Lo que un pago abona a la deuda, en la moneda de la deuda. Pagado con
-     * soles una deuda en dólares, el monto llega en soles y se abona su
-     * equivalente al tipo de cambio que se indicó (el comercial del día, que
-     * se propone y se puede cambiar). Null si falta el tipo de cambio.
-     *
-     * @return array{monto: float, monto_pen: ?float, tipo_cambio: ?float}|null
-     */
-    private function abono(CuentaPorCobrar $cuenta, array $pago): ?array
-    {
-        $moneda = $cuenta->moneda ?: 'PEN';
-        $monto = round((float) $pago['monto'], 2);
-
-        if ($moneda === 'PEN' || ($pago['moneda'] ?? $moneda) !== 'PEN') {
-            return ['monto' => $monto, 'monto_pen' => null, 'tipo_cambio' => null];
-        }
-
-        $tipoCambio = (float) ($pago['tipo_cambio'] ?? 0);
-        if ($tipoCambio <= 0) {
-            return null;
-        }
-
-        return ['monto' => round($monto / $tipoCambio, 2), 'monto_pen' => $monto, 'tipo_cambio' => $tipoCambio];
-    }
-
-    /**
-     * El ingreso de caja de un pago: la plata que de verdad entró. Pagada en
-     * soles, entra en soles; si no, en la moneda de la deuda.
-     *
-     * @param  array{monto: float, monto_pen: ?float, tipo_cambio: ?float}  $abono
-     * @return array{monto: float, moneda: string}
-     */
-    private function ingreso(CuentaPorCobrar $cuenta, array $abono): array
-    {
-        return $abono['monto_pen'] !== null
-            ? ['monto' => $abono['monto_pen'], 'moneda' => 'PEN']
-            : ['monto' => $abono['monto'], 'moneda' => $cuenta->moneda ?: 'PEN'];
-    }
-
-    private function recalcular(CuentaPorCobrar $cuenta): void
-    {
-        $pagado = (float) $cuenta->pagos()->sum('monto');
-        $total = (float) $cuenta->monto_total;
-        $resto = round($total - $pagado, 2);
-
-        // En soles, lo que falta si es menos de S/ 1 ya no se cobra: se perdona como ajuste por redondeo y la cuenta queda
-        // cancelada. Solo después de haber cobrado algo (una cuota de menos de S/ 1 sí se cobra).
-        $ajuste = ($cuenta->moneda ?: 'PEN') === 'PEN' && $pagado > 0 && $resto > 0.005 && $resto < 1 ? $resto : 0.0;
-        $saldo = round($resto - $ajuste, 2);
-        $estado = $saldo <= 0.005 ? 'pagado' : ($pagado > 0 ? 'parcial' : 'pendiente');
-
-        $cuenta->update([
-            'monto_pagado' => $pagado,
-            'saldo' => max($saldo, 0),
-            'ajuste_redondeo' => $ajuste,
-            'estado' => $estado,
-        ]);
     }
 }

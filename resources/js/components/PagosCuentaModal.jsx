@@ -85,7 +85,7 @@ function Dato({ etiqueta, children, className }) {
  * documento de control, referencia, importe de abono y tipo de pago—. Los pagos anteriores se pueden editar o anular.
  * @param {'cobrar'|'pagar'} tipo
  */
-export default function PagosCuentaModal({ open, onClose, cuenta, tipo: tipoProp, onSaved, elegir = false, cerrarAlGuardar = false, permitidos = ['cobrar', 'pagar'] }) {
+export default function PagosCuentaModal({ open, onClose, cuenta, tipo: tipoProp, onSaved, elegir = false, cerrarAlGuardar = false, permitidos = ['cobrar', 'pagar'], onVarios = null }) {
     const toast = useToast();
     const { user } = useAuth();
     /** Desde Mi Caja un solo botón sirve para cobrar y para pagar: aquí se elige cuál (por defecto, el primero permitido). */
@@ -462,6 +462,15 @@ export default function PagosCuentaModal({ open, onClose, cuenta, tipo: tipoProp
                                     {t}
                                 </button>
                             ))}
+                        </div>
+                    )}
+                    {/* Un mismo pago del cliente que cubre más de un documento: pasa a la misma ventana en modo "varios". */}
+                    {elegir && esCobrar && onVarios && (
+                        <div className="mt-2 flex items-center justify-between gap-3 rounded-lg bg-primary-50 px-3 py-2 text-sm">
+                            <span className="text-primary-800">¿El cliente paga <strong>varios documentos</strong> con un solo pago?</span>
+                            <Button size="sm" variant="secondary" onClick={() => onVarios({ clienteId: state?.cliente_id ?? null, cuentaId: state?.id ?? null })}>
+                                Cobrar varios documentos
+                            </Button>
                         </div>
                     )}
                     {elegir && (

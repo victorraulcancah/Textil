@@ -1,7 +1,7 @@
 import { paisConCodigo } from '../lib/paises';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, ChevronRight, FileText, Package, Pencil, Plus, Ship, Trash2 } from 'lucide-react';
+import { ArchiveRestore, ArrowLeft, ChevronRight, FileText, Package, Pencil, Plus, Ship, Trash2 } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
@@ -10,6 +10,7 @@ import CatalogoSelect from '../components/CatalogoSelect';
 import ContenedorSelect from '../components/ContenedorSelect';
 import ColorSelect from '../components/ColorSelect';
 import ProductoPickerModal from '../components/ProductoPickerModal';
+import RecuperarOrdenModal from '../components/RecuperarOrdenModal';
 import TelaCompraModal, { presentacionMetroDe } from '../components/TelaCompraModal';
 import { Button, Input, Modal, SearchSelect, Select, Spinner, cn } from '../components/ui';
 
@@ -98,33 +99,16 @@ export default function CrearOrdenCompra() {
     const [telaCompra, setTelaCompra] = useState(null);
     /** Los datos de embarque son muchos campos: se editan en un modal aparte. */
     const [modalExterior, setModalExterior] = useState(false);
+    /** La ventana para recuperar los datos de una orden anulada (solo al crear una nueva). */
+    const [recuperando, setRecuperando] = useState(false);
 
-    const load = useCallback(async () => {
-        setLoading(true);
-        try {
-            const [provRes, prodRes, existRes, aprobRes] = await Promise.all([
-                api.get('/proveedores'),
-                api.get('/productos', { params: { per_page: 500 } }),
-                api.get('/existencias'),
-                api.get('/ordenes-compra/aprobadores').catch(() => ({ data: [] })),
-            ]);
-            setProveedores(asList(provRes));
-            setAprobadores(asList(aprobRes));
-            setProductos(asList(prodRes));
-
-            // El stock vive por almacén: lo acumulamos por producto (en unidad base).
-            setStockPorProducto(
-                asList(existRes).reduce((acc, fila) => {
-                    const pid = String(fila.producto_id);
-                    acc[pid] = (acc[pid] ?? 0) + (Number(fila.stock_actual) || 0);
-                    return acc;
-                }, {}),
-            );
-
-            if (!id) return;
-
-            // Modo edición: la orden se vuelca al formulario y a la tabla.
-            const { data: orden } = await api.get(`/ordenes-compra/${id}`);
+    /**
+     * Vuelca una orden al formulario y a la tabla. Al editar es la propia orden; al recuperar una anulada son sus datos
+     * copiados a una orden nueva: sin código (se genera al guardar), con la emisión de hoy, quien la elabora es quien
+     * la recupera y la entrega estimada solo se conserva si todavía no pasó.
+     */
+    const volcarOrden = useCallback(
+        (orden, comoNueva = false) => {
             setCodigo(orden.codigo ?? '');
             setForm({
                 tipo: orden.tipo ?? 'nacional',
@@ -158,12 +142,54 @@ export default function CrearOrdenCompra() {
                     precio_unitario: String(d.precio_unitario),
                 })),
             );
+            if (comoNueva) {
+                setCodigo('');
+                setForm((prev) => ({
+                    ...prev,
+                    fecha_emision: hoy(),
+                    fecha_entrega_estimada: prev.fecha_entrega_estimada >= hoy() ? prev.fecha_entrega_estimada : '',
+                    elaborado_por: user?.name ?? '',
+                    aprobado_por: '',
+                }));
+                setAbiertas({});
+            }
+        },
+        [user?.name],
+    );
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        try {
+            const [provRes, prodRes, existRes, aprobRes] = await Promise.all([
+                api.get('/proveedores'),
+                api.get('/productos', { params: { per_page: 500 } }),
+                api.get('/existencias'),
+                api.get('/ordenes-compra/aprobadores').catch(() => ({ data: [] })),
+            ]);
+            setProveedores(asList(provRes));
+            setAprobadores(asList(aprobRes));
+            setProductos(asList(prodRes));
+
+            // El stock vive por almacén: lo acumulamos por producto (en unidad base).
+            setStockPorProducto(
+                asList(existRes).reduce((acc, fila) => {
+                    const pid = String(fila.producto_id);
+                    acc[pid] = (acc[pid] ?? 0) + (Number(fila.stock_actual) || 0);
+                    return acc;
+                }, {}),
+            );
+
+            if (!id) return;
+
+            // Modo edición: la orden se vuelca al formulario y a la tabla.
+            const { data: orden } = await api.get(`/ordenes-compra/${id}`);
+            volcarOrden(orden);
         } catch {
             toast.error('No se pudieron cargar los datos de la orden.');
         } finally {
             setLoading(false);
         }
-    }, [toast, id]);
+    }, [toast, id, volcarOrden]);
 
     useEffect(() => {
         load();
@@ -636,7 +662,25 @@ export default function CrearOrdenCompra() {
                     </h1>
                     <p className="text-sm text-warm-500">Pedido formal de productos al proveedor</p>
                 </div>
+                {/* Solo trae los datos de una orden anulada a esta orden nueva: la anulada no se toca. */}
+                {!editando && (
+                    <Button type="button" variant="secondary" className="ml-auto" onClick={() => setRecuperando(true)}>
+                        <ArchiveRestore className="h-4 w-4" />
+                        Recuperar orden anulada
+                    </Button>
+                )}
             </div>
+
+            <RecuperarOrdenModal
+                open={recuperando}
+                onClose={() => setRecuperando(false)}
+                hayDatos={items.length > 0 || Boolean(form.proveedor_id)}
+                onRecuperar={(orden) => {
+                    volcarOrden(orden, true);
+                    setRecuperando(false);
+                    toast.success('Datos recuperados: revisa y guarda la orden nueva.');
+                }}
+            />
 
             <Modal
                 open={modalExterior}

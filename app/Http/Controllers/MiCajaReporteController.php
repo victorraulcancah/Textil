@@ -22,24 +22,37 @@ class MiCajaReporteController extends Controller
 {
     public function pdf(Request $request)
     {
-        $r = $this->construir($this->fecha($request));
+        $r = $this->construir($this->fecha($request), $this->turno($request));
 
         $pdf = app(PdfService::class)->generarVista('pdf.reportes.caja-dia', [
             'r' => $r,
             'empresa' => Empresa::query()->where('activa', true)->first() ?? Empresa::first(),
         ], 'a4h');
 
-        $archivo = 'caja-'.($r['fecha'] ?? now()->format('Y-m-d')).'.pdf';
+        $archivo = 'caja-'.($r['fecha'] ?? now()->format('Y-m-d')).($r['turnos'] === 1 && $r['fecha'] ? '-pl'.$r['apertura']->id : '').'.pdf';
 
         return $request->boolean('descargar') ? $pdf->download($archivo) : $pdf->stream($archivo);
     }
 
-    /** Responde si hay reporte para ese día, antes de abrirlo (así el visor no muestra un error en crudo). */
+    /**
+     * Responde si hay reporte para ese día, antes de abrirlo (así el visor no muestra un error en crudo), y qué turnos
+     * tuvo la caja ese día para poder elegir uno.
+     */
     public function disponible(Request $request)
     {
-        $aperturas = $this->aperturasDelReporte($this->fecha($request));
+        $fecha = $this->fecha($request);
+        $aperturas = $this->aperturasDelReporte($fecha, null);
 
-        return response()->json(['turnos' => $aperturas->count()]);
+        return response()->json([
+            'turnos' => $aperturas->count(),
+            'lista' => $aperturas->each->load('cierre:id,apertura_caja_id,fecha_cierre')->map(fn (AperturaCaja $a) => [
+                'id' => $a->id,
+                'usuario' => $a->usuario?->name,
+                'desde' => $a->fecha_apertura?->timezone(config('app.timezone'))->format('H:i'),
+                'hasta' => $a->cierre?->fecha_cierre ? date('H:i', strtotime((string) $a->cierre->fecha_cierre)) : null,
+                'estado' => $a->estado,
+            ])->values(),
+        ]);
     }
 
     /** El día pedido (AAAA-MM-DD, nunca futuro) o null para la caja abierta ahora. */
@@ -50,13 +63,22 @@ class MiCajaReporteController extends Controller
         ])['fecha'] ?? null;
     }
 
+    /** El turno (apertura) pedido, si el reporte es de uno solo; null para todos los del día. */
+    private function turno(Request $request): ?int
+    {
+        $id = $request->validate(['apertura' => 'nullable|integer|min:1'])['apertura'] ?? null;
+
+        return $id ? (int) $id : null;
+    }
+
     /**
      * Sin día: la apertura abierta de quien consulta. Con día: todos los turnos de la caja ese día, de quien los haya
-     * abierto, aunque ya estén cerrados (puede haber más de uno). El reporte es del día de la caja, no de un usuario.
+     * abierto, aunque ya estén cerrados (puede haber más de uno), o solo el turno elegido. Sin turno elegido el reporte
+     * es del día de la caja, no de un usuario.
      *
      * @return Collection<int, AperturaCaja>
      */
-    private function aperturasDelReporte(?string $fecha): Collection
+    private function aperturasDelReporte(?string $fecha, ?int $turno): Collection
     {
         $user = auth('api')->user();
         $consulta = AperturaCaja::with(['caja:id,nombre,codigo,almacen_id', 'caja.almacen:id,nombre', 'usuario:id,name']);
@@ -68,10 +90,14 @@ class MiCajaReporteController extends Controller
             $consulta->when($cajaId, fn ($q) => $q->where('caja_id', $cajaId))
                 ->when(! $cajaId && $almacenId, fn ($q) => $q->whereHas('caja', fn ($c) => $c->where('almacen_id', $almacenId)));
 
-            $aperturas = $consulta->whereDate('fecha_apertura', $fecha)->orderBy('fecha_apertura')->get();
+            $aperturas = $consulta->whereDate('fecha_apertura', $fecha)
+                ->when($turno, fn ($q) => $q->where('id', $turno))
+                ->orderBy('fecha_apertura')->get();
 
             if ($aperturas->isEmpty()) {
-                throw ValidationException::withMessages(['fecha' => 'No hubo caja abierta el '.date('d/m/Y', strtotime($fecha)).'.']);
+                throw ValidationException::withMessages(['fecha' => $turno
+                    ? 'Ese turno no es de la caja del '.date('d/m/Y', strtotime($fecha)).'.'
+                    : 'No hubo caja abierta el '.date('d/m/Y', strtotime($fecha)).'.']);
             }
 
             return $aperturas;
@@ -93,9 +119,9 @@ class MiCajaReporteController extends Controller
      *
      * @return array<string, mixed>
      */
-    private function construir(?string $fecha = null): array
+    private function construir(?string $fecha = null, ?int $turno = null): array
     {
-        $aperturas = $this->aperturasDelReporte($fecha);
+        $aperturas = $this->aperturasDelReporte($fecha, $turno);
         $apertura = $aperturas->first();
 
         // Con los anulados: salen marcados, sin importe y sin sumar.

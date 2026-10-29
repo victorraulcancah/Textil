@@ -68,6 +68,9 @@ export default function MiCaja() {
     const [reportePdf, setReportePdf] = useState(null);
     /** El día del reporte de caja (el filtro es solo por día): hoy por defecto. */
     const [diaReporte, setDiaReporte] = useState(hoyIso());
+    /** Los turnos que tuvo la caja ese día y el elegido para el reporte ('' = todos los del día). */
+    const [turnosReporte, setTurnosReporte] = useState([]);
+    const [turnoReporte, setTurnoReporte] = useState('');
     const [data, setData] = useState(null);
     const [motivos, setMotivos] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -138,11 +141,25 @@ export default function MiCaja() {
         }
     };
 
-    /** El PDF del día elegido: primero se confirma que ese día hubo caja, para no abrir el visor con un error. */
+    // Al cambiar el día se buscan sus turnos (si hubo más de uno se puede sacar el reporte de uno solo).
+    useEffect(() => {
+        let vigente = true;
+        setTurnoReporte('');
+        api.get('/mi-caja/reporte/dia', { params: { fecha: diaReporte } })
+            .then((res) => vigente && setTurnosReporte(res.data?.lista ?? []))
+            .catch(() => vigente && setTurnosReporte([]));
+
+        return () => {
+            vigente = false;
+        };
+    }, [diaReporte, data?.apertura?.id]);
+
+    /** El PDF del día (y del turno) elegido: primero se confirma que hubo caja, para no abrir el visor con un error. */
     const abrirReportePdf = async () => {
         try {
-            await api.get('/mi-caja/reporte/dia', { params: { fecha: diaReporte } });
-            setReportePdf({ url: `/mi-caja/reporte/pdf?fecha=${diaReporte}` });
+            const params = { fecha: diaReporte, ...(turnoReporte ? { apertura: turnoReporte } : {}) };
+            await api.get('/mi-caja/reporte/dia', { params });
+            setReportePdf({ url: `/mi-caja/reporte/pdf?${new URLSearchParams(params)}` });
         } catch (e) {
             toast.error(await mensajeDe(e, 'No se pudo generar el reporte de caja.'));
         }
@@ -589,6 +606,22 @@ export default function MiCaja() {
                             <div className="w-36 min-w-0 shrink sm:w-44">
                                 <Input label="Reporte del día" type="date" max={hoyIso()} value={diaReporte} onChange={(e) => setDiaReporte(e.target.value || hoyIso())} />
                             </div>
+                            {turnosReporte.length > 1 && (
+                                <div className="w-44 min-w-0 shrink sm:w-56">
+                                    <Select
+                                        label="Turno"
+                                        value={turnoReporte}
+                                        onChange={(e) => setTurnoReporte(e.target.value)}
+                                        options={[
+                                            { value: '', label: 'Todos los turnos' },
+                                            ...turnosReporte.map((t) => ({
+                                                value: String(t.id),
+                                                label: `${t.usuario ?? 'Turno'} · ${t.desde ?? ''}${t.hasta ? ` – ${t.hasta}` : t.estado === 'abierta' ? ' – abierta' : ''}`,
+                                            })),
+                                        ]}
+                                    />
+                                </div>
+                            )}
                             <Button className="shrink-0 whitespace-nowrap" variant="secondary" onClick={abrirReportePdf}>
                                 <FileText className="h-4 w-4" /> <span><span className="hidden sm:inline">Planilla </span>PDF</span>
                             </Button>

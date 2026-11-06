@@ -481,12 +481,14 @@ export default function StockPorRollo() {
                                 </Button>
                                 <Button
                                     variant="secondary"
-                                    onClick={() =>
-                                        setPdf({
-                                            url: `/rollos/etiquetas?producto_id=${seleccion.producto_id}&producto_color_id=${seleccion.producto_color_id}`,
-                                            titulo: `Etiquetas · ${seleccion.color}`,
-                                        })
-                                    }
+                                    onClick={() => {
+                                        // Las mismas condiciones que la lista de rollos: salen las etiquetas de los que se ven, no las de todo el color.
+                                        const filtros = new URLSearchParams({ producto_id: seleccion.producto_id, producto_color_id: seleccion.producto_color_id });
+                                        Object.entries({ almacen_id: almacenId, estado, metros_desde: metrosDesde, metros_hasta: metrosHasta })
+                                            .filter(([, valor]) => valor)
+                                            .forEach(([clave, valor]) => filtros.set(clave, valor));
+                                        setPdf({ url: `/rollos/etiquetas?${filtros}`, titulo: `Etiquetas · ${seleccion.color}` });
+                                    }}
                                 >
                                     <Printer className="h-4 w-4" />
                                     Etiquetas del color

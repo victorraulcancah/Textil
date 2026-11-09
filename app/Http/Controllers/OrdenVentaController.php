@@ -169,6 +169,48 @@ class OrdenVentaController extends Controller
         );
     }
 
+    /**
+     * Los metros convertidos (stock por metros) que se pueden prometer de una tela y color, para que el vendedor marque un
+     * corte "sin QR". Con almacén, los de ese almacén; sin él, los de todos.
+     */
+    public function metrosSueltos(Request $request)
+    {
+        $datos = $request->validate([
+            'producto_id' => 'nullable|integer',
+            'color_id' => 'nullable|integer',
+            'almacen_id' => 'nullable|integer',
+        ]);
+
+        // Sin tela: todos los saldos con metros libres (para el buscador de productos "solo sin QR").
+        if (empty($datos['producto_id'])) {
+            $filas = \App\Models\StockMetros::query()
+                ->when(! empty($datos['almacen_id']), fn ($q) => $q->where('almacen_id', $datos['almacen_id']))
+                ->get()
+                ->map(fn ($f) => [
+                    'producto_id' => $f->producto_id,
+                    'producto_color_id' => $f->producto_color_id,
+                    'almacen_id' => $f->almacen_id,
+                    'disponible' => $f->disponible(),
+                ])
+                ->filter(fn ($f) => $f['disponible'] > 0)
+                ->values();
+
+            return response()->json(['filas' => $filas]);
+        }
+
+        $filas = \App\Models\StockMetros::query()
+            ->where('producto_id', $datos['producto_id'])
+            ->when(
+                ! empty($datos['color_id']),
+                fn ($q) => $q->where('producto_color_id', $datos['color_id']),
+                fn ($q) => $q->whereNull('producto_color_id'),
+            )
+            ->when(! empty($datos['almacen_id']), fn ($q) => $q->where('almacen_id', $datos['almacen_id']))
+            ->get();
+
+        return response()->json(['disponible' => round((float) $filas->sum(fn ($f) => $f->disponible()), 2)]);
+    }
+
     /** Marca (o desmarca) como preparado un corte sin QR: no se escanea, solo se confirma que ya está listo. */
     public function prepararSinQr(Request $request, OrdenVenta $ordenesVenta)
     {

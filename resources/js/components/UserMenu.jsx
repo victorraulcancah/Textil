@@ -69,18 +69,18 @@ export default function UserMenu({ compact = false, barra = false }) {
                     onClick={() => setOpen((v) => !v)}
                     aria-haspopup="menu"
                     aria-expanded={open}
-                    className="flex items-center gap-3 rounded-full border border-edge bg-white py-1 pl-1 pr-3 text-left shadow-sm transition hover:bg-primary-50"
+                    className="flex items-center gap-2 rounded-full border border-edge bg-white py-0.5 pl-0.5 pr-2.5 text-left shadow-sm transition hover:bg-primary-50"
                 >
-                    <Avatar user={user} />
+                    <Avatar user={user} size="xs" />
                     <span className="hidden min-w-0 sm:block">
-                        <span className="block max-w-[11rem] truncate text-sm font-semibold leading-tight text-gray-900">{user?.name}</span>
-                        <span className="block max-w-[11rem] truncate text-[11px] leading-tight text-gray-500">{user?.email}</span>
+                        <span className="block max-w-[11rem] truncate text-xs font-semibold leading-tight text-gray-900">{user?.name}</span>
+                        <span className="block max-w-[11rem] truncate text-[10px] leading-tight text-gray-500">{user?.email}</span>
                     </span>
-                    <span className="hidden items-center gap-1 whitespace-nowrap rounded-full bg-primary-50 px-2.5 py-1 text-xs font-semibold text-primary-700 md:inline-flex" title="Almacén (sucursal) en el que trabajas">
-                        <Warehouse className="h-3.5 w-3.5" />
+                    <span className="hidden items-center gap-1 whitespace-nowrap rounded-full bg-primary-50 px-2 py-0.5 text-[11px] font-semibold text-primary-700 md:inline-flex" title="Almacén (sucursal) en el que trabajas">
+                        <Warehouse className="h-3 w-3" />
                         {almacen}
                     </span>
-                    <ChevronDown className="h-4 w-4 shrink-0 text-gray-400" />
+                    <ChevronDown className="h-3.5 w-3.5 shrink-0 text-gray-400" />
                 </button>
 
                 {open && (

@@ -65,13 +65,13 @@ export default function AlertsBell() {
                     if (!open) load();
                 }}
                 aria-label="Alertas"
-                className="relative flex h-10 w-10 items-center justify-center rounded-full border border-edge bg-white text-warm-600 shadow-sm transition hover:bg-primary-50 hover:text-primary-700"
+                className="relative flex h-8 w-8 items-center justify-center rounded-full border border-edge bg-white text-warm-600 shadow-sm transition hover:bg-primary-50 hover:text-primary-700"
             >
-                <Bell className="h-5 w-5" />
+                <Bell className="h-4 w-4" />
                 {total > 0 && (
                     <span
                         className={cn(
-                            'absolute -right-0.5 -top-0.5 flex h-5 min-w-[20px] items-center justify-center rounded-full px-1 text-[10px] font-bold text-white',
+                            'absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[9px] font-bold text-white',
                             badgeColor,
                         )}
                     >

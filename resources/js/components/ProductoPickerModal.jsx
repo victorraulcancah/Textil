@@ -122,6 +122,13 @@ export default function ProductoPickerModal({
      * porRollos: true, compra: true }, sin cerrar el buscador.
      */
     porColor = false,
+    /**
+     * Los metros convertidos (stock por metros) que hay: [{ producto_id, producto_color_id, almacen_id, disponible }].
+     * Con ellos aparece el interruptor "Solo metros convertidos (sin QR)": la lista se queda con las telas que los tienen y
+     * se piden en metros, no en rollos. Entrega { producto, presentacion (Metro), color, cantidad (metros), porRollos: false,
+     * sinQr: true }. Solo con `porColor` en un pedido.
+     */
+    metrosConvertidos = null,
     /** La moneda de la compra, para rotular el total de la tabla de compra. */
     moneda = 'PEN',
     /** Ajuste de inventario: la tabla por color pide el costo (del catálogo), no un precio de compra. */
@@ -139,6 +146,9 @@ export default function ProductoPickerModal({
     const [cantidades, setCantidades] = useState({});
     /** Rollos escritos por color de una tela: { ['productoId:colorId']: '3' } */
     const [rollosPorColor, setRollosPorColor] = useState({});
+    /** Modo "solo sin QR": ¿está encendido?, y los metros elegidos por color: { ['productoId:colorId']: '12.5' }. */
+    const [soloSinQr, setSoloSinQr] = useState(false);
+    const [metrosSinQr, setMetrosSinQr] = useState({});
     /** La tela cuyos colores se están eligiendo (su propio modal) y lo escrito ahí, sin confirmar. */
     const [telaModal, setTelaModal] = useState(null);
     const [borrador, setBorrador] = useState({});
@@ -177,6 +187,8 @@ export default function ProductoPickerModal({
         setMarcados({});
         setCantidades({});
         setRollosPorColor({});
+        setSoloSinQr(false);
+        setMetrosSinQr({});
         setTelaModal(null);
         setBorrador({});
         setTelaCompra(null);

@@ -54,7 +54,7 @@ export default function BarraPestanas() {
             ref={lista}
             role="tablist"
             aria-label="Pestañas abiertas"
-            className="flex h-9 min-w-0 flex-1 items-end overflow-x-auto overflow-y-hidden [scrollbar-width:none]"
+            className="flex h-8 min-w-0 flex-1 items-end overflow-x-auto overflow-y-hidden [scrollbar-width:none]"
         >
             {tabs.map((tab, i) => {
                 const opcion = opcionPorBase(tab.base);
@@ -95,7 +95,7 @@ export default function BarraPestanas() {
                                   ),
                         )}
                     >
-                        {Icono && <Icono className="h-4 w-4 shrink-0" />}
+                        {Icono && <Icono className="h-3.5 w-3.5 shrink-0" />}
                         <span className="truncate">{opcion?.label ?? 'Página'}</span>
                         <button
                             type="button"

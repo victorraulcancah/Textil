@@ -129,7 +129,12 @@ export default function CrearPedido() {
         metros_por_rollo: '',
         // Una tela también se puede vender por metros ("120 m de negro"), no solo en rollos.
         porMetros: false,
+        // Por metros, del stock por metros (ya convertidos): en el almacén no se escanea QR, solo se marca preparado.
+        sinQr: false,
     });
+
+    /** Los metros convertidos (stock por metros) disponibles de la tela y color elegidos; null mientras se consulta. */
+    const [metrosSueltos, setMetrosSueltos] = useState(null);
 
     /* ------------------------------ carga ------------------------------ */
 
@@ -377,6 +382,7 @@ export default function CrearPedido() {
                 precioManual: false,
                 // Otro producto, otro color: nunca se hereda de la línea anterior.
                 producto_color_id: '',
+                sinQr: false,
             }));
             return;
         }
@@ -415,10 +421,38 @@ export default function CrearPedido() {
         );
     }, [presentacion?.id, tipoPrecioId, nueva.cantidad, nueva.porMetros]); // eslint-disable-line react-hooks/exhaustive-deps
 
+    // Los metros convertidos disponibles de la tela y color elegidos (en el almacén del pedido, si ya se eligió).
+    useEffect(() => {
+        if (!(esTelaNueva && nueva.porMetros && producto)) {
+            setMetrosSueltos(null);
+            return undefined;
+        }
+
+        let vigente = true;
+        setMetrosSueltos(null);
+        api.get('/ordenes-venta/metros-sueltos', {
+            params: {
+                producto_id: producto.id,
+                color_id: nueva.producto_color_id || undefined,
+                almacen_id: almacenId || undefined,
+            },
+        })
+            .then((res) => vigente && setMetrosSueltos(Number(res.data?.disponible) || 0))
+            .catch(() => vigente && setMetrosSueltos(0));
+
+        return () => {
+            vigente = false;
+        };
+    }, [esTelaNueva, nueva.porMetros, producto?.id, nueva.producto_color_id, almacenId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Un corte sin QR no puede pedir más de lo convertido.
+    const sobrepasaSueltos = nueva.sinQr && metrosSueltos !== null && Number(nueva.cantidad) > metrosSueltos + 0.001;
+
     const puedeAgregar =
         nueva.producto_presentacion_id &&
         Number(nueva.cantidad) > 0 &&
         Number(nueva.precio_unitario) >= 0 &&
+        !sobrepasaSueltos &&
         // Una tela: en rollos enteros (con su metraje si se pide) o en metros; en los dos, si tiene colores, el color.
         (!esTelaNueva ||
             (nueva.porMetros
@@ -496,6 +530,8 @@ export default function CrearPedido() {
                     const j = prev.findIndex(
                         (l) =>
                             l.modo !== ROLLOS &&
+                            // Un corte sin QR (de metros convertidos) es otra línea que los metros normales.
+                            Boolean(l.sin_qr) === Boolean(nueva.sinQr) &&
                             String(l.producto_presentacion_id) === String(nueva.producto_presentacion_id) &&
                             String(l.producto_color_id || '') === String(nueva.producto_color_id || ''),
                     );
@@ -517,6 +553,7 @@ export default function CrearPedido() {
                         producto: producto?.nombre,
                         color: colorElegido?.nombre ?? '',
                         modo: 'metros',
+                        sin_qr: esTelaNueva && Boolean(nueva.sinQr),
                         rollos_pedidos: '',
                         presentacion: presentacion?.nombre,
                         descripcion: nueva.descripcion.trim(),
@@ -546,6 +583,7 @@ export default function CrearPedido() {
             conMetraje: false,
             metros_por_rollo: '',
             porMetros: false,
+            sinQr: false,
         });
 
     /**
@@ -858,7 +896,9 @@ export default function CrearPedido() {
                                 value={
                                     !producto
                                         ? ''
-                                        : esTelaNueva && nueva.porMetros
+                                        : esTelaNueva && nueva.porMetros && nueva.sinQr
+                                          ? `${num(metrosSueltos ?? 0)} m convertidos`
+                                          : esTelaNueva && nueva.porMetros
                                           ? `${num(stockEnUnidad)} m`
                                           : esTelaNueva
                                             ? `${num(rollosLibres)} rollo${rollosLibres === 1 ? '' : 's'}`
@@ -878,6 +918,7 @@ export default function CrearPedido() {
                                         setNueva((prev) => ({
                                             ...prev,
                                             porMetros: id === 'metro',
+                                            sinQr: false,
                                             cantidad: '',
                                             conMetraje: false,
                                             metros_por_rollo: '',
@@ -930,12 +971,35 @@ export default function CrearPedido() {
                             />
                         </div>
 
-                        {/* Por metros: el almacén corta lo que se pide de los rollos del color. */}
+                        {/* Por metros: el almacén corta lo que se pide de los rollos del color, o de los metros ya convertidos. */}
                         {esTelaNueva && nueva.porMetros && (
-                            <p className="-mt-2 text-xs text-warm-500">
-                                {producto?.colores?.length > 0 && !nueva.producto_color_id ? 'Elige el color de la tela. ' : ''}
-                                Se piden metros sueltos: el almacén los corta de los rollos del color y se cobra lo que salga.
-                            </p>
+                            <div className="-mt-2 space-y-2">
+                                {/* Del stock por metros: en el almacén no se escanea ningún QR, solo se marca como preparado. */}
+                                <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-warm-700">
+                                    <input
+                                        type="checkbox"
+                                        checked={Boolean(nueva.sinQr)}
+                                        onChange={(e) => setNueva((prev) => ({ ...prev, sinQr: e.target.checked }))}
+                                        className="h-4 w-4 rounded border-gray-300 accent-primary-600"
+                                    />
+                                    Vender de metros convertidos (corte sin QR)
+                                </label>
+                                <p className="text-xs text-warm-500">
+                                    {producto?.colores?.length > 0 && !nueva.producto_color_id ? 'Elige el color de la tela. ' : ''}
+                                    {nueva.sinQr
+                                        ? 'Sale del stock por metros: el almacenero no escanea ningún QR, solo marca que el corte ya está preparado.'
+                                        : 'Se piden metros sueltos: el almacén los corta de los rollos del color y se cobra lo que salga.'}
+                                </p>
+                                {nueva.sinQr && metrosSueltos !== null && (
+                                    <p className={cn('text-xs font-medium', sobrepasaSueltos || metrosSueltos <= 0 ? 'text-red-600' : 'text-green-700')}>
+                                        {metrosSueltos <= 0
+                                            ? 'No hay metros convertidos de esta tela y color. Conviértelos en Stock por metros.'
+                                            : sobrepasaSueltos
+                                              ? `Solo hay ${num(metrosSueltos)} m convertidos: baja los metros o conviértelos primero.`
+                                              : `Metros convertidos disponibles: ${num(metrosSueltos)} m.`}
+                                    </p>
+                                )}
+                            </div>
                         )}
 
                         {/* Una tela: rollos enteros, o rollos de un metraje que el almacén corta si no lo tiene. */}

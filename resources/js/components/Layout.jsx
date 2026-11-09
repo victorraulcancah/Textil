@@ -58,7 +58,7 @@ function Marco({ children }) {
                     del menú) y a la derecha el usuario con su almacén y la campana de alertas. */}
                 <div
                     className={cn(
-                        'flex h-12 shrink-0 items-end gap-3 px-4 pl-16 sm:px-6 lg:px-8',
+                        'flex h-10 shrink-0 items-end gap-3 px-4 pl-16 sm:px-6 lg:px-8',
                         hayPestanas && 'bg-gray-200/70',
                     )}
                 >

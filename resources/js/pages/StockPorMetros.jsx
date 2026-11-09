@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Package, Scissors } from 'lucide-react';
+import { Camera, Package, Scissors } from 'lucide-react';
 import api, { asList } from '../lib/api';
 import { useToast } from '../lib/toast';
 import { useAlmacenPropio } from '../lib/almacenes';
+import EscanerCamara from '../components/EscanerCamara';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import PestanasStock from '../components/PestanasStock';
@@ -47,6 +48,16 @@ export default function StockPorMetros() {
     /** El rollo que corresponde al código escrito, para ver su tela, color y cuánto mide antes de convertir. */
     const [rollo, setRollo] = useState(null);
     const campoCodigo = useRef(null);
+    /** El visor de la cámara abierto: lee el QR de la etiqueta del rollo en vez de la pistola. */
+    const [camara, setCamara] = useState(false);
+
+    /** La cámara leyó una etiqueta: el código pasa al campo y el visor se cierra (es un solo rollo por conversión). */
+    const alLeerCamara = useCallback(async (leido) => {
+        setCodigo(String(leido).trim());
+        setCamara(false);
+
+        return { ok: true, texto: 'Código leído' };
+    }, []);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -209,15 +220,22 @@ export default function StockPorMetros() {
                     Convertir un rollo a metros
                 </h2>
                 <div className="flex flex-wrap items-end gap-3">
-                    <div className="w-64">
-                        <Input
-                            ref={campoCodigo}
-                            label="Código o QR del rollo"
-                            value={codigo}
-                            onChange={(e) => setCodigo(e.target.value)}
-                            placeholder="Escanea o escribe el código"
-                            autoFocus
-                        />
+                    <div className="flex items-end gap-2">
+                        <div className="w-64">
+                            <Input
+                                ref={campoCodigo}
+                                label="Código o QR del rollo"
+                                value={codigo}
+                                onChange={(e) => setCodigo(e.target.value)}
+                                placeholder="Escanea o escribe el código"
+                                autoComplete="off"
+                                autoFocus
+                            />
+                        </div>
+                        {/* La misma lectura con la cámara del celular, como en Preparación y despacho. */}
+                        <Button type="button" variant="secondary" onClick={() => setCamara(true)} title="Escanear con la cámara" aria-label="Escanear con la cámara">
+                            <Camera className="h-4 w-4" />
+                        </Button>
                     </div>
                     <div className="w-44">
                         <Input
@@ -231,7 +249,7 @@ export default function StockPorMetros() {
                         />
                     </div>
                     <div className="min-w-56 flex-1">
-                        <Input label="Observación (opcional)" value={observaciones} onChange={(e) => setObservaciones(e.target.value)} />
+                        <Input label="Observación (opcional)" value={observaciones} onChange={(e) => setObservaciones(e.target.value)} autoComplete="off" />
                     </div>
                     <Button type="submit" loading={convirtiendo} disabled={!codigo.trim()}>
                         <Scissors className="h-4 w-4" />
@@ -282,6 +300,8 @@ export default function StockPorMetros() {
 
             <h2 className="mb-2 mt-8 text-sm font-semibold text-warm-900">Últimas conversiones</h2>
             <DataTable columns={columnasHistorial} rows={historial} loading={loading} searchPlaceholder="Buscar rollo..." />
+
+            <EscanerCamara abierto={camara} onCerrar={() => setCamara(false)} onLeer={alLeerCamara} titulo="Escanear el rollo a convertir" />
         </Layout>
     );
 }

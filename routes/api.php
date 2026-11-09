@@ -248,6 +248,8 @@ Route::middleware('auth:api')->group(function () {
     Route::get('ordenes-venta', [OrdenVentaController::class, 'index']);
     // Antes de {ordenesVenta}: si no, "almaceneros" se tomaría por un id.
     Route::get('ordenes-venta/almaceneros', [OrdenVentaController::class, 'almaceneros']);
+    // Metros convertidos disponibles de una tela y color (para marcar un corte "sin QR" al armar el pedido).
+    Route::get('ordenes-venta/metros-sueltos', [OrdenVentaController::class, 'metrosSueltos']);
     Route::get('ordenes-venta/motivos-ajuste', [OrdenVentaController::class, 'motivosAjuste']);
     Route::post('ordenes-venta/motivos-ajuste/nuevo', [OrdenVentaController::class, 'crearMotivoAjuste']);
     Route::post('ordenes-venta', [OrdenVentaController::class, 'store']);

@@ -5,6 +5,7 @@ import CreditoMagus from '../components/CreditoMagus';
 import CintaMetrica from '../components/CintaMetrica';
 import { useAuth } from '../lib/auth';
 import { useBranding } from '../lib/branding';
+import LogoRecortado from '../components/LogoRecortado';
 
 const REMEMBER_KEY = 'brava_remember';
 
@@ -150,11 +151,16 @@ export default function Login() {
 
                 <div className="flex flex-1 flex-col items-center justify-center px-5 py-10 sm:px-8 lg:px-12">
                     <div className="w-full max-w-sm">
-                        <img
-                            src={branding?.logo_url ?? '/img/logo-telas.svg'}
-                            alt={branding?.nombre_comercial ?? 'Logo'}
-                            className="h-24 w-auto max-w-[16rem] object-contain object-left"
-                        />
+                        {/* El logo de la empresa en uso, dentro de un marco circular: cualquier forma de logo (ancho, alto o
+                            cuadrado) queda centrada y con aire dentro del círculo. */}
+                        <div className="mx-auto flex h-40 w-40 items-center justify-center overflow-hidden rounded-full border-2 border-primary-600 bg-white p-6 shadow-md ring-4 ring-primary-100">
+                            {/* Tamaño fijo: el logo se recorta a lo que se ve y llena el marco, tenga el margen que tenga. */}
+                            <LogoRecortado
+                                src={branding?.logo_url ?? '/img/logo-telas.svg'}
+                                alt={branding?.nombre_comercial ?? 'Logo'}
+                                className="h-full w-full object-contain"
+                            />
+                        </div>
 
                         <h1 className="mt-8 text-2xl font-semibold tracking-tight text-warm-900">Ingresa a tu cuenta</h1>
                         <p className="mt-1.5 text-sm text-warm-500">Usa el correo y la contraseña de tu usuario del sistema.</p>

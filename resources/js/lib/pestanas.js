@@ -2,7 +2,8 @@ import { useSyncExternalStore } from 'react';
 import { navigation } from '../config/navigation';
 
 /**
- * Las pestañas de submódulos: con clic derecho en una opción del menú se abre en una pestaña nueva, como en un navegador.
+ * Las pestañas de submódulos, como en un navegador: cada vista que se abre tiene la suya (se crea sola al entrar) y con clic
+ * derecho en una opción del menú se puede abrir otra pestaña de la misma vista.
  *
  * Cada pestaña guarda la dirección en la que está (`path`, con su ?consulta) y la opción del menú a la que pertenece
  * (`base`): de ahí salen su título, su icono y su color. Cada página dibuja su propio Layout, así que el estado vive aquí,
@@ -97,11 +98,11 @@ export function activarPestana(id) {
 
 /**
  * Cierra una pestaña. Devuelve la dirección a la que hay que ir si era la activa (la de al lado), o null si no hay que
- * moverse. Al cerrar la última, la barra desaparece y la página queda como está.
+ * moverse. La última no se cierra: siempre queda la pestaña de la vista en la que se está.
  */
 export function cerrarPestana(id) {
     const i = estado.tabs.findIndex((t) => t.id === id);
-    if (i < 0) return null;
+    if (i < 0 || estado.tabs.length <= 1) return null;
 
     const tabs = estado.tabs.filter((t) => t.id !== id);
     if (estado.activa !== id) {
@@ -117,16 +118,37 @@ export function cerrarPestana(id) {
 }
 
 /**
- * La pestaña activa sigue a la página: si se navega dentro de ella (otra opción del menú, bajar a los colores de una
- * tela…), cambia su dirección y, si es otra opción del menú, su título e icono.
+ * Cada vista que se abre tiene su pestaña, sin que nadie la pida: al entrar a una opción del menú se crea su pestaña (o, si ya
+ * la tenía, se pasa a ella). Dentro de la misma opción —bajar a los colores de una tela, editar un pedido…— la pestaña solo
+ * cambia de dirección.
  */
 export function registrarRuta(ruta) {
-    const tab = estado.tabs.find((t) => t.id === estado.activa);
-    if (!tab || tab.path === ruta) return;
+    const base = baseDe(ruta);
+    const activa = estado.tabs.find((t) => t.id === estado.activa);
 
-    const base = baseDe(ruta) ?? tab.base;
-    cambiar({
-        ...estado,
-        tabs: estado.tabs.map((t) => (t.id === tab.id ? { ...t, path: ruta, base } : t)),
-    });
+    // Sigue en el mismo submódulo (o en una pantalla que no está en el menú): la pestaña activa solo cambia de dirección.
+    if (activa && (base === null || activa.base === base)) {
+        if (activa.path !== ruta) {
+            cambiar({ ...estado, tabs: estado.tabs.map((t) => (t.id === activa.id ? { ...t, path: ruta } : t)) });
+        }
+
+        return;
+    }
+
+    // Una pantalla que no es de ningún submódulo y sin pestaña a la que pertenecer: nada que abrir.
+    if (base === null) return;
+
+    // Otro submódulo: si ya tiene su pestaña se pasa a ella; si no, se abre una nueva.
+    const existente = estado.tabs.find((t) => t.base === base);
+    if (existente) {
+        cambiar({
+            tabs: estado.tabs.map((t) => (t.id === existente.id ? { ...t, path: ruta } : t)),
+            activa: existente.id,
+        });
+
+        return;
+    }
+
+    const nueva = { id: nuevoId(), path: ruta, base };
+    cambiar({ tabs: [...estado.tabs, nueva], activa: nueva.id });
 }

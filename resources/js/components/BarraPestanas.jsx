@@ -16,9 +16,9 @@ const COLORES = [
 ];
 
 /**
- * Las pestañas de los submódulos abiertos, en la barra de arriba (a la izquierda del usuario y las alertas). Solo se ven si
- * hay alguna: se abren con clic derecho en el menú lateral y se cierran con su X (o con el botón del medio). La activa se
- * une con el contenido de abajo; cada una recuerda la dirección en la que quedó.
+ * Las pestañas de los submódulos abiertos, en la barra de arriba (a la izquierda del usuario y las alertas). Cada vista que
+ * se abre tiene la suya, creada sola al entrar; con clic derecho en el menú lateral se abre otra de la misma vista. Se cierran
+ * con su X (o con el botón del medio). La activa se une con el contenido de abajo; cada una recuerda la dirección en la que quedó.
  */
 export default function BarraPestanas() {
     const { tabs, activa } = usePestanas();
@@ -27,7 +27,8 @@ export default function BarraPestanas() {
     const ruta = `${pathname}${search}`;
     const lista = useRef(null);
 
-    // La pestaña activa acompaña a la página en la que se está.
+    // Cada vista tiene su pestaña: al entrar a una se crea sola (o se pasa a la que ya tenía); dentro de la misma, la activa
+    // solo cambia de dirección.
     useEffect(() => {
         registrarRuta(ruta);
     }, [ruta]);
@@ -97,21 +98,24 @@ export default function BarraPestanas() {
                     >
                         {Icono && <Icono className="h-3.5 w-3.5 shrink-0" />}
                         <span className="truncate">{opcion?.label ?? 'Página'}</span>
-                        <button
-                            type="button"
-                            aria-label={`Cerrar ${opcion?.label ?? 'pestaña'}`}
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                ir(cerrarPestana(tab.id));
-                            }}
-                            className={cn(
-                                'ml-auto shrink-0 rounded p-0.5 text-gray-400 transition hover:bg-black/10 hover:text-gray-700',
-                                // En las demás pestañas la X aparece al pasar el cursor, y cierra de frente.
-                                !esActiva && 'opacity-0 focus:opacity-100 group-hover:opacity-100',
-                            )}
-                        >
-                            <X className="h-3.5 w-3.5" />
-                        </button>
+                        {/* La última pestaña no se cierra: es la de la vista en la que se está. */}
+                        {tabs.length > 1 && (
+                            <button
+                                type="button"
+                                aria-label={`Cerrar ${opcion?.label ?? 'pestaña'}`}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    ir(cerrarPestana(tab.id));
+                                }}
+                                className={cn(
+                                    'ml-auto shrink-0 rounded p-0.5 text-gray-400 transition hover:bg-black/10 hover:text-gray-700',
+                                    // En las demás pestañas la X aparece al pasar el cursor, y cierra de frente.
+                                    !esActiva && 'opacity-0 focus:opacity-100 group-hover:opacity-100',
+                                )}
+                            >
+                                <X className="h-3.5 w-3.5" />
+                            </button>
+                        )}
                     </div>
                 );
             })}

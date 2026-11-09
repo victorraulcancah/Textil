@@ -106,7 +106,8 @@ export default function BarraPestanas() {
                             }}
                             className={cn(
                                 'ml-auto shrink-0 rounded p-0.5 text-gray-400 transition hover:bg-black/10 hover:text-gray-700',
-                                !esActiva && 'hidden',
+                                // En las demás pestañas la X aparece al pasar el cursor, y cierra de frente.
+                                !esActiva && 'opacity-0 focus:opacity-100 group-hover:opacity-100',
                             )}
                         >
                             <X className="h-3.5 w-3.5" />

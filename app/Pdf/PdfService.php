@@ -33,7 +33,7 @@ class PdfService
         }
 
         $datos = $documento->datos($id) + $extra + [
-            'empresa' => Empresa::query()->where('activa', true)->first() ?? Empresa::first(),
+            'empresa' => Empresa::enUso(),
             'formato' => $formato,
             'pieLegal' => config('pdf.pie_legal'),
             'generadoEn' => now(),
@@ -53,7 +53,7 @@ class PdfService
     public function generarVista(string $vista, array $datos, string $formato = 'a4')
     {
         $datos += [
-            'empresa' => Empresa::query()->where('activa', true)->first() ?? Empresa::first(),
+            'empresa' => Empresa::enUso(),
             'formato' => $formato,
             'pieLegal' => config('pdf.pie_legal'),
             'generadoEn' => now(),

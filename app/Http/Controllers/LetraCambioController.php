@@ -59,7 +59,7 @@ class LetraCambioController extends Controller
         $cuenta = CuentaPorCobrar::with('cliente', 'notaVenta:id,serie,numero')->findOrFail($request->integer('cuenta_id'));
         AlmacenAcceso::exigir($cuenta->almacen_id);
         $cliente = $cuenta->cliente;
-        $empresa = Empresa::query()->where('activa', true)->first() ?? Empresa::first();
+        $empresa = Empresa::enUso();
 
         // Lo que ya se emitió en letras de esta cuenta no se puede volver a girar.
         $enLetras = (float) LetraCambio::where('cuenta_por_cobrar_id', $cuenta->id)->where('estado', 'emitida')->sum('saldo');

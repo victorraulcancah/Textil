@@ -24,11 +24,18 @@ class EmpresaController extends Controller
         $data = $request->validated();
         unset($data['logo']);
 
+        // Solo una empresa está en uso: la primera que se crea lo queda sola; las demás, si se marca expresamente.
+        $data['activa'] = ! empty($data['activa']) || ! Empresa::exists();
+
         $empresa = Empresa::create($data);
 
         if ($request->hasFile('logo')) {
             $empresa->logo = $this->guardarLogo($request->file('logo'));
             $empresa->save();
+        }
+
+        if ($empresa->activa) {
+            $empresa->marcarEnUso();
         }
 
         return response()->json($empresa, 201);
@@ -56,12 +63,33 @@ class EmpresaController extends Controller
             $empresa->save();
         }
 
-        return response()->json($empresa->load('users'));
+        // Marcarla pasa a ser la única en uso. Desmarcarla no deja al sistema sin empresa: para cambiar, se marca otra.
+        if ($empresa->activa) {
+            $empresa->marcarEnUso();
+        } elseif (! Empresa::where('activa', true)->exists()) {
+            $empresa->update(['activa' => true]);
+        }
+
+        return response()->json($empresa->fresh()->load('users'));
+    }
+
+    /** Pone esta empresa en uso: su logo y sus datos salen en el menú, el login, el favicon y los PDF. */
+    public function usar(int $id): JsonResponse
+    {
+        $empresa = Empresa::findOrFail($id);
+        $empresa->marcarEnUso();
+
+        return response()->json($empresa->fresh()->load('users'));
     }
 
     public function destroy(int $id): JsonResponse
     {
         Empresa::findOrFail($id)->delete();
+
+        // Si se borró la que estaba en uso, otra toma su lugar.
+        if (! Empresa::where('activa', true)->exists()) {
+            Empresa::orderBy('id')->first()?->update(['activa' => true]);
+        }
 
         return response()->json(null, 204);
     }
@@ -84,7 +112,7 @@ class EmpresaController extends Controller
      */
     public function branding(): JsonResponse
     {
-        $empresa = Empresa::activa() ?? Empresa::first();
+        $empresa = Empresa::enUso();
 
         return response()->json([
             'nombre_comercial' => $empresa?->nombre_comercial,

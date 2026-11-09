@@ -26,7 +26,7 @@ class MiCajaReporteController extends Controller
 
         $pdf = app(PdfService::class)->generarVista('pdf.reportes.caja-dia', [
             'r' => $r,
-            'empresa' => Empresa::query()->where('activa', true)->first() ?? Empresa::first(),
+            'empresa' => Empresa::enUso(),
         ], 'a4h');
 
         $archivo = 'caja-'.($r['fecha'] ?? now()->format('Y-m-d')).($r['turnos'] === 1 && $r['fecha'] ? '-pl'.$r['apertura']->id : '').'.pdf';

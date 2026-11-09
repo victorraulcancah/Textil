@@ -4,7 +4,7 @@ import { Button, Input, Alert } from '../components/ui';
 import CreditoMagus from '../components/CreditoMagus';
 import CintaMetrica from '../components/CintaMetrica';
 import { useAuth } from '../lib/auth';
-import api from '../lib/api';
+import { useBranding } from '../lib/branding';
 
 const REMEMBER_KEY = 'brava_remember';
 
@@ -48,12 +48,7 @@ export default function Login() {
     const navigate = useNavigate();
     const location = useLocation();
 
-    const [branding, setBranding] = useState(null);
-    useEffect(() => {
-        api.get('/branding')
-            .then((res) => setBranding(res.data))
-            .catch(() => {});
-    }, []);
+    const branding = useBranding();
 
     const [form, setForm] = useState(() => {
         const saved = localStorage.getItem(REMEMBER_KEY);
@@ -158,7 +153,7 @@ export default function Login() {
                         <img
                             src={branding?.logo_url ?? '/img/logo-telas.svg'}
                             alt={branding?.nombre_comercial ?? 'Logo'}
-                            className="h-16 w-auto object-contain"
+                            className="h-24 w-auto max-w-[16rem] object-contain object-left"
                         />
 
                         <h1 className="mt-8 text-2xl font-semibold tracking-tight text-warm-900">Ingresa a tu cuenta</h1>

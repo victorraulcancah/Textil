@@ -94,7 +94,7 @@ class MovimientoCajaReporteController extends Controller
 
         $pdf = app(PdfService::class)->generarVista('pdf.reportes.movimientos-caja', [
             'reporte' => $reporte,
-            'empresa' => Empresa::query()->where('activa', true)->first() ?? Empresa::first(),
+            'empresa' => Empresa::enUso(),
         ], 'a4h');
 
         $archivo = 'movimientos-caja-'.now()->format('Y-m-d').'.pdf';

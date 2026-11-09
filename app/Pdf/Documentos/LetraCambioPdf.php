@@ -34,7 +34,7 @@ class LetraCambioPdf implements DocumentoPdf
     public function datos(int $id): array
     {
         $letra = LetraCambio::with('cliente:id,nombre')->findOrFail($id);
-        $empresa = Empresa::query()->where('activa', true)->first() ?? Empresa::first();
+        $empresa = Empresa::enUso();
         $dolares = $letra->moneda === 'USD';
         $importe = (float) $letra->importe;
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Building2, Edit, Mail, Phone, Trash2 } from 'lucide-react';
+import { Building2, Edit, Mail, Phone, Star, Trash2 } from 'lucide-react';
 import api, { asList } from '../lib/api';
+import { refrescarBranding } from '../lib/branding';
 import { useToast } from '../lib/toast';
 import ConsultarDocumento from '../components/ConsultarDocumento';
 import Layout from '../components/Layout';
@@ -19,7 +20,8 @@ const emptyForm = {
     telefono: '',
     email: '',
     web: '',
-    activa: true,
+    // Solo una empresa está en uso; al crear otra no lo es salvo que se marque.
+    activa: false,
 };
 
 export default function Empresa() {
@@ -109,6 +111,8 @@ export default function Empresa() {
             }
             setModalOpen(false);
             await load();
+            // El menú y el login muestran el logo de la empresa en uso: se actualizan sin recargar.
+            refrescarBranding();
         } catch (err) {
             if (err.response?.status === 422) {
                 const validation = err.response.data?.errors ?? {};
@@ -123,6 +127,22 @@ export default function Empresa() {
         }
     };
 
+    /** Pone esta empresa en uso: su logo y sus datos pasan al menú, al login y a los PDF. */
+    const [poniendoEnUso, setPoniendoEnUso] = useState(null);
+    const usarEmpresa = async (empresa) => {
+        setPoniendoEnUso(empresa.id);
+        try {
+            await api.post(`/empresas/${empresa.id}/usar`);
+            toast.success(`Ahora se usa "${empresa.nombre_comercial || empresa.razon_social}".`);
+            await load();
+            refrescarBranding();
+        } catch {
+            toast.error('No se pudo cambiar la empresa en uso.');
+        } finally {
+            setPoniendoEnUso(null);
+        }
+    };
+
     const handleDelete = async () => {
         setDeleting(true);
         try {
@@ -130,6 +150,7 @@ export default function Empresa() {
             toast.success('Empresa eliminada.');
             setDeleteTarget(null);
             await load();
+            refrescarBranding();
         } catch {
             toast.error('No se pudo eliminar la empresa.');
         } finally {
@@ -187,9 +208,20 @@ export default function Empresa() {
         },
         {
             key: 'activa',
-            label: 'Estado',
+            label: 'Uso',
             render: (row) =>
-                row.activa ? <Badge variant="green">Activa</Badge> : <Badge variant="red">Inactiva</Badge>,
+                row.activa ? (
+                    <Badge variant="green">En uso</Badge>
+                ) : (
+                    <button
+                        type="button"
+                        disabled={poniendoEnUso === row.id}
+                        onClick={() => usarEmpresa(row)}
+                        className="text-xs font-medium text-primary-600 underline-offset-2 hover:underline disabled:opacity-50"
+                    >
+                        Usar esta empresa
+                    </button>
+                ),
         },
         {
             type: 'actions',
@@ -197,6 +229,17 @@ export default function Empresa() {
             label: 'Acciones',
             actions: (row) => (
                 <>
+                    {!row.activa && (
+                        <button
+                            aria-label="Usar esta empresa"
+                            title="Usar esta empresa: su logo y datos salen en el menú, el login y los PDF"
+                            disabled={poniendoEnUso === row.id}
+                            onClick={() => usarEmpresa(row)}
+                            className="rounded-md p-1.5 text-amber-500 transition hover:bg-amber-50 hover:text-amber-600 disabled:opacity-50"
+                        >
+                            <Star className="h-4 w-4" />
+                        </button>
+                    )}
                     <button
                         aria-label="Editar"
                         onClick={() => openEdit(row)}
@@ -225,6 +268,14 @@ export default function Empresa() {
             />
 
             {error && <Alert variant="error" className="mb-4">{error}</Alert>}
+
+            {/* Con más de una empresa, solo una se usa: la marcada "En uso". */}
+            {empresas.length > 1 && (
+                <Alert variant="info" className="mb-4">
+                    Solo una empresa está <strong>en uso</strong>: su logo y sus datos salen en el menú lateral, el login y todos los PDF.
+                    {' '}Para cambiarla, usa <strong>«Usar esta empresa»</strong> en la otra.
+                </Alert>
+            )}
 
             <DataTable
                 columns={columns}
@@ -281,7 +332,7 @@ export default function Empresa() {
                     <Input label="Dirección" value={form.direccion} onChange={(e) => field('direccion', e.target.value)} error={formErrors.direccion} />
                     <div>
                         <label className="mb-1 block text-sm font-medium text-gray-700">
-                            Logo (para el login y el sidebar)
+                            Logo (menú lateral, login y PDF cuando esta empresa está en uso)
                         </label>
                         {editing?.logo_url && !logoFile && (
                             <img
@@ -307,7 +358,7 @@ export default function Empresa() {
                             onChange={(e) => field('activa', e.target.checked)}
                             className="h-4 w-4 rounded border-gray-300 accent-primary-600"
                         />
-                        Empresa activa
+                        Usar esta empresa (las demás dejan de estar en uso)
                     </label>
                 </form>
             </Modal>

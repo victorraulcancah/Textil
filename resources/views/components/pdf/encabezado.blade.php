@@ -4,7 +4,7 @@
     // Logo subido por la empresa (storage/app/public), ya con tamaño calculado
     // para dompdf. Sin logo, la cabecera muestra el nombre comercial como marca
     // de texto: no hay logo del sistema.
-    $logo = $empresa?->logoPdf(145, 54);
+    $logo = $empresa?->logoPdf(165, 76);
     $nombreEmpresa = $empresa->razon_social ?? $empresa->nombre_comercial ?? 'Mi Empresa';
     $marcaTexto = $empresa->nombre_comercial ?? $nombreEmpresa;
 @endphp
@@ -12,7 +12,7 @@
 {{-- Cabecera A4: logo | empresa (centrado) | recuadro RUC/tipo/número --}}
 <table style="margin-bottom: 6px;">
     <tr>
-        <td style="width: 150px; vertical-align: middle;">
+        <td style="width: 170px; vertical-align: middle;">
             @if ($logo)
                 <img src="{{ $logo['ruta'] }}" width="{{ $logo['ancho'] }}" height="{{ $logo['alto'] }}" style="width: {{ $logo['ancho'] }}px; height: {{ $logo['alto'] }}px;">
             @else

@@ -20,7 +20,7 @@ class PurchaseIngles
     public static function armar($orden, string $campoPrecio, string $moneda, ?string $contenedor, $fechaAcuerdo, $fechaDocumento): array
     {
         $proveedor = $orden->proveedor;
-        $empresa = Empresa::query()->where('activa', true)->first() ?? Empresa::first();
+        $empresa = Empresa::enUso();
         $simbolo = $moneda === 'USD' ? '$' : 'S/';
 
         $mayus = fn ($v) => mb_strtoupper(trim((string) $v));

@@ -89,7 +89,7 @@ class NotaVentaReporteController extends Controller
 
         $pdf = app(PdfService::class)->generarVista('pdf.reportes.proformas', [
             'reporte' => $reporte,
-            'empresa' => Empresa::query()->where('activa', true)->first() ?? Empresa::first(),
+            'empresa' => Empresa::enUso(),
         ], 'a4h');
 
         $archivo = 'proformas-'.now()->format('Y-m-d').'.pdf';

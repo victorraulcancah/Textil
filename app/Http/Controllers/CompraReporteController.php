@@ -96,7 +96,7 @@ class CompraReporteController extends Controller
 
         $pdf = app(PdfService::class)->generarVista('pdf.reportes.compras', [
             'reporte' => $reporte,
-            'empresa' => Empresa::query()->where('activa', true)->first() ?? Empresa::first(),
+            'empresa' => Empresa::enUso(),
         ], 'a4h');
 
         $archivo = 'compras-'.now()->format('Y-m-d').'.pdf';

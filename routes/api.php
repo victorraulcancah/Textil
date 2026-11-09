@@ -360,6 +360,8 @@ Route::post('movimientos-caja', [MovimientoCajaController::class, 'store']);
     Route::delete('cuentas-por-pagar/pagos/{pago}', [CuentaPorPagarController::class, 'anularPago']);
 
     // Gestión
+    // Poner una empresa en uso: es la única cuyo logo y datos salen en el menú, el login y los PDF.
+    Route::post('empresas/{id}/usar', [EmpresaController::class, 'usar']);
     Route::apiResource('empresas', EmpresaController::class);
     // Fuera del árbol de permisos a propósito: es un picker liviano (nombre e
     // id nomás), no la gestión de usuarios. Se llama distinto a "users" para

@@ -379,7 +379,12 @@ return [
                     ],
                 ],
                 'usuarios' => ['label' => 'Usuarios', 'apis' => ['users']],
-                'empresa' => ['label' => 'Empresa', 'apis' => ['empresas']],
+                'empresa' => [
+                    'label' => 'Empresa',
+                    'apis' => ['empresas'],
+                    // Elegir cuál empresa se usa es cambiar una existente, no crear otra.
+                    'patrones' => ['empresas/*/usar' => 'editar'],
+                ],
                 'auditoria' => ['label' => 'Auditoría', 'apis' => ['auditorias'], 'acciones' => ['ver']],
             ],
         ],

@@ -3,7 +3,7 @@
 @php
     // Logo subido por la empresa, con tamaño ya calculado para dompdf.
     // Sin logo subido se muestra el nombre comercial como marca de texto.
-    $logo = $empresa?->logoPdf(135, 50);
+    $logo = $empresa?->logoPdf(150, 66);
 @endphp
 
 @if ($formato === 'ticket')
@@ -19,7 +19,7 @@
 @else
     <table>
         <tr>
-            <td style="width: 140px; vertical-align: top;">
+            <td style="width: 155px; vertical-align: top;">
                 @if ($logo)
                     <img src="{{ $logo['ruta'] }}" width="{{ $logo['ancho'] }}" height="{{ $logo['alto'] }}" style="width: {{ $logo['ancho'] }}px; height: {{ $logo['alto'] }}px;">
                 @else

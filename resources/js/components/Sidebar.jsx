@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { ChevronDown, ChevronsLeft, ChevronsRight, Menu, X } from 'lucide-react';
 import { navigation } from '../config/navigation';
-import api from '../lib/api';
+import { useBranding } from '../lib/branding';
 import { useAuth } from '../lib/auth';
 import { abrirPestana } from '../lib/pestanas';
 import { cn } from './ui';
@@ -119,12 +119,8 @@ export default function Sidebar({ collapsed = false, onToggleCollapse }) {
         [pathname],
     );
 
-    const [branding, setBranding] = useState(null);
-    useEffect(() => {
-        api.get('/branding')
-            .then((res) => setBranding(res.data))
-            .catch(() => {});
-    }, []);
+    // El logo es el de la empresa en uso: cambia solo cuando en Empresa se pone otra.
+    const branding = useBranding();
 
     const [collapsedGroups, setCollapsedGroups] = useState(initGroups);
     const [mobileOpen, setMobileOpen] = useState(false);
@@ -245,7 +241,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse }) {
                             <img
                                 src={branding?.logo_url ?? '/img/logo-telas.svg'}
                                 alt={branding?.nombre_comercial ?? 'Logo'}
-                                className="h-9 w-auto max-w-[8.5rem] object-contain"
+                                className="h-10 w-auto max-w-[9rem] object-contain"
                             />
                             <div className="flex items-center gap-1">
                                 <button

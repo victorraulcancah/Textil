@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from './lib/auth';
 import { ToastProvider } from './lib/toast';
 import ProtectedRoute from './components/ProtectedRoute';
 import AccesoDenegado from './components/AccesoDenegado';
+import { MarcoPersistente } from './components/Layout';
 import RutaProtegida, { pantallaInicial } from './components/RutaProtegida';
 import { Spinner } from './components/ui';
 import Login from './pages/Login';
@@ -182,28 +183,23 @@ createRoot(document.getElementById('root')).render(
                     <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><Spinner size="lg" className="text-primary-600" /></div>}>
                     <Routes>
                     <Route path="/login" element={<Login />} />
-                    {routes.map(({ path, element }) => (
-                        <Route
-                            key={path}
-                            path={path}
-                            element={
-                                <ProtectedRoute>
-                                    <RutaProtegida>{element}</RutaProtegida>
-                                </ProtectedRoute>
-                            }
-                        />
-                    ))}
+                    {/* El marco (menú lateral y barra de arriba) se monta una sola vez para todas las pantallas: al cambiar
+                        de página o de pestaña el menú no se mueve, solo cambia el contenido. */}
+                    <Route
+                        element={
+                            <ProtectedRoute>
+                                <MarcoPersistente />
+                            </ProtectedRoute>
+                        }
+                    >
+                        {routes.map(({ path, element }) => (
+                            <Route key={path} path={path} element={<RutaProtegida>{element}</RutaProtegida>} />
+                        ))}
                         {/* Rutas del menú aún sin página: muestran "En construcción"
                             (con sidebar) en vez de botar al login. Si el usuario no
                             está autenticado, ProtectedRoute lo manda a /login. */}
-                        <Route
-                            path="*"
-                            element={
-                                <ProtectedRoute>
-                                    <EnConstruccion />
-                                </ProtectedRoute>
-                            }
-                        />
+                        <Route path="*" element={<EnConstruccion />} />
+                    </Route>
                     </Routes>
                     </Suspense>
                 </AuthProvider>

@@ -54,7 +54,7 @@ export default function BarraPestanas() {
             ref={lista}
             role="tablist"
             aria-label="Pestañas abiertas"
-            className="flex h-10 min-w-0 flex-1 items-end overflow-x-auto overflow-y-hidden [scrollbar-width:none]"
+            className="flex h-9 min-w-0 flex-1 items-end overflow-x-auto overflow-y-hidden [scrollbar-width:none]"
         >
             {tabs.map((tab, i) => {
                 const opcion = opcionPorBase(tab.base);

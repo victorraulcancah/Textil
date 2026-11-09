@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { Suspense, createContext, useContext, useState } from 'react';
+import { Outlet } from 'react-router-dom';
 import AlertsBell from './AlertsBell';
 import BarraPestanas from './BarraPestanas';
 import Sidebar from './Sidebar';
@@ -6,11 +7,17 @@ import UserMenu from './UserMenu';
 import SeleccionAlmacen from './SeleccionAlmacen';
 import { useAlmacenPropio } from '../lib/almacenes';
 import { usePestanas } from '../lib/pestanas';
-import { cn } from './ui';
+import { Spinner, cn } from './ui';
 
 const COLLAPSE_STORAGE = 'sidebar_collapsed';
 
-export default function Layout({ children }) {
+/** ¿Ya está puesto el marco de la aplicación (menú y barra de arriba) por encima de la página? */
+const EnMarco = createContext(false);
+
+/**
+ * El marco de la aplicación: el menú lateral, la barra de arriba (pestañas, usuario y alertas) y el contenido.
+ */
+function Marco({ children }) {
     const { superAdmin } = useAlmacenPropio();
     const hayPestanas = usePestanas().tabs.length > 0;
     const [collapsed, setCollapsed] = useState(() => {
@@ -51,7 +58,7 @@ export default function Layout({ children }) {
                     del menú) y a la derecha el usuario con su almacén y la campana de alertas. */}
                 <div
                     className={cn(
-                        'flex h-14 shrink-0 items-end gap-3 px-4 pl-16 sm:px-6 lg:px-8',
+                        'flex h-12 shrink-0 items-end gap-3 px-4 pl-16 sm:px-6 lg:px-8',
                         hayPestanas && 'bg-gray-200/70',
                     )}
                 >
@@ -65,4 +72,37 @@ export default function Layout({ children }) {
             </div>
         </div>
     );
+}
+
+/**
+ * El marco que no se desmonta al cambiar de página: lo usan las rutas (en app.jsx) para que el menú lateral y la barra de
+ * pestañas se queden quietos —con su desplazamiento y sus grupos abiertos— y solo cambie el contenido de abajo.
+ */
+export function MarcoPersistente() {
+    return (
+        <EnMarco.Provider value>
+            <Marco>
+                {/* Mientras baja la página, el indicador va solo en el contenido: el menú no parpadea. */}
+                <Suspense
+                    fallback={
+                        <div className="flex items-center justify-center py-24">
+                            <Spinner size="lg" className="text-primary-600" />
+                        </div>
+                    }
+                >
+                    <Outlet />
+                </Suspense>
+            </Marco>
+        </EnMarco.Provider>
+    );
+}
+
+/**
+ * El Layout de cada página. Dentro del marco persistente solo deja pasar su contenido (el marco ya está); fuera de él, se
+ * dibuja completo como siempre.
+ */
+export default function Layout({ children }) {
+    const enMarco = useContext(EnMarco);
+
+    return enMarco ? <>{children}</> : <Marco>{children}</Marco>;
 }

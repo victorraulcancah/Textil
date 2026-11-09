@@ -18,7 +18,7 @@ function Avatar({ user, size = 'md' }) {
         <div
             className={cn(
                 'flex shrink-0 items-center justify-center rounded-full bg-primary-600 font-semibold text-white',
-                size === 'md' ? 'h-9 w-9 text-xs' : 'h-8 w-8 text-[10px]',
+                size === 'md' ? 'h-9 w-9 text-xs' : size === 'xs' ? 'h-7 w-7 text-[10px]' : 'h-8 w-8 text-[10px]',
             )}
         >
             {initials}

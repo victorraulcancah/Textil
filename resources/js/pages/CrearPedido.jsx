@@ -135,6 +135,8 @@ export default function CrearPedido() {
 
     /** Los metros convertidos (stock por metros) disponibles de la tela y color elegidos; null mientras se consulta. */
     const [metrosSueltos, setMetrosSueltos] = useState(null);
+    /** Todos los saldos de metros convertidos con metros libres (del almacén del pedido, si ya se eligió): para el buscador. */
+    const [metrosConvertidos, setMetrosConvertidos] = useState(null);
 
     /* ------------------------------ carga ------------------------------ */
 
@@ -421,6 +423,18 @@ export default function CrearPedido() {
         );
     }, [presentacion?.id, tipoPrecioId, nueva.cantidad, nueva.porMetros]); // eslint-disable-line react-hooks/exhaustive-deps
 
+    // Los metros convertidos de todas las telas, para el interruptor "solo sin QR" del buscador de productos.
+    useEffect(() => {
+        let vigente = true;
+        api.get('/ordenes-venta/metros-sueltos', { params: { almacen_id: almacenId || undefined } })
+            .then((res) => vigente && setMetrosConvertidos(res.data?.filas ?? []))
+            .catch(() => vigente && setMetrosConvertidos(null));
+
+        return () => {
+            vigente = false;
+        };
+    }, [almacenId]);
+
     // Los metros convertidos disponibles de la tela y color elegidos (en el almacén del pedido, si ya se eligió).
     useEffect(() => {
         if (!(esTelaNueva && nueva.porMetros && producto)) {
@@ -597,7 +611,7 @@ export default function CrearPedido() {
         setLineas((prev) => {
             let next = [...prev];
 
-            utiles.forEach(({ producto, presentacion, cantidad, color, porRollos }) => {
+            utiles.forEach(({ producto, presentacion, cantidad, color, porRollos, sinQr }) => {
                 // Una tela marcada por color: rollos enteros al precio del metro.
                 if (porRollos) {
                     next = conRollos(next, {
@@ -614,6 +628,8 @@ export default function CrearPedido() {
                 const i = next.findIndex(
                     (l) =>
                         l.modo !== ROLLOS &&
+                        // Un corte sin QR (de metros convertidos) es otra línea que los metros normales.
+                        Boolean(l.sin_qr) === Boolean(sinQr) &&
                         String(l.producto_presentacion_id) === String(presentacion.id) &&
                         String(l.producto_color_id || '') === String(color?.id ?? ''),
                 );
@@ -636,6 +652,7 @@ export default function CrearPedido() {
                     producto: producto.nombre,
                     color: color?.nombre ?? '',
                     modo: 'metros',
+                    sin_qr: Boolean(sinQr),
                     rollos_pedidos: '',
                     presentacion: presentacion.nombre,
                     descripcion: '',
@@ -1524,8 +1541,9 @@ export default function CrearPedido() {
                 onSelect={agregarDesdePicker}
                 initialQuery={picker.query}
                 multiple
-                // Una tela se elige por color y solo en rollos.
+                // Una tela se elige por color y solo en rollos (o, con el interruptor "sin QR", en metros convertidos).
                 porColor
+                metrosConvertidos={metrosConvertidos}
                 productos={productos}
                 stockPorProducto={stockPorProducto}
                 unidadPreferida={unidadPreferida}

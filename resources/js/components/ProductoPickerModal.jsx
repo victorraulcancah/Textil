@@ -295,6 +295,20 @@ export default function ProductoPickerModal({
     );
     const esTela = (producto) => modoTela && Boolean(presentacionMetro(producto));
 
+    /** "Solo sin QR" encendido (y hay con qué): la lista son las telas con metros convertidos, y se piden en metros. */
+    const modoSinQr = soloSinQr && modoTela && porColor !== 'compra' && Array.isArray(metrosConvertidos);
+
+    /** Los metros convertidos libres de una tela (y de un color, si se da; null = sin color), del almacén del pedido si lo hay. */
+    const convertidosDe = (productoId, colorId = undefined) =>
+        (metrosConvertidos ?? [])
+            .filter(
+                (f) =>
+                    String(f.producto_id) === String(productoId) &&
+                    (colorId === undefined || String(f.producto_color_id ?? '') === String(colorId ?? '')) &&
+                    (!almacenId || String(f.almacen_id) === String(almacenId)),
+            )
+            .reduce((suma, f) => suma + (Number(f.disponible) || 0), 0);
+
     /**
      * Los colores de una tela con los rollos libres de cada uno. Con el almacén
      * de la venta cuenta solo los suyos; sin él, los de todos, menos los que
@@ -307,6 +321,14 @@ export default function ProductoPickerModal({
         const filas = (stockPorAlmacen[String(producto.id)] ?? []).filter(
             (f) => !almacenId || f.almacenId === String(almacenId),
         );
+
+        // Solo sin QR: cada color con sus metros convertidos (los que no tienen, no salen).
+        if (modoSinQr) {
+            return lista
+                .filter((c) => todos || !filtros.color || normalize(c.nombre) === filtros.color)
+                .map((c) => ({ ...c, rollos: 0, metros: convertidosDe(producto.id, c.id) }))
+                .filter((c) => c.metros > 0);
+        }
 
         return lista
             .filter((c) => todos || !filtros.color || normalize(c.nombre) === filtros.color)
@@ -331,7 +353,7 @@ export default function ProductoPickerModal({
     /** Abre el modal de una tela con lo que ya se había marcado de ella. */
     const abrirTela = (producto) => {
         const propios = {};
-        Object.entries(rollosPorColor).forEach(([clave, v]) => {
+        Object.entries(modoSinQr ? metrosSinQr : rollosPorColor).forEach(([clave, v]) => {
             if (clave.startsWith(`${producto.id}:`) && Number(v) > 0) propios[clave] = v;
         });
         setBorrador(propios);
@@ -340,6 +362,15 @@ export default function ProductoPickerModal({
 
     /** Rollos de un color, en el modal: enteros, y sin pasarse de los libres si no se puede comprometer tela que no hay. */
     const setRollosBorrador = (color, valor, libres) => {
+        // Solo sin QR son metros, con hasta dos decimales y sin pasarse de lo convertido.
+        if (modoSinQr) {
+            let m = String(valor).replace(',', '.');
+            if (m !== '' && !/^\d*\.?\d{0,2}$/.test(m)) return;
+            if (m !== '' && Number(m) > libres) m = String(Math.round(libres * 100) / 100);
+            setBorrador((prev) => ({ ...prev, [`${telaModal.id}:${color.id ?? 'sin'}`]: m }));
+            return;
+        }
+
         let v = valor === '' ? '' : String(Math.max(0, Math.floor(Number(valor) || 0)));
         if (bloquearSinStock && v !== '' && Number(v) > libres) v = String(libres);
         setBorrador((prev) => ({ ...prev, [`${telaModal.id}:${color.id ?? 'sin'}`]: v }));
@@ -348,7 +379,7 @@ export default function ProductoPickerModal({
     /** Lo marcado de otras telas más lo del modal: el mapa completo de rollos por color. */
     const conBorrador = () => {
         const next = {};
-        Object.entries(rollosPorColor).forEach(([clave, v]) => {
+        Object.entries(modoSinQr ? metrosSinQr : rollosPorColor).forEach(([clave, v]) => {
             if (!clave.startsWith(`${telaModal.id}:`)) next[clave] = v;
         });
         Object.entries(borrador).forEach(([clave, v]) => {
@@ -387,6 +418,8 @@ export default function ProductoPickerModal({
         const q = normalize(filtros.texto);
 
         return productos.filter((p) => {
+            // Solo sin QR: las telas que tienen metros convertidos.
+            if (modoSinQr && !(esTela(p) && convertidosDe(p.id) > 0)) return false;
             if (filtros.tipoTejido && normalize(p.tipo_tejido) !== filtros.tipoTejido) return false;
             if (filtros.color && !(p.colores ?? []).some((c) => normalize(c.nombre) === filtros.color)) {
                 return false;
@@ -432,7 +465,7 @@ export default function ProductoPickerModal({
             );
             return heno.includes(q);
         });
-    }, [productos, filtros, stockFilter, stockPorProducto]);
+    }, [productos, filtros, stockFilter, stockPorProducto, modoSinQr, metrosConvertidos, almacenId]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const filtrosActivos = Object.values(filtros).filter(Boolean).length;
 
@@ -478,14 +511,40 @@ export default function ProductoPickerModal({
     );
     const seleccionadosTela = useMemo(() => telaDe(rollosPorColor), [telaDe, rollosPorColor]);
 
-    /** Todo lo marcado, sea producto suelto o color de una tela. */
+    /** Las telas marcadas "sin QR": un renglón por cada color con metros convertidos, en metros y no en rollos. */
+    const sinQrDe = useCallback(
+        (mapa) =>
+            Object.entries(mapa)
+                .filter(([, v]) => Number(v) > 0)
+                .map(([clave, v]) => {
+                    const [pid, cid] = clave.split(':');
+                    const producto = productos.find((p) => String(p.id) === pid);
+                    const color = cid === 'sin' ? null : ((producto?.colores ?? []).find((c) => String(c.id) === cid) ?? null);
+                    return {
+                        clave: `q:${clave}`,
+                        producto,
+                        presentacion: producto ? presentacionMetro(producto) : null,
+                        color,
+                        cantidad: Math.round(Number(v) * 100) / 100,
+                        porRollos: false,
+                        sinQr: true,
+                    };
+                })
+                .filter((x) => x.producto && x.presentacion),
+        [productos, presentacionMetro],
+    );
+    const seleccionadosSinQr = useMemo(() => sinQrDe(metrosSinQr), [sinQrDe, metrosSinQr]);
+
+    /** Todo lo marcado, sea producto suelto, color de una tela o corte sin QR. */
     const marcadosTodos = [
         ...seleccionados.map((x) => ({ ...x, clave: `p:${x.producto.id}` })),
         ...seleccionadosTela,
+        ...seleccionadosSinQr,
     ];
 
     const quitarMarcado = (clave) => {
         if (clave.startsWith('p:')) desmarcar(clave.slice(2));
+        else if (clave.startsWith('q:')) setMetrosSinQr((prev) => ({ ...prev, [clave.slice(2)]: '' }));
         else setRollosPorColor((prev) => ({ ...prev, [clave]: '' }));
     };
 
@@ -605,21 +664,31 @@ export default function ProductoPickerModal({
     const rollosBorrador = Object.values(borrador).reduce((suma, v) => suma + (Number(v) > 0 ? Number(v) : 0), 0);
     const coloresBorrador = Object.values(borrador).filter((v) => Number(v) > 0).length;
     const otrosMarcados = telaModal
-        ? marcadosTodos.filter((x) => !(x.porRollos && String(x.producto.id) === String(telaModal.id))).length
+        ? marcadosTodos.filter(
+              (x) => !((x.porRollos || x.sinQr) && String(x.producto.id) === String(telaModal.id) && Boolean(x.sinQr) === modoSinQr),
+          ).length
         : 0;
 
     /** Deja lo del modal en la selección y vuelve a la lista. */
     const aplicarTela = () => {
-        setRollosPorColor(conBorrador());
+        if (modoSinQr) setMetrosSinQr(conBorrador());
+        else setRollosPorColor(conBorrador());
         setTelaModal(null);
     };
 
     /** Deja lo del modal en la selección y agrega todo lo marcado. */
     const agregarDesdeTela = () => {
         const mapa = conBorrador();
-        setRollosPorColor(mapa);
+        if (modoSinQr) setMetrosSinQr(mapa);
+        else setRollosPorColor(mapa);
         setTelaModal(null);
-        const utiles = [...seleccionados, ...telaDe(mapa)].filter((x) => x.cantidad > 0).map(({ clave, ...resto }) => resto);
+        const utiles = [
+            ...seleccionados,
+            ...telaDe(modoSinQr ? rollosPorColor : mapa),
+            ...sinQrDe(modoSinQr ? mapa : metrosSinQr),
+        ]
+            .filter((x) => x.cantidad > 0)
+            .map(({ clave, ...resto }) => resto);
         if (utiles.length === 0) return;
         onSelect?.(utiles);
         onClose?.();
@@ -708,6 +777,24 @@ export default function ProductoPickerModal({
                     )}
                 </div>
 
+                {/* Solo las telas con metros convertidos (stock por metros): se piden en metros y en el almacén no se escanean. */}
+                {modoTela && porColor !== 'compra' && Array.isArray(metrosConvertidos) && (
+                    <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-warm-700">
+                        <input
+                            type="checkbox"
+                            checked={soloSinQr}
+                            onChange={(e) => setSoloSinQr(e.target.checked)}
+                            className="h-4 w-4 rounded border-gray-300 accent-primary-600"
+                        />
+                        Solo metros convertidos (sin QR)
+                        <span className="text-xs font-normal text-warm-500">
+                            {metrosConvertidos.length === 0
+                                ? '· no hay metros convertidos en este almacén'
+                                : '· se piden en metros y el almacenero solo marca que están preparados'}
+                        </span>
+                    </label>
+                )}
+
                 {/* Lo que más se pregunta en una tienda de telas: qué tejido y en qué color. */}
                 <div className="grid grid-cols-2 gap-3">
                     <SearchSelect
@@ -777,15 +864,17 @@ export default function ProductoPickerModal({
                             Productos seleccionados: {marcadosTodos.length}
                         </p>
                         <div className="flex flex-wrap gap-2">
-                            {marcadosTodos.map(({ clave, producto, presentacion, cantidad, color, porRollos }) => (
+                            {marcadosTodos.map(({ clave, producto, presentacion, cantidad, color, porRollos, sinQr }) => (
                                 <span
                                     key={clave}
                                     className="inline-flex items-center gap-2 rounded-full border border-edge bg-white py-1 pl-3 pr-2 text-sm text-warm-900"
                                 >
                                     <span className="max-w-[260px] truncate">
-                                        <span className="font-semibold text-primary-600">{cantidad}×</span>{' '}
+                                        <span className="font-semibold text-primary-600">{sinQr ? `${numero(cantidad)} m` : `${cantidad}×`}</span>{' '}
                                         {producto.nombre}
-                                        {porRollos ? (
+                                        {sinQr ? (
+                                            <span className="text-warm-500"> · {color?.nombre ?? 'sin color'} · sin QR</span>
+                                        ) : porRollos ? (
                                             <span className="text-warm-500">
                                                 {' '}
                                                 · {color?.nombre ?? 'sin color'} · {cantidad === 1 ? 'rollo' : 'rollos'}
@@ -830,10 +919,11 @@ export default function ProductoPickerModal({
                             const metro = presentacionMetro(producto);
                             const lineas = coloresTela(producto);
                             const libres = lineas.reduce((suma, c) => suma + c.rollos, 0);
+                            const convertidos = lineas.reduce((suma, c) => suma + c.metros, 0);
                             const enCompra = porColor === 'compra';
                             const elegidos = enCompra
                                 ? Number(agregadas[producto.id]) || 0
-                                : Object.entries(rollosPorColor)
+                                : Object.entries(modoSinQr ? metrosSinQr : rollosPorColor)
                                       .filter(([clave, v]) => clave.startsWith(`${producto.id}:`) && Number(v) > 0)
                                       .reduce((suma, [, v]) => suma + Number(v), 0);
                             const abrir = () => (enCompra ? setTelaCompra(producto) : abrirTela(producto));
@@ -871,11 +961,15 @@ export default function ProductoPickerModal({
                                             )}
                                             <span className="text-[11px] text-warm-500">
                                                 {lineas.length} color{lineas.length === 1 ? '' : 'es'}
-                                                {conDesglose && !enCompra && ` · ${libres} rollo${libres === 1 ? '' : 's'} libre${libres === 1 ? '' : 's'}`}
+                                                {modoSinQr
+                                                    ? ` · ${numero(convertidos)} m convertidos`
+                                                    : conDesglose && !enCompra && ` · ${libres} rollo${libres === 1 ? '' : 's'} libre${libres === 1 ? '' : 's'}`}
                                             </span>
                                             {elegidos > 0 && (
                                                 <span className="rounded bg-primary-100 px-1.5 py-0.5 text-[11px] font-semibold text-primary-700">
-                                                    {elegidos} rollo{elegidos === 1 ? '' : 's'} {enCompra ? 'agregado' : 'elegido'}{elegidos === 1 ? '' : 's'}
+                                                    {modoSinQr
+                                                        ? `${numero(elegidos)} m elegidos`
+                                                        : `${elegidos} rollo${elegidos === 1 ? '' : 's'} ${enCompra ? 'agregado' : 'elegido'}${elegidos === 1 ? '' : 's'}`}
                                                 </span>
                                             )}
                                         </div>
@@ -1092,15 +1186,29 @@ export default function ProductoPickerModal({
             open={Boolean(telaModal)}
             onClose={() => setTelaModal(null)}
             title={telaModal?.nombre}
-            description={`Marca los colores y cuántos rollos quieres de cada uno.${sinPrecios ? '' : ` Cada rollo se cobra por sus metros reales${
-                telaPrecio ? ` a ${moneyEn(telaPrecio, telaModal?.moneda_venta || 'PEN')} por metro` : ''
-            }`}.`}
+            description={
+                modoSinQr
+                    ? `Marca los colores y cuántos metros convertidos quieres de cada uno${
+                          telaPrecio ? ` a ${moneyEn(telaPrecio, telaModal?.moneda_venta || 'PEN')} por metro` : ''
+                      }. Sin QR: el almacenero solo marca que el corte está preparado.`
+                    : `Marca los colores y cuántos rollos quieres de cada uno.${sinPrecios ? '' : ` Cada rollo se cobra por sus metros reales${
+                          telaPrecio ? ` a ${moneyEn(telaPrecio, telaModal?.moneda_venta || 'PEN')} por metro` : ''
+                      }`}.`
+            }
             size="xl"
             footer={
                 <>
                     <span className="mr-auto text-xs text-warm-500">
-                        {coloresBorrador} color{coloresBorrador === 1 ? '' : 'es'} · {rollosBorrador} rollo
-                        {rollosBorrador === 1 ? '' : 's'}
+                        {modoSinQr ? (
+                            <>
+                                {coloresBorrador} color{coloresBorrador === 1 ? '' : 'es'} · {numero(rollosBorrador)} m
+                            </>
+                        ) : (
+                            <>
+                                {coloresBorrador} color{coloresBorrador === 1 ? '' : 'es'} · {rollosBorrador} rollo
+                                {rollosBorrador === 1 ? '' : 's'}
+                            </>
+                        )}
                     </span>
                     <Button variant="secondary" onClick={() => setTelaModal(null)}>
                         Cancelar
@@ -1123,9 +1231,12 @@ export default function ProductoPickerModal({
                     const claveSig = sig ? `${telaModal.id}:${sig.id ?? 'sin'}` : null;
                     const valor = borrador[clave] ?? '';
                     const marcada = Number(valor) > 0;
-                    const sinRollos = c.rollos <= 0;
+                    // Sin QR no hay rollos que contar: manda lo convertido (que siempre es más que cero aquí).
+                    const sinRollos = !modoSinQr && c.rollos <= 0;
                     // Se puede pedir tela que aún no llega; vender, no.
                     const bloqueada = bloquearSinStock && sinRollos;
+                    // Lo máximo que se puede escribir: los rollos libres o los metros convertidos.
+                    const tope = modoSinQr ? c.metros : c.rollos;
 
                     return (
                         <li
@@ -1140,7 +1251,7 @@ export default function ProductoPickerModal({
                                 type="checkbox"
                                 checked={marcada}
                                 disabled={bloqueada}
-                                onChange={() => setRollosBorrador(c, marcada ? '' : '1', c.rollos)}
+                                onChange={() => setRollosBorrador(c, marcada ? '' : modoSinQr ? String(c.metros) : '1', tope)}
                                 aria-label={`Elegir ${c.nombre}`}
                                 className="h-4 w-4 shrink-0 cursor-pointer rounded accent-primary-600"
                             />
@@ -1152,24 +1263,26 @@ export default function ProductoPickerModal({
                                 <span className="block truncate text-sm font-medium uppercase text-warm-900">{c.nombre}</span>
                                 <span className="block truncate text-[11px] text-warm-500">
                                     {c.codigo ? `${c.codigo} · ` : ''}
-                                    {!conDesglose
-                                        ? ''
-                                        : sinRollos
-                                          ? 'Sin rollos libres'
-                                          : `${c.rollos} rollo${c.rollos === 1 ? '' : 's'} · ${numero(c.metros)} m`}
+                                    {modoSinQr
+                                        ? `${numero(c.metros)} m convertidos`
+                                        : !conDesglose
+                                          ? ''
+                                          : sinRollos
+                                            ? 'Sin rollos libres'
+                                            : `${c.rollos} rollo${c.rollos === 1 ? '' : 's'} · ${numero(c.metros)} m`}
                                 </span>
                             </span>
                             <input
                                 type="number"
                                 min="0"
-                                step="1"
-                                inputMode="numeric"
+                                step={modoSinQr ? '0.01' : '1'}
+                                inputMode={modoSinQr ? 'decimal' : 'numeric'}
                                 placeholder="0"
                                 disabled={bloqueada}
                                 value={valor}
                                 onChange={(e) => {
                                     editandoRollos.current = clave;
-                                    setRollosBorrador(c, e.target.value, c.rollos);
+                                    setRollosBorrador(c, e.target.value, tope);
                                 }}
                                 onFocus={() => {
                                     if (editandoRollos.current !== clave) editandoRollos.current = null;
@@ -1180,15 +1293,15 @@ export default function ProductoPickerModal({
                                         editando: editandoRollos,
                                         actual: { clave, valor },
                                         siguiente: sig ? { clave: claveSig, valor: borrador[claveSig] ?? '' } : null,
-                                        copiar: (_, v) => setRollosBorrador(sig, v, sig.rollos),
+                                        copiar: (_, v) => setRollosBorrador(sig, v, modoSinQr ? sig.metros : sig.rollos),
                                         atributo: 'data-rollos-color',
                                     })
                                 }
                                 data-rollos-color={clave}
-                                aria-label={`Rollos de ${telaModal.nombre} ${c.nombre}`}
+                                aria-label={`${modoSinQr ? 'Metros' : 'Rollos'} de ${telaModal.nombre} ${c.nombre}`}
                                 className="w-16 shrink-0 rounded-md border-0 px-2 py-1.5 text-center text-sm text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-primary-600 disabled:bg-gray-100"
                             />
-                            <span className="w-9 shrink-0 text-[11px] text-warm-500">rollos</span>
+                            <span className="w-9 shrink-0 text-[11px] text-warm-500">{modoSinQr ? 'm' : 'rollos'}</span>
                         </li>
                     );
                 })}

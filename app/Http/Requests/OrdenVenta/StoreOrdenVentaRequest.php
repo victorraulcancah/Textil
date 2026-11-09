@@ -39,6 +39,8 @@ class StoreOrdenVentaRequest extends FormRequest
             // Una tela se pide en metros o en rollos enteros; por rollos la
             // cantidad la estima el servicio con el metraje promedio.
             'detalles.*.modo' => 'nullable|in:metros,rollos',
+            // Corte del stock por metros: en preparación no se escanea, solo se marca como preparado.
+            'detalles.*.sin_qr' => 'nullable|boolean',
             'detalles.*.rollos_pedidos' => 'required_if:detalles.*.modo,rollos|nullable|integer|min:1|max:9999',
             // Un metraje por rollo ("1 rollo de 50 m"): si el almacén no tiene uno así, corta la tela de otro.
             'detalles.*.metros_por_rollo' => 'nullable|numeric|min:0.01|max:9999',

@@ -220,6 +220,8 @@ return [
                         'rollos/*/revision-perdido' => 'editar',
                     ],
                 ],
+                // Tela suelta que se vende por corte sin escanear QR; se llena convirtiendo metros de un rollo.
+                'stock-metros' => ['label' => 'Stock por metros', 'apis' => ['stock-metros']],
                 'importaciones' => [
                     'label' => 'Importaciones',
                     // No hay alta: los embarques nacen en la recepción de compra.
@@ -235,6 +237,7 @@ return [
                         'ordenes-venta/almaceneros' => 'ver',
                         'ordenes-venta/*/asignar' => 'asignar',
                         'ordenes-venta/*/escanear' => 'editar',
+                        'ordenes-venta/*/preparar-sin-qr' => 'editar',
                         'ordenes-venta/motivos-ajuste' => 'ver',
                         // Agregar un motivo nuevo es escribir: pide editar, no solo ver.
                         'ordenes-venta/motivos-ajuste/nuevo' => 'editar',

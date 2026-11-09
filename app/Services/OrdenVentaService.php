@@ -50,6 +50,7 @@ class OrdenVentaService
         protected StockService $stock,
         protected TipoCambioService $tiposCambio,
         protected AjusteRolloService $ajustesRollo,
+        protected StockMetrosService $metrosSueltos,
     ) {}
 
     /**
@@ -233,8 +234,8 @@ class OrdenVentaService
         $noEncontrado = false;
         if (! $orden->estaVerificada()) {
             if ($parcial) {
-                if (! $orden->detalles->contains(fn ($d) => $d->rollos->isNotEmpty())) {
-                    throw new \DomainException('Escanea al menos un rollo antes de despachar lo encontrado. Si no se encontró nada, anula el pedido.');
+                if (! $orden->detalles->contains(fn ($d) => $d->rollos->isNotEmpty() || $d->estaPreparadaSinQr())) {
+                    throw new \DomainException('Escanea al menos un rollo (o marca un corte como preparado) antes de despachar lo encontrado. Si no se encontró nada, anula el pedido.');
                 }
                 $noEncontrado = true;
             } else {
@@ -303,8 +304,9 @@ class OrdenVentaService
             throw new \DomainException("El rollo {$codigo} ya está asignado a este pedido.");
         }
 
+        // Un corte sin QR no recibe rollos: se prepara marcándolo, no escaneando.
         $delMismoProducto = $orden->detalles->filter(
-            fn ($d) => ! $d->estaCubierta() && (int) $d->presentacion?->producto_id === (int) $rollo->producto_id
+            fn ($d) => ! $d->esSinQr() && ! $d->estaCubierta() && (int) $d->presentacion?->producto_id === (int) $rollo->producto_id
         );
 
         if ($delMismoProducto->isEmpty()) {
@@ -386,6 +388,48 @@ class OrdenVentaService
                 'rollos_pedidos' => $avance['rollos_pedidos'],
                 'completo' => $orden->estaVerificada(),
             ];
+        });
+    }
+
+    /**
+     * El almacenero marca como preparado (o deshace) un corte sin QR: no hay nada que escanear, la tela suelta sale del
+     * stock por metros y solo se confirma que ya está lista. Como el primer escaneo, el primer marcado pone el pedido en
+     * preparación y fija de qué almacén sale.
+     */
+    public function prepararSinQr(OrdenVenta $orden, int $detalleId, bool $preparado = true): OrdenVenta
+    {
+        if (! in_array($orden->estado, [OrdenVenta::SOLICITADO, OrdenVenta::PREPARANDO], true)) {
+            throw new \DomainException('Solo se pueden marcar cortes de un pedido solicitado o en preparación.');
+        }
+
+        return DB::transaction(function () use ($orden, $detalleId, $preparado) {
+            $orden->load('detalles.rollos', 'detalles.presentacion');
+
+            $linea = $orden->detalles->firstWhere('id', $detalleId);
+            if (! $linea) {
+                throw new \DomainException('Esa línea no es de este pedido.');
+            }
+            if (! $linea->esSinQr()) {
+                throw new \DomainException('Esa línea lleva rollos con QR: se prepara escaneándolos.');
+            }
+
+            if ($preparado) {
+                $almacenCorte = $linea->reserva_almacen_id ? (int) $linea->reserva_almacen_id : null;
+                if ($orden->almacen_id && $almacenCorte && (int) $orden->almacen_id !== $almacenCorte) {
+                    throw new \DomainException('Los metros de este corte están en otro almacén: este pedido se está preparando desde '.($orden->almacen?->nombre ?? 'otro').'.');
+                }
+
+                if ($orden->estado === OrdenVenta::SOLICITADO) {
+                    $orden = $this->empezarPreparacion($orden, $almacenCorte);
+                }
+            }
+
+            $linea->update([
+                'preparado_at' => $preparado ? now() : null,
+                'usuario_prepara_id' => $preparado ? auth()->id() : null,
+            ]);
+
+            return $this->conRelaciones($orden->fresh());
         });
     }
 
@@ -724,6 +768,20 @@ class OrdenVentaService
                     );
                 }
 
+                // Un corte sin QR sale del stock por metros (la reserva ya se soltó arriba).
+                if ($linea->esSinQr()) {
+                    if (! $linea->estaPreparadaSinQr()) {
+                        throw new \DomainException('Un corte sin QR no está marcado como preparado: márcalo antes de despachar.');
+                    }
+
+                    $this->metrosSueltos->consumir(
+                        (int) $linea->presentacion->producto_id,
+                        $linea->producto_color_id ? (int) $linea->producto_color_id : null,
+                        (int) $orden->almacen_id,
+                        (float) $linea->metros,
+                    );
+                }
+
                 try {
                     $this->stock->salida(
                         $linea->presentacion,
@@ -974,6 +1032,15 @@ class OrdenVentaService
             $nuevaReserva = $nuevo <= 0 ? 0.0 : round($reserva * $ratio, 2);
             if ($reserva - $nuevaReserva > 0) {
                 $this->stock->liberarReserva($linea->presentacion, $linea->almacenReserva, $reserva - $nuevaReserva);
+
+                if ($linea->esSinQr()) {
+                    $this->metrosSueltos->liberar(
+                        (int) $linea->presentacion->producto_id,
+                        $linea->producto_color_id ? (int) $linea->producto_color_id : null,
+                        (int) $linea->almacenReserva->id,
+                        $linea->presentacion->aMetros($reserva - $nuevaReserva),
+                    );
+                }
             }
             $linea->cantidad_reservada = $nuevaReserva > 0 ? $nuevaReserva : null;
             if ($nuevaReserva <= 0) {
@@ -1099,9 +1166,20 @@ class OrdenVentaService
             $factor = (float) ($presentacion->factor_conversion ?: 1);
             $necesario = round((float) $linea->cantidad * $factor, 2);
 
+            // Un corte sin QR sale de los metros sueltos: el almacén lo decide el stock por metros (falla si no alcanzan).
+            $almacenCorte = $linea->esSinQr()
+                ? $this->metrosSueltos->elegirAlmacen(
+                    (int) $presentacion->producto_id,
+                    $linea->producto_color_id ? (int) $linea->producto_color_id : null,
+                    (float) $linea->metros,
+                    $orden->almacen_id ? (int) $orden->almacen_id : null,
+                )
+                : null;
+
             $stock = ProductoAlmacenStock::with('almacen')
                 ->where('producto_id', $presentacion->producto_id)
                 ->when($orden->almacen_id, fn ($q) => $q->where('almacen_id', $orden->almacen_id))
+                ->when($almacenCorte, fn ($q) => $q->where('almacen_id', $almacenCorte))
                 ->orderByDesc('stock_disponible')
                 ->first();
 
@@ -1116,6 +1194,15 @@ class OrdenVentaService
             }
 
             $this->stock->reservar($presentacion, $stock->almacen, (float) $linea->cantidad);
+
+            if ($linea->esSinQr()) {
+                $this->metrosSueltos->reservar(
+                    (int) $presentacion->producto_id,
+                    $linea->producto_color_id ? (int) $linea->producto_color_id : null,
+                    (int) $stock->almacen_id,
+                    (float) $linea->metros,
+                );
+            }
 
             $linea->update([
                 'reserva_almacen_id' => $stock->almacen_id,
@@ -1191,6 +1278,16 @@ class OrdenVentaService
             // para que el pedido se pueda anular o devolver a borrador igual.
             if ($linea->presentacion) {
                 $this->stock->liberarReserva($linea->presentacion, $linea->almacenReserva, (float) $linea->cantidad_reservada);
+
+                // Un corte sin QR también tenía apartados sus metros del stock por metros.
+                if ($linea->esSinQr()) {
+                    $this->metrosSueltos->liberar(
+                        (int) $linea->presentacion->producto_id,
+                        $linea->producto_color_id ? (int) $linea->producto_color_id : null,
+                        (int) $linea->almacenReserva->id,
+                        $linea->presentacion->aMetros((float) $linea->cantidad_reservada),
+                    );
+                }
             }
 
             $linea->update(['reserva_almacen_id' => null, 'cantidad_reservada' => null]);
@@ -1213,6 +1310,16 @@ class OrdenVentaService
                         $orden->id,
                     );
                 }
+            }
+
+            // Un corte sin QR devuelve sus metros al stock por metros.
+            if ($linea->esSinQr() && $orden->almacen && $linea->presentacion) {
+                $this->metrosSueltos->devolver(
+                    (int) $linea->presentacion->producto_id,
+                    $linea->producto_color_id ? (int) $linea->producto_color_id : null,
+                    (int) $orden->almacen_id,
+                    (float) $linea->metros,
+                );
             }
 
             // Una línea cuyo producto ya no existe no tiene stock al que volver.
@@ -1273,6 +1380,11 @@ class OrdenVentaService
             if ($linea->rollos->isNotEmpty()) {
                 $this->revalorizar($linea);
             }
+
+            // Un corte sin QR vuelve a quedar sin preparar.
+            if ($linea->preparado_at !== null) {
+                $linea->update(['preparado_at' => null, 'usuario_prepara_id' => null]);
+            }
         }
 
         $this->recalcularTotales($orden);
@@ -1326,6 +1438,11 @@ class OrdenVentaService
             // va en su formato "Metro" con los rollos pedidos, sin metros ni
             // importe. Cuánto mide cada rollo lo define el almacén al separar.
             $porRollos = ($linea['modo'] ?? OrdenVentaDetalle::MODO_METROS) === OrdenVentaDetalle::MODO_ROLLOS;
+            // Un corte del stock por metros: solo una tela en metros, nunca en rollos enteros.
+            $sinQr = ! $porRollos && ! empty($linea['sin_qr']);
+            if ($sinQr && ! $presentacion->producto?->esTela()) {
+                throw new \DomainException("\"{$presentacion->producto?->nombre}\" no es una tela: no se vende del stock por metros.");
+            }
             $rollosPedidos = null;
             if ($porRollos) {
                 $producto = $presentacion->producto;
@@ -1354,6 +1471,7 @@ class OrdenVentaService
                 // rollos de ese color.
                 'producto_color_id' => $linea['producto_color_id'] ?? null,
                 'modo' => $porRollos ? OrdenVentaDetalle::MODO_ROLLOS : OrdenVentaDetalle::MODO_METROS,
+                'sin_qr' => $sinQr,
                 'rollos_pedidos' => $rollosPedidos,
                 'metros_por_rollo' => $porRollos && ! empty($linea['metros_por_rollo']) ? round((float) $linea['metros_por_rollo'], 2) : null,
                 'cantidad' => $cantidad,

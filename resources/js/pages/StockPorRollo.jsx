@@ -10,6 +10,7 @@ import {
     Printer,
     QrCode,
     Ruler,
+    Scissors,
     Ship,
     Tag,
 } from 'lucide-react';
@@ -20,6 +21,7 @@ import ImprimirEtiquetasModal from '../components/ImprimirEtiquetasModal';
 import Layout from '../components/Layout';
 import PageHeader from '../components/PageHeader';
 import PdfViewerModal from '../components/PdfViewerModal';
+import PestanasStock from '../components/PestanasStock';
 import RollosEnRevision from '../components/RollosEnRevision';
 import { Alert, Badge, Button, DataTable, Input, SearchSelect, Select, Spinner } from '../components/ui';
 
@@ -383,14 +385,26 @@ export default function StockPorRollo() {
             key: 'actions',
             label: 'Acciones',
             actions: (row) => (
-                <button
-                    aria-label="Etiqueta"
-                    title="Imprimir la etiqueta de este rollo"
-                    onClick={() => setPdf({ url: `/pdf/etiqueta-rollo/${row.id}?formato=etiqueta`, titulo: `Etiqueta ${row.codigo}` })}
-                    className="rounded-md p-1.5 text-primary-600 transition hover:bg-primary-50 hover:text-primary-700"
-                >
-                    <Printer className="h-4 w-4" />
-                </button>
+                <>
+                    <button
+                        aria-label="Etiqueta"
+                        title="Imprimir la etiqueta de este rollo"
+                        onClick={() => setPdf({ url: `/pdf/etiqueta-rollo/${row.id}?formato=etiqueta`, titulo: `Etiqueta ${row.codigo}` })}
+                        className="rounded-md p-1.5 text-primary-600 transition hover:bg-primary-50 hover:text-primary-700"
+                    >
+                        <Printer className="h-4 w-4" />
+                    </button>
+                    {row.estado === 'disponible' && (
+                        <button
+                            aria-label="Convertir a metros"
+                            title="Pasar metros de este rollo al stock por metros (venta por corte, sin QR)"
+                            onClick={() => navigate(`/stock-metros?rollo=${encodeURIComponent(row.codigo)}`)}
+                            className="rounded-md p-1.5 text-primary-600 transition hover:bg-primary-50 hover:text-primary-700"
+                        >
+                            <Scissors className="h-4 w-4" />
+                        </button>
+                    )}
+                </>
             ),
         },
     ];
@@ -493,6 +507,10 @@ export default function StockPorRollo() {
                                     <Printer className="h-4 w-4" />
                                     Etiquetas del color
                                 </Button>
+                                <Button variant="secondary" onClick={() => navigate('/stock-metros')}>
+                                    <Scissors className="h-4 w-4" />
+                                    Stock por metros
+                                </Button>
                                 <Button variant="secondary" onClick={() => setImprimirQr(true)}>
                                     <QrCode className="h-4 w-4" />
                                     Imprimir QR
@@ -570,6 +588,10 @@ export default function StockPorRollo() {
                         description="Cada rollo con su metraje, su estado y dónde está"
                         actions={
                             <>
+                                <Button variant="secondary" onClick={() => navigate('/stock-metros')}>
+                                    <Scissors className="h-4 w-4" />
+                                    Stock por metros
+                                </Button>
                                 <Button variant="secondary" onClick={() => setImprimirQr(true)}>
                                     <QrCode className="h-4 w-4" />
                                     Imprimir QR
@@ -581,6 +603,8 @@ export default function StockPorRollo() {
                             </>
                         }
                     />
+
+                    <PestanasStock activa="rollos" />
 
                     {error && <Alert variant="error" className="mb-4">{error}</Alert>}
 

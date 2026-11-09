@@ -198,6 +198,27 @@ export default function Despacho() {
         await verificar(valor);
     };
 
+    /** El corte (línea sin QR) que se está marcando; null si ninguno. */
+    const [marcandoCorte, setMarcandoCorte] = useState(null);
+
+    /**
+     * Un corte sin QR no se escanea: el almacenero lo corta del stock por metros y solo confirma que ya está preparado
+     * (o lo deshace). Marcar el primero pone el pedido en preparación, como el primer escaneo.
+     */
+    const marcarCorte = async (linea, preparado) => {
+        setMarcandoCorte(linea.id);
+        try {
+            const estadoAntes = detalle.estado;
+            await api.post(`/ordenes-venta/${detalle.id}/preparar-sin-qr`, { detalle_id: linea.id, preparado });
+            await cargarDetalle(detalle.id);
+            if (estadoAntes === 'solicitado') await cargar();
+        } catch (err) {
+            toast.error(err.response?.data?.message ?? 'No se pudo marcar el corte.');
+        } finally {
+            setMarcandoCorte(null);
+        }
+    };
+
     const despachar = async () => {
         setDespachando(true);
         try {
@@ -757,12 +778,62 @@ export default function Despacho() {
                                     </div>
                                 )}
 
+                                {/* Los cortes del stock por metros: sin QR, solo se marcan como preparados. */}
+                                {lineas.some((d) => d.sin_qr) && (
+                                    <div className="border-b border-edge px-4 py-3">
+                                        <p className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+                                            <Scissors className="h-3.5 w-3.5" />
+                                            Cortes sin QR · solo marca cuando esté preparado
+                                        </p>
+                                        <ul className="divide-y divide-edge rounded-lg border border-edge">
+                                            {lineas
+                                                .filter((d) => d.sin_qr)
+                                                .map((d) => (
+                                                    <li key={d.id} className="flex flex-wrap items-center justify-between gap-3 px-3 py-2">
+                                                        <div className="min-w-0">
+                                                            <p className="truncate text-sm font-medium text-warm-900">
+                                                                {d.producto}
+                                                                {d.color?.nombre ? ` · ${d.color.nombre}` : ''}
+                                                            </p>
+                                                            <p className="text-xs text-warm-500">{num(d.metros)} m de corte</p>
+                                                        </div>
+                                                        {d.preparado ? (
+                                                            <span className="inline-flex items-center gap-2">
+                                                                <Badge variant="green">
+                                                                    <Check className="mr-1 inline h-3 w-3" />
+                                                                    Preparado
+                                                                </Badge>
+                                                                {escaneando && (
+                                                                    <button
+                                                                        type="button"
+                                                                        disabled={marcandoCorte === d.id}
+                                                                        onClick={() => marcarCorte(d, false)}
+                                                                        className="text-xs text-warm-500 underline hover:text-warm-800"
+                                                                    >
+                                                                        Deshacer
+                                                                    </button>
+                                                                )}
+                                                            </span>
+                                                        ) : escaneando ? (
+                                                            <Button size="sm" loading={marcandoCorte === d.id} onClick={() => marcarCorte(d, true)}>
+                                                                <Check className="h-4 w-4" />
+                                                                Marcar como preparado
+                                                            </Button>
+                                                        ) : (
+                                                            <Badge variant="gray">Pendiente</Badge>
+                                                        )}
+                                                    </li>
+                                                ))}
+                                        </ul>
+                                    </div>
+                                )}
+
                                 {/* Lo que pidió el cliente y con qué se va cubriendo, en el mismo
                                     formato del pedido (una tabla por tela, rollo por rollo) pero sin
                                     precios: el almacenero busca los metros que faltan. */}
                                 <div className="overflow-x-auto p-2 sm:p-4">
                                     <PlanillaTela
-                                        grupos={gruposDePedido(detalle.detalles ?? [])}
+                                        grupos={gruposDePedido((detalle.detalles ?? []).filter((d) => !d.sin_qr))}
                                         precios={false}
                                         pendiente={!completo}
                                         completa={(f) => Boolean(f.hecho)}

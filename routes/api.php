@@ -213,6 +213,10 @@ Route::middleware('auth:api')->group(function () {
     Route::apiResource('prestamos', PrestamoController::class);
     Route::post('prestamos/{prestamo}/devoluciones', [PrestamoController::class, 'devolucion']);
 
+    // Stock por metros: tela suelta que se vende por corte, sin escanear un QR. Se llena convirtiendo metros de un rollo.
+    Route::get('stock-metros', [\App\Http\Controllers\StockMetrosController::class, 'index']);
+    Route::post('stock-metros/convertir', [\App\Http\Controllers\StockMetrosController::class, 'convertir']);
+
     // Rollos: la unidad individual de inventario
     Route::get('rollos', [RolloController::class, 'index']);
     Route::get('rollos/resumen', [RolloController::class, 'resumen']);
@@ -260,6 +264,8 @@ Route::middleware('auth:api')->group(function () {
     Route::post('ordenes-venta/{ordenesVenta}/separar', [OrdenVentaController::class, 'separar']);
     Route::post('ordenes-venta/{ordenesVenta}/asignar', [OrdenVentaController::class, 'asignar']);
     Route::post('ordenes-venta/{ordenesVenta}/escanear', [OrdenVentaController::class, 'escanear']);
+    // Una línea de corte (sin QR) no se escanea: el almacenero solo la marca como preparada.
+    Route::post('ordenes-venta/{ordenesVenta}/preparar-sin-qr', [OrdenVentaController::class, 'prepararSinQr']);
     Route::post('ordenes-venta/{ordenesVenta}/despachar', [OrdenVentaController::class, 'despachar']);
     Route::post('ordenes-venta/{ordenesVenta}/facturar', [OrdenVentaController::class, 'facturar']);
     Route::post('ordenes-venta/{ordenesVenta}/anular', [OrdenVentaController::class, 'anular']);

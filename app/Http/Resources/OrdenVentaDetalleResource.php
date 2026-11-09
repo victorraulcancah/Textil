@@ -38,6 +38,10 @@ class OrdenVentaDetalleResource extends JsonResource
             // "rollos": N rollos enteros, cada uno con su metraje real;
             // "metros": X metros, cortando si hace falta.
             'modo' => $this->modo ?? 'metros',
+            // Corte del stock por metros: no se escanea, se marca como preparado.
+            'sin_qr' => (bool) $this->sin_qr,
+            'preparado' => $this->preparado_at !== null,
+            'preparado_at' => $this->preparado_at,
             'rollos_pedidos' => $this->rollos_pedidos !== null ? (int) $this->rollos_pedidos : null,
             'metros_por_rollo' => $this->metros_por_rollo !== null ? (float) $this->metros_por_rollo : null,
             'cantidad' => (float) $this->cantidad,

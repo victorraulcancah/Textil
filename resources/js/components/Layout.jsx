@@ -1,15 +1,18 @@
 import { useState } from 'react';
 import AlertsBell from './AlertsBell';
+import BarraPestanas from './BarraPestanas';
 import Sidebar from './Sidebar';
 import UserMenu from './UserMenu';
 import SeleccionAlmacen from './SeleccionAlmacen';
 import { useAlmacenPropio } from '../lib/almacenes';
+import { usePestanas } from '../lib/pestanas';
 import { cn } from './ui';
 
 const COLLAPSE_STORAGE = 'sidebar_collapsed';
 
 export default function Layout({ children }) {
     const { superAdmin } = useAlmacenPropio();
+    const hayPestanas = usePestanas().tabs.length > 0;
     const [collapsed, setCollapsed] = useState(() => {
         try {
             return localStorage.getItem(COLLAPSE_STORAGE) === '1';
@@ -44,10 +47,19 @@ export default function Layout({ children }) {
                     collapsed ? 'lg:pl-16' : 'lg:pl-52',
                 )}
             >
-                {/* La barra de arriba: el usuario con su almacén y la campana de alertas. */}
-                <div className="flex h-14 shrink-0 items-center justify-end gap-3 px-4 pl-16 sm:px-6 lg:px-8">
-                    <UserMenu barra />
-                    <AlertsBell />
+                {/* La barra de arriba: a la izquierda las pestañas de los submódulos abiertos (clic derecho en una opción
+                    del menú) y a la derecha el usuario con su almacén y la campana de alertas. */}
+                <div
+                    className={cn(
+                        'flex h-14 shrink-0 items-end gap-3 px-4 pl-16 sm:px-6 lg:px-8',
+                        hayPestanas && 'bg-gray-200/70',
+                    )}
+                >
+                    <BarraPestanas />
+                    <div className="ml-auto flex shrink-0 items-center gap-3 self-center">
+                        <UserMenu barra />
+                        <AlertsBell />
+                    </div>
                 </div>
                 <main className="flex-1 px-4 pb-6 pt-2 sm:px-6 lg:px-8">{children}</main>
             </div>

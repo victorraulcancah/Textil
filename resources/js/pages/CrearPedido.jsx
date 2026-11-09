@@ -183,6 +183,7 @@ export default function CrearPedido() {
                             producto: d.producto,
                             color: d.color?.nombre ?? '',
                             modo: d.modo ?? 'metros',
+                            sin_qr: Boolean(d.sin_qr),
                             rollos_pedidos: d.rollos_pedidos ? String(d.rollos_pedidos) : '',
                             metros_por_rollo: d.metros_por_rollo ? String(d.metros_por_rollo) : '',
                             presentacion: d.modo === ROLLOS ? 'Rollo' : d.presentacion,
@@ -745,6 +746,7 @@ export default function CrearPedido() {
                     producto_presentacion_id: Number(l.producto_presentacion_id),
                     producto_color_id: l.producto_color_id ? Number(l.producto_color_id) : null,
                     modo: l.modo === ROLLOS ? ROLLOS : 'metros',
+                    sin_qr: l.modo !== ROLLOS && Boolean(l.sin_qr),
                     rollos_pedidos: l.modo === ROLLOS ? Number(l.rollos_pedidos) || 0 : null,
                     metros_por_rollo: l.modo === ROLLOS && Number(l.metros_por_rollo) > 0 ? Number(l.metros_por_rollo) : null,
                     // En rollos no hay metros: los define el almacén al separar.
@@ -1256,6 +1258,21 @@ export default function CrearPedido() {
                                                     onChange={(e) => cambiar(i, 'cantidad', e.target.value)}
                                                     className="ml-auto w-24 text-right"
                                                 />
+                                                {/* Corte del stock por metros: en el almacén no se escanea, solo se marca como preparado. */}
+                                                {!esRollo && Boolean(presentacionMetroDe(productoDe(l.producto_presentacion_id))) && (
+                                                    <label
+                                                        className="mt-1 flex items-center justify-end gap-1.5 text-[11px] font-medium text-warm-500"
+                                                        title="Sale del stock por metros: el almacenero no escanea QR, solo marca que ya está preparado"
+                                                    >
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={Boolean(l.sin_qr)}
+                                                            onChange={(e) => cambiar(i, 'sin_qr', e.target.checked)}
+                                                            className="h-3.5 w-3.5 rounded border-gray-300 accent-primary-600"
+                                                        />
+                                                        Corte sin QR
+                                                    </label>
+                                                )}
                                             </td>
                                             <td className="px-3 py-2 text-right">
                                                 {esRollo && (

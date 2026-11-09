@@ -33,6 +33,11 @@ class OrdenVentaDetalle extends Model
         // "rollos": N rollos enteros, cada uno con su metraje real;
         // "metros": X metros, cortando de un rollo si hace falta.
         'modo',
+        // Corte vendido del stock por metros: en preparación no se escanea ningún QR, el almacenero solo lo marca como
+        // preparado (`preparado_at`).
+        'sin_qr',
+        'preparado_at',
+        'usuario_prepara_id',
         // Cuántos rollos enteros se pidieron (solo en modo "rollos").
         'rollos_pedidos',
         // Si se pidió un metraje por rollo ("1 rollo de 50 m"): cuánto debe medir lo que sale. Vacío = rollo entero.
@@ -63,7 +68,21 @@ class OrdenVentaDetalle extends Model
             'subtotal' => 'decimal:2',
             'precio_oculto' => 'boolean',
             'rollos_pedidos' => 'integer',
+            'sin_qr' => 'boolean',
+            'preparado_at' => 'datetime',
         ];
+    }
+
+    /** Es un corte del stock por metros: no lleva rollos asignados ni se escanea. */
+    public function esSinQr(): bool
+    {
+        return (bool) $this->sin_qr;
+    }
+
+    /** Una línea sin QR que el almacenero ya marcó como preparada. */
+    public function estaPreparadaSinQr(): bool
+    {
+        return $this->esSinQr() && $this->preparado_at !== null;
     }
 
     public const MODO_ROLLOS = 'rollos';
@@ -161,6 +180,11 @@ class OrdenVentaDetalle extends Model
     /** Metros ya cubiertos con rollos escaneados. */
     public function metrosAsignados(): float
     {
+        // Un corte sin QR no tiene rollos: queda cubierto entero cuando el almacenero lo marca como preparado.
+        if ($this->esSinQr()) {
+            return $this->preparado_at ? round((float) $this->metros, 2) : 0.0;
+        }
+
         $lista = $this->relationLoaded('rollos') ? $this->rollos : $this->rollos()->get();
 
         return round((float) $lista->sum('metros'), 2);

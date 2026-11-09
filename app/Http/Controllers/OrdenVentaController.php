@@ -169,6 +169,21 @@ class OrdenVentaController extends Controller
         );
     }
 
+    /** Marca (o desmarca) como preparado un corte sin QR: no se escanea, solo se confirma que ya está listo. */
+    public function prepararSinQr(Request $request, OrdenVenta $ordenesVenta)
+    {
+        AlmacenAcceso::exigir($ordenesVenta->almacen_id);
+        $datos = $request->validate([
+            'detalle_id' => 'required|integer',
+            'preparado' => 'nullable|boolean',
+        ]);
+
+        return new OrdenVentaResource(
+            $this->pedidos->prepararSinQr($ordenesVenta, (int) $datos['detalle_id'], (bool) ($datos['preparado'] ?? true))
+                ->load(self::RELACIONES)
+        );
+    }
+
     /** A quién se le puede repartir un pedido: el personal con permiso de despacho. */
     public function almaceneros()
     {

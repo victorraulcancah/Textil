@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { ChevronDown, ChevronsLeft, ChevronsRight, Menu, X } from 'lucide-react';
 import { navigation } from '../config/navigation';
 import api from '../lib/api';
 import { useAuth } from '../lib/auth';
+import { abrirPestana } from '../lib/pestanas';
 import { cn } from './ui';
 import CreditoMagus from './CreditoMagus';
+import MenuPestana from './MenuPestana';
 
 const GROUPS_STORAGE = 'sidebar_groups';
 const GROUP_LABELS = navigation.filter((i) => i.children).map((i) => i.label);
@@ -70,8 +72,26 @@ let scrollMenu = 0;
 
 export default function Sidebar({ collapsed = false, onToggleCollapse }) {
     const { puede } = useAuth();
-    const { pathname } = useLocation();
+    const { pathname, search } = useLocation();
+    const navigate = useNavigate();
     const navRef = useRef(null);
+
+    /** El menú del clic derecho sobre una opción: { item, x, y }. Abre esa opción en una pestaña nueva o en la actual. */
+    const [menuPestana, setMenuPestana] = useState(null);
+    const cerrarMenuPestana = useCallback(() => setMenuPestana(null), []);
+    const alClicDerecho = (item) => (e) => {
+        e.preventDefault();
+        setMenuPestana({ item, x: e.clientX, y: e.clientY });
+    };
+    const abrirEnPestanaNueva = (item) => {
+        setMenuPestana(null);
+        abrirPestana(item.to, `${pathname}${search}`);
+        navigate(item.to);
+    };
+    const abrirAqui = (item) => {
+        setMenuPestana(null);
+        navigate(item.to);
+    };
 
     useLayoutEffect(() => {
         if (navRef.current) navRef.current.scrollTop = scrollMenu;
@@ -264,6 +284,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse }) {
                                         key={item.to}
                                         to={item.to}
                                         title={item.label}
+                                        onContextMenu={alClicDerecho(item)}
                                         className={({ isActive }) =>
                                             cn(
                                                 'relative mb-1 flex items-center justify-center rounded-lg p-2.5 transition',
@@ -316,6 +337,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse }) {
                                             key={item.to}
                                             to={item.to}
                                             onClick={() => setMobileOpen(false)}
+                                            onContextMenu={alClicDerecho(item)}
                                             className={({ isActive }) =>
                                                 cn(
                                                     'relative mb-0.5 flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] transition',
@@ -380,6 +402,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse }) {
                                                         to={child.to}
                                                         end={soloExacta(child, item.children)}
                                                         onClick={() => setMobileOpen(false)}
+                                                        onContextMenu={alClicDerecho(child)}
                                                         className={({ isActive }) =>
                                                             cn(
                                                                 'relative mb-0.5 flex items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[13px] transition',
@@ -452,6 +475,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse }) {
                                 to={child.to}
                                 end={soloExacta(child, flyout.children)}
                                 onClick={cerrarFlyout}
+                                onContextMenu={alClicDerecho(child)}
                                 className={({ isActive }) =>
                                     cn(
                                         'flex items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[13px] transition',
@@ -478,6 +502,8 @@ export default function Sidebar({ collapsed = false, onToggleCollapse }) {
                     </div>,
                     document.body,
                 )}
+
+            <MenuPestana menu={menuPestana} onCerrar={cerrarMenuPestana} onNueva={abrirEnPestanaNueva} onActual={abrirAqui} />
         </>
     );
 }

@@ -42,6 +42,7 @@ const UnidadesMedida = lazy(() => import('./pages/UnidadesMedida'));
 const Almacenes = lazy(() => import('./pages/Almacenes'));
 const Existencias = lazy(() => import('./pages/Existencias'));
 const StockPorRollo = lazy(() => import('./pages/StockPorRollo'));
+const StockPorMetros = lazy(() => import('./pages/StockPorMetros'));
 const Movimientos = lazy(() => import('./pages/Movimientos'));
 const KardexDocumento = lazy(() => import('./pages/KardexDocumento'));
 const KardexColor = lazy(() => import('./pages/KardexColor'));
@@ -119,6 +120,8 @@ const routes = [
     // Los colores de un tipo de tela y los rollos de un color: la misma pantalla, en la dirección.
     { path: '/stock-rollos/*', element: <StockPorRollo /> },
     { path: '/stock-rollos/reporte', element: <StockRollosReporte /> },
+    // Tela suelta que se vende por corte, sin QR; se llena convirtiendo metros de un rollo.
+    { path: '/stock-metros', element: <StockPorMetros /> },
     { path: '/kardex', element: <Movimientos /> },
     { path: '/kardex/color/:telaId/:colorId', element: <KardexColor /> },
     { path: '/kardex/documento/:tipo/:id', element: <KardexDocumento /> },

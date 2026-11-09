@@ -47,6 +47,7 @@ import {
     LineChart,
     TrendingUp,
     Layers,
+    Scissors,
     ScanLine,
     ClipboardList,
 } from 'lucide-react';
@@ -100,6 +101,7 @@ export const navigation = [
             { label: 'Almacenes', icon: Store, to: '/almacenes', permiso: 'inventario.almacenes' },
             { label: 'Existencias', icon: Warehouse, to: '/existencias', permiso: 'inventario.existencias' },
             { label: 'Stock por rollo', icon: Layers, to: '/stock-rollos', permiso: 'inventario.rollos' },
+            { label: 'Stock por metros', icon: Scissors, to: '/stock-metros', permiso: 'inventario.stock-metros' },
             { label: 'Preparación y despacho', icon: ScanLine, to: '/despacho', permiso: 'inventario.despacho' },
             { label: 'Kardex', icon: ArrowLeftRight, to: '/kardex', permiso: 'inventario.kardex' },
             { label: 'Traslados', icon: Repeat, to: '/transferencias', permiso: 'inventario.transferencias' },
